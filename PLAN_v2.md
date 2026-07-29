@@ -1,0 +1,230 @@
+# PLAN — Integración de los documentos v2 y ejecución por tajadas
+
+> **Fecha:** 2026-07-29
+> **Alcance:** cómo llevar al repo los seis archivos subidos (PRD, ARCHITECTURE, DECISIONS_nuevas_entradas, ROADMAP, seed) y cómo ejecutar el rediseño v2 en incrementos chicos, priorizando funcionalidad visible por sobre refactors internos.
+> **Regla del plan:** una tajada = un PR = algo que un analista puede usar (o, si es refactor, algo que no cambia nada observable y se verifica con los tests existentes).
+
+---
+
+## 0. Antes de empezar: dos cosas que definen el resto
+
+### 0.1 El seed real está publicado
+
+El commit `ea6f38e` subió `hya-controles-config.seed.json` a la raíz de `main`. **El repo es público.** El archivo contiene, de los 22 clientes: nombre, dotación (`pays`), consultor asignado, complejidad, CCTs y equipo. No hay datos de empleados, pero sí el mapa comercial y de asignación de recursos de H&A, hoy accesible desde GitHub y desde el sitio de GitHub Pages.
+
+Borrarlo en un commit nuevo lo saca de la copia de trabajo, **no del historial**: sigue siendo recuperable desde cualquier clon. Las opciones reales son (a) aceptar la exposición pasada y evitar que se repita, o (b) reescribir el historial de `main` (`git filter-repo`) y forzar push, lo que rompe los clones del equipo y requiere coordinar. Recomiendo (a) más rotación de nada — no hay credenciales en el archivo — porque el costo de (b) es alto y el dato no es secreto en sentido estricto; pero es una decisión de Willy, no técnica.
+
+Lo que sí resuelve el plan: **el seed real no vuelve a versionarse.** Vive en SharePoint (misma carpeta cuyo permiso de escritura es, según D-005, el control de seguridad real del sistema). En el repo queda solo un ejemplo anonimizado y el esquema.
+
+### 0.2 El seed necesita tres respuestas antes de la tajada 3
+
+El propio archivo las marca en `_pendingReview`, y una es bloqueante:
+
+- **Los 22 `code` son propuestos, no confirmados.** Un `code` es identidad permanente (D-004): cambiarlo después de que el seed circuló por 15 navegadores rompe `controlConfigs` y `controlRuns` de todos. **Hay que confirmar la lista antes de distribuir el primer seed** (tajada 3), no después.
+- `controlConfigs` viene vacío: qué controles aplican a cada cliente fuera de Marval/Sportline está sin relevar. No bloquea nada — la tajada 4 (`appliesWhen`) deriva la mayoría de los casos de los atributos, y el relevamiento (ROADMAP 2.9) corre en paralelo.
+- 9 consultores contra ~15 analistas estimados: faltan personas o clientes. Tampoco bloquea; el seed se re-publica cuando aparezca el dato.
+
+Y una dependencia externa que conviene arrancar hoy, porque tiene el lead time más largo del plan: **pedir los archivos reales de Axton de Merz** (Tabulado y equivalentes). La tajada 8 no puede empezar sin ellos.
+
+---
+
+## 1. Desvío respecto de ARCHITECTURE.md §2 (y por qué)
+
+`ARCHITECTURE.md` propone pasar `clients` a `&code` como clave primaria en un solo salto v3→v4, reescribiendo las FK de `groupers`, `fileProfiles`, `sessions`, `controlRuns` y `clientCatalogs`. `ROADMAP.md` lo pone como ítem 2.1, prioridad 1.
+
+Eso es un big-bang: hay **42 usos de `clientId` en `db.js` y 9 archivos que lo pasan** (`main.js`, `wizard.js`, `controlsWizard.js`, `controlsResults.js`, `checklistView.js`, `fileUpload.js`, `grouperEditor.js`, `resultsView.js`). Un PR que toca los nueve, migra datos existentes y no entrega ninguna funcionalidad nueva es exactamente lo que este plan quiere evitar.
+
+**Estrategia alternativa: migración aditiva.**
+
+- v4 agrega `code` como **índice único junto a `++id`**, que sigue siendo la PK: `clients: '++id, &code, name, sourceSystem, active, team'`.
+- Las tablas **nuevas** (`controlConfigs`) usan `clientCode` desde el día uno.
+- Las tablas **existentes** siguen con `clientId` hasta que algo funcional exija cambiarlas.
+- El cierre de la migración (FKs a `clientCode`, drop de `clientId`) queda como última tajada, **opcional**: si nada la necesita, no se paga.
+
+El resultado observable es el mismo que describe ARCHITECTURE (seed compartido referenciando clientes por `code`), con el riesgo repartido en pasos reversibles. Esto contradice el texto del documento, así que se registra como decisión (D-011 en la tajada 0) en vez de dejar el código y el doc en desacuerdo.
+
+---
+
+## 2. Las tajadas
+
+Tamaños: **S** <1 día · **M** 1-3 días · **L** >3 días. Cada tajada indica qué gana el analista, qué archivos toca y cómo se verifica.
+
+### T0 — Documentos y hogar del seed · S · sin código
+
+Lo único que hace falta hacer para "aplicar los archivos", sin tocar la app.
+
+| Acción | Detalle |
+|---|---|
+| Consolidar docs en la raíz | Los archivos subidos ya están en la raíz; borrar los duplicados de `Claude md/` (`PRD.md`, `ARCHITECTURE.md`, `ROADMAP.md`) y **mover `CLAUDE.md` a la raíz** |
+| Anexar decisiones | Pegar D-004 … D-008 al final de `DECISIONS.md` (D-001 a D-003 intactos) y borrar `DECISIONS_nuevas_entradas.md` |
+| Sacar el seed del repo | `git rm hya-controles-config.seed.json`; agregar `config/hya-controles-config.json` al `.gitignore` |
+| Dejar el esquema en el repo | `config/hya-controles-config.example.json` con 2 clientes ficticios + `config/SEED_SCHEMA.md` describiendo los campos |
+| Corregir `CLAUDE.md` | Hoy dice "dar doble click al HTML y que funcione"; con ES modules es falso (ya corregido en PRD §6 y ARCHITECTURE §1). Es el archivo que Claude Code lee en cada sesión: dejarlo desactualizado cuesta trabajo real |
+
+**Decisiones nuevas a registrar:** D-009 (docs a la raíz, supersede D-001 — y el motivo concreto: `CLAUDE.md` en la raíz es el único lugar donde Claude Code lo carga solo), D-010 (seed real fuera del repo, ejemplo anonimizado adentro), D-011 (migración aditiva en vez del v4 big-bang de ARCHITECTURE §2).
+
+**Listo cuando:** hay un solo `PRD.md`, un solo `ARCHITECTURE.md` y un solo `ROADMAP.md` en el repo; `DECISIONS.md` llega hasta D-011; ningún dato real de clientes en archivos versionados.
+
+---
+
+### T1 — Respaldo local exportable · S · red de seguridad de todo lo demás
+
+Botón **Exportar respaldo (JSON)** en el home: volcado de todas las tablas de IndexedDB a un archivo, con su contraparte de import.
+
+Va primero porque cada tajada siguiente corre un `upgrade()` de Dexie sobre datos que solo existen en el navegador del analista. Hoy, si una migración sale mal, el historial de corridas de ese analista no se recupera. Cubre además el ítem 3.7 del ROADMAP.
+
+**Toca:** `js/db.js` (+ `exportDbBackup()` / `importDbBackup()`), `js/ui/clientsList.js`.
+**Listo cuando:** exportar en un navegador con datos, borrar la base, importar, y el listado de clientes y corridas queda igual.
+
+---
+
+### T2 — `code` y atributos de cliente · M · DB v4 (aditiva)
+
+- `db.version(4)`: `clients: '++id, &code, name, sourceSystem, active, team'`, resto de las tablas sin cambios.
+- `upgrade()`: a cada cliente existente, `code` = slug del `name` en mayúsculas, `sourceSystem: 'meta4'`, `active: true`, `attributes: {}`, `ccts: []`, `entityCount: 1`.
+- Formulario de cliente: `code` (editable solo al crear), `sourceSystem`, equipo, consultor, CCTs, dotación, atributos (`pluriempleo`, `holding`, `paymentUsd`, `f1359`, `retroactividad`).
+- Helper `getClientByCode(code)` y `resolveClient(codeOrId)` para que lo nuevo hable en `code` sin romper lo viejo.
+
+**Gana el analista:** ve sistema de origen, equipo y CCT de cada cliente en la lista — hoy solo hay nombre y notas.
+**Toca:** `js/db.js`, `js/ui/clientsList.js`.
+**Riesgo:** el `upgrade()` corre una sola vez por navegador. Mitigación: T1, más colisión de slug resuelta con sufijo numérico y aviso.
+**Listo cuando:** un navegador con clientes v3 abre la app y todos tienen `code` único y `sourceSystem`, sin perder corridas.
+
+---
+
+### T3 — Import del seed: los 22 clientes · M · primer valor grande
+
+Import manual del JSON desde la UI, con `fetch('./config/hya-controles-config.json')` intentado en silencio primero (inútil en GitHub Pages, listo para cuando el hosting se mueva — ROADMAP parking lot).
+
+- Chequeo de `schemaVersion` (incompatible → se rechaza con mensaje claro) y de `configVersion` (más viejo que el cargado → avisa antes de aplicar).
+- Merge por `code`: upsert de clientes, `sourceSystems`, `teams`. **Nunca toca `controlRuns`, `controlRunFiles`, `controlRunResults`, `clientCatalogs`** (ARCHITECTURE §6).
+- Versión del seed cargado visible en el header o el footer (mitigación del primer riesgo del PRD §7).
+
+**Gana el analista:** abre la app, importa un archivo y tiene la cartera completa. Hoy tendría que crear 22 clientes a mano, cada uno en su navegador, con nombres distintos entre analistas.
+**Depende de:** T2 y de los `code` confirmados (§0.2).
+**Toca:** `js/db.js`, `js/ui/clientsList.js`, nuevo `js/seed/importSeed.js`.
+**Listo cuando:** dos navegadores importan el mismo seed y quedan con los mismos 22 clientes y códigos; el que ya tenía corridas las conserva.
+
+---
+
+### T4 — `appliesWhen` y scopes · M
+
+- Cada entrada del `CONTROL_REGISTRY` gana `scope` (default `'general'`), `scopeMeta` y `appliesWhen(client)` (default `() => true`): los 10 controles actuales siguen apareciendo igual salvo donde se declare un predicado real.
+- Primeros predicados reales, con atributos que el seed ya trae: `f1359 === true` (Marval), `pluriempleo === true` (Sportline, Lowsedo), `paymentUsd === true` (Geopagos, Piano).
+- El wizard separa **"Aplican a este cliente"** de **"Otros controles"** (colapsado, no oculto): si un predicado se equivoca, el analista no queda bloqueado.
+
+**Gana el analista:** el wizard deja de ofrecer 10 controles indistintos para los 22 clientes; se ve qué corresponde a este cliente.
+**Depende de:** T2 (atributos). Mucho más útil después de T3.
+**Toca:** `js/controls/registry.js`, `js/ui/controlsWizard.js`.
+**Listo cuando:** con Marval aparece F.1359 en aplicables y en Merz no; el resto sigue accesible desde "Otros controles".
+
+---
+
+### T5 — `controlConfigs` · M · DB v5
+
+- `db.version(5)`: `controlConfigs: '[clientCode+controlId], clientCode, controlId, status'`.
+- `upgrade()`: migrar las tres claves que hoy viven mal en `fileProfiles` — `brutos_tab_config`, `rendvstabu_concept_grouping`, `rva_config` (`controlsWizard.js:96-99`, `1264-1270`) — a `controlConfigs.params`, resolviendo `clientId → clientCode`. `fileProfiles` vuelve a ser solo mapeo de columnas (ARCHITECTURE §4).
+- `status`: `activo` / `no_aplica` / `sin_configurar` / `forzado_activo` / `forzado_no_aplica`, con `overrideReason` obligatorio en los forzados.
+- El seed pasa a poder traer `controlConfigs`; si el analista cambió un parámetro respecto del seed, la UI lo marca como **override visible** y no se pisa en silencio.
+
+**Gana el analista:** la configuración de un control es del cliente y viaja en el seed — deja de reconfigurarse navegador por navegador. Y puede decir "este control no aplica acá" con motivo, cuando el predicado de T4 se equivoca.
+**Depende de:** T3, T4.
+**Toca:** `js/db.js`, `js/ui/controlsWizard.js`, `js/seed/importSeed.js`.
+**Listo cuando:** un navegador con `brutos_tab_config` guardado en v4 abre la app y el control de Brutos arranca con la misma configuración de antes.
+
+---
+
+### T6 — Modo admin y export del seed · M
+
+Pantalla `#/admin` con contraseña (hash SHA-256 comparado del lado cliente), documentada como barrera contra el acceso accidental y no como seguridad real (D-005). Permite editar atributos de cliente y `controlConfigs`, y **exportar el seed actualizado**.
+
+Cierra el ciclo completo: Willy edita → exporta → sube a SharePoint → los analistas importan (T3).
+
+**Gana Willy:** mantener el seed sin editar JSON a mano.
+**Depende de:** T3, T5.
+**Toca:** nuevo `js/ui/adminView.js`, `js/main.js` (ruta), `js/seed/exportSeed.js`.
+**Listo cuando:** exportar desde admin, importar en otro navegador y obtener la misma configuración, sin perder corridas locales.
+
+---
+
+### T7 — Seam de adaptadores Meta4 · M · refactor, cero funcionalidad nueva
+
+`js/adapters/meta4/*` envolviendo los parsers actuales; los controles declaran `inputs` en forma lógica (`tabulado`, `reporte_brutos`, `reporte_nr`); los textos de "cómo consigo este archivo" pasan del control al adaptador (D-007).
+
+Va acá y no antes justamente porque no entrega nada observable: es el precio de entrada de T8. Se valida con `tests/costoTotalParser.test.js` y `tests/rendVsAsientoDrill.test.js` más una corrida real de Marval antes/después.
+
+**Toca:** nuevo `js/adapters/meta4/`, `js/controls/*.js`, `js/ui/controlsWizard.js`.
+**Listo cuando:** una corrida de Marval con los mismos archivos da resultados idénticos a los de antes del refactor.
+
+---
+
+### T8 — Adaptador Axton, piloto Merz · M-L · desbloquea 8 clientes
+
+`js/adapters/axton/tabulado.js` y lo que exija el piloto. Merz: 44 pays, complejidad 1, un CCT.
+
+Es la tajada de mayor impacto funcional del plan — hoy los 8 clientes de Axton (Siasa, COELSA, Red Bull, Plastic Omnium Pilar, Epiroc, Geopagos, Poincenot, Coty) **no pueden usar la herramienta**. Está octava solo porque depende de T7 y de archivos reales que todavía no tenemos: por eso el pedido arranca en T0 (§0.2).
+
+**Depende de:** T7 + archivos de Merz.
+**Listo cuando:** Merz corre con adaptador Axton y da el mismo resultado que daría el parser Meta4 con datos equivalentes (DoD de v2 en ROADMAP).
+
+---
+
+### T9 — Retirar la ruta de agrupadores · S
+
+El cruce por agrupadores pasa a ser un control del registry con `scope: 'general'`; se retira `#/wizard/:clientId` y queda una sola ruta de validación (D-008). Cleanup: va al final, cuando nada nuevo dependa de la ruta vieja.
+
+**Toca:** `js/main.js`, `js/ui/wizard.js`, `js/matching.js`, `js/controls/registry.js`.
+**Listo cuando:** no quedan dos rutas de validación paralelas (DoD de v2).
+
+---
+
+### T10 — Cierre de la migración a `clientCode` · L · opcional
+
+FKs de `groupers`, `fileProfiles`, `sessions`, `controlRuns`, `clientCatalogs` a `clientCode` (DB v6, dual-write y después drop de `clientId`), llegando al schema que describe ARCHITECTURE §2.
+
+**Solo si algo funcional lo pide.** Después de T3-T6, el seed ya referencia clientes por `code` y las tablas locales pueden seguir usando `++id` sin costo para el usuario. Si nadie lo necesita, esta tajada no se hace y ARCHITECTURE §2 se ajusta al schema real.
+
+---
+
+## 3. Orden, y en qué se aparta del ROADMAP
+
+| Tajada | ROADMAP | Prio ROADMAP | Orden acá | Por qué el cambio |
+|---|---|---|---|---|
+| T0 | — | — | 1 | Prerrequisito documental, sin código |
+| T1 | 3.7 (v3) | 4 | 2 | Adelantado: es la red de seguridad de cada `upgrade()` posterior |
+| T2 | 2.1 | 1 | 3 | Recortado a lo aditivo; el resto se va a T10 |
+| T3 | 2.2 | 1 | 4 | Igual: es el primer valor grande de verdad |
+| T4 | 2.5 | 3 | 5 | Adelantado sobre 2.3/2.4: es lo que hace que el seed se note en el wizard |
+| T5 | 2.4 | 2 | 6 | Después de T4, que ya usa los atributos |
+| T6 | 2.3 | 2 | 7 | Postergado: sin T5 no habría casi nada que editar desde admin |
+| T7 | 2.6 | 3 | 8 | Refactor puro: se paga cuando habilita T8, no antes |
+| T8 | 2.7 | 4 | 9 | Igual, con la dependencia externa arrancada en T0 |
+| T9 | 2.8 | 5 | 10 | Igual |
+| T10 | 2.1 (resto) | 1 | 11 | Degradado a opcional (ver §1) |
+
+`2.9` (relevar `controlConfigs` de los 21 clientes fuera de Marval) no es código: corre en paralelo desde T0 y alimenta T4 y T5.
+
+---
+
+## 4. Definition of Done de v2
+
+Los cuatro criterios del ROADMAP, contra las tajadas que los cierran:
+
+- [ ] Un analista selecciona cualquiera de los 22 clientes y ve solo sus controles aplicables → **T3 + T4**
+- [ ] El seed se exporta desde admin y se importa en otro navegador sin perder historial local → **T3 + T6**
+- [ ] Merz corre con adaptador Axton y da el mismo resultado que Meta4 con datos equivalentes → **T7 + T8**
+- [ ] No quedan dos rutas de validación paralelas → **T9**
+
+Con T0-T6 la herramienta ya es multi-cliente y multi-analista. T7-T9 cierran la v2.
+
+---
+
+## 5. Riesgos del plan (los del producto están en PRD §7)
+
+| Riesgo | Mitigación |
+|---|---|
+| Una migración de Dexie corrompe la base de un analista | T1 primero; cada `upgrade()` es aditivo y se prueba con una base v3 real antes de mergear |
+| Los `code` cambian después de distribuir el primer seed | Confirmarlos antes de T3; después de T3, un cambio de `code` es una migración de datos, no una corrección |
+| El refactor de adaptadores (T7) rompe controles que hoy funcionan | Los 2 test files existentes + corrida de Marval antes/después; T7 no cambia nada observable, así que cualquier diferencia es un bug |
+| No llegan los archivos de Axton de Merz | T8 queda bloqueada y el plan entrega T0-T7 igual; el pedido arranca en T0 para que el bloqueo se vea temprano |
+| El seed real se vuelve a commitear | `.gitignore` en T0 más el ejemplo anonimizado como único JSON versionado |
