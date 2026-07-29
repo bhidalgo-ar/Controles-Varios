@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 1,
+  "configVersion": 1,
+  "updatedAt": "2026-07-29",
+  "updatedBy": "",
+  "_about": "Seed de configuración de Controles Nómina. Se importa desde el modo admin de la app. Los ids locales de Dexie NO viajan acá: la identidad es 'code'.",
+  "sourceSystems": [
+    {
+      "id": "meta4",
+      "label": "Meta4 / PeopleNet",
+      "shortLabel": "M4"
+    },
+    {
+      "id": "axton",
+      "label": "Axton IT",
+      "shortLabel": "Axton"
+    }
+  ],
+  "teams": [
+    {
+      "code": "EQ_CANDELA",
+      "lead": "Candela"
+    },
+    {
+      "code": "EQ_MELINA",
+      "lead": "Melina"
+    },
+    {
+      "code": "EQ_SERGIO",
+      "lead": "Sergio"
+    }
+  ],
+  "clients": [
+    {
+      "code": "SIASA",
+      "name": "Siasa Logística",
+      "team": "EQ_CANDELA",
+      "consultant": "Celeste",
+      "complexity": 3,
+      "pays": 130,
+      "ccts": [
+        "Camioneros",
+        "Carga y Descarga"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "COELSA",
+      "name": "COELSA",
+      "team": "EQ_CANDELA",
+      "consultant": "Celeste",
+      "complexity": 2,
+      "pays": 278,
+      "ccts": [
+        "FC",
+        "Comercio"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "REDBULL",
+      "name": "Red Bull",
+      "team": "EQ_CANDELA",
+      "consultant": "Celeste",
+      "complexity": 1,
+      "pays": 60,
+      "ccts": [
+        "FC",
+        "Comercio"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "MERZ",
+      "name": "Merz",
+      "team": "EQ_CANDELA",
+      "consultant": "Celeste",
+      "complexity": 1,
+      "pays": 44,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "POM_PILAR",
+      "name": "Plastic Omnium Pilar",
+      "team": "EQ_CANDELA",
+      "consultant": "Micaela",
+      "complexity": 4,
+      "pays": 370,
+      "ccts": [
+        "FC",
+        "Plasticos"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "FINADIET",
+      "name": "Finadiet",
+      "team": "EQ_CANDELA",
+      "consultant": "Candela",
+      "complexity": 3,
+      "pays": 362,
+      "ccts": [
+        "Sanidad",
+        "APM",
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "EPIROC",
+      "name": "Epiroc",
+      "team": "EQ_CANDELA",
+      "consultant": "Micaela",
+      "complexity": 2,
+      "pays": 46,
+      "ccts": [
+        "FC",
+        "Viajantes de Comercio"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "GEOPAGOS",
+      "name": "Geopagos",
+      "team": "EQ_CANDELA",
+      "consultant": "Agustina R.",
+      "complexity": 2,
+      "pays": 220,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": true,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "POINCENOT",
+      "name": "Poincenot",
+      "team": "EQ_CANDELA",
+      "consultant": "Agustina R.",
+      "complexity": 1,
+      "pays": 84,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 2,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": true,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "POM_FLORIDA",
+      "name": "Plastic Omnium Florida",
+      "team": "EQ_CANDELA",
+      "consultant": "Candela",
+      "complexity": 4,
+      "pays": 119,
+      "ccts": [
+        "FC",
+        "Plasticos"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": true,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "TIM",
+      "name": "TIM",
+      "team": "EQ_CANDELA",
+      "consultant": "Agustina R.",
+      "complexity": 2,
+      "pays": 165,
+      "ccts": [
+        "Viajantes de Comercio",
+        "FC",
+        "Comercio"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "PIANO",
+      "name": "Piano",
+      "team": "EQ_MELINA",
+      "consultant": "Melina",
+      "complexity": 1,
+      "pays": 23,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": true,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": true,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "MARVAL",
+      "name": "Marval",
+      "team": "EQ_MELINA",
+      "consultant": "Araceli",
+      "complexity": 3,
+      "pays": 580,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": true,
+        "confidential": true,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "SPORTLINE",
+      "name": "Sportline",
+      "team": "EQ_MELINA",
+      "consultant": "Daiana",
+      "complexity": 5,
+      "pays": 623,
+      "ccts": [
+        "Comercio"
+      ],
+      "entityCount": 4,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": true,
+        "holding": true,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "COPETRO",
+      "name": "Copetro",
+      "team": "EQ_MELINA",
+      "consultant": "Araceli",
+      "complexity": 4,
+      "pays": 120,
+      "ccts": [
+        "Petroleros Privados"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": true,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "DLA",
+      "name": "DLA (Mixplay)",
+      "team": "EQ_MELINA",
+      "consultant": "Agustina C.",
+      "complexity": 3,
+      "pays": 280,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "CARRIER",
+      "name": "Carrier",
+      "team": "EQ_MELINA",
+      "consultant": "Agustina C.",
+      "complexity": 4,
+      "pays": 424,
+      "ccts": [
+        "UOM",
+        "ASIMRA",
+        "Comercio",
+        "FC"
+      ],
+      "entityCount": 2,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "LOWSEDO",
+      "name": "Lowsedo",
+      "team": "EQ_SERGIO",
+      "consultant": "Sergio",
+      "complexity": 2,
+      "pays": 72,
+      "ccts": [
+        "ATSA",
+        "FC"
+      ],
+      "entityCount": 3,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": true,
+        "holding": true,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "BONAFIDE",
+      "name": "Bonafide",
+      "team": "EQ_SERGIO",
+      "consultant": "Sergio",
+      "complexity": 1,
+      "pays": 7,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "CAMPARI",
+      "name": "Campari",
+      "team": "EQ_SERGIO",
+      "consultant": "Sergio",
+      "complexity": 3,
+      "pays": 135,
+      "ccts": [
+        "Vitivinicolas",
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "COTY",
+      "name": "Coty",
+      "team": "EQ_SERGIO",
+      "consultant": "Sergio",
+      "complexity": 2,
+      "pays": 116,
+      "ccts": [
+        "Viajantes Perfumistas",
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": true,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "GSMA",
+      "name": "GSMA",
+      "team": "EQ_SERGIO",
+      "consultant": "Sergio",
+      "complexity": 1,
+      "pays": 9,
+      "ccts": [
+        "FC"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    }
+  ],
+  "controlConfigs": [],
+  "catalogs": [],
+  "_pendingReview": [
+    "Códigos de cliente propuestos, no confirmados por Willy.",
+    "Contradicción retros/retroactividad y campo 'confidential' quedaron fuera de scope de esta herramienta (dato de migración, no de Controles Nómina).",
+    "El listado tiene 9 consultores; Willy estimó ~15 analistas usuarios. Faltarían personas o clientes.",
+    "controlConfigs vacío: pendiente relevar qué controles aplican a cada cliente fuera de Marval/Sportline."
+  ]
+}
