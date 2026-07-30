@@ -15,11 +15,25 @@ import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed } from '../s
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
+function closeAllRowMenus() {
+  document.querySelectorAll('.row-menu__panel').forEach(p => p.setAttribute('hidden', ''));
+}
+
 // Cierra cualquier menú "⋯" abierto al clickear afuera. Se registra una sola
 // vez a nivel módulo (el módulo sólo se evalúa una vez por carga de página).
-document.addEventListener('click', () => {
-  document.querySelectorAll('.row-menu__panel').forEach(p => p.setAttribute('hidden', ''));
-});
+document.addEventListener('click', closeAllRowMenus);
+
+// El panel usa position:fixed calculado desde el botón (en vez de depender
+// de position:absolute contra un ancestro) porque la tabla vive dentro de un
+// contenedor con overflow-x:auto — eso hace que el navegador recorte
+// cualquier hijo que se salga verticalmente, y el menú quedaba tapado.
+function positionRowMenuPanel(btn, panel) {
+  const rect = btn.getBoundingClientRect();
+  panel.style.position = 'fixed';
+  panel.style.top = `${rect.bottom + 4}px`;
+  panel.style.left = 'auto';
+  panel.style.right = `${window.innerWidth - rect.right}px`;
+}
 
 /**
  * Renderiza la pantalla de clientes en el elemento indicado.
@@ -314,8 +328,14 @@ function attachRowEvents(container, r, root, state) {
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const wasHidden = panel.hasAttribute('hidden');
-    document.querySelectorAll('.row-menu__panel').forEach(p => p.setAttribute('hidden', ''));
-    if (wasHidden) panel.removeAttribute('hidden');
+    closeAllRowMenus();
+    if (wasHidden) {
+      positionRowMenuPanel(menuBtn, panel);
+      panel.removeAttribute('hidden');
+      // Si el usuario scrollea con el menú abierto, la posición fija queda
+      // desactualizada — más simple cerrarlo que ir recalculando.
+      window.addEventListener('scroll', closeAllRowMenus, { once: true, capture: true });
+    }
   });
   panel.addEventListener('click', (e) => e.stopPropagation());
 }
@@ -424,56 +444,61 @@ function showCreateModal(root, state) {
             <input type="text" class="form-input" id="js-client-name" placeholder="Ej: ACME SA" autofocus>
           </div>
           <div class="form-group">
-            <label class="form-label">Código (opcional)</label>
-            <input type="text" class="form-input" id="js-client-code" placeholder="Se genera solo a partir del nombre si lo dejás vacío" style="text-transform:uppercase;">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Sistema de origen</label>
-            <select class="form-input" id="js-client-source-system">
-              <option value="meta4">Meta4 / PeopleNet</option>
-              <option value="axton">Axton IT</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Equipo (opcional)</label>
-            <input type="text" class="form-input" id="js-client-team" placeholder="Ej: EQ_CANDELA">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Consultor/a (opcional)</label>
-            <input type="text" class="form-input" id="js-client-consultant" placeholder="Ej: Candela">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Convenios / CCTs (opcional)</label>
-            <input type="text" class="form-input" id="js-client-ccts" placeholder="Separados por coma. Ej: Comercio, Camioneros">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Dotación (opcional)</label>
-            <input type="number" class="form-input" id="js-client-pays" placeholder="Cantidad de legajos" min="0">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Atributos</label>
-            <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);">
-              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                <input type="checkbox" id="js-client-attr-pluriempleo"> Pluriempleo
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                <input type="checkbox" id="js-client-attr-holding"> Holding
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                <input type="checkbox" id="js-client-attr-paymentUsd"> Pago en USD
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                <input type="checkbox" id="js-client-attr-f1359"> F.1359
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                <input type="checkbox" id="js-client-attr-retroactividad"> Retroactividad
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
             <label class="form-label">Notas internas (opcional)</label>
             <input type="text" class="form-input" id="js-client-notes" placeholder="Ej: CUIT, contacto, observaciones...">
           </div>
+          <details style="margin-top:var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--sp-3);">
+            <summary style="cursor:pointer;font-weight:600;font-size:var(--text-sm);">Más datos del cliente (opcional)</summary>
+            <div style="margin-top:var(--sp-4);">
+              <div class="form-group">
+                <label class="form-label">Código</label>
+                <input type="text" class="form-input" id="js-client-code" placeholder="Se genera solo a partir del nombre si lo dejás vacío" style="text-transform:uppercase;">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Sistema de origen</label>
+                <select class="form-input" id="js-client-source-system">
+                  <option value="meta4">Meta4 / PeopleNet</option>
+                  <option value="axton">Axton IT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Equipo</label>
+                <input type="text" class="form-input" id="js-client-team" placeholder="Ej: EQ_CANDELA">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Consultor/a</label>
+                <input type="text" class="form-input" id="js-client-consultant" placeholder="Ej: Candela">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Convenios / CCTs</label>
+                <input type="text" class="form-input" id="js-client-ccts" placeholder="Separados por coma. Ej: Comercio, Camioneros">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Dotación</label>
+                <input type="number" class="form-input" id="js-client-pays" placeholder="Cantidad de legajos" min="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Atributos</label>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                    <input type="checkbox" id="js-client-attr-pluriempleo"> Pluriempleo
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                    <input type="checkbox" id="js-client-attr-holding"> Holding
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                    <input type="checkbox" id="js-client-attr-paymentUsd"> Pago en USD
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                    <input type="checkbox" id="js-client-attr-f1359"> F.1359
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                    <input type="checkbox" id="js-client-attr-retroactividad"> Retroactividad
+                  </label>
+                </div>
+              </div>
+            </div>
+          </details>
         </form>
       </div>
       <div class="modal__footer">
