@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "configVersion": 1,
+  "updatedAt": "2026-07-30",
+  "updatedBy": "",
+  "_about": "Ejemplo con datos ficticios. El seed real (22 clientes) vive fuera del repo — ver config/SEED_SCHEMA.md y DECISIONS.md D-010.",
+  "sourceSystems": [
+    {
+      "id": "meta4",
+      "label": "Meta4 / PeopleNet",
+      "shortLabel": "M4"
+    },
+    {
+      "id": "axton",
+      "label": "Axton IT",
+      "shortLabel": "Axton"
+    }
+  ],
+  "teams": [
+    {
+      "code": "EQ_EJEMPLO",
+      "lead": "Analista Ejemplo"
+    }
+  ],
+  "clients": [
+    {
+      "code": "ACME",
+      "name": "Acme Demo SA",
+      "team": "EQ_EJEMPLO",
+      "consultant": "Analista Ejemplo",
+      "complexity": 2,
+      "pays": 50,
+      "ccts": [
+        "Comercio"
+      ],
+      "entityCount": 1,
+      "sourceSystem": "meta4",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": false,
+        "pluriempleo": false,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    },
+    {
+      "code": "DEMOCORP",
+      "name": "Demo Corp SRL",
+      "team": "EQ_EJEMPLO",
+      "consultant": "Analista Ejemplo",
+      "complexity": 3,
+      "pays": 200,
+      "ccts": [
+        "Camioneros",
+        "Comercio"
+      ],
+      "entityCount": 2,
+      "sourceSystem": "axton",
+      "migratedAt": null,
+      "active": true,
+      "attributes": {
+        "paymentUsd": true,
+        "pluriempleo": true,
+        "holding": false,
+        "retroactividad": false,
+        "f1359": false,
+        "confidential": false,
+        "downloadF572": false
+      }
+    }
+  ],
+  "controlConfigs": [],
+  "catalogs": []
+}

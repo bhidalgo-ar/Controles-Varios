@@ -25,8 +25,8 @@
 - **Excel:** SheetJS (`xlsx`) vía CDN — `https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js`
 - **IndexedDB:** Dexie.js vía CDN — `https://unpkg.com/dexie@4/dist/dexie.min.js`
 - **PDF (v2 en adelante):** pdf.js vía CDN — `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/`
-- **Build:** Ninguno. Todo se sirve como archivos estáticos. Abrir `index.html` directamente o servir con un static server simple.
-- **Sin transpilación, sin bundler, sin npm install.** Esto es deliberado: cualquiera del equipo tiene que poder abrir el repo, dar doble click al HTML y que funcione.
+- **Build:** Ninguno. Todo se sirve como archivos estáticos, con un static server simple (hoy GitHub Pages).
+- **Sin transpilación, sin bundler, sin npm install.** Esto es deliberado: cualquiera del equipo tiene que poder abrir el repo y que funcione sin instalar nada. Aclaración técnica: la app usa ES modules (`type="module"` en `index.html`), por lo que **no funciona abriendo el HTML con doble click desde `file://`** — requiere servirse. Ver `DECISIONS.md`.
 
 ---
 
