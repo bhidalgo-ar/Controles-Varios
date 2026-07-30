@@ -11,7 +11,7 @@ import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../contro
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { downloadBlob } from '../utils/exportData.js';
-import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed } from '../seed/importSeed.js';
+import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed, tryLoadKnownCompanies } from '../seed/importSeed.js';
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
@@ -429,11 +429,12 @@ async function handleSeedFile(seed, root, state) {
 }
 
 // Arma las opciones de Equipo/Consultor/CCTs a partir de lo que ya hay
-// cargado (seed importado + clientes existentes) — nunca texto libre, así
-// las respuestas quedan encerradas a lo que ya se conoce. Si no hay nada
+// cargado (seed importado + clientes existentes + compañías conocidas del
+// seed real todavía commiteado, D-010) — nunca texto libre, así las
+// respuestas quedan encerradas a lo que ya se conoce. Si no hay nada
 // cargado todavía, el campo queda vacío con una nota explicando por qué
 // (en vez de dejar escribir cualquier cosa).
-export async function buildClientCatalogs() {
+export async function buildClientCatalogs(knownCompanies = []) {
   const [seedTeams, existingClients] = await Promise.all([
     getConfig('seedTeams'),
     getClients(),
@@ -442,22 +443,26 @@ export async function buildClientCatalogs() {
   const teamMap = new Map();
   (seedTeams || []).forEach(t => teamMap.set(t.code, t.lead ? `${t.code} — ${t.lead}` : t.code));
   existingClients.forEach(c => { if (c.team && !teamMap.has(c.team)) teamMap.set(c.team, c.team); });
+  knownCompanies.forEach(c => { if (c.team && !teamMap.has(c.team)) teamMap.set(c.team, c.team); });
   const teamOptions = [...teamMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
   const consultantSet = new Set();
   (seedTeams || []).forEach(t => { if (t.lead) consultantSet.add(t.lead); });
   existingClients.forEach(c => { if (c.consultant) consultantSet.add(c.consultant); });
+  knownCompanies.forEach(c => { if (c.consultant) consultantSet.add(c.consultant); });
   const consultantOptions = [...consultantSet].sort((a, b) => a.localeCompare(b));
 
   const cctSet = new Set();
   existingClients.forEach(c => (c.ccts || []).forEach(cct => { if (cct) cctSet.add(cct); }));
+  knownCompanies.forEach(c => (c.ccts || []).forEach(cct => { if (cct) cctSet.add(cct); }));
   const cctOptions = [...cctSet].sort((a, b) => a.localeCompare(b));
 
   return { teamOptions, consultantOptions, cctOptions };
 }
 
 async function showCreateModal(root, state) {
-  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs();
+  const knownCompanies = await tryLoadKnownCompanies();
+  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs(knownCompanies);
 
   const emptyHint = (label) => `<p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Todavía no hay ${label} cargados/as — importá el seed o pedile a un admin que los agregue.</p>`;
 
@@ -473,7 +478,14 @@ async function showCreateModal(root, state) {
         <form id="js-create-client-form">
           <div class="form-group">
             <label class="form-label form-label--required">Nombre del cliente</label>
-            <input type="text" class="form-input" id="js-client-name" placeholder="Ej: ACME SA" autofocus>
+            <input type="text" class="form-input" id="js-client-name" placeholder="Ej: ACME SA" autofocus
+                   list="js-known-companies" autocomplete="off">
+            <datalist id="js-known-companies">
+              ${knownCompanies.map(c => `<option value="${esc(c.name)}">`).join('')}
+            </datalist>
+            ${knownCompanies.length
+              ? `<p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Si el nombre coincide con una de las ${knownCompanies.length} compañías conocidas, el resto de los datos se completa solo (podés cambiarlo después).</p>`
+              : ''}
           </div>
           <div class="form-group">
             <label class="form-label">Notas internas (opcional)</label>
@@ -559,6 +571,36 @@ async function showCreateModal(root, state) {
   overlay.querySelector('#js-close-modal').addEventListener('click', close);
   overlay.querySelector('#js-cancel-create').addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  // Autocompletar: si el nombre tipeado coincide con una compañía conocida,
+  // completa el resto de los campos con sus datos reales — el usuario puede
+  // cambiar cualquiera después, esto solo ahorra tipeo cuando ya se conoce
+  // la compañía.
+  const nameInput = overlay.querySelector('#js-client-name');
+  let lastAutofilledName = null;
+  nameInput.addEventListener('input', () => {
+    const typed = nameInput.value.trim().toLowerCase();
+    const match = knownCompanies.find(c => c.name.trim().toLowerCase() === typed);
+    if (!match || match.name === lastAutofilledName) return;
+    lastAutofilledName = match.name;
+
+    overlay.querySelector('#js-client-code').value = match.code || '';
+    overlay.querySelector('#js-client-source-system').value = match.sourceSystem || 'meta4';
+    overlay.querySelector('#js-client-team').value = match.team || '';
+    overlay.querySelector('#js-client-consultant').value = match.consultant || '';
+    overlay.querySelector('#js-client-pays').value = match.pays ?? '';
+    const cctsSelect = overlay.querySelector('#js-client-ccts');
+    Array.from(cctsSelect.options).forEach(o => { o.selected = (match.ccts || []).includes(o.value); });
+    const attrs = match.attributes || {};
+    overlay.querySelector('#js-client-attr-pluriempleo').checked = !!attrs.pluriempleo;
+    overlay.querySelector('#js-client-attr-holding').checked = !!attrs.holding;
+    overlay.querySelector('#js-client-attr-paymentUsd').checked = !!attrs.paymentUsd;
+    overlay.querySelector('#js-client-attr-f1359').checked = !!attrs.f1359;
+    overlay.querySelector('#js-client-attr-retroactividad').checked = !!attrs.retroactividad;
+
+    overlay.querySelector('#js-create-client-form details').open = true;
+    showToast(`Datos de "${match.name}" completados automáticamente. Podés cambiar lo que necesites.`, 'info');
+  });
 
   overlay.querySelector('#js-confirm-create').addEventListener('click', async () => {
     const name = overlay.querySelector('#js-client-name').value.trim();
