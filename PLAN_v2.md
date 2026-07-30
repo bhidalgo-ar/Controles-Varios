@@ -6,25 +6,21 @@
 
 ---
 
-## 0. Antes de empezar: dos cosas que definen el resto
+## 0. Antes de empezar: estado a 2026-07-30
 
-### 0.1 El seed real está publicado
+### 0.1 El seed real está en el repo — por ahora, aceptado
 
-El commit `ea6f38e` subió `hya-controles-config.seed.json` a la raíz de `main`. **El repo es público.** El archivo contiene, de los 22 clientes: nombre, dotación (`pays`), consultor asignado, complejidad, CCTs y equipo. No hay datos de empleados, pero sí el mapa comercial y de asignación de recursos de H&A, hoy accesible desde GitHub y desde el sitio de GitHub Pages.
+El commit `ea6f38e` subió `hya-controles-config.seed.json` a la raíz de `main` de un repo hoy público. Guillermo confirmó que no hay problema en que los datos de clientes estén ahí mientras tanto; el repo pasa a privado más adelante. No se reescribe historial. Queda igual la recomendación de fondo para cuando eso ocurra: el seed **real** (con los 22 clientes) termina viviendo en SharePoint, y en el repo solo queda un ejemplo anonimizado — no es urgente, es la forma correcta de mantenerlo una vez que el repo sea privado y el flujo de import (T3) esté andando.
 
-Borrarlo en un commit nuevo lo saca de la copia de trabajo, **no del historial**: sigue siendo recuperable desde cualquier clon. Las opciones reales son (a) aceptar la exposición pasada y evitar que se repita, o (b) reescribir el historial de `main` (`git filter-repo`) y forzar push, lo que rompe los clones del equipo y requiere coordinar. Recomiendo (a) más rotación de nada — no hay credenciales en el archivo — porque el costo de (b) es alto y el dato no es secreto en sentido estricto; pero es una decisión de Willy, no técnica.
+### 0.2 Los `code` de cliente están confirmados
 
-Lo que sí resuelve el plan: **el seed real no vuelve a versionarse.** Vive en SharePoint (misma carpeta cuyo permiso de escritura es, según D-005, el control de seguridad real del sistema). En el repo queda solo un ejemplo anonimizado y el esquema.
+**Cerrado el 2026-07-30 por Guillermo Esposito.** Los 22 `code` del seed dejan de ser propuesta: son identidad estable (D-004) desde ahora. Registrado en `hya-controles-config.seed.json` (`_pendingReview`). Esto destraba la tajada 3 sin condiciones — importar el seed ya no espera nada.
 
-### 0.2 El seed necesita tres respuestas antes de la tajada 3
+Sigue pendiente, sin bloquear nada: `controlConfigs` vacío (releva en paralelo con T4/T5, ROADMAP 2.9) y la brecha de 9 consultores contra ~15 analistas estimados.
 
-El propio archivo las marca en `_pendingReview`, y una es bloqueante:
+### 0.3 Axton queda deprioritizado
 
-- **Los 22 `code` son propuestos, no confirmados.** Un `code` es identidad permanente (D-004): cambiarlo después de que el seed circuló por 15 navegadores rompe `controlConfigs` y `controlRuns` de todos. **Hay que confirmar la lista antes de distribuir el primer seed** (tajada 3), no después.
-- `controlConfigs` viene vacío: qué controles aplican a cada cliente fuera de Marval/Sportline está sin relevar. No bloquea nada — la tajada 4 (`appliesWhen`) deriva la mayoría de los casos de los atributos, y el relevamiento (ROADMAP 2.9) corre en paralelo.
-- 9 consultores contra ~15 analistas estimados: faltan personas o clientes. Tampoco bloquea; el seed se re-publica cuando aparezca el dato.
-
-Y una dependencia externa que conviene arrancar hoy, porque tiene el lead time más largo del plan: **pedir los archivos reales de Axton de Merz** (Tabulado y equivalentes). La tajada 8 no puede empezar sin ellos.
+**Decisión del 2026-07-30:** Axton (T7 seam de adaptadores + T8 piloto Merz) no es prioridad ahora — se retoma más adelante. No hace falta pedir los archivos de Merz todavía. El plan se ejecuta hasta T6 (herramienta multi-cliente, multi-analista, con seed y modo admin) y ahí se reevalúa si seguir a T7-T9 o priorizar otra cosa.
 
 ---
 
@@ -57,13 +53,12 @@ Lo único que hace falta hacer para "aplicar los archivos", sin tocar la app.
 |---|---|
 | Consolidar docs en la raíz | Los archivos subidos ya están en la raíz; borrar los duplicados de `Claude md/` (`PRD.md`, `ARCHITECTURE.md`, `ROADMAP.md`) y **mover `CLAUDE.md` a la raíz** |
 | Anexar decisiones | Pegar D-004 … D-008 al final de `DECISIONS.md` (D-001 a D-003 intactos) y borrar `DECISIONS_nuevas_entradas.md` |
-| Sacar el seed del repo | `git rm hya-controles-config.seed.json`; agregar `config/hya-controles-config.json` al `.gitignore` |
-| Dejar el esquema en el repo | `config/hya-controles-config.example.json` con 2 clientes ficticios + `config/SEED_SCHEMA.md` describiendo los campos |
+| Dejar el esquema de ejemplo en el repo | `config/hya-controles-config.example.json` con 2 clientes ficticios + `config/SEED_SCHEMA.md` describiendo los campos — sin sacar todavía el seed real (§0.1) |
 | Corregir `CLAUDE.md` | Hoy dice "dar doble click al HTML y que funcione"; con ES modules es falso (ya corregido en PRD §6 y ARCHITECTURE §1). Es el archivo que Claude Code lee en cada sesión: dejarlo desactualizado cuesta trabajo real |
 
-**Decisiones nuevas a registrar:** D-009 (docs a la raíz, supersede D-001 — y el motivo concreto: `CLAUDE.md` en la raíz es el único lugar donde Claude Code lo carga solo), D-010 (seed real fuera del repo, ejemplo anonimizado adentro), D-011 (migración aditiva en vez del v4 big-bang de ARCHITECTURE §2).
+**Decisiones nuevas a registrar:** D-009 (docs a la raíz, supersede D-001 — y el motivo concreto: `CLAUDE.md` en la raíz es el único lugar donde Claude Code lo carga solo), D-010 (el seed real se acepta temporalmente en el repo público; pasa a SharePoint cuando el repo sea privado, ejemplo anonimizado queda igual en el repo), D-011 (migración aditiva en vez del v4 big-bang de ARCHITECTURE §2).
 
-**Listo cuando:** hay un solo `PRD.md`, un solo `ARCHITECTURE.md` y un solo `ROADMAP.md` en el repo; `DECISIONS.md` llega hasta D-011; ningún dato real de clientes en archivos versionados.
+**Listo cuando:** hay un solo `PRD.md`, un solo `ARCHITECTURE.md` y un solo `ROADMAP.md` en el repo; `DECISIONS.md` llega hasta D-011; existe el ejemplo anonimizado en `config/`.
 
 ---
 
@@ -147,24 +142,24 @@ Cierra el ciclo completo: Willy edita → exporta → sube a SharePoint → los 
 
 ---
 
-### T7 — Seam de adaptadores Meta4 · M · refactor, cero funcionalidad nueva
+### T7 — Seam de adaptadores Meta4 · M · refactor, cero funcionalidad nueva · **deprioritizado**
 
 `js/adapters/meta4/*` envolviendo los parsers actuales; los controles declaran `inputs` en forma lógica (`tabulado`, `reporte_brutos`, `reporte_nr`); los textos de "cómo consigo este archivo" pasan del control al adaptador (D-007).
 
-Va acá y no antes justamente porque no entrega nada observable: es el precio de entrada de T8. Se valida con `tests/costoTotalParser.test.js` y `tests/rendVsAsientoDrill.test.js` más una corrida real de Marval antes/después.
+**Deprioritizado el 2026-07-30 (§0.3):** no se agenda todavía. Cuando se retome, va acá y no antes porque no entrega nada observable por sí solo — es el precio de entrada de T8. Se valida con `tests/costoTotalParser.test.js` y `tests/rendVsAsientoDrill.test.js` más una corrida real de Marval antes/después.
 
 **Toca:** nuevo `js/adapters/meta4/`, `js/controls/*.js`, `js/ui/controlsWizard.js`.
 **Listo cuando:** una corrida de Marval con los mismos archivos da resultados idénticos a los de antes del refactor.
 
 ---
 
-### T8 — Adaptador Axton, piloto Merz · M-L · desbloquea 8 clientes
+### T8 — Adaptador Axton, piloto Merz · M-L · desbloquea 8 clientes · **deprioritizado**
 
 `js/adapters/axton/tabulado.js` y lo que exija el piloto. Merz: 44 pays, complejidad 1, un CCT.
 
-Es la tajada de mayor impacto funcional del plan — hoy los 8 clientes de Axton (Siasa, COELSA, Red Bull, Plastic Omnium Pilar, Epiroc, Geopagos, Poincenot, Coty) **no pueden usar la herramienta**. Está octava solo porque depende de T7 y de archivos reales que todavía no tenemos: por eso el pedido arranca en T0 (§0.2).
+Sería la tajada de mayor impacto funcional del plan — hoy los 8 clientes de Axton (Siasa, COELSA, Red Bull, Plastic Omnium Pilar, Epiroc, Geopagos, Poincenot, Coty) **no pueden usar la herramienta** — pero **queda fuera de alcance por ahora** (§0.3, decisión de Guillermo del 2026-07-30). No hace falta pedir los archivos de Merz mientras tanto. T0-T6 entregan igual una herramienta multi-cliente completa para los 14 clientes Meta4; Axton se retoma cuando vuelva a ser prioridad.
 
-**Depende de:** T7 + archivos de Merz.
+**Depende de:** T7 + archivos de Merz (ninguno de los dos, en curso).
 **Listo cuando:** Merz corre con adaptador Axton y da el mismo resultado que daría el parser Meta4 con datos equivalentes (DoD de v2 en ROADMAP).
 
 ---
@@ -197,12 +192,14 @@ FKs de `groupers`, `fileProfiles`, `sessions`, `controlRuns`, `clientCatalogs` a
 | T4 | 2.5 | 3 | 5 | Adelantado sobre 2.3/2.4: es lo que hace que el seed se note en el wizard |
 | T5 | 2.4 | 2 | 6 | Después de T4, que ya usa los atributos |
 | T6 | 2.3 | 2 | 7 | Postergado: sin T5 no habría casi nada que editar desde admin |
-| T7 | 2.6 | 3 | 8 | Refactor puro: se paga cuando habilita T8, no antes |
-| T8 | 2.7 | 4 | 9 | Igual, con la dependencia externa arrancada en T0 |
-| T9 | 2.8 | 5 | 10 | Igual |
-| T10 | 2.1 (resto) | 1 | 11 | Degradado a opcional (ver §1) |
+| T7 | 2.6 | 3 | — (deprioritizado) | Sin fecha: se retoma cuando Axton vuelva a ser prioridad (§0.3) |
+| T8 | 2.7 | 4 | — (deprioritizado) | Ídem — no se piden archivos de Merz por ahora |
+| T9 | 2.8 | 5 | 8 | Sigue en pie, ya no depende de esperar a T7/T8 |
+| T10 | 2.1 (resto) | 1 | 9 | Degradado a opcional (ver §1) |
 
 `2.9` (relevar `controlConfigs` de los 21 clientes fuera de Marval) no es código: corre en paralelo desde T0 y alimenta T4 y T5.
+
+**Con Axton deprioritizado, el plan ejecutable hoy es T0 → T6, después T9 y T10 si hacen falta.** T7/T8 quedan documentadas pero fuera del backlog activo hasta nueva decisión.
 
 ---
 
@@ -212,10 +209,10 @@ Los cuatro criterios del ROADMAP, contra las tajadas que los cierran:
 
 - [ ] Un analista selecciona cualquiera de los 22 clientes y ve solo sus controles aplicables → **T3 + T4**
 - [ ] El seed se exporta desde admin y se importa en otro navegador sin perder historial local → **T3 + T6**
-- [ ] Merz corre con adaptador Axton y da el mismo resultado que Meta4 con datos equivalentes → **T7 + T8**
+- [ ] Merz corre con adaptador Axton y da el mismo resultado que Meta4 con datos equivalentes → **T7 + T8 (en pausa, §0.3)**
 - [ ] No quedan dos rutas de validación paralelas → **T9**
 
-Con T0-T6 la herramienta ya es multi-cliente y multi-analista. T7-T9 cierran la v2.
+Con T0-T6 la herramienta ya es multi-cliente y multi-analista para los 14 clientes Meta4. El criterio de Axton queda abierto hasta que T7/T8 se retomen; no bloquea considerar la v2 utilizable en producción para esa porción de la cartera.
 
 ---
 
@@ -225,6 +222,5 @@ Con T0-T6 la herramienta ya es multi-cliente y multi-analista. T7-T9 cierran la 
 |---|---|
 | Una migración de Dexie corrompe la base de un analista | T1 primero; cada `upgrade()` es aditivo y se prueba con una base v3 real antes de mergear |
 | Los `code` cambian después de distribuir el primer seed | Confirmarlos antes de T3; después de T3, un cambio de `code` es una migración de datos, no una corrección |
-| El refactor de adaptadores (T7) rompe controles que hoy funcionan | Los 2 test files existentes + corrida de Marval antes/después; T7 no cambia nada observable, así que cualquier diferencia es un bug |
-| No llegan los archivos de Axton de Merz | T8 queda bloqueada y el plan entrega T0-T7 igual; el pedido arranca en T0 para que el bloqueo se vea temprano |
-| El seed real se vuelve a commitear | `.gitignore` en T0 más el ejemplo anonimizado como único JSON versionado |
+| El refactor de adaptadores (T7) rompe controles que hoy funcionan | Los 2 test files existentes + corrida de Marval antes/después; T7 no cambia nada observable, así que cualquier diferencia es un bug (aplica cuando se retome, §0.3) |
+| El repo sigue público más tiempo del previsto con datos de clientes | Aceptado por Guillermo (§0.1); pasar a privado sigue siendo la acción pendiente, sin fecha comprometida en este plan |
