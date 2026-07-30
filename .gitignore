@@ -15,3 +15,8 @@ desktop.ini
 # Archivos temporales
 *.tmp
 *.log
+
+# Dependencias y salidas de los tests (T1) — no se versionan
+node_modules/
+playwright-report/
+test-results/
