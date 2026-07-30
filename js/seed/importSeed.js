@@ -7,7 +7,7 @@
 // historial local (controlRuns / controlRunFiles / controlRunResults /
 // clientCatalogs — ver ARCHITECTURE.md §6).
 
-import { getClients, createClient, updateClient, getConfig, setConfig } from '../db.js';
+import { getClients, createClient, updateClient, getConfig, setConfig, getControlConfig, saveControlConfig } from '../db.js';
 
 export const SEED_SCHEMA_VERSION = 1;
 
@@ -89,13 +89,16 @@ export function inspectSeed(seed, loadedMeta) {
 }
 
 /**
- * Aplica el seed: upsert de clients/sourceSystems/teams por `code`.
- * Nunca toca controlRuns/controlRunFiles/controlRunResults/clientCatalogs —
- * el historial local de corridas sobrevive siempre a un import.
+ * Aplica el seed: upsert de clients/sourceSystems/teams por `code`, y de
+ * controlConfigs por [clientCode+controlId] (T5). Nunca toca
+ * controlRuns/controlRunFiles/controlRunResults/clientCatalogs — el
+ * historial local de corridas sobrevive siempre a un import.
  *
- * No procesa todavía `controlConfigs` ni `catalogs` del seed (T5/T6).
+ * No procesa todavía `catalogs` del seed (T6).
  *
- * @returns {{ created: string[], updated: string[], nameConflicts: {code:string, localName:string, seedName:string}[] }}
+ * @returns {{ created: string[], updated: string[],
+ *             nameConflicts: {code:string, localName:string, seedName:string}[],
+ *             configOverrides: {clientCode:string, controlId:string}[] }}
  */
 export async function applySeed(seed) {
   const existing = await getClients();
@@ -104,6 +107,7 @@ export async function applySeed(seed) {
   const created = [];
   const updated = [];
   const nameConflicts = [];
+  const configOverrides = [];
 
   for (const sc of seed.clients) {
     const local = byCode.get(sc.code);
@@ -136,6 +140,27 @@ export async function applySeed(seed) {
     updated.push(sc.code);
   }
 
+  // controlConfigs: si no hay nada local todavía, se aplica tal cual trae el
+  // seed. Si ya hay una config local distinta, se deja como está (puede ser
+  // un ajuste que hizo un analista) y se marca como override visible — no
+  // se pisa en silencio (mismo criterio que el conflicto de nombre arriba).
+  for (const cc of (seed.controlConfigs || [])) {
+    const local = await getControlConfig(cc.clientCode, cc.controlId);
+    if (!local) {
+      await saveControlConfig(cc.clientCode, cc.controlId, {
+        status: cc.status || 'activo',
+        overrideReason: cc.overrideReason ?? null,
+        params: cc.params || {},
+      });
+      continue;
+    }
+    const localDiffers = local.status !== (cc.status || 'activo')
+      || JSON.stringify(local.params) !== JSON.stringify(cc.params || {});
+    if (localDiffers) {
+      configOverrides.push({ clientCode: cc.clientCode, controlId: cc.controlId });
+    }
+  }
+
   await setConfig(SEED_META_KEY, {
     schemaVersion: seed.schemaVersion,
     configVersion: seed.configVersion,
@@ -146,5 +171,5 @@ export async function applySeed(seed) {
   if (Array.isArray(seed.sourceSystems)) await setConfig('seedSourceSystems', seed.sourceSystems);
   if (Array.isArray(seed.teams))         await setConfig('seedTeams', seed.teams);
 
-  return { created, updated, nameConflicts };
+  return { created, updated, nameConflicts, configOverrides };
 }

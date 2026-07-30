@@ -91,6 +91,58 @@ db.version(4).stores({
   });
 });
 
+// v5 — agrega controlConfigs: config de controles por cliente, separada de
+// fileProfiles (que vuelve a ser solo mapeo de columnas — ARCHITECTURE.md
+// §4). Migra las 3 claves que hoy viven mal en fileProfiles
+// ('brutos_tab_config', 'rendvstabu_concept_grouping', 'rva_config',
+// compartidas entre varios controles — ver controlsWizard.js) resolviendo
+// clientId → clientCode. No borra fileProfiles: sigue existiendo para
+// mapeo de columnas real, y las 3 claves viejas quedan sin usarse (cleanup
+// posterior, no bloquea T5 — ver specs/plan-v2-t0-t6.md).
+const LEGACY_CONTROL_CONFIG_KEYS = ['brutos_tab_config', 'rendvstabu_concept_grouping', 'rva_config'];
+
+db.version(5).stores({
+  clients:           '++id, &code, name, sourceSystem, active, team',
+  groupers:          '++id, clientId, name',
+  grouperConcepts:   '++id, grouperId, conceptCode, [grouperId+conceptCode]',
+  fileProfiles:      '++id, clientId, fileType, [clientId+fileType]',
+  sessions:          '++id, clientId, period, isDefinitive, [clientId+period]',
+  sessionFiles:      '++id, sessionId, fileType',
+  sessionResults:    '++id, sessionId',
+  appConfig:         'key',
+  controlRuns:       '++id, clientId, period, isDefinitive, createdAt, [clientId+period]',
+  controlRunFiles:   '++id, controlRunId, fileType, [controlRunId+fileType]',
+  controlRunResults: '++id, controlRunId, controlId, [controlRunId+controlId]',
+  clientCatalogs:    'clientId',
+  controlConfigs:    '[clientCode+controlId], clientCode, controlId, status',
+}).upgrade(async tx => {
+  const clients  = await tx.table('clients').toArray();
+  const byId     = new Map(clients.map(c => [c.id, c]));
+  const profiles = await tx.table('fileProfiles').where('fileType').anyOf(LEGACY_CONTROL_CONFIG_KEYS).toArray();
+
+  const orphaned = [];
+  for (const p of profiles) {
+    const client = byId.get(p.clientId);
+    if (!client || !client.code) {
+      // Cliente borrado, o sin code por algún motivo — no hay a quién
+      // migrarle esta config. No se descarta en silencio: queda anotado
+      // en appConfig (ver abajo) para que se pueda revisar si hace falta.
+      orphaned.push({ clientId: p.clientId, fileType: p.fileType });
+      continue;
+    }
+    await tx.table('controlConfigs').put({
+      clientCode: client.code,
+      controlId: p.fileType,
+      status: 'activo',
+      overrideReason: null,
+      params: p.mapping,
+    });
+  }
+  if (orphaned.length) {
+    await tx.table('appConfig').put({ key: 'controlConfigsMigrationOrphaned', value: orphaned });
+  }
+});
+
 // Convierte un nombre de cliente en un `code` legible (MAYÚSCULAS, sin
 // acentos, sin espacios). Usado tanto por el backfill de arriba como por
 // createClient() para clientes nuevos.
@@ -407,6 +459,34 @@ export async function saveControlRunResults(controlRunId, controlId, results) {
 
 export async function getControlRunResults(controlRunId) {
   return db.controlRunResults.where('controlRunId').equals(Number(controlRunId)).toArray();
+}
+
+// ── CONFIGURACIÓN DE CONTROLES (por cliente) ────────────────────────────────
+// Config de un control para un cliente puntual — clave [clientCode+controlId].
+// Reemplaza el uso de fileProfiles para esto (que vuelve a ser solo mapeo de
+// columnas). status default 'activo': si algo guarda params, es porque el
+// control está configurado y en uso; el resto de los status (no_aplica,
+// forzado_*) se manejan desde el modo admin (T6), no desde acá.
+
+export async function getControlConfig(clientCode, controlId) {
+  return db.controlConfigs.get([clientCode, controlId]);
+}
+
+export async function getControlConfigsForClient(clientCode) {
+  return db.controlConfigs.where('clientCode').equals(clientCode).toArray();
+}
+
+export async function saveControlConfig(clientCode, controlId, changes) {
+  const existing = await getControlConfig(clientCode, controlId);
+  const data = {
+    clientCode,
+    controlId,
+    status:         existing?.status ?? 'activo',
+    overrideReason: existing?.overrideReason ?? null,
+    params:         existing?.params ?? {},
+    ...changes,
+  };
+  return db.controlConfigs.put(data);
 }
 
 // ── RESPALDO COMPLETO (export/import de toda la base) ───────────────────
