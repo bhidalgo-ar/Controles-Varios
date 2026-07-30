@@ -105,13 +105,14 @@ Import manual del JSON desde la UI, con `fetch('./config/hya-controles-config.js
 ### T4 — `appliesWhen` y scopes · M
 
 - Cada entrada del `CONTROL_REGISTRY` gana `scope` (default `'general'`), `scopeMeta` y `appliesWhen(client)` (default `() => true`): los 10 controles actuales siguen apareciendo igual salvo donde se declare un predicado real.
-- Primeros predicados reales, con atributos que el seed ya trae: `f1359 === true` (Marval), `pluriempleo === true` (Sportline, Lowsedo), `paymentUsd === true` (Geopagos, Piano).
-- El wizard separa **"Aplican a este cliente"** de **"Otros controles"** (colapsado, no oculto): si un predicado se equivoca, el analista no queda bloqueado.
+- El wizard separa **"Aplican a este cliente"** de **"Otros controles"** (colapsado, no oculto, y solo aparece si hay algo que mostrar ahí): si un predicado se equivoca, el analista no queda bloqueado.
 
-**Gana el analista:** el wizard deja de ofrecer 10 controles indistintos para los 22 clientes; se ve qué corresponde a este cliente.
-**Depende de:** T2 (atributos). Mucho más útil después de T3.
+**Ajuste del 2026-07-30:** esta sección preveía 3 "primeros predicados reales" (`f1359`→Marval, `pluriempleo`→Sportline/Lowsedo, `paymentUsd`→Geopagos/Piano). No se implementaron: ninguno de los 10 controles del registry corresponde a esos atributos — F.1359 es un control hipotético de `ARCHITECTURE.md` §4, no uno de los 10 reales. Se le preguntó al usuario a qué control real atarlos y no hubo respuesta, así que se avanzó solo con el mecanismo (sin inventar la regla de negocio). Ver detalle en `specs/plan-v2-t0-t6.md` T4.
+
+**Gana el analista:** hoy, nada observable todavía (los 10 controles siguen aplicando siempre) — pero el mecanismo queda probado y listo para el primer control que sí necesite restringirse.
+**Depende de:** T2 (atributos).
 **Toca:** `js/controls/registry.js`, `js/ui/controlsWizard.js`.
-**Listo cuando:** con Marval aparece F.1359 en aplicables y en Merz no; el resto sigue accesible desde "Otros controles".
+**Listo cuando:** `tests/controlsRegistryScope.test.js` y `tests/e2e/controlsWizardScope.spec.js` pasan en CI, confirmando que nada cambió para ningún cliente real.
 
 ---
 

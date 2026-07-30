@@ -7,6 +7,14 @@
 // Cada entrada define:
 //   id              — identificador único (snake_case)
 //   label           — nombre visible al usuario
+//   scope           — 'general' (default, se ofrece a cualquier cliente) | 'convenio' | 'cliente'
+//   scopeMeta       — datos del scope, ej. { ccts: [...] } o { clients: [...] } — {} si no aplica
+//   appliesWhen(client) — predicado sobre el cliente que decide si el control es "aplicable"
+//                     (T4 de PLAN_v2.md). Los 10 controles de hoy son genéricos: siempre
+//                     aplican (() => true) — ningún control real depende todavía de un
+//                     atributo puntual del cliente. Cuando se construya uno que sí (ej. un
+//                     futuro control atado a `pluriempleo`/`paymentUsd`/`f1359`), este es el
+//                     lugar para restringirlo — ver ejemplos de predicados en ARCHITECTURE.md §4.
 //   description     — descripción breve
 //   tabRequired     — si necesita el Tabulado como archivo pivote
 //   additionalFiles — archivos adicionales requeridos: [{ key, label, fileType }]
@@ -72,6 +80,9 @@ export const CONTROL_REGISTRY = {
   cat_x_empleados: {
     id:          'cat_x_empleados',
     label:       'EE x CATEG',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Empleados por Categoría. Compara el catálogo del sistema contra el Tabulado: '
       + 'valida activos, diferencias de cantidad, discrepancias de campo y distribución por puesto y centro de costo.',
     help: {
@@ -95,6 +106,9 @@ export const CONTROL_REGISTRY = {
   brutos: {
     id:          'brutos',
     label:       'Brutos — Controlar',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza SAL_BASE y A_CTA_FUT_AUMEN del Reporte de Brutos contra '
       + 'las columnas configuradas en el Tabulado (SUELDO y A_CTA_FUT_AUMEN).',
     help: {
@@ -121,6 +135,9 @@ export const CONTROL_REGISTRY = {
   brutos_reporte: {
     id:          'brutos_reporte',
     label:       'Brutos — Generar Reporte',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Genera el Reporte de Brutos directamente desde el Tabulado, '
       + 'sin necesitar el archivo de Brutos.',
     help: {
@@ -144,6 +161,9 @@ export const CONTROL_REGISTRY = {
   gs_pers: {
     id:          'gs_pers',
     label:       'GS Pers — Controlar',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza GTOS_PERSONALES y DTO_COCHERA del Reporte de Gastos Personales y Cochera '
       + 'contra las columnas configuradas en el Tabulado.',
     help: {
@@ -170,6 +190,9 @@ export const CONTROL_REGISTRY = {
   gs_pers_reporte: {
     id:          'gs_pers_reporte',
     label:       'GS Pers — Generar Reporte',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Genera el Reporte de Gastos Personales y Cochera directamente desde el Tabulado.',
     help: {
       what: 'Genera el archivo de GS Pers directamente desde el Tabulado, '
@@ -191,6 +214,9 @@ export const CONTROL_REGISTRY = {
   nr: {
     id:          'nr',
     label:       'Control NR — Controlar',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza los 18 conceptos No Remunerativos del Reporte de M4 contra '
       + 'las columnas configuradas en el Tabulado (Indemnizatorios y Otros NR).',
     help: {
@@ -217,6 +243,9 @@ export const CONTROL_REGISTRY = {
   nr_reporte: {
     id:          'nr_reporte',
     label:       'Control NR — Generar Reporte',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Genera el Reporte de No Remunerativos directamente desde el Tabulado, '
       + 'sin necesitar el archivo de M4.',
     help: {
@@ -241,6 +270,9 @@ export const CONTROL_REGISTRY = {
   rend_vs_tabu: {
     id:          'rend_vs_tabu',
     label:       'Rendimiento vs Tabulado',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza el Reporte de Rendimiento contra el Tabulado agrupado por centro de costo. '
       + 'Compara PRECIO, ASIG. ESTÍMULO, RETIROS, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL.',
     help: {
@@ -265,6 +297,9 @@ export const CONTROL_REGISTRY = {
   rend_vs_asiento: {
     id:          'rend_vs_asiento',
     label:       'Rendimiento vs Asiento',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza el Reporte de Rendimiento de M4 contra la Contabilidad Desglosada (CONTA). '
       + 'Agrupa CONTA por CC × categoría (Σ Debe − Σ Haber) y compara contra el Rendimiento.',
     help: {
@@ -294,6 +329,9 @@ export const CONTROL_REGISTRY = {
   rend_x_ee: {
     id:          'rend_x_ee',
     label:       'Rendimiento x EE',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
     description: 'Cruza el Costo Total por empleado del reporte de M4 contra el Costo Total '
       + 'calculado desde el Tabulado (PRECIO + ASIG. ESTÍMULO + CARGAS SS + PROV. MES + PROV. CCSS MES).',
     help: {
