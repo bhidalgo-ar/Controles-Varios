@@ -4,7 +4,7 @@
 // corrió y cuándo. Desde acá el usuario ejecuta controles, ve resultados,
 // o entra al menú "⋯" para agrupadores / checklist / borrar.
 
-import { getClients, createClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup } from '../db.js';
+import { getClients, createClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup, getConfig } from '../db.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
@@ -428,7 +428,39 @@ async function handleSeedFile(seed, root, state) {
   }
 }
 
-function showCreateModal(root, state) {
+// Arma las opciones de Equipo/Consultor/CCTs a partir de lo que ya hay
+// cargado (seed importado + clientes existentes) — nunca texto libre, así
+// las respuestas quedan encerradas a lo que ya se conoce. Si no hay nada
+// cargado todavía, el campo queda vacío con una nota explicando por qué
+// (en vez de dejar escribir cualquier cosa).
+export async function buildClientCatalogs() {
+  const [seedTeams, existingClients] = await Promise.all([
+    getConfig('seedTeams'),
+    getClients(),
+  ]);
+
+  const teamMap = new Map();
+  (seedTeams || []).forEach(t => teamMap.set(t.code, t.lead ? `${t.code} — ${t.lead}` : t.code));
+  existingClients.forEach(c => { if (c.team && !teamMap.has(c.team)) teamMap.set(c.team, c.team); });
+  const teamOptions = [...teamMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const consultantSet = new Set();
+  (seedTeams || []).forEach(t => { if (t.lead) consultantSet.add(t.lead); });
+  existingClients.forEach(c => { if (c.consultant) consultantSet.add(c.consultant); });
+  const consultantOptions = [...consultantSet].sort((a, b) => a.localeCompare(b));
+
+  const cctSet = new Set();
+  existingClients.forEach(c => (c.ccts || []).forEach(cct => { if (cct) cctSet.add(cct); }));
+  const cctOptions = [...cctSet].sort((a, b) => a.localeCompare(b));
+
+  return { teamOptions, consultantOptions, cctOptions };
+}
+
+async function showCreateModal(root, state) {
+  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs();
+
+  const emptyHint = (label) => `<p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Todavía no hay ${label} cargados/as — importá el seed o pedile a un admin que los agregue.</p>`;
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -463,15 +495,28 @@ function showCreateModal(root, state) {
               </div>
               <div class="form-group">
                 <label class="form-label">Equipo</label>
-                <input type="text" class="form-input" id="js-client-team" placeholder="Ej: EQ_CANDELA">
+                <select class="form-input" id="js-client-team">
+                  <option value="">Sin equipo</option>
+                  ${teamOptions.map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`).join('')}
+                </select>
+                ${teamOptions.length === 0 ? emptyHint('equipos') : ''}
               </div>
               <div class="form-group">
                 <label class="form-label">Consultor/a</label>
-                <input type="text" class="form-input" id="js-client-consultant" placeholder="Ej: Candela">
+                <select class="form-input" id="js-client-consultant">
+                  <option value="">Sin consultor/a</option>
+                  ${consultantOptions.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('')}
+                </select>
+                ${consultantOptions.length === 0 ? emptyHint('consultores') : ''}
               </div>
               <div class="form-group">
                 <label class="form-label">Convenios / CCTs</label>
-                <input type="text" class="form-input" id="js-client-ccts" placeholder="Separados por coma. Ej: Comercio, Camioneros">
+                <select class="form-input" id="js-client-ccts" multiple size="4">
+                  ${cctOptions.map(cct => `<option value="${esc(cct)}">${esc(cct)}</option>`).join('')}
+                </select>
+                ${cctOptions.length
+                  ? `<p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Ctrl/Cmd + clic para elegir varios.</p>`
+                  : emptyHint('convenios')}
               </div>
               <div class="form-group">
                 <label class="form-label">Dotación</label>
@@ -520,15 +565,14 @@ function showCreateModal(root, state) {
     const notes = overlay.querySelector('#js-client-notes').value.trim();
     if (!name) { showToast('El nombre del cliente es obligatorio.', 'warning'); return; }
 
-    const ccts = overlay.querySelector('#js-client-ccts').value
-      .split(',').map(s => s.trim()).filter(Boolean);
+    const ccts = Array.from(overlay.querySelector('#js-client-ccts').selectedOptions).map(o => o.value);
     const paysValue = overlay.querySelector('#js-client-pays').value;
 
     const extra = {
       code:         overlay.querySelector('#js-client-code').value,
       sourceSystem: overlay.querySelector('#js-client-source-system').value,
-      team:         overlay.querySelector('#js-client-team').value.trim(),
-      consultant:   overlay.querySelector('#js-client-consultant').value.trim(),
+      team:         overlay.querySelector('#js-client-team').value,
+      consultant:   overlay.querySelector('#js-client-consultant').value,
       ccts,
       pays:         paysValue ? Number(paysValue) : null,
       attributes: {
