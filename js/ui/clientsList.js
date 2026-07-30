@@ -11,6 +11,7 @@ import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../contro
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { downloadBlob } from '../utils/exportData.js';
+import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed } from '../seed/importSeed.js';
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
@@ -33,6 +34,7 @@ export async function renderClientsList(root) {
         <div class="page-actions__title">
           <h2>Clientes</h2>
           <span id="js-control-help"></span>
+          <span id="js-seed-version" style="font-size:12px;color:var(--t3);margin-left:var(--sp-3);"></span>
         </div>
         <div class="page-actions__buttons" style="align-items:center;">
           <div class="month-selector">
@@ -40,6 +42,8 @@ export async function renderClientsList(root) {
             <span class="month-selector__label" id="js-month-label"></span>
             <button type="button" class="month-selector__arrow" id="js-month-next" aria-label="Mes siguiente">›</button>
           </div>
+          <button class="btn btn--ghost btn--pill" id="js-seed-import-btn" title="Importa la cartera de clientes desde un archivo de seed">📥 Importar cartera</button>
+          <input type="file" accept="application/json" id="js-seed-file-input" hidden>
           <button class="btn btn--ghost btn--pill" id="js-backup-export-btn" title="Descarga un archivo con todos los clientes, sesiones y corridas guardadas en este navegador">⬇ Respaldo</button>
           <button class="btn btn--ghost btn--pill" id="js-backup-import-btn" title="Reemplaza todos los datos de este navegador por los de un archivo de respaldo">⬆ Restaurar</button>
           <input type="file" accept="application/json" id="js-backup-file-input" hidden>
@@ -67,10 +71,28 @@ export async function renderClientsList(root) {
   root.querySelector('#js-backup-export-btn').addEventListener('click', handleBackupExport);
   root.querySelector('#js-backup-import-btn').addEventListener('click', () => root.querySelector('#js-backup-file-input').click());
   root.querySelector('#js-backup-file-input').addEventListener('change', (e) => handleBackupImport(e, root, state));
+  root.querySelector('#js-seed-import-btn').addEventListener('click', () => root.querySelector('#js-seed-file-input').click());
+  root.querySelector('#js-seed-file-input').addEventListener('change', (e) => handleSeedFileChosen(e, root, state));
   renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
 
   updateMonthLabel(root, state);
+  await updateSeedVersionLabel(root);
   await reloadList(root, state);
+
+  // Intento silencioso de auto-carga (útil cuando la app se sirva desde
+  // infraestructura propia de H&A — hoy en GitHub Pages este archivo no
+  // existe a propósito, así que esto no hace nada la mayoría de las veces).
+  const autoSeed = await tryAutoLoadSeed();
+  if (autoSeed) await handleSeedFile(autoSeed, root, state);
+}
+
+async function updateSeedVersionLabel(root) {
+  const label = root.querySelector('#js-seed-version');
+  if (!label) return;
+  const meta = await getLoadedSeedMeta();
+  label.textContent = meta
+    ? `Seed v${meta.configVersion}${meta.updatedAt ? ` · ${meta.updatedAt}` : ''}`
+    : 'Sin seed importado';
 }
 
 async function changeMonth(root, state, stepFn) {
@@ -332,6 +354,57 @@ async function handleBackupImport(e, root, state) {
     setTimeout(() => window.location.reload(), 900);
   } catch (err) {
     showToast(`Error al restaurar el respaldo: ${err.message}`, 'danger');
+  }
+}
+
+async function handleSeedFileChosen(e, root, state) {
+  const input = e.target;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+
+  let seed;
+  try {
+    seed = JSON.parse(await file.text());
+  } catch {
+    showToast('El archivo elegido no es un JSON válido.', 'danger');
+    return;
+  }
+  await handleSeedFile(seed, root, state);
+}
+
+async function handleSeedFile(seed, root, state) {
+  const loadedMeta = await getLoadedSeedMeta();
+  const inspection = inspectSeed(seed, loadedMeta);
+
+  if (!inspection.compatible) {
+    showToast(`No se pudo importar el seed: ${inspection.reason}`, 'danger');
+    return;
+  }
+
+  const lines = [`Vas a importar ${inspection.clientCount} clientes del seed (v${inspection.seedConfigVersion}).`];
+  if (inspection.olderThanLoaded) {
+    lines.push(`⚠ Este seed es más viejo que el que ya tenés cargado (v${inspection.loadedConfigVersion}).`);
+  }
+  lines.push('No se toca tu historial de corridas guardado en este navegador. ¿Continuar?');
+
+  const ok = await showConfirm(lines.join('\n'), {
+    type: inspection.olderThanLoaded ? 'danger' : 'warning',
+    confirmLabel: 'Importar',
+  });
+  if (!ok) return;
+
+  try {
+    const result = await applySeed(seed);
+    showToast(`Seed importado: ${result.created.length} clientes nuevos, ${result.updated.length} actualizados.`, 'success');
+    if (result.nameConflicts.length) {
+      const detail = result.nameConflicts.map(c => `${c.code}: local="${c.localName}" vs seed="${c.seedName}"`).join(' · ');
+      showToast(`${result.nameConflicts.length} cliente(s) con nombre distinto al del seed (no se pisó automáticamente): ${detail}`, 'warning', 0);
+    }
+    await updateSeedVersionLabel(root);
+    await reloadList(root, state);
+  } catch (err) {
+    showToast(`Error al importar el seed: ${err.message}`, 'danger');
   }
 }
 
