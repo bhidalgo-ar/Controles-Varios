@@ -1,6 +1,6 @@
 # Esquema del seed de configuración
 
-> El archivo real (`hya-controles-config.json`, 22 clientes) no vive en este repo — ver `DECISIONS.md` D-010. `config/hya-controles-config.example.json` es el mismo shape con 2 clientes ficticios, para referencia y para pruebas locales de import (T3 de `PLAN_v2.md`).
+> El archivo real (`hya-controles-config.json`, 22 clientes) no vive en este repo — ver `DECISIONS.md` D-010. El ejemplo anonimizado que existió en `config/hya-controles-config.example.json` se borró (D-012); este documento describe el esquema para referencia, y los tests que necesitan un seed de prueba lo arman en memoria.
 
 ## Campos de nivel raíz
 
@@ -12,7 +12,8 @@
 | `updatedBy` | string | Quién lo exportó. |
 | `_about` | string | Nota libre, no la lee la app. |
 | `sourceSystems` | array | Catálogo de sistemas de origen soportados (`meta4`, `axton`). |
-| `teams` | array | Equipos de analistas (`code`, `lead`). |
+| `teams` | array | Equipos de analistas (`code`, `lead` — `lead` puede ser `null` si el equipo todavía no tiene referente asignado). |
+| `consultants` | array | Catálogo de consultores/as conocidos (`{ name }`), incluye a quienes todavía no tienen un cliente asignado. Se usa para autocompletar el alta de cliente. |
 | `clients` | array | Los clientes de la cartera — ver abajo. |
 | `controlConfigs` | array | Configuración de controles por cliente (T5 de `PLAN_v2.md`). Vacío hasta que se releve. |
 | `catalogs` | array | Catálogos de conceptos por cliente, si se distribuyen por seed en vez de por import individual. |
@@ -33,7 +34,7 @@
 | `sourceSystem` | `"meta4"` \| `"axton"` | Determina qué adaptador de parsing usa. |
 | `migratedAt` | string \| null | Fecha de migración de sistema de origen, si aplica. |
 | `active` | boolean | Si el cliente está activo en la cartera. |
-| `attributes` | object | Booleanos que alimentan `appliesWhen` de los controles (T4): `paymentUsd`, `pluriempleo`, `holding`, `retroactividad`, `f1359`, `confidential`, `downloadF572`. |
+| `attributes` | object | Booleanos que alimentan `appliesWhen` de los controles (T4): `paymentUsd`, `pluriempleo`, `holding`, `retroactividad`, `confidential`, `downloadF572`. (`f1359` se sacó del modelo — no correspondía a ningún control real, ver D-012.) |
 
 ## Notas
 

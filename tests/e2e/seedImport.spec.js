@@ -1,20 +1,46 @@
 // seedImport.spec.js — Prueba de extremo a extremo de T3 (import del seed).
-// Usa config/hya-controles-config.example.json (2 clientes ficticios,
-// committeado a propósito como referencia — el seed real vive fuera del
-// repo, ver DECISIONS.md D-010) como archivo a importar.
+// El seed de prueba se arma en memoria y se escribe a un archivo temporal
+// (el seed real vive fuera del repo, ver DECISIONS.md D-010 — no hay
+// ejemplo commiteado, D-012).
 
 import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
-const EXAMPLE_SEED_PATH = 'config/hya-controles-config.example.json';
+function testSeed(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    configVersion: 1,
+    updatedAt: '2026-07-30',
+    updatedBy: 'test',
+    sourceSystems: [{ id: 'meta4', label: 'Meta4' }, { id: 'axton', label: 'Axton' }],
+    teams: [{ code: 'EQ_TEST', lead: 'Alguien' }],
+    consultants: [{ name: 'Alguien' }],
+    clients: [
+      { code: 'ACME', name: 'Acme Demo SA', team: 'EQ_TEST', consultant: 'Alguien', complexity: 2, pays: 50, ccts: ['Comercio'], entityCount: 1, sourceSystem: 'meta4', active: true, attributes: {} },
+      { code: 'DEMOCORP', name: 'Demo Corp SRL', team: 'EQ_TEST', consultant: 'Alguien', complexity: 3, pays: 200, ccts: ['Camioneros'], entityCount: 2, sourceSystem: 'axton', active: true, attributes: { paymentUsd: true } },
+    ],
+    controlConfigs: [],
+    catalogs: [],
+    ...overrides,
+  };
+}
 
-test('importar el seed de ejemplo crea los clientes y muestra la versión', async ({ page }) => {
+async function writeTestSeed(testInfo, overrides = {}) {
+  const path = testInfo.outputPath('test-seed.json');
+  await writeFile(path, JSON.stringify(testSeed(overrides)));
+  return path;
+}
+
+test('importar un seed de prueba crea los clientes y muestra la versión', async ({ page }, testInfo) => {
+  const seedPath = await writeTestSeed(testInfo);
+
   await page.goto('/');
   await expect(page.locator('#js-seed-version')).toHaveText('Sin seed importado');
 
   const fileChooserPromise = page.waitForEvent('filechooser');
   await page.click('#js-seed-import-btn');
   const fileChooser = await fileChooserPromise;
-  await fileChooser.setFiles(EXAMPLE_SEED_PATH);
+  await fileChooser.setFiles(seedPath);
 
   await expect(page.locator('.modal__footer')).toBeVisible();
   await page.click('#js-confirm-ok');
@@ -25,14 +51,16 @@ test('importar el seed de ejemplo crea los clientes y muestra la versión', asyn
   await expect(page.locator('#js-seed-version')).toContainText('Seed v1');
 });
 
-test('importar el mismo seed dos veces no duplica clientes', async ({ page }) => {
+test('importar el mismo seed dos veces no duplica clientes', async ({ page }, testInfo) => {
+  const seedPath = await writeTestSeed(testInfo);
+
   await page.goto('/');
 
   for (let i = 0; i < 2; i++) {
     const fileChooserPromise = page.waitForEvent('filechooser');
     await page.click('#js-seed-import-btn');
     const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(EXAMPLE_SEED_PATH);
+    await fileChooser.setFiles(seedPath);
     await expect(page.locator('.modal__footer')).toBeVisible();
     await page.click('#js-confirm-ok');
     await expect(page.locator('.toast--success')).toBeVisible();

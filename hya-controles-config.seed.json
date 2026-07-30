@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "configVersion": 1,
+  "configVersion": 2,
   "updatedAt": "2026-07-30",
   "updatedBy": "gesposito",
   "_about": "Seed de configuración de Controles Nómina. Se importa desde el modo admin de la app. Los ids locales de Dexie NO viajan acá: la identidad es 'code'.",
@@ -28,6 +28,10 @@
     {
       "code": "EQ_SERGIO",
       "lead": "Sergio"
+    },
+    {
+      "code": "EQ_TOYOTA",
+      "lead": null
     }
   ],
   "clients": [
@@ -51,7 +55,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -76,7 +79,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -101,7 +103,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -125,7 +126,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -150,7 +150,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -176,7 +175,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -201,7 +199,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -225,7 +222,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -249,7 +245,6 @@
         "pluriempleo": false,
         "holding": true,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -274,7 +269,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": true,
         "downloadF572": false
       }
@@ -300,7 +294,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -324,7 +317,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": true,
         "downloadF572": false
       }
@@ -348,7 +340,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": true,
         "confidential": true,
         "downloadF572": false
       }
@@ -372,7 +363,6 @@
         "pluriempleo": true,
         "holding": true,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -396,7 +386,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": true,
         "downloadF572": false
       }
@@ -420,7 +409,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -447,7 +435,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -472,7 +459,6 @@
         "pluriempleo": true,
         "holding": true,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -496,7 +482,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -521,7 +506,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -546,7 +530,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": true,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -570,7 +553,6 @@
         "pluriempleo": false,
         "holding": false,
         "retroactividad": false,
-        "f1359": false,
         "confidential": false,
         "downloadF572": false
       }
@@ -581,7 +563,45 @@
   "_pendingReview": [
     "Códigos de cliente confirmados por Guillermo Esposito (gesposito) el 2026-07-30 — ya no son propuestos, son identidad estable (D-004). No renombrar sin migración de datos.",
     "Contradicción retros/retroactividad y campo 'confidential' quedaron fuera de scope de esta herramienta (dato de migración, no de Controles Nómina).",
-    "El listado tiene 9 consultores; Willy estimó ~15 analistas usuarios. Faltarían personas o clientes.",
-    "controlConfigs vacío: pendiente relevar qué controles aplican a cada cliente fuera de Marval/Sportline."
+    "controlConfigs vacío: pendiente relevar qué controles aplican a cada cliente fuera de Marval/Sportline.",
+    "Consultores: 12 en total (9 ya asignados a clientes + 3 nuevos sin cliente asignado todavía: Florencia, Eileen, Laura). EQ_TOYOTA agregado sin lead asignado."
+  ],
+  "consultants": [
+    {
+      "name": "Agustina C."
+    },
+    {
+      "name": "Agustina R."
+    },
+    {
+      "name": "Araceli"
+    },
+    {
+      "name": "Candela"
+    },
+    {
+      "name": "Celeste"
+    },
+    {
+      "name": "Daiana"
+    },
+    {
+      "name": "Eileen"
+    },
+    {
+      "name": "Florencia"
+    },
+    {
+      "name": "Laura"
+    },
+    {
+      "name": "Melina"
+    },
+    {
+      "name": "Micaela"
+    },
+    {
+      "name": "Sergio"
+    }
   ]
 }

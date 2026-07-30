@@ -11,7 +11,7 @@ import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../contro
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { downloadBlob } from '../utils/exportData.js';
-import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed, tryLoadKnownCompanies } from '../seed/importSeed.js';
+import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed, tryLoadKnownCompanies, tryLoadKnownConsultants } from '../seed/importSeed.js';
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
@@ -438,9 +438,10 @@ async function handleSeedFile(seed, root, state) {
 // respuestas quedan encerradas a lo que ya se conoce. Si no hay nada
 // cargado todavía, el campo queda vacío con una nota explicando por qué
 // (en vez de dejar escribir cualquier cosa).
-export async function buildClientCatalogs(knownCompanies = []) {
-  const [seedTeams, existingClients] = await Promise.all([
+export async function buildClientCatalogs(knownCompanies = [], knownConsultants = []) {
+  const [seedTeams, seedConsultants, existingClients] = await Promise.all([
     getConfig('seedTeams'),
+    getConfig('seedConsultants'),
     getClients(),
   ]);
 
@@ -452,8 +453,10 @@ export async function buildClientCatalogs(knownCompanies = []) {
 
   const consultantSet = new Set();
   (seedTeams || []).forEach(t => { if (t.lead) consultantSet.add(t.lead); });
+  (seedConsultants || []).forEach(c => { if (c.name) consultantSet.add(c.name); });
   existingClients.forEach(c => { if (c.consultant) consultantSet.add(c.consultant); });
   knownCompanies.forEach(c => { if (c.consultant) consultantSet.add(c.consultant); });
+  knownConsultants.forEach(name => { if (name) consultantSet.add(name); });
   const consultantOptions = [...consultantSet].sort((a, b) => a.localeCompare(b));
 
   const cctSet = new Set();
@@ -465,8 +468,11 @@ export async function buildClientCatalogs(knownCompanies = []) {
 }
 
 async function showCreateModal(root, state) {
-  const knownCompanies = await tryLoadKnownCompanies();
-  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs(knownCompanies);
+  const [knownCompanies, knownConsultants] = await Promise.all([
+    tryLoadKnownCompanies(),
+    tryLoadKnownConsultants(),
+  ]);
+  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs(knownCompanies, knownConsultants);
 
   const emptyHint = (label) => `<p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Todavía no hay ${label} cargados/as — importá el seed o pedile a un admin que los agregue.</p>`;
 
@@ -551,9 +557,6 @@ async function showCreateModal(root, state) {
                     <input type="checkbox" id="js-client-attr-paymentUsd"> Pago en USD
                   </label>
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
-                    <input type="checkbox" id="js-client-attr-f1359"> F.1359
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
                     <input type="checkbox" id="js-client-attr-retroactividad"> Retroactividad
                   </label>
                 </div>
@@ -599,7 +602,6 @@ async function showCreateModal(root, state) {
     overlay.querySelector('#js-client-attr-pluriempleo').checked = !!attrs.pluriempleo;
     overlay.querySelector('#js-client-attr-holding').checked = !!attrs.holding;
     overlay.querySelector('#js-client-attr-paymentUsd').checked = !!attrs.paymentUsd;
-    overlay.querySelector('#js-client-attr-f1359').checked = !!attrs.f1359;
     overlay.querySelector('#js-client-attr-retroactividad').checked = !!attrs.retroactividad;
 
     overlay.querySelector('#js-create-client-form details').open = true;
@@ -625,7 +627,6 @@ async function showCreateModal(root, state) {
         pluriempleo:     overlay.querySelector('#js-client-attr-pluriempleo').checked,
         holding:         overlay.querySelector('#js-client-attr-holding').checked,
         paymentUsd:      overlay.querySelector('#js-client-attr-paymentUsd').checked,
-        f1359:           overlay.querySelector('#js-client-attr-f1359').checked,
         retroactividad:  overlay.querySelector('#js-client-attr-retroactividad').checked,
       },
     };

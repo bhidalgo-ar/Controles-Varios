@@ -32,10 +32,10 @@ for (const c of controls) {
   assert(`${c.id}: aplica a un cliente sin atributos especiales (default no-op)`, c.appliesWhen(clienteSinAtributos) === true);
 }
 
-// Ningún control real quedó atado todavía a f1359/pluriempleo/paymentUsd —
+// Ningún control real quedó atado todavía a pluriempleo/paymentUsd/holding —
 // son ejemplos de predicado documentados para cuando exista un control real
 // que los necesite (ver ARCHITECTURE.md §4), no ataduras inventadas hoy.
-const clienteConTodosLosAtributos = { code: 'CON_TODO', attributes: { f1359: true, pluriempleo: true, paymentUsd: true, holding: true, retroactividad: true } };
+const clienteConTodosLosAtributos = { code: 'CON_TODO', attributes: { pluriempleo: true, paymentUsd: true, holding: true, retroactividad: true } };
 for (const c of controls) {
   assert(`${c.id}: sigue aplicando igual aunque el cliente tenga todos los atributos activados`, c.appliesWhen(clienteConTodosLosAtributos) === true);
 }

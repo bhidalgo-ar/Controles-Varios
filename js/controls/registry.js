@@ -13,7 +13,7 @@
 //                     (T4 de PLAN_v2.md). Los 10 controles de hoy son genéricos: siempre
 //                     aplican (() => true) — ningún control real depende todavía de un
 //                     atributo puntual del cliente. Cuando se construya uno que sí (ej. un
-//                     futuro control atado a `pluriempleo`/`paymentUsd`/`f1359`), este es el
+//                     futuro control atado a `pluriempleo`/`paymentUsd`/`holding`), este es el
 //                     lugar para restringirlo — ver ejemplos de predicados en ARCHITECTURE.md §4.
 //   description     — descripción breve
 //   tabRequired     — si necesita el Tabulado como archivo pivote
