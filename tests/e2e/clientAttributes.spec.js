@@ -9,6 +9,7 @@ test('crear un cliente con sistema de origen, equipo y CCTs los muestra en la li
   await page.locator('#js-first-client-btn, #js-new-client-btn').first().click();
 
   await page.fill('#js-client-name', 'Cliente Axton E2E');
+  await page.click('#js-create-client-form details summary'); // despliega "Más datos del cliente"
   await page.selectOption('#js-client-source-system', 'axton');
   await page.fill('#js-client-team', 'EQ_CANDELA');
   await page.fill('#js-client-ccts', 'Comercio, Camioneros');
