@@ -1,25 +1,44 @@
 // clientAttributes.spec.js — Prueba de extremo a extremo de T2 (code y
-// atributos de cliente). Crea un cliente con los campos nuevos del
-// formulario y verifica que la lista los muestre.
+// atributos de cliente) + del ajuste del 2026-07-30 (equipo/consultor/CCTs
+// salen de un <select> con lo ya cargado, no de texto libre — así las
+// respuestas quedan encerradas a lo que ya se conoce).
+//
+// Para que haya algo cargado de dónde elegir, primero se importa el seed
+// de ejemplo (T3): trae el equipo EQ_EJEMPLO, el consultor "Analista
+// Ejemplo" y los CCTs Comercio/Camioneros.
 
 import { test, expect } from '@playwright/test';
 
-test('crear un cliente con sistema de origen, equipo y CCTs los muestra en la lista', async ({ page }) => {
-  await page.goto('/');
-  await page.locator('#js-first-client-btn, #js-new-client-btn').first().click();
+const EXAMPLE_SEED_PATH = 'config/hya-controles-config.example.json';
 
+async function importExampleSeed(page) {
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.click('#js-seed-import-btn');
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles(EXAMPLE_SEED_PATH);
+  await expect(page.locator('.modal__footer')).toBeVisible();
+  await page.click('#js-confirm-ok');
+  await expect(page.locator('.toast--success')).toBeVisible();
+}
+
+test('el equipo/consultor/CCTs del alta de cliente salen de lo ya cargado (seed), no de texto libre', async ({ page }) => {
+  await page.goto('/');
+  await importExampleSeed(page);
+
+  await page.click('#js-new-client-btn');
   await page.fill('#js-client-name', 'Cliente Axton E2E');
   await page.click('#js-create-client-form details summary'); // despliega "Más datos del cliente"
   await page.selectOption('#js-client-source-system', 'axton');
-  await page.fill('#js-client-team', 'EQ_CANDELA');
-  await page.fill('#js-client-ccts', 'Comercio, Camioneros');
+  await page.selectOption('#js-client-team', 'EQ_EJEMPLO');
+  await page.selectOption('#js-client-consultant', 'Analista Ejemplo');
+  await page.selectOption('#js-client-ccts', ['Comercio']);
   await page.fill('#js-client-pays', '120');
   await page.check('#js-client-attr-pluriempleo');
   await page.click('#js-confirm-create');
 
   const row = page.locator('.home-table__row', { hasText: 'Cliente Axton E2E' });
   await expect(row).toContainText('Axton');
-  await expect(row).toContainText('EQ_CANDELA');
+  await expect(row).toContainText('EQ_EJEMPLO');
   await expect(row).toContainText('Comercio');
 });
 
