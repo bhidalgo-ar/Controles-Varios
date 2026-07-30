@@ -421,6 +421,10 @@ async function handleSeedFile(seed, root, state) {
       const detail = result.nameConflicts.map(c => `${c.code}: local="${c.localName}" vs seed="${c.seedName}"`).join(' · ');
       showToast(`${result.nameConflicts.length} cliente(s) con nombre distinto al del seed (no se pisó automáticamente): ${detail}`, 'warning', 0);
     }
+    if (result.configOverrides.length) {
+      const detail = result.configOverrides.map(c => `${c.clientCode}/${c.controlId}`).join(', ');
+      showToast(`${result.configOverrides.length} configuración(es) de control ya tenían un ajuste local distinto al del seed y no se tocaron: ${detail}`, 'warning', 0);
+    }
     await updateSeedVersionLabel(root);
     await reloadList(root, state);
   } catch (err) {

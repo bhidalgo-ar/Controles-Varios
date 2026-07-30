@@ -6,7 +6,7 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
-const { createClient, createControlRun, getControlRuns, getClientByCode } = await import('./js/db.js');
+const { createClient, createControlRun, getControlRuns, getClientByCode, getControlConfig, saveControlConfig } = await import('./js/db.js');
 const { inspectSeed, applySeed, getLoadedSeedMeta, tryLoadKnownCompanies, SEED_SCHEMA_VERSION } = await import('./js/seed/importSeed.js');
 
 let ok = 0, fail = 0;
@@ -104,7 +104,33 @@ function baseSeed(overrides = {}) {
   assert('el nombre local no se pisó en silencio', local.name === 'Un Nombre Cualquiera');
 }
 
-// 7) tryLoadKnownCompanies(): trae la lista de compañías conocidas para
+// 7) controlConfigs del seed (T5): se aplican si no hay nada local; si ya
+//    hay una config local distinta, se deja como está y se marca como
+//    override — no se pisa en silencio (mismo criterio que el nombre).
+{
+  const seedWithConfigs = baseSeed({
+    configVersion: 4,
+    controlConfigs: [
+      { clientCode: 'ACME', controlId: 'brutos', status: 'activo', overrideReason: null, params: { SUELDO: 'COL_SEED' } },
+      { clientCode: 'DEMOCORP', controlId: 'nr', status: 'activo', overrideReason: null, params: { concepto1: 'COL_X' } },
+    ],
+  });
+
+  // DEMOCORP/nr ya tiene un ajuste local distinto al del seed.
+  await saveControlConfig('DEMOCORP', 'nr', { params: { concepto1: 'COL_LOCAL_DISTINTO' } });
+
+  const result = await applySeed(seedWithConfigs);
+
+  const acmeBrutos = await getControlConfig('ACME', 'brutos');
+  assert('una config sin nada local se aplica tal cual trae el seed', acmeBrutos.params.SUELDO === 'COL_SEED');
+
+  const democorpNr = await getControlConfig('DEMOCORP', 'nr');
+  assert('una config local distinta a la del seed NO se pisa', democorpNr.params.concepto1 === 'COL_LOCAL_DISTINTO');
+  assert('el override se reporta en vez de aplicarse en silencio', result.configOverrides.some(o => o.clientCode === 'DEMOCORP' && o.controlId === 'nr'));
+  assert('la config que sí se pudo aplicar no aparece como override', !result.configOverrides.some(o => o.clientCode === 'ACME'));
+}
+
+// 8) tryLoadKnownCompanies(): trae la lista de compañías conocidas para
 //    autocompletar el alta de cliente (ajuste del 2026-07-30). No importa
 //    nada a la base — solo lee el archivo, con fetch mockeado acá.
 {

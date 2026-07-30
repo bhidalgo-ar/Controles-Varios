@@ -11,8 +11,8 @@ import {
   updateControlRun,
   saveControlRunFile,
   saveControlRunResults,
-  getFileProfile,
-  saveFileProfile,
+  getControlConfig,
+  saveControlConfig,
   getClientCatalog,
   saveClientCatalog,
   getConfig,
@@ -93,10 +93,10 @@ export async function renderControlsWizard(root, clientId) {
   }
 
   const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig] = await Promise.all([
-    getFileProfile(Number(clientId), 'brutos_tab_config'),
+    getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(Number(clientId)),
-    getFileProfile(Number(clientId), 'rendvstabu_concept_grouping'),
-    getFileProfile(Number(clientId), 'rva_config'),
+    getControlConfig(client.code, 'rendvstabu_concept_grouping'),
+    getControlConfig(client.code, 'rva_config'),
   ]);
 
   // Pre-cargar tabulado desde caché de sesión si existe y es del mismo cliente
@@ -115,13 +115,14 @@ export async function renderControlsWizard(root, clientId) {
     period:           currentPeriod(),
     notes:            '',
     // tabExtraConfig: columnas adicionales del Tabulado para Brutos y GS Pers
-    // (se persiste bajo la clave 'brutos_tab_config' por compatibilidad histórica).
-    tabExtraConfig:            savedBrutosConfig?.mapping || {},
+    // (se persiste en controlConfigs bajo controlId 'brutos_tab_config' —
+    // compartida entre Brutos/GS Pers/NR por compatibilidad histórica).
+    tabExtraConfig:            savedBrutosConfig?.params || {},
     tabExtraConfigAutoDetected: false,
-    rendVsTabuGrouping:        savedRendGrouping?.mapping || null,
+    rendVsTabuGrouping:        savedRendGrouping?.params || null,
     // Config del Control 6 (Rendimiento vs Asiento): clasificación CUENTA_CONTAB,
     // conceptos PROV CCSS y redirects de CC. Editable por el usuario en el paso Archivos.
-    rvaConfig:                 savedRvaConfig?.mapping || JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
+    rvaConfig:                 savedRvaConfig?.params || JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
     expandedGroups:            new Set(),  // grupos de controles cuyo panel de modos está abierto
     lastRunId:                 null,       // runId del último execute exitoso (null si quickRun)
     lastRunResults:            null,       // { [controlId]: results } del último execute exitoso
@@ -1026,7 +1027,7 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
       renderWizardNav(root, state);
       // Guardar inmediatamente para no perder la config si no se ejecuta el control
       if (Object.keys(state.tabExtraConfig).length > 0) {
-        await saveFileProfile(state.clientId, 'brutos_tab_config', state.tabExtraConfig).catch(() => {});
+        await saveControlConfig(state.client.code, 'brutos_tab_config', { params: state.tabExtraConfig }).catch(() => {});
       }
     });
   });
@@ -1288,13 +1289,13 @@ async function executeControls(state, statusEl, container, root) {
       BRUTOS_IDS.includes(id) || GS_PERS_IDS.includes(id) || NR_IDS.includes(id)
     );
     if (needsTabExtra && Object.keys(state.tabExtraConfig).length > 0) {
-      await saveFileProfile(state.clientId, 'brutos_tab_config', state.tabExtraConfig);
+      await saveControlConfig(state.client.code, 'brutos_tab_config', { params: state.tabExtraConfig });
     }
     if (state.selectedControls.some(id => REND_GROUPING_IDS.includes(id)) && state.rendVsTabuGrouping) {
-      await saveFileProfile(state.clientId, 'rendvstabu_concept_grouping', state.rendVsTabuGrouping);
+      await saveControlConfig(state.client.code, 'rendvstabu_concept_grouping', { params: state.rendVsTabuGrouping });
     }
     if (state.selectedControls.includes('rend_vs_asiento') && state.rvaConfig) {
-      await saveFileProfile(state.clientId, 'rva_config', state.rvaConfig);
+      await saveControlConfig(state.client.code, 'rva_config', { params: state.rvaConfig });
     }
 
     // El run en sí se crea sólo si NO es quickRun
