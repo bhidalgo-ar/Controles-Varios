@@ -56,5 +56,20 @@ await createClient('Cliente Dos', '', { team: 'EQ_SIN_SEED', consultant: 'Otro C
   assert('junta los CCTs de todos los clientes sin duplicar', cctOptions.length === 2 && cctOptions.includes('Comercio') && cctOptions.includes('Camioneros'));
 }
 
+// 3) Compañías conocidas (autocompletar por nombre, ajuste del 2026-07-30):
+//    su team/consultant/ccts también entran al catálogo, aunque todavía no
+//    exista ningún cliente local con esos datos — así el <select> tiene la
+//    opción disponible cuando el autocompletado la quiera seleccionar.
+{
+  const knownCompanies = [
+    { code: 'SIASA', name: 'Siasa Logística', team: 'EQ_NUEVO_DEL_SEED', consultant: 'Consultor Nuevo', ccts: ['Convenio Nuevo'] },
+  ];
+  const { teamOptions, consultantOptions, cctOptions } = await buildClientCatalogs(knownCompanies);
+
+  assert('trae el equipo de una compañía conocida aunque nadie lo use todavía', teamOptions.some(([code]) => code === 'EQ_NUEVO_DEL_SEED'));
+  assert('trae el consultor de una compañía conocida', consultantOptions.includes('Consultor Nuevo'));
+  assert('trae el CCT de una compañía conocida', cctOptions.includes('Convenio Nuevo'));
+}
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

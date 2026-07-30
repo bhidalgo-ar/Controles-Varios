@@ -7,7 +7,7 @@ import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
 const { createClient, createControlRun, getControlRuns, getClientByCode } = await import('./js/db.js');
-const { inspectSeed, applySeed, getLoadedSeedMeta, SEED_SCHEMA_VERSION } = await import('./js/seed/importSeed.js');
+const { inspectSeed, applySeed, getLoadedSeedMeta, tryLoadKnownCompanies, SEED_SCHEMA_VERSION } = await import('./js/seed/importSeed.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -102,6 +102,28 @@ function baseSeed(overrides = {}) {
 
   const local = await getClientByCode('CONFLICTIVO');
   assert('el nombre local no se pisó en silencio', local.name === 'Un Nombre Cualquiera');
+}
+
+// 7) tryLoadKnownCompanies(): trae la lista de compañías conocidas para
+//    autocompletar el alta de cliente (ajuste del 2026-07-30). No importa
+//    nada a la base — solo lee el archivo, con fetch mockeado acá.
+{
+  const realFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => baseSeed() });
+  const companies = await tryLoadKnownCompanies();
+  assert('trae los clientes del archivo cuando el fetch da OK', companies.length === 2 && companies[0].code === 'ACME');
+
+  globalThis.fetch = async () => ({ ok: false });
+  assert('un fetch con status no-ok devuelve lista vacía (sin tirar error)', (await tryLoadKnownCompanies()).length === 0);
+
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  assert('un fetch que tira excepción devuelve lista vacía (sin tirar error)', (await tryLoadKnownCompanies()).length === 0);
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ foo: 'bar' }) });
+  assert('un archivo sin "clients" devuelve lista vacía', (await tryLoadKnownCompanies()).length === 0);
+
+  globalThis.fetch = realFetch;
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);

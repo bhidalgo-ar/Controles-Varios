@@ -31,6 +31,29 @@ export async function tryAutoLoadSeed(url = './config/hya-controles-config.json'
   }
 }
 
+/**
+ * Trae la lista de compañías conocidas (nombre, code, equipo, consultor,
+ * CCTs, etc.) desde el seed real que hoy vive en la raíz del repo
+ * (`hya-controles-config.seed.json` — aceptado ahí temporalmente, D-010).
+ * Se usa para autocompletar el alta de cliente (nombre → resto de los
+ * datos), no para importar/crear clientes en bulk (eso es applySeed/T3).
+ *
+ * Cuando el seed real se mude a SharePoint (D-010), esta función va a
+ * empezar a devolver [] acá — en ese momento el catálogo de "compañías
+ * conocidas" pasa a depender pura y exclusivamente de lo que cada analista
+ * ya importó vía T3, no de este archivo del repo.
+ */
+export async function tryLoadKnownCompanies(url = './hya-controles-config.seed.json') {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.clients) ? data.clients : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Metadata del último seed aplicado (o null si nunca se importó ninguno). */
 export async function getLoadedSeedMeta() {
   return getConfig(SEED_META_KEY);
