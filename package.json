@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Herramienta de validación de nómina H&A. Sin build step para la app (ver CLAUDE.md) — este package.json es solo para correr los tests en CI, no para servir ni empaquetar la app.",
   "scripts": {
-    "test:unit": "node --input-type=module < tests/costoTotalParser.test.js && node --input-type=module < tests/dbBackup.test.js && node --input-type=module < tests/dbMigrationV4.test.js && node --input-type=module < tests/importSeed.test.js && node --input-type=module < tests/controlsRegistryScope.test.js && node --input-type=module < tests/clientCatalogs.test.js && node --input-type=module < tests/dbMigrationV5.test.js",
+    "test:unit": "node --input-type=module < tests/costoTotalParser.test.js && node --input-type=module < tests/dbBackup.test.js && node --input-type=module < tests/dbMigrationV4.test.js && node --input-type=module < tests/importSeed.test.js && node --input-type=module < tests/controlsRegistryScope.test.js && node --input-type=module < tests/clientCatalogs.test.js && node --input-type=module < tests/dbMigrationV5.test.js && node --input-type=module < tests/exportSeed.test.js",
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:e2e"
   },

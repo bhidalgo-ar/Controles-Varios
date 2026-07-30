@@ -10,6 +10,7 @@
 //   #/client/:id/groupers   → editor de agrupadores
 //   #/wizard/:clientId      → wizard de validación
 //   #/results/:sessionId    → pantalla de resultados
+//   #/admin                 → modo admin (contraseña, ver D-005)
 
 import { renderClientsList }    from './ui/clientsList.js';
 import { renderGrouperEditor }  from './ui/grouperEditor.js';
@@ -18,6 +19,7 @@ import { renderResultsView }    from './ui/resultsView.js';
 import { renderControlsWizard } from './ui/controlsWizard.js';
 import { renderControlsResults } from './ui/controlsResults.js';
 import { renderChecklist }       from './ui/checklistView.js';
+import { renderAdminView }       from './ui/adminView.js';
 
 const APP_VERSION = '1.0.0-alpha';
 const root = document.getElementById('js-app-root');
@@ -83,6 +85,9 @@ async function handleRoute() {
     } else if (parts[0] === 'checklist' && parts[1]) {
       // #/checklist/:clientId → grilla mensual de controles ejecutados
       await renderChecklist(root, Number(parts[1]));
+    } else if (parts[0] === 'admin') {
+      // #/admin → modo admin (protegido por contraseña, ver D-005)
+      await renderAdminView(root);
     } else {
       // Ruta desconocida → volvemos al inicio
       window.location.hash = '#/';
