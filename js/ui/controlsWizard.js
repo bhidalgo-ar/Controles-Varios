@@ -403,49 +403,63 @@ function isGroupExpanded(groupId, state) {
     .some(c => c.group?.id === groupId && state.selectedControls.includes(c.id));
 }
 
+// Un bloque "aplica" a un cliente si aplica alguno de sus controles (un grupo
+// junta variantes del mismo control — Controlar/Generar Reporte — que en la
+// práctica comparten el mismo appliesWhen). Default () => true si el control
+// no lo declara, para no romper nada si algún control quedara sin migrar.
+export function blockAppliesToClient(block, client) {
+  const controls = block.kind === 'standalone' ? [block.ctrl] : block.controls;
+  return controls.some(c => (c.appliesWhen || (() => true))(client));
+}
+
+function renderBlockHtml(b, state) {
+  if (b.kind === 'standalone') {
+    const active = state.selectedControls.includes(b.ctrl.id);
+    return `
+      <button class="pill ${active ? 'pill--active' : ''}"
+              data-ctrl="${esc(b.ctrl.id)}"
+              title="${esc(b.ctrl.description)}">
+        ${esc(b.ctrl.label)}
+      </button>
+    `;
+  }
+  // Grupo con sub-modos
+  const groupId   = b.groupMeta.id;
+  const expanded  = isGroupExpanded(groupId, state);
+  const anyActive = b.controls.some(c => state.selectedControls.includes(c.id));
+  const arrow     = expanded ? '▾' : '▸';
+  const subsHtml  = expanded
+    ? `<div class="control-group__modes">
+         ${b.controls.map(c => {
+           const subActive = state.selectedControls.includes(c.id);
+           return `
+             <button class="pill pill--sub ${subActive ? 'pill--active' : ''}"
+                     data-ctrl="${esc(c.id)}"
+                     title="${esc(c.description)}">
+               ${esc(c.group.mode)}
+             </button>
+           `;
+         }).join('')}
+       </div>`
+    : '';
+  return `
+    <div class="control-group">
+      <button class="pill ${anyActive ? 'pill--active' : ''}"
+              data-group="${esc(groupId)}">
+        ${esc(b.groupMeta.label)} ${arrow}
+      </button>
+      ${subsHtml}
+    </div>
+  `;
+}
+
 function renderStepControls(container, state, root) {
   const blocks = buildControlBlocks();
+  const applicableBlocks = blocks.filter(b => blockAppliesToClient(b, state.client));
+  const otherBlocks      = blocks.filter(b => !blockAppliesToClient(b, state.client));
 
-  const blocksHtml = blocks.map(b => {
-    if (b.kind === 'standalone') {
-      const active = state.selectedControls.includes(b.ctrl.id);
-      return `
-        <button class="pill ${active ? 'pill--active' : ''}"
-                data-ctrl="${esc(b.ctrl.id)}"
-                title="${esc(b.ctrl.description)}">
-          ${esc(b.ctrl.label)}
-        </button>
-      `;
-    }
-    // Grupo con sub-modos
-    const groupId   = b.groupMeta.id;
-    const expanded  = isGroupExpanded(groupId, state);
-    const anyActive = b.controls.some(c => state.selectedControls.includes(c.id));
-    const arrow     = expanded ? '▾' : '▸';
-    const subsHtml  = expanded
-      ? `<div class="control-group__modes">
-           ${b.controls.map(c => {
-             const subActive = state.selectedControls.includes(c.id);
-             return `
-               <button class="pill pill--sub ${subActive ? 'pill--active' : ''}"
-                       data-ctrl="${esc(c.id)}"
-                       title="${esc(c.description)}">
-                 ${esc(c.group.mode)}
-               </button>
-             `;
-           }).join('')}
-         </div>`
-      : '';
-    return `
-      <div class="control-group">
-        <button class="pill ${anyActive ? 'pill--active' : ''}"
-                data-group="${esc(groupId)}">
-          ${esc(b.groupMeta.label)} ${arrow}
-        </button>
-        ${subsHtml}
-      </div>
-    `;
-  }).join('');
+  const blocksHtml = applicableBlocks.map(b => renderBlockHtml(b, state)).join('');
+  const otherBlocksHtml = otherBlocks.map(b => renderBlockHtml(b, state)).join('');
 
   container.innerHTML = `
     <h3 style="margin:0 0 var(--sp-1);">Paso 1 — Controles a ejecutar</h3>
@@ -482,14 +496,27 @@ function renderStepControls(container, state, root) {
     </div>
 
     <div class="pill-group" id="js-control-pills" style="margin-bottom:var(--sp-3);">
-      ${blocksHtml}
+      ${blocksHtml || '<span class="text-sm text-muted">Ningún control aplica hoy a este cliente.</span>'}
     </div>
+
+    ${otherBlocks.length ? `
+      <details style="margin-bottom:var(--sp-3);">
+        <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-wordmark);">
+          Otros controles (no aplican hoy a este cliente, pero podés ejecutarlos igual)
+        </summary>
+        <div class="pill-group" style="margin-top:var(--sp-3);">
+          ${otherBlocksHtml}
+        </div>
+      </details>
+    ` : ''}
   `;
 
-  // Botón "Seleccionar todos": selecciona standalones + las variantes "Controlar" de cada grupo
+  // Botón "Seleccionar todos": selecciona las variantes "Controlar" de los
+  // controles aplicables a este cliente (no arrastra los de "Otros controles").
   container.querySelector('#js-select-all-ctrls').addEventListener('click', () => {
+    const applicableIds = new Set(applicableBlocks.flatMap(b => b.kind === 'standalone' ? [b.ctrl.id] : b.controls.map(c => c.id)));
     const allControlarIds = Object.values(CONTROL_REGISTRY)
-      .filter(c => !c.group || c.group.mode === 'Controlar')
+      .filter(c => applicableIds.has(c.id) && (!c.group || c.group.mode === 'Controlar'))
       .map(c => c.id);
     state.selectedControls = [...allControlarIds];
     state.controlFiles = {};
