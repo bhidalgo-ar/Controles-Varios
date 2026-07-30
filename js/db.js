@@ -53,6 +53,68 @@ db.version(3).stores({
   clientCatalogs:    'clientId',  // uno por cliente, clientId es la clave primaria
 });
 
+// v4 — agrega `code` como identidad estable de cliente (D-004), en paralelo a
+// `++id` (que sigue siendo la clave primaria interna — migración aditiva,
+// ver PLAN_v2.md §1 / DECISIONS.md D-011). El resto de las tablas no cambia:
+// `clientId` sigue siendo la FK que usan groupers/sessions/controlRuns/etc.
+db.version(4).stores({
+  clients:           '++id, &code, name, sourceSystem, active, team',
+  groupers:          '++id, clientId, name',
+  grouperConcepts:   '++id, grouperId, conceptCode, [grouperId+conceptCode]',
+  fileProfiles:      '++id, clientId, fileType, [clientId+fileType]',
+  sessions:          '++id, clientId, period, isDefinitive, [clientId+period]',
+  sessionFiles:      '++id, sessionId, fileType',
+  sessionResults:    '++id, sessionId',
+  appConfig:         'key',
+  controlRuns:       '++id, clientId, period, isDefinitive, createdAt, [clientId+period]',
+  controlRunFiles:   '++id, controlRunId, fileType, [controlRunId+fileType]',
+  controlRunResults: '++id, controlRunId, controlId, [controlRunId+controlId]',
+  clientCatalogs:    'clientId',
+}).upgrade(tx => {
+  // Backfill: a cada cliente existente le asignamos un code único (slug del
+  // name, con sufijo numérico si dos clientes generan el mismo slug) y los
+  // defaults del resto de los campos nuevos. No toca ninguna otra tabla.
+  const usedCodes = new Set();
+  return tx.table('clients').toCollection().modify(client => {
+    const base = slugifyClientCode(client.name);
+    let code = base;
+    let n = 2;
+    while (usedCodes.has(code)) { code = `${base}_${n}`; n++; }
+    usedCodes.add(code);
+
+    client.code          = code;
+    client.sourceSystem   = client.sourceSystem || 'meta4';
+    client.active         = client.active !== undefined ? client.active : true;
+    client.attributes     = client.attributes || {};
+    client.ccts           = client.ccts || [];
+    client.entityCount    = client.entityCount || 1;
+  });
+});
+
+// Convierte un nombre de cliente en un `code` legible (MAYÚSCULAS, sin
+// acentos, sin espacios). Usado tanto por el backfill de arriba como por
+// createClient() para clientes nuevos.
+function slugifyClientCode(name) {
+  const slug = String(name || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'CLIENTE';
+}
+
+// Encuentra un `code` libre a partir de uno candidato, contra la tabla real
+// (a diferencia del backfill de la migración, esto corre en vivo).
+async function uniqueClientCode(candidate) {
+  let code = candidate;
+  let n = 2;
+  while (await db.clients.where('code').equals(code).count()) {
+    code = `${candidate}_${n}`;
+    n++;
+  }
+  return code;
+}
+
 // ── CLIENTES ────────────────────────────────────────────────────────────
 
 export async function getClients() {
@@ -63,9 +125,41 @@ export async function getClient(id) {
   return db.clients.get(Number(id));
 }
 
-export async function createClient(name, notes = '') {
+export async function getClientByCode(code) {
+  return db.clients.where('code').equals(code).first();
+}
+
+// Resuelve un cliente por `id` numérico (uso interno existente, ej. rutas
+// `#/controls/:clientId`) o por `code` (uso nuevo, ej. el seed). Acepta
+// ambos porque conviven durante toda la migración aditiva (ver T2 en
+// specs/plan-v2-t0-t6.md).
+export async function resolveClient(codeOrId) {
+  if (codeOrId === null || codeOrId === undefined) return undefined;
+  if (typeof codeOrId === 'number' || /^\d+$/.test(String(codeOrId))) {
+    return getClient(codeOrId);
+  }
+  return getClientByCode(String(codeOrId));
+}
+
+export async function createClient(name, notes = '', extra = {}) {
   const now = new Date().toISOString();
-  return db.clients.add({ name: name.trim(), notes, createdAt: now, updatedAt: now });
+  const trimmedName = name.trim();
+  const code = await uniqueClientCode(slugifyClientCode(extra.code?.trim() || trimmedName));
+  return db.clients.add({
+    name: trimmedName,
+    notes,
+    code,
+    sourceSystem: extra.sourceSystem || 'meta4',
+    team:         extra.team || '',
+    consultant:   extra.consultant || '',
+    ccts:         extra.ccts || [],
+    pays:         extra.pays ?? null,
+    entityCount:  extra.entityCount || 1,
+    active:       true,
+    attributes:   extra.attributes || {},
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 export async function updateClient(id, changes) {

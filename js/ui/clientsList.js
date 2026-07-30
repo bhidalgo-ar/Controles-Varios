@@ -211,6 +211,8 @@ async function buildClientRowData(client, period) {
   return { client, period, statusRun, lastRunOverall, status, miniDots, lastRunText };
 }
 
+const SOURCE_SYSTEM_LABEL = { meta4: 'M4', axton: 'Axton' };
+
 function renderClientRow(r) {
   const { client, status, miniDots, lastRunText, lastRunOverall } = r;
 
@@ -218,10 +220,17 @@ function renderClientRow(r) {
     ? miniDots.map(d => `<span class="status-dot status-dot--sm status-dot--${TIER_DOT[d.tier]}" title="${esc(d.label)}"></span>`).join('')
     : '<span style="font-size:12px;color:var(--t3);">—</span>';
 
+  const metaParts = [
+    client.sourceSystem ? SOURCE_SYSTEM_LABEL[client.sourceSystem] || client.sourceSystem : null,
+    client.team || null,
+    client.ccts && client.ccts.length ? client.ccts.join(', ') : null,
+  ].filter(Boolean);
+
   return `
     <div class="home-table__row" data-client-id="${client.id}">
       <div>
         <strong class="home-table__client-name">${esc(client.name)}</strong>
+        ${metaParts.length ? `<span class="home-table__client-sub">${esc(metaParts.join(' · '))}</span>` : ''}
         ${client.notes ? `<span class="home-table__client-sub">${esc(client.notes)}</span>` : ''}
       </div>
       <span class="home-table__status home-table__status--${TIER_DOT[status.tier]}">
@@ -342,6 +351,53 @@ function showCreateModal(root, state) {
             <input type="text" class="form-input" id="js-client-name" placeholder="Ej: ACME SA" autofocus>
           </div>
           <div class="form-group">
+            <label class="form-label">Código (opcional)</label>
+            <input type="text" class="form-input" id="js-client-code" placeholder="Se genera solo a partir del nombre si lo dejás vacío" style="text-transform:uppercase;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sistema de origen</label>
+            <select class="form-input" id="js-client-source-system">
+              <option value="meta4">Meta4 / PeopleNet</option>
+              <option value="axton">Axton IT</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Equipo (opcional)</label>
+            <input type="text" class="form-input" id="js-client-team" placeholder="Ej: EQ_CANDELA">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Consultor/a (opcional)</label>
+            <input type="text" class="form-input" id="js-client-consultant" placeholder="Ej: Candela">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Convenios / CCTs (opcional)</label>
+            <input type="text" class="form-input" id="js-client-ccts" placeholder="Separados por coma. Ej: Comercio, Camioneros">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dotación (opcional)</label>
+            <input type="number" class="form-input" id="js-client-pays" placeholder="Cantidad de legajos" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Atributos</label>
+            <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);">
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                <input type="checkbox" id="js-client-attr-pluriempleo"> Pluriempleo
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                <input type="checkbox" id="js-client-attr-holding"> Holding
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                <input type="checkbox" id="js-client-attr-paymentUsd"> Pago en USD
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                <input type="checkbox" id="js-client-attr-f1359"> F.1359
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);">
+                <input type="checkbox" id="js-client-attr-retroactividad"> Retroactividad
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
             <label class="form-label">Notas internas (opcional)</label>
             <input type="text" class="form-input" id="js-client-notes" placeholder="Ej: CUIT, contacto, observaciones...">
           </div>
@@ -362,11 +418,32 @@ function showCreateModal(root, state) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
   overlay.querySelector('#js-confirm-create').addEventListener('click', async () => {
-    const name  = overlay.querySelector('#js-client-name').value.trim();
+    const name = overlay.querySelector('#js-client-name').value.trim();
     const notes = overlay.querySelector('#js-client-notes').value.trim();
     if (!name) { showToast('El nombre del cliente es obligatorio.', 'warning'); return; }
+
+    const ccts = overlay.querySelector('#js-client-ccts').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const paysValue = overlay.querySelector('#js-client-pays').value;
+
+    const extra = {
+      code:         overlay.querySelector('#js-client-code').value,
+      sourceSystem: overlay.querySelector('#js-client-source-system').value,
+      team:         overlay.querySelector('#js-client-team').value.trim(),
+      consultant:   overlay.querySelector('#js-client-consultant').value.trim(),
+      ccts,
+      pays:         paysValue ? Number(paysValue) : null,
+      attributes: {
+        pluriempleo:     overlay.querySelector('#js-client-attr-pluriempleo').checked,
+        holding:         overlay.querySelector('#js-client-attr-holding').checked,
+        paymentUsd:      overlay.querySelector('#js-client-attr-paymentUsd').checked,
+        f1359:           overlay.querySelector('#js-client-attr-f1359').checked,
+        retroactividad:  overlay.querySelector('#js-client-attr-retroactividad').checked,
+      },
+    };
+
     try {
-      await createClient(name, notes);
+      await createClient(name, notes, extra);
       close();
       await reloadList(root, state);
     } catch (err) {
