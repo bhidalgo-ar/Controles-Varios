@@ -6,7 +6,9 @@
 
 ## 0. Acuerdos transversales (aplican a las 7 tajadas)
 
-**Cadencia:** una tajada por vez. Se completa T0, se muestra el resultado y se espera confirmación explícita antes de arrancar T1 — y así sucesivamente. No se encadenan tajadas sin OK intermedio.
+**Cadencia:** una tajada por vez. Se completa una tajada, se muestra el resultado y se espera confirmación explícita antes de arrancar la siguiente. No se encadenan tajadas sin OK intermedio.
+
+**Merge (actualizado el 2026-07-30 por Guillermo):** cuando CI da OK (`unit-tests` + `e2e-tests` en verde) y no hay comentarios de revisión pendientes en el PR, el agente mergea directo, sin pedir una confirmación adicional solo para ese paso. La pausa sigue estando entre tajadas (para arrancar la siguiente), no en el merge de la que ya se cerró.
 
 **Acceso a GitHub:** resuelto el 2026-07-30 — el push funciona con normalidad.
 
