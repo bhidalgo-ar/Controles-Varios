@@ -315,4 +315,36 @@ export async function getControlRunResults(controlRunId) {
   return db.controlRunResults.where('controlRunId').equals(Number(controlRunId)).toArray();
 }
 
+// ── RESPALDO COMPLETO (export/import de toda la base) ───────────────────
+// Volcado plano de todas las tablas de la versión de Dexie vigente. Sirve
+// como red de seguridad antes de correr una migración de schema (upgrade()),
+// y como forma de mover el historial local de un navegador a otro.
+// Importar es todo-o-nada: reemplaza la base completa, no fusiona.
+
+export async function exportDbBackup() {
+  const tables = {};
+  for (const table of db.tables) {
+    tables[table.name] = await table.toArray();
+  }
+  return {
+    kind: 'controles-nomina-backup',
+    schemaVersion: db.verno,
+    exportedAt: new Date().toISOString(),
+    tables,
+  };
+}
+
+export async function importDbBackup(backup) {
+  if (!backup || backup.kind !== 'controles-nomina-backup' || !backup.tables) {
+    throw new Error('El archivo no es un respaldo válido de Controles Nómina.');
+  }
+  await db.transaction('rw', db.tables, async () => {
+    for (const table of db.tables) {
+      await table.clear();
+      const rows = backup.tables[table.name];
+      if (rows && rows.length) await table.bulkAdd(rows);
+    }
+  });
+}
+
 export { db };

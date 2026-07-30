@@ -8,9 +8,16 @@
 
 **Cadencia:** una tajada por vez. Se completa T0, se muestra el resultado y se espera confirmación explícita antes de arrancar T1 — y así sucesivamente. No se encadenan tajadas sin OK intermedio.
 
-**Acceso a GitHub:** el push a `bhidalgo-ar/Controles-Varios` devuelve 403 (permiso de escritura de la integración conectada, no un problema de red ni de commit). **Por decisión del usuario, el trabajo de código queda en pausa hasta que el push funcione** — no se generan más commits locales acumulados de tajadas nuevas mientras el acceso esté roto. Cuando se confirme que el push funciona, se retoma con T0.
+**Acceso a GitHub:** resuelto el 2026-07-30 — el push funciona con normalidad.
 
-**Migraciones de schema de IndexedDB (afecta T2 y T5 puntualmente, se deja acá por ser transversal a "no romper datos reales"):** el agente valida cada `upgrade()` de Dexie contra datos sintéticos que arma él mismo (no tiene acceso a una base real de un analista). **Ninguna de las dos tajadas se da por cerrada hasta que el usuario o Willy la corran contra un navegador con una base v3 real** y confirmen que no se perdió historial de corridas. Esto es un guardrail de cierre, no un bloqueo para empezar a codear.
+**Cómo se prueba cada tajada (actualizado el 2026-07-30 — reemplaza el criterio original de "el usuario prueba en un navegador real" como único gate):**
+
+El sandbox donde corre el agente tiene la salida de red restringida y no puede cargar las librerías que la app usa desde internet (Dexie, SheetJS), así que no puede abrir la app en un navegador él mismo. Se resuelve en dos capas, ninguna de las cuales depende de que el usuario opere la app:
+
+1. **Pruebas automáticas que el agente escribe y corre.** Cuando la función a probar se puede aislar (ej. "exportar/importar el respaldo", "migrar un dato de una tabla a otra"), el agente arma una prueba con datos inventados que ejercita el código real (no una reimplementación simplificada) y la corre. Al reportar, describe en español llano — qué probó, qué esperaba que pasara, qué pasó — sin nombres de funciones ni jerga técnica, salvo que el usuario pida el detalle técnico.
+2. **CI en GitHub Actions**, que sí tiene acceso normal a internet (a diferencia del sandbox del agente): corre esas mismas pruebas automáticas en cada cambio, más una prueba de extremo a extremo con un navegador real (Playwright) que abre la app tal como la abriría un analista y hace clic en los botones. Ver `.github/workflows/ci.yml`.
+
+Esto cubre la mayoría de los casos. Sigue habiendo un límite real: el agente arma datos de prueba plausibles, pero no tiene acceso a una base real de un analista con meses de uso — así que un caso raro que solo aparece en datos reales (un cliente con un dato viejo en un formato inesperado, por ejemplo) puede no estar cubierto. Para T2 y T5 en particular (migraciones de schema que tocan el historial real de corridas), esto queda anotado como riesgo residual conocido en vez de bloqueo: si algo raro aparece en producción, se soluciona como un bug puntual, no se exige probar contra una base real antes de mergear.
 
 **No tocar sin consultar, en ninguna tajada:**
 - Los 22 `code` de cliente ya confirmados (`hya-controles-config.seed.json`) — son identidad estable (D-004); no se renombran.
@@ -39,9 +46,9 @@
 | **Guardrails** | Puede modificar: `js/db.js` (agregar funciones, no tocar los `db.version()` existentes), `js/ui/clientsList.js` (agregar el botón y su handler). No puede tocar: ningún `db.version()` ya declarado, ninguna función existente de `db.js` más allá de agregar las nuevas. |
 | **Comportamientos a preservar** | Todo el flujo actual de clientes/sesiones/corridas sigue igual — T1 solo agrega, no modifica lectura/escritura existente. Se verifica corriendo la app sin usar el botón nuevo: nada cambia. |
 | **Scope** | Entra: `exportDbBackup()` (vuelca todas las tablas de la versión de Dexie vigente a un JSON descargable) e `importDbBackup(file)` (restaura, con confirmación explícita del usuario antes de sobreescribir); botón "Exportar respaldo" en el home; botón/flujo de import con advertencia de que pisa la base actual. Afuera: no hay merge inteligente en el import (es todo o nada, restaurar = reemplazar) — un import parcial o "fusionar con lo existente" es explícitamente otra iteración, no esta. |
-| **Evals** | Método: manual, en un navegador real con datos (clientes + al menos 1 corrida). Criterio: exportar, borrar la IndexedDB del navegador (`indexedDB.deleteDatabase` o borrar datos del sitio), importar, y que el listado de clientes y el historial de corridas queden idénticos al estado previo a la exportación. Revisa: el usuario. |
+| **Evals** | Método: prueba automática (`tests/dbBackup.test.js`, corre en CI) que simula un cliente con corridas guardadas, exporta, agrega un cliente "basura" (simula que algo más se guardó encima), importa el respaldo, y verifica que la basura desaparece y el cliente + sus corridas quedan igual que antes de exportar. Más una prueba de extremo a extremo (`tests/e2e/backup.spec.js`, Playwright, corre en CI) que hace exactamente eso mismo pero clickeando los botones reales en un navegador. Criterio: ambas pasan en verde en GitHub Actions. Revisa: el agente corre y reporta en español llano qué probó; el usuario puede confirmar mirando el resultado en verde de CI en el PR, sin tener que operar la app él mismo. |
 | **Autonomía** | Decide solo: formato interno del JSON de respaldo, texto de los mensajes de confirmación. Consulta antes de: si aparece alguna tabla cuyo volumen de datos haga inviable un export en memoria del navegador (no se espera con los datos actuales, pero si pasa, se avisa en vez de truncar en silencio). |
-| **Condición de salida** | Para cuando el eval de arriba pasa en un navegador real. No agrega import selectivo por tabla, no agrega programación de respaldos automáticos — eso no se pidió. |
+| **Condición de salida** | Para cuando `tests/dbBackup.test.js` y `tests/e2e/backup.spec.js` pasan en CI. No agrega import selectivo por tabla, no agrega programación de respaldos automáticos — eso no se pidió. |
 
 ---
 

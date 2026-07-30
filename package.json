@@ -1,0 +1,17 @@
+{
+  "name": "controles-nomina",
+  "private": true,
+  "type": "module",
+  "description": "Herramienta de validación de nómina H&A. Sin build step para la app (ver CLAUDE.md) — este package.json es solo para correr los tests en CI, no para servir ni empaquetar la app.",
+  "scripts": {
+    "test:unit": "node --input-type=module < tests/costoTotalParser.test.js && node --input-type=module < tests/dbBackup.test.js",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "dexie": "^4.0.8",
+    "fake-indexeddb": "^6.0.0",
+    "xlsx": "0.18.5"
+  }
+}

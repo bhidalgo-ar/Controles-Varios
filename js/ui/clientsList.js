@@ -4,12 +4,13 @@
 // corrió y cuándo. Desde acá el usuario ejecuta controles, ve resultados,
 // o entra al menú "⋯" para agrupadores / checklist / borrar.
 
-import { getClients, createClient, deleteClient, getControlRuns, getControlRunResults } from '../db.js';
+import { getClients, createClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup } from '../db.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
+import { downloadBlob } from '../utils/exportData.js';
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
@@ -39,6 +40,9 @@ export async function renderClientsList(root) {
             <span class="month-selector__label" id="js-month-label"></span>
             <button type="button" class="month-selector__arrow" id="js-month-next" aria-label="Mes siguiente">›</button>
           </div>
+          <button class="btn btn--ghost btn--pill" id="js-backup-export-btn" title="Descarga un archivo con todos los clientes, sesiones y corridas guardadas en este navegador">⬇ Respaldo</button>
+          <button class="btn btn--ghost btn--pill" id="js-backup-import-btn" title="Reemplaza todos los datos de este navegador por los de un archivo de respaldo">⬆ Restaurar</button>
+          <input type="file" accept="application/json" id="js-backup-file-input" hidden>
           <button class="btn btn--primary btn--pill" id="js-new-client-btn">+ Nuevo cliente</button>
         </div>
       </div>
@@ -60,6 +64,9 @@ export async function renderClientsList(root) {
   root.querySelector('#js-new-client-btn').addEventListener('click', () => showCreateModal(root, state));
   root.querySelector('#js-month-prev').addEventListener('click', () => changeMonth(root, state, previousPeriod));
   root.querySelector('#js-month-next').addEventListener('click', () => changeMonth(root, state, nextPeriod));
+  root.querySelector('#js-backup-export-btn').addEventListener('click', handleBackupExport);
+  root.querySelector('#js-backup-import-btn').addEventListener('click', () => root.querySelector('#js-backup-file-input').click());
+  root.querySelector('#js-backup-file-input').addEventListener('change', (e) => handleBackupImport(e, root, state));
   renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
 
   updateMonthLabel(root, state);
@@ -280,6 +287,43 @@ function attachRowEvents(container, r, root, state) {
     if (wasHidden) panel.removeAttribute('hidden');
   });
   panel.addEventListener('click', (e) => e.stopPropagation());
+}
+
+async function handleBackupExport() {
+  try {
+    const backup = await exportDbBackup();
+    const stamp = backup.exportedAt.slice(0, 19).replace(/[:T]/g, '-');
+    downloadBlob(
+      new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }),
+      `controles-nomina-respaldo-${stamp}.json`
+    );
+    showToast('Respaldo descargado.', 'success');
+  } catch (err) {
+    showToast(`Error al exportar el respaldo: ${err.message}`, 'danger');
+  }
+}
+
+async function handleBackupImport(e, root, state) {
+  const input = e.target;
+  const file = input.files?.[0];
+  input.value = ''; // permite volver a elegir el mismo archivo más adelante
+  if (!file) return;
+
+  const ok = await showConfirm(
+    'Restaurar un respaldo reemplaza TODOS los clientes, sesiones y corridas guardadas en este navegador por los del archivo. '
+    + 'No se puede deshacer. ¿Continuar?',
+    { type: 'danger', confirmLabel: 'Restaurar y reemplazar' }
+  );
+  if (!ok) return;
+
+  try {
+    const backup = JSON.parse(await file.text());
+    await importDbBackup(backup);
+    showToast('Respaldo restaurado. Recargando…', 'success');
+    setTimeout(() => window.location.reload(), 900);
+  } catch (err) {
+    showToast(`Error al restaurar el respaldo: ${err.message}`, 'danger');
+  }
 }
 
 function showCreateModal(root, state) {
