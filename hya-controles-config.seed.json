@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "configVersion": 1,
-  "updatedAt": "2026-07-29",
-  "updatedBy": "",
+  "updatedAt": "2026-07-30",
+  "updatedBy": "gesposito",
   "_about": "Seed de configuración de Controles Nómina. Se importa desde el modo admin de la app. Los ids locales de Dexie NO viajan acá: la identidad es 'code'.",
   "sourceSystems": [
     {
@@ -131,7 +131,7 @@
       }
     },
     {
-      "code": "POM_PILAR",
+      "code": "POP",
       "name": "Plastic Omnium Pilar",
       "team": "EQ_CANDELA",
       "consultant": "Micaela",
@@ -255,7 +255,7 @@
       }
     },
     {
-      "code": "POM_FLORIDA",
+      "code": "POF",
       "name": "Plastic Omnium Florida",
       "team": "EQ_CANDELA",
       "consultant": "Candela",
@@ -579,7 +579,7 @@
   "controlConfigs": [],
   "catalogs": [],
   "_pendingReview": [
-    "Códigos de cliente propuestos, no confirmados por Willy.",
+    "Códigos de cliente confirmados por Guillermo Esposito (gesposito) el 2026-07-30 — ya no son propuestos, son identidad estable (D-004). No renombrar sin migración de datos.",
     "Contradicción retros/retroactividad y campo 'confidential' quedaron fuera de scope de esta herramienta (dato de migración, no de Controles Nómina).",
     "El listado tiene 9 consultores; Willy estimó ~15 analistas usuarios. Faltarían personas o clientes.",
     "controlConfigs vacío: pendiente relevar qué controles aplican a cada cliente fuera de Marval/Sportline."
