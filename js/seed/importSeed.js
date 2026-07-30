@@ -54,6 +54,23 @@ export async function tryLoadKnownCompanies(url = './hya-controles-config.seed.j
   }
 }
 
+/**
+ * Trae el catálogo de consultores conocidos (incluye a quienes todavía no
+ * tienen un cliente asignado) desde el mismo seed real — ver
+ * tryLoadKnownCompanies() de arriba, mismas condiciones y mismo límite.
+ * @returns {string[]} nombres de consultores
+ */
+export async function tryLoadKnownConsultants(url = './hya-controles-config.seed.json') {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.consultants) ? data.consultants.map(c => c.name).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Metadata del último seed aplicado (o null si nunca se importó ninguno). */
 export async function getLoadedSeedMeta() {
   return getConfig(SEED_META_KEY);
@@ -170,6 +187,7 @@ export async function applySeed(seed) {
   });
   if (Array.isArray(seed.sourceSystems)) await setConfig('seedSourceSystems', seed.sourceSystems);
   if (Array.isArray(seed.teams))         await setConfig('seedTeams', seed.teams);
+  if (Array.isArray(seed.consultants))   await setConfig('seedConsultants', seed.consultants);
 
   return { created, updated, nameConflicts, configOverrides };
 }

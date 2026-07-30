@@ -71,5 +71,16 @@ await createClient('Cliente Dos', '', { team: 'EQ_SIN_SEED', consultant: 'Otro C
   assert('trae el CCT de una compañía conocida', cctOptions.includes('Convenio Nuevo'));
 }
 
+// 4) Catálogo de consultores (D-012): un consultor sin cliente asignado
+//    todavía (ej. Florencia/Eileen/Laura en el seed real) tiene que aparecer
+//    igual, tanto si viene de seedConsultants (ya importado) como del
+//    parámetro knownConsultants (fetch directo del seed real, sin importar).
+{
+  await setConfig('seedConsultants', [{ name: 'Consultor Sin Cliente (seed importado)' }]);
+  const { consultantOptions } = await buildClientCatalogs([], ['Consultor Sin Cliente (fetch directo)']);
+  assert('incluye un consultor de seedConsultants aunque no tenga cliente', consultantOptions.includes('Consultor Sin Cliente (seed importado)'));
+  assert('incluye un consultor de knownConsultants aunque no tenga cliente', consultantOptions.includes('Consultor Sin Cliente (fetch directo)'));
+}
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

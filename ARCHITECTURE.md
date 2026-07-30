@@ -76,11 +76,11 @@ Clientes con más de una entidad legal (Poincenot, Carrier, Lowsedo, Sportline) 
 
 ```js
 {
-  id:          'control_f1359',
-  label:       'F.1359',
+  id:          'control_holding',
+  label:       '(ejemplo hipotético — ningún control real usa esto todavía)',
   scope:       'cliente',           // 'general' | 'convenio' | 'cliente'
-  scopeMeta:   { clients: ['MARVAL'] },   // o { ccts: ['Comercio'] } si scope=convenio
-  appliesWhen: (client) => client.attributes.f1359 === true,
+  scopeMeta:   { clients: ['POINCENOT'] },   // o { ccts: ['Comercio'] } si scope=convenio
+  appliesWhen: (client) => client.attributes.holding === true,
   paramSchema: { /* qué parámetros pide configurar */ },
   inputs:      [{ key: 'tabulado', logical: 'tabulado' }],  // formas lógicas, no columnas crudas
   run, summarize, renderResults,
@@ -89,7 +89,7 @@ Clientes con más de una entidad legal (Poincenot, Carrier, Lowsedo, Sportline) 
 
 `appliesWhen` es el mecanismo default de activación: en vez de tildar manualmente 22 clientes × 15 controles, el control se ofrece solo donde el predicado da verdadero. `controlConfigs.status` permite el override manual (`forzado_activo` / `forzado_no_aplica`) con motivo, para las excepciones que el predicado no capture.
 
-Ejemplos de predicados según atributos ya cargados en el seed: `pluriempleo === true` (Sportline, Lowsedo), `f1359 === true` (Marval), `paymentUsd === true` (Geopagos, Piano).
+Ejemplos de predicados según atributos ya cargados en el seed: `pluriempleo === true` (Sportline, Lowsedo), `holding === true` (Poincenot, Sportline, Lowsedo), `paymentUsd === true` (Geopagos, Piano). Ninguno de los 10 controles reales de hoy usa `appliesWhen` para restringirse — es mecanismo puro, ver D-012 y T4 en `specs/plan-v2-t0-t6.md`.
 
 **Configuración (dato, `controlConfigs`):** clave `[clientCode + controlId]`. Reemplaza el uso indebido de `fileProfiles` para guardar cosas como `brutos_tab_config` o `rendvstabu_concept_grouping` — eso vuelve a ser exclusivamente mapeo de columnas.
 

@@ -6,8 +6,8 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
-const { createClient, createControlRun, getControlRuns, getClientByCode, getControlConfig, saveControlConfig } = await import('./js/db.js');
-const { inspectSeed, applySeed, getLoadedSeedMeta, tryLoadKnownCompanies, SEED_SCHEMA_VERSION } = await import('./js/seed/importSeed.js');
+const { createClient, createControlRun, getControlRuns, getClientByCode, getControlConfig, saveControlConfig, getConfig } = await import('./js/db.js');
+const { inspectSeed, applySeed, getLoadedSeedMeta, tryLoadKnownCompanies, tryLoadKnownConsultants, SEED_SCHEMA_VERSION } = await import('./js/seed/importSeed.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -23,6 +23,7 @@ function baseSeed(overrides = {}) {
     updatedBy: 'gesposito',
     sourceSystems: [{ id: 'meta4', label: 'Meta4' }, { id: 'axton', label: 'Axton' }],
     teams: [{ code: 'EQ_TEST', lead: 'Alguien' }],
+    consultants: [{ name: 'Ana' }, { name: 'Bruno' }],
     clients: [
       { code: 'ACME', name: 'Acme Demo SA', team: 'EQ_TEST', consultant: 'Ana', complexity: 2, pays: 50, ccts: ['Comercio'], entityCount: 1, sourceSystem: 'meta4', active: true, attributes: { pluriempleo: false } },
       { code: 'DEMOCORP', name: 'Demo Corp SRL', team: 'EQ_TEST', consultant: 'Bruno', complexity: 3, pays: 200, ccts: ['Camioneros'], entityCount: 2, sourceSystem: 'axton', active: true, attributes: { paymentUsd: true } },
@@ -150,6 +151,34 @@ function baseSeed(overrides = {}) {
   assert('un archivo sin "clients" devuelve lista vacía', (await tryLoadKnownCompanies()).length === 0);
 
   globalThis.fetch = realFetch;
+}
+
+// 9) tryLoadKnownConsultants(): mismo mecanismo que tryLoadKnownCompanies,
+//    pero para el catálogo de consultores (D-012 — consultores sin cliente
+//    asignado todavía, como Florencia/Eileen/Laura en el seed real).
+{
+  const realFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => baseSeed() });
+  const consultants = await tryLoadKnownConsultants();
+  assert('trae los nombres de consultants[] cuando el fetch da OK', consultants.length === 2 && consultants.includes('Ana') && consultants.includes('Bruno'));
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ foo: 'bar' }) });
+  assert('un archivo sin "consultants" devuelve lista vacía', (await tryLoadKnownConsultants()).length === 0);
+
+  globalThis.fetch = async () => { throw new Error('network down'); };
+  assert('un fetch que tira excepción devuelve lista vacía (sin tirar error)', (await tryLoadKnownConsultants()).length === 0);
+
+  globalThis.fetch = realFetch;
+}
+
+// 10) applySeed() persiste seed.consultants (igual que ya hace con seed.teams)
+//     para que el catálogo sobreviva sin depender de un fetch en vivo.
+{
+  const seed = baseSeed({ configVersion: 5 });
+  await applySeed(seed);
+  const stored = await getConfig('seedConsultants');
+  assert('seedConsultants queda guardado tras el import', stored?.length === 2 && stored.some(c => c.name === 'Ana'));
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
