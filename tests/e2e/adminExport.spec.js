@@ -59,7 +59,7 @@ test('editar y exportar desde admin en un navegador llega a otro sin perder sus 
   await page.click('#js-admin-password-form button[type="submit"]');
   await expect(page.locator('#js-admin-client-select')).toBeVisible();
 
-  await page.selectOption('#js-admin-client-select', { label: /Acme Demo SA/ });
+  await page.selectOption('#js-admin-client-select', { label: 'Acme Demo SA (ACME)' });
   await page.selectOption('#js-admin-source-system', 'axton');
   await page.click('#js-admin-save-client-btn');
   await expect(page.locator('.toast--success')).toBeVisible();
