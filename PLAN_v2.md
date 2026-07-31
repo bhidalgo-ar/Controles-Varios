@@ -165,12 +165,12 @@ Sería la tajada de mayor impacto funcional del plan — hoy los 8 clientes de A
 
 ---
 
-### T9 — Retirar la ruta de agrupadores · S
+### T9 — Retirar la ruta de agrupadores · S · ✅ hecho (2026-07-31)
 
 El cruce por agrupadores pasa a ser un control del registry con `scope: 'general'`; se retira `#/wizard/:clientId` y queda una sola ruta de validación (D-008). Cleanup: va al final, cuando nada nuevo dependa de la ruta vieja.
 
-**Toca:** `js/main.js`, `js/ui/wizard.js`, `js/matching.js`, `js/controls/registry.js`.
-**Listo cuando:** no quedan dos rutas de validación paralelas (DoD de v2).
+**Toca:** `js/main.js`, `js/ui/wizard.js` (borrado), `js/ui/resultsView.js` (borrado), `js/matching.js` (reusado, no borrado), `js/controls/agrupadores.js` (nuevo), `js/controls/registry.js`, `js/ui/controlsWizard.js`.
+**Listo cuando:** no quedan dos rutas de validación paralelas (DoD de v2). Ver spec y decisiones concretas en `specs/plan-v2-t9-t10.md` y D-014.
 
 ---
 
@@ -211,7 +211,7 @@ Los cuatro criterios del ROADMAP, contra las tajadas que los cierran:
 - [ ] Un analista selecciona cualquiera de los 22 clientes y ve solo sus controles aplicables → **T3 + T4**
 - [ ] El seed se exporta desde admin y se importa en otro navegador sin perder historial local → **T3 + T6**
 - [ ] Merz corre con adaptador Axton y da el mismo resultado que Meta4 con datos equivalentes → **T7 + T8 (en pausa, §0.3)**
-- [ ] No quedan dos rutas de validación paralelas → **T9**
+- [x] No quedan dos rutas de validación paralelas → **T9** (hecho 2026-07-31)
 
 Con T0-T6 la herramienta ya es multi-cliente y multi-analista para los 14 clientes Meta4. El criterio de Axton queda abierto hasta que T7/T8 se retomen; no bloquea considerar la v2 utilizable en producción para esa porción de la cartera.
 

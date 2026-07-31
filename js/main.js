@@ -8,14 +8,11 @@
 // La navegación usa el "hash" de la URL (lo que viene después del #):
 //   #/                      → lista de clientes
 //   #/client/:id/groupers   → editor de agrupadores
-//   #/wizard/:clientId      → wizard de validación
-//   #/results/:sessionId    → pantalla de resultados
+//   #/controls/:clientId    → wizard de controles (incluye el Cruce por Agrupadores, D-008/T9)
 //   #/admin                 → modo admin (contraseña, ver D-005)
 
 import { renderClientsList }    from './ui/clientsList.js';
 import { renderGrouperEditor }  from './ui/grouperEditor.js';
-import { renderWizard }         from './ui/wizard.js';
-import { renderResultsView }    from './ui/resultsView.js';
 import { renderControlsWizard } from './ui/controlsWizard.js';
 import { renderControlsResults } from './ui/controlsResults.js';
 import { renderChecklist }       from './ui/checklistView.js';
@@ -70,12 +67,6 @@ async function handleRoute() {
     } else if (parts[0] === 'client' && parts[2] === 'groupers') {
       // #/client/:id/groupers → editor de agrupadores
       await renderGrouperEditor(root, Number(parts[1]));
-    } else if (parts[0] === 'wizard' && parts[1]) {
-      // #/wizard/:clientId → wizard de validación
-      await renderWizard(root, Number(parts[1]));
-    } else if (parts[0] === 'results' && parts[1]) {
-      // #/results/:sessionId → resultados
-      await renderResultsView(root, Number(parts[1]));
     } else if (parts[0] === 'controls' && parts[1]) {
       // #/controls/:clientId → wizard de controles
       await renderControlsWizard(root, Number(parts[1]));

@@ -75,6 +75,12 @@ import {
   summarizeRendXEe,
 } from './rendXEe.js';
 
+import {
+  runAgrupadores,
+  renderAgrupadoresResults,
+  summarizeAgrupadores,
+} from './agrupadores.js';
+
 export const CONTROL_REGISTRY = {
 
   cat_x_empleados: {
@@ -353,6 +359,44 @@ export const CONTROL_REGISTRY = {
     run:           runRendXEe,
     summarize:     summarizeRendXEe,
     renderResults: renderRendXEeResults,
+  },
+
+  agrupadores: {
+    id:          'agrupadores',
+    label:       'Cruce por Agrupadores',
+    scope:       'general',
+    scopeMeta:   {},
+    appliesWhen: () => true,
+    description: 'Cruza la Nómina Maestra contra un archivo Resumen del mismo período, sumando los '
+      + 'conceptos de cada agrupador configurado para el cliente y marcando las diferencias por legajo. '
+      + 'No usa el Tabulado como pivote (a diferencia del resto de los controles).',
+    help: {
+      what: 'Reemplaza el cruce manual entre la Nómina Maestra y un Resumen: agrupa los conceptos '
+        + 'según los agrupadores del cliente (ver "Agrupadores" en el menú "⋯" de cada cliente) y '
+        + 'compara los totales por legajo entre ambos archivos.',
+      how: [
+        'Cargá la Nómina Maestra exportada de Meta4.',
+        'Cargá el archivo Resumen del mismo período — el formato Largo (una fila por concepto) o el '
+          + 'Tabulado Horizontal (mismo formato que la nómina), el que corresponda.',
+        'Elegí qué agrupadores incluir y ajustá los umbrales si hace falta.',
+        'Ejecutá. Las diferencias se muestran por agrupador y por legajo.',
+      ],
+    },
+    tabRequired: false,
+    // El Resumen puede venir en 2 formatos distintos (a diferencia del resto de los
+    // additionalFiles, que tienen un fileType fijo). En vez de un selector de tipo en
+    // runtime (que el registry no soporta), se declaran los dos como additionalFiles
+    // opcionales — el analista sube el que tenga, y run() usa el que haya llegado
+    // (ver agrupadores.js). controlsWizard.js exige "al menos uno de los dos" con un
+    // caso puntual en canGoNext, igual que otros controles validan sus propios extras.
+    additionalFiles: [
+      { key: 'nomina',          label: 'Nómina Maestra',                                    fileType: 'nomina_maestra' },
+      { key: 'resumenLargo',    label: 'Resumen — Formato Largo (opcional)',                fileType: 'resumen_largo_excel', optional: true },
+      { key: 'resumenTabulado', label: 'Resumen — Formato Tabulado Horizontal (opcional)',  fileType: 'resumen_tabulado_horizontal', optional: true },
+    ],
+    run:           runAgrupadores,
+    summarize:     summarizeAgrupadores,
+    renderResults: renderAgrupadoresResults,
   },
 
 };
