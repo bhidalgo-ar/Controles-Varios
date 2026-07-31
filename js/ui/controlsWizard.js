@@ -16,6 +16,8 @@ import {
   getClientCatalog,
   saveClientCatalog,
   getConfig,
+  getGroupers,
+  getGrouperConcepts,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
@@ -33,6 +35,7 @@ import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { currentPeriod, periodOptions } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
 import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
+import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
 
@@ -92,11 +95,13 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig] = await Promise.all([
+  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, groupers] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(Number(clientId)),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
     getControlConfig(client.code, 'rva_config'),
+    getControlConfig(client.code, 'agrupadores_config'),
+    getGroupers(clientId),
   ]);
 
   // Pre-cargar tabulado desde caché de sesión si existe y es del mismo cliente
@@ -123,6 +128,11 @@ export async function renderControlsWizard(root, clientId) {
     // Config del Control 6 (Rendimiento vs Asiento): clasificación CUENTA_CONTAB,
     // conceptos PROV CCSS y redirects de CC. Editable por el usuario en el paso Archivos.
     rvaConfig:                 savedRvaConfig?.params || JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
+    // Agrupadores del cliente + config de "Cruce por Agrupadores" (selección + umbrales,
+    // ver agrupadores.js). Se cargan siempre (no sólo si el control está seleccionado),
+    // mismo criterio que rvaConfig arriba.
+    groupers:                  groupers || [],
+    agrupadoresConfig:         savedAgrupadoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
     expandedGroups:            new Set(),  // grupos de controles cuyo panel de modos está abierto
     lastRunId:                 null,       // runId del último execute exitoso (null si quickRun)
     lastRunResults:            null,       // { [controlId]: results } del último execute exitoso
@@ -300,6 +310,14 @@ function canGoNext(state) {
       if (hasGsPers) {
         if (!cfg.tabGtosPersonalesColumn || !cfg.tabDtoCocheraColumn) return false;
       }
+
+      // Agrupadores: el Resumen puede venir en 2 formatos, ambos declarados como
+      // additionalFiles opcionales (ver registry.js) — se exige que llegue al menos uno.
+      if (state.selectedControls.includes('agrupadores')) {
+        const files = state.controlFiles.agrupadores || {};
+        if (!files.resumenLargo && !files.resumenTabulado) return false;
+      }
+
       return true;
     }
 
@@ -820,6 +838,21 @@ function renderStepFiles(container, state, root) {
         onChange:     (newConfig) => { state.rvaConfig = newConfig; },
       });
     }
+
+    // Editor de "Agrupadores y umbrales" del Cruce por Agrupadores
+    if (controlId === 'agrupadores') {
+      const cfgWrapper = document.createElement('div');
+      cfgWrapper.style.marginBottom = 'var(--sp-3)';
+      filesArea.appendChild(cfgWrapper);
+
+      renderAgrupadoresConfigEditor(cfgWrapper, {
+        config:        state.agrupadoresConfig,
+        groupers:      state.groupers,
+        clientId:      state.clientId,
+        openByDefault: true,
+        onChange:      (newConfig) => { state.agrupadoresConfig = newConfig; renderWizardNav(root, state); },
+      });
+    }
   }
 
   // ── Panel de configuración de columnas del Tabulado ─────────────────────────
@@ -1297,6 +1330,9 @@ async function executeControls(state, statusEl, container, root) {
     if (state.selectedControls.includes('rend_vs_asiento') && state.rvaConfig) {
       await saveControlConfig(state.client.code, 'rva_config', { params: state.rvaConfig });
     }
+    if (state.selectedControls.includes('agrupadores') && state.agrupadoresConfig) {
+      await saveControlConfig(state.client.code, 'agrupadores_config', { params: state.agrupadoresConfig });
+    }
 
     // El run en sí se crea sólo si NO es quickRun
     let runId = null;
@@ -1342,6 +1378,20 @@ async function executeControls(state, statusEl, container, root) {
       }
       if (controlId === 'rend_vs_asiento' && state.rvaConfig) {
         mapping.rvaConfig = state.rvaConfig;
+      }
+      if (controlId === 'agrupadores') {
+        const cfg           = state.agrupadoresConfig || {};
+        const allGroupers   = state.groupers || [];
+        const selectedIds   = cfg.selectedGrouperIds ?? allGroupers.map(g => g.id);
+        const grouperDefs   = allGroupers.filter(g => selectedIds.includes(g.id));
+        const grouperConceptsMap = {};
+        for (const g of grouperDefs) {
+          const concepts = await getGrouperConcepts(g.id);
+          grouperConceptsMap[g.id] = concepts.map(c => c.conceptCode);
+        }
+        mapping.grouperDefs        = grouperDefs;
+        mapping.grouperConceptsMap = grouperConceptsMap;
+        mapping.agrupadoresConfig  = cfg;
       }
       for (const fileSpec of ctrl.additionalFiles) {
         const fileData = state.controlFiles[controlId]?.[fileSpec.key];

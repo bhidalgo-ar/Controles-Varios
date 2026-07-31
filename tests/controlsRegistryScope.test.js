@@ -17,7 +17,9 @@ function assert(desc, val) {
 }
 
 const controls = Object.values(CONTROL_REGISTRY);
-assert('el registry sigue teniendo los 10 controles de siempre', controls.length === 10);
+// T9: se agregó "agrupadores" (11º control, el viejo cruce por agrupadores
+// reimplementado como control del registry — ver specs/plan-v2-t9-t10.md).
+assert('el registry tiene los 10 controles de siempre + agrupadores (T9)', controls.length === 11);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');
