@@ -18,11 +18,13 @@ import {
   getConfig,
   getGroupers,
   getGrouperConcepts,
+  getControlConfigsForClient,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
+import { controlAppliesToClient, filterControlsForClient } from '../controls/scope.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { autoDetectTabMapping }    from '../parsers/tabuladoControl.js';
 import { autoDetectCatMapping }    from '../parsers/catEmpleados.js';
@@ -95,14 +97,22 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, groupers] = await Promise.all([
+  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, groupers, allControlConfigs] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(Number(clientId)),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
     getControlConfig(client.code, 'rva_config'),
     getControlConfig(client.code, 'agrupadores_config'),
     getGroupers(clientId),
+    getControlConfigsForClient(client.code),
   ]);
+
+  // controlConfigs por controlId — se usa para resolver qué controles aplican a
+  // este cliente: un `forzado_activo`/`forzado_no_aplica` cargado desde #/admin
+  // gana sobre el scope declarado en el registry (ver js/controls/scope.js).
+  const controlConfigsByControlId = new Map(
+    (allControlConfigs || []).map(cfg => [cfg.controlId, cfg])
+  );
 
   // Pre-cargar tabulado desde caché de sesión si existe y es del mismo cliente
   const cachedTab = (_tabSessionCache?.clientId === Number(clientId))
@@ -133,6 +143,8 @@ export async function renderControlsWizard(root, clientId) {
     // mismo criterio que rvaConfig arriba.
     groupers:                  groupers || [],
     agrupadoresConfig:         savedAgrupadoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
+    controlConfigsByControlId,
+
     expandedGroups:            new Set(),  // grupos de controles cuyo panel de modos está abierto
     lastRunId:                 null,       // runId del último execute exitoso (null si quickRun)
     lastRunResults:            null,       // { [controlId]: results } del último execute exitoso
@@ -328,8 +340,12 @@ function canGoNext(state) {
 // ── Paso 0: Seleccionar controles ─────────────────────────────────────────────
 
 // Construye la sección colapsable "¿Qué hace cada control?" del paso 1.
-function buildHelpSection() {
-  const allControls = Object.values(CONTROL_REGISTRY);
+// Sólo describe los controles que este cliente puede ejecutar — no tiene
+// sentido explicarle a un cliente Axton cómo bajar un reporte de M4.
+function buildHelpSection(state) {
+  const allControls = filterControlsForClient(
+    Object.values(CONTROL_REGISTRY), state.client, state.controlConfigsByControlId
+  );
 
   const cards = allControls
     .filter(c => c.help)
@@ -424,11 +440,11 @@ function isGroupExpanded(groupId, state) {
 
 // Un bloque "aplica" a un cliente si aplica alguno de sus controles (un grupo
 // junta variantes del mismo control — Controlar/Generar Reporte — que en la
-// práctica comparten el mismo appliesWhen). Default () => true si el control
-// no lo declara, para no romper nada si algún control quedara sin migrar.
-export function blockAppliesToClient(block, client) {
+// práctica comparten la misma clasificación). La resolución (override de admin
+// → scope/scopeMeta → appliesWhen) vive en js/controls/scope.js.
+export function blockAppliesToClient(block, client, configByControlId) {
   const controls = block.kind === 'standalone' ? [block.ctrl] : block.controls;
-  return controls.some(c => (c.appliesWhen || (() => true))(client));
+  return controls.some(c => controlAppliesToClient(c, client, configByControlId?.get(c.id)));
 }
 
 function renderBlockHtml(b, state) {
@@ -473,12 +489,13 @@ function renderBlockHtml(b, state) {
 }
 
 function renderStepControls(container, state, root) {
-  const blocks = buildControlBlocks();
-  const applicableBlocks = blocks.filter(b => blockAppliesToClient(b, state.client));
-  const otherBlocks      = blocks.filter(b => !blockAppliesToClient(b, state.client));
+  // Sólo los controles que aplican a este cliente. Los que no aplican no se
+  // muestran de ninguna forma (decisión de Guillermo, 2026-07-31): la vía para
+  // ejecutar uno que el scope excluye es forzarlo desde #/admin con motivo.
+  const applicableBlocks = buildControlBlocks()
+    .filter(b => blockAppliesToClient(b, state.client, state.controlConfigsByControlId));
 
   const blocksHtml = applicableBlocks.map(b => renderBlockHtml(b, state)).join('');
-  const otherBlocksHtml = otherBlocks.map(b => renderBlockHtml(b, state)).join('');
 
   container.innerHTML = `
     <h3 style="margin:0 0 var(--sp-1);">Paso 1 — Controles a ejecutar</h3>
@@ -500,39 +517,38 @@ function renderStepControls(container, state, root) {
       </ul>
     `)}
 
-    ${buildHelpSection()}
+    ${buildHelpSection(state)}
 
-    <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap;">
-      <button class="btn btn--secondary btn--sm" id="js-select-all-ctrls">
-        ✓ Seleccionar todos
-      </button>
-      <button class="btn btn--ghost btn--sm" id="js-clear-ctrls">
-        ✕ Limpiar selección
-      </button>
-      <span class="text-muted" style="font-size:var(--text-sm);align-self:center;">
-        "Seleccionar todos" elige las variantes de Control de cada grupo (no las de Generar Reporte).
-      </span>
-    </div>
+    ${applicableBlocks.length ? `
+      <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap;">
+        <button class="btn btn--secondary btn--sm" id="js-select-all-ctrls">
+          ✓ Seleccionar todos
+        </button>
+        <button class="btn btn--ghost btn--sm" id="js-clear-ctrls">
+          ✕ Limpiar selección
+        </button>
+        <span class="text-muted" style="font-size:var(--text-sm);align-self:center;">
+          "Seleccionar todos" elige las variantes de Control de cada grupo (no las de Generar Reporte).
+        </span>
+      </div>
+    ` : ''}
 
     <div class="pill-group" id="js-control-pills" style="margin-bottom:var(--sp-3);">
-      ${blocksHtml || '<span class="text-sm text-muted">Ningún control aplica hoy a este cliente.</span>'}
-    </div>
-
-    ${otherBlocks.length ? `
-      <details style="margin-bottom:var(--sp-3);">
-        <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-wordmark);">
-          Otros controles (no aplican hoy a este cliente, pero podés ejecutarlos igual)
-        </summary>
-        <div class="pill-group" style="margin-top:var(--sp-3);">
-          ${otherBlocksHtml}
+      ${blocksHtml || `
+        <div class="alert alert--info" style="margin:0;">
+          Todavía no hay controles asignados a <strong>${esc(state.client.name)}</strong>.
+          <br>
+          Los controles se asignan por cliente o por sistema de origen. Si este cliente
+          debería poder ejecutar alguno, se habilita desde el modo admin
+          (<a href="#/admin">#/admin</a> → Configuración de controles → "Forzado activo").
         </div>
-      </details>
-    ` : ''}
+      `}
+    </div>
   `;
 
   // Botón "Seleccionar todos": selecciona las variantes "Controlar" de los
-  // controles aplicables a este cliente (no arrastra los de "Otros controles").
-  container.querySelector('#js-select-all-ctrls').addEventListener('click', () => {
+  // controles que aplican a este cliente (`applicableBlocks` ya viene filtrado).
+  container.querySelector('#js-select-all-ctrls')?.addEventListener('click', () => {
     const applicableIds = new Set(applicableBlocks.flatMap(b => b.kind === 'standalone' ? [b.ctrl.id] : b.controls.map(c => c.id)));
     const allControlarIds = Object.values(CONTROL_REGISTRY)
       .filter(c => applicableIds.has(c.id) && (!c.group || c.group.mode === 'Controlar'))
@@ -550,7 +566,7 @@ function renderStepControls(container, state, root) {
   });
 
   // Botón "Limpiar selección"
-  container.querySelector('#js-clear-ctrls').addEventListener('click', () => {
+  container.querySelector('#js-clear-ctrls')?.addEventListener('click', () => {
     state.selectedControls = [];
     state.controlFiles = {};
     state.expandedGroups = new Set();

@@ -4,14 +4,22 @@
 // default sólo cuenta los runs marcados como definitivos — los borradores
 // quedan ocultos pero se pueden ver con un toggle.
 
-import { getClient, getControlRuns, getControlRunResults } from '../db.js';
+import { getClient, getControlRuns, getControlRunResults, getControlConfigsForClient } from '../db.js';
 import { CONTROL_REGISTRY }              from '../controls/registry.js';
+import { filterControlsForClient }       from '../controls/scope.js';
 import { periodToLabel, periodOptions }  from '../utils/dates.js';
 
-// Solo "Controlar" — los de Generar Reporte no son controles propiamente dichos.
-function checklistControls() {
-  return Object.values(CONTROL_REGISTRY)
-    .filter(c => !c.group || c.group.mode === 'Controlar');
+// Columnas del checklist: sólo "Controlar" (los de Generar Reporte no son
+// controles propiamente dichos) y sólo los que aplican a este cliente — no
+// tiene sentido pedirle a un cliente Axton que complete controles de Marval.
+// Ojo: esto filtra las *columnas*; los resultados históricos ya guardados se
+// resuelven por `controlId` más abajo y se siguen viendo igual.
+function checklistControls(client, configByControlId) {
+  return filterControlsForClient(
+    Object.values(CONTROL_REGISTRY).filter(c => !c.group || c.group.mode === 'Controlar'),
+    client,
+    configByControlId
+  );
 }
 
 export async function renderChecklist(root, clientId) {
@@ -28,6 +36,9 @@ export async function renderChecklist(root, clientId) {
   }
 
   const allRuns = await getControlRuns(clientId);  // ordenados desc por createdAt
+  const controlConfigsByControlId = new Map(
+    (await getControlConfigsForClient(client.code) || []).map(cfg => [cfg.controlId, cfg])
+  );
 
   // Pre-cargo los resultados de cada run (para conocer status por control)
   const runDataById = new Map();  // runId → { run, results }
@@ -73,7 +84,7 @@ export async function renderChecklist(root, clientId) {
     const last12 = periodOptions(12).map(p => p.value);
     const allPeriods = new Set([...last12, ...periodMap.keys()]);
     const periods = [...allPeriods].sort().reverse();
-    const controls = checklistControls();
+    const controls = checklistControls(client, controlConfigsByControlId);
 
     root.innerHTML = `
       <div class="page-content">

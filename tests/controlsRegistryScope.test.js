@@ -2,6 +2,13 @@
 // Correr desde la raíz del proyecto:
 //   node --input-type=module < tests/controlsRegistryScope.test.js
 //
+// Cubre la forma de cada entrada del registry (scope/scopeMeta/appliesWhen
+// existen y tienen el tipo correcto) y que appliesWhen en sí — el predicado
+// fino sobre atributos del cliente — sigue siendo un no-op en los 11
+// controles. La clasificación real por scope (quién ve qué control) se
+// prueba aparte en tests/controlsScope.test.js — ver
+// specs/segmentacion-controles-por-cliente.md.
+//
 // registry.js importa (transitivamente) módulos de UI que registran un
 // listener a nivel de módulo (ej. exportMenu.js) — necesitan un `document`
 // mínimo para poder importarse fuera del navegador. No se ejercita nada de

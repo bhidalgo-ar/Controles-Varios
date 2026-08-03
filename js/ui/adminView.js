@@ -17,6 +17,7 @@ import { buildSeedExport } from '../seed/exportSeed.js';
 import { downloadBlob } from '../utils/exportData.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
+import { scopeLabel, controlAppliesToClient } from '../controls/scope.js';
 
 // SHA-256 de la contraseña de acceso. Generada al implementar T6 (el usuario
 // no llegó a elegir una propia) — hay que avisarle que puede rotarla acá.
@@ -217,11 +218,17 @@ async function renderClientDetail(root, state) {
     <button class="btn btn--primary" id="js-admin-save-client-btn" style="margin-top:var(--sp-3);">Guardar cliente</button>
 
     <h4 style="margin-top:var(--sp-5);">Configuración de controles</h4>
+    <p class="text-sm text-muted" style="margin:0 0 var(--sp-2);">
+      "Aplica hoy" es lo que decide el scope declarado en el código (<code>registry.js</code>).
+      "Estado" es el override manual — "Forzado activo"/"Forzado no aplica" ganan por sobre el scope.
+    </p>
     <div class="card" style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr style="text-align:left;">
             <th style="padding:var(--sp-2);">Control</th>
+            <th style="padding:var(--sp-2);">Scope</th>
+            <th style="padding:var(--sp-2);">Aplica hoy</th>
             <th style="padding:var(--sp-2);">Estado</th>
             <th style="padding:var(--sp-2);">Motivo (si es forzado)</th>
           </tr>
@@ -230,9 +237,16 @@ async function renderClientDetail(root, state) {
           ${Object.values(CONTROL_REGISTRY).map(ctrl => {
             const cfg = configByControl.get(ctrl.id);
             const status = cfg?.status || 'sin_configurar';
+            const applies = controlAppliesToClient(ctrl, client, cfg);
             return `
               <tr data-control-id="${esc(ctrl.id)}">
                 <td style="padding:var(--sp-2);">${esc(ctrl.label)}</td>
+                <td style="padding:var(--sp-2);" class="text-sm text-muted">${esc(scopeLabel(ctrl))}</td>
+                <td style="padding:var(--sp-2);">
+                  ${applies
+                    ? '<span class="badge badge--success">Sí</span>'
+                    : '<span class="badge badge--neutral">No</span>'}
+                </td>
                 <td style="padding:var(--sp-2);">
                   <select class="form-input js-control-status">
                     ${CONTROL_CONFIG_STATUSES.map(s => `<option value="${s.value}" ${status === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}

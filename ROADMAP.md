@@ -37,14 +37,14 @@ Prioridad 1 (más alta) a 10 (más baja). Esfuerzo: S (<1 día) · M (1-3 días)
 | 2.2 | Import del seed (`hya-controles-config.json`), chequeo de versión, merge no destructivo sobre `controlRuns` | 1 | M | planeado |
 | 2.3 | Modo admin con contraseña (hash local) para editar clientes/config y exportar seed | 2 | M | planeado |
 | 2.4 | Tabla `controlConfigs` + migrar fuera de `fileProfiles` lo que no es mapeo de columnas | 2 | M | planeado |
-| 2.5 | `appliesWhen` por control + scopes general/convenio/cliente | 3 | M | planeado |
+| 2.5 | `appliesWhen` por control + scopes general/convenio/cliente | 3 | M | hecho ✅ (2026-07-31, agrega scope `sistema`; ver `specs/segmentacion-controles-por-cliente.md`) |
 | 2.6 | Seam de adaptadores: `js/adapters/meta4/` (extraer de parsers actuales) | 3 | M | planeado |
 | 2.7 | Adaptador Axton — piloto con Merz | 4 | M | planeado |
 | 2.8 | Retirar ruta de agrupadores; reimplementar como control `scope: general` | 5 | S | planeado |
 | 2.9 | Relevar `controlConfigs` real de los 21 clientes fuera de Marval (validar `appliesWhen` con consultores) | 5 | L | planeado |
 
 **Definition of Done de v2:**
-- [ ] Un analista puede seleccionar cualquiera de los 22 clientes y ver solo sus controles aplicables.
+- [x] Un analista puede seleccionar cualquiera de los 22 clientes y ver solo sus controles aplicables (2026-07-31 — hoy sólo Marval tiene los 10 controles de M4; el resto ve "Cruce por Agrupadores").
 - [ ] El seed se puede exportar desde modo admin e importar en otro navegador sin perder historial local.
 - [ ] Merz corre con adaptador Axton y da el mismo resultado que el parser Meta4 daría con datos equivalentes.
 - [ ] No quedan dos rutas de validación paralelas.
