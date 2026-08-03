@@ -62,6 +62,8 @@ db.version(4).stores({
 
 **Migración de v3 a v4:** requiere backfill: a cada `client` existente asignarle un `code` (slug del `name`), y reescribir las FK de `groupers`, `fileProfiles`, `sessions`, `controlRuns`, `clientCatalogs` de `clientId` numérico a `clientCode`. Ejecutar una sola vez, con export JSON previo de respaldo.
 
+**Nota (2026-07-31 — D-011/D-016):** el schema de arriba es el ideal final; no se llegó a él en un solo salto. `clients` mantuvo `++id` como primary key real (con `&code` como índice único agregado en v4) hasta hoy — v3→v4 fue aditiva, no un reemplazo de PK. El cierre (v6, T10) llevó `groupers`/`fileProfiles`/`sessions`/`controlRuns` a indexar por `clientCode` como muestra el bloque de arriba, con una excepción real que este documento no anticipaba: `clientCatalogs` sigue usando `clientId` como primary key por dentro (no `clientCode`), porque Dexie no permite cambiar la primary key de una tabla existente — confirmado empíricamente al implementar T10. `clientCode` existe ahí como índice secundario; `db.js` resuelve la diferencia y nada fuera de ese archivo la ve.
+
 ---
 
 ## 3. Cliente y entidad

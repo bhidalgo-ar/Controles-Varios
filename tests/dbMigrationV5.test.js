@@ -69,7 +69,9 @@ assert('la config de Rend vs Asiento migró con el mismo mapping', JSON.stringif
 
 // 3) fileProfiles no se tocó — ni las 3 claves viejas (limpieza es tajada
 //    aparte) ni, sobre todo, el mapeo de columnas real.
-const profiles = await db.table('fileProfiles').where('clientId').equals(marvalId).toArray();
+// Nota: se consulta por `clientCode` porque db.js hoy declara hasta v6 (T10),
+// que saca `clientId` del índice de fileProfiles — ver dbMigrationV6.test.js.
+const profiles = await db.table('fileProfiles').where('clientCode').equals('MARVAL').toArray();
 assert('fileProfiles de Marval sigue con sus 4 filas (nada se borró)', profiles.length === 4);
 const tabuladoProfile = profiles.find(p => p.fileType === 'tabulado_control');
 assert('el mapeo de columnas real (no una de las 3 claves) sigue intacto', tabuladoProfile && tabuladoProfile.mapping.legajo === 'LEGAJO');

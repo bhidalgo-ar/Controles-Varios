@@ -99,11 +99,11 @@ export async function renderControlsWizard(root, clientId) {
 
   const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, groupers, allControlConfigs] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
-    getClientCatalog(Number(clientId)),
+    getClientCatalog(client.code),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
     getControlConfig(client.code, 'rva_config'),
     getControlConfig(client.code, 'agrupadores_config'),
-    getGroupers(clientId),
+    getGroupers(client.code),
     getControlConfigsForClient(client.code),
   ]);
 
@@ -720,12 +720,12 @@ function renderStepFiles(container, state, root) {
 
     if (catalogUploadEl) {
       initFileUploadStep(catalogUploadEl, {
-        clientId:    state.clientId,
+        clientCode:  state.client.code,
         fileType:    'concept_catalog',
         existingData: null,
         onComplete:  async (data) => {
           state.catalog = { rows: data.rows, fileName: data.fileName, parseMetadata: data.parseMetadata };
-          await saveClientCatalog(state.clientId, state.catalog);
+          await saveClientCatalog(state.client.code, state.catalog);
           renderStepFiles(container, state, root);
         },
       });
@@ -739,12 +739,12 @@ function renderStepFiles(container, state, root) {
       uploadEl.style.display = '';
       container.querySelector('#js-catalog-replace')?.remove();
       initFileUploadStep(uploadEl, {
-        clientId:    state.clientId,
+        clientCode:  state.client.code,
         fileType:    'concept_catalog',
         existingData: null,
         onComplete:  async (data) => {
           state.catalog = { rows: data.rows, fileName: data.fileName, parseMetadata: data.parseMetadata };
-          await saveClientCatalog(state.clientId, state.catalog);
+          await saveClientCatalog(state.client.code, state.catalog);
           renderStepFiles(container, state, root);
         },
       });
@@ -755,7 +755,7 @@ function renderStepFiles(container, state, root) {
     }
 
     initFileUploadStep(container.querySelector('#js-tab-upload'), {
-      clientId:    state.clientId,
+      clientCode:  state.client.code,
       fileType:    'tab_control',
       existingData: state.tab,
       autoDetect:  AUTO_DETECT.tab_control,
@@ -805,7 +805,7 @@ function renderStepFiles(container, state, root) {
         : null;
 
       initFileUploadStep(uploadDiv, {
-        clientId:    state.clientId,
+        clientCode:  state.client.code,
         fileType:    fileSpec.fileType,
         existingData: state.controlFiles[controlId]?.[fileSpec.key] || null,
         autoDetect,
@@ -1354,7 +1354,7 @@ async function executeControls(state, statusEl, container, root) {
     let runId = null;
     if (!quickRun) {
       runId = await createControlRun(
-        state.clientId, state.period, state.selectedControls, state.notes
+        state.client.code, state.period, state.selectedControls, state.notes
       );
       if (tab) {
         await saveControlRunFile(

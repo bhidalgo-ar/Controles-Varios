@@ -75,14 +75,19 @@ assert('el otro quedó con un sufijo numérico', [cafeA.code, cafeB.code].some(c
 
 assert('getClientByCode encuentra a Marval por code', (await getClientByCode('MARVAL'))?.id === marvalId);
 
-// 3) Nada del historial de Marval se perdió ni cambió de dueño
-const groupers = await db.table('groupers').where('clientId').equals(marvalId).toArray();
+// 3) Nada del historial de Marval se perdió ni cambió de dueño.
+// Nota: db.js hoy declara hasta v6 (T10), que migra estas 3 tablas de
+// `clientId` a `clientCode` — por eso se consulta acá por `clientCode` (ya no
+// está indexado por `clientId`, ver dbMigrationV6.test.js para el detalle de
+// esa migración puntual). Lo que este test verifica (T2) sigue intacto: el
+// dato sobrevive completo, sin cambiar de dueño, a través de toda la cadena.
+const groupers = await db.table('groupers').where('clientCode').equals(marval.code).toArray();
 assert('el grouper de Marval sigue ahí', groupers.length === 1 && groupers[0].name === 'Sueldos');
 
-const sessions = await db.table('sessions').where('clientId').equals(marvalId).toArray();
+const sessions = await db.table('sessions').where('clientCode').equals(marval.code).toArray();
 assert('la sesión de Marval sigue ahí', sessions.length === 1 && sessions[0].period === '2026-06');
 
-const runs = await db.table('controlRuns').where('clientId').equals(marvalId).toArray();
+const runs = await db.table('controlRuns').where('clientCode').equals(marval.code).toArray();
 assert('la corrida de Marval sigue ahí con sus notas', runs.length === 1 && runs[0].notes === 'corrida real');
 
 const catalog = await db.table('clientCatalogs').get(marvalId);

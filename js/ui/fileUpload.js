@@ -118,15 +118,15 @@ const TIPOS_CON_NOMBRE = ['nomina_maestra', 'resumen_tabulado_horizontal'];
  *
  * @param {HTMLElement} container
  * @param {object} opts
- *   clientId     {number}         - ID del cliente (para buscar/guardar perfil)
+ *   clientCode   {string}         - code del cliente (para buscar/guardar perfil, T10)
  *   fileType     {string}         - Tipo de archivo
  *   existingData {object|null}    - Datos ya cargados en esta sesión (null = primera vez)
  *   onComplete   {function(data)} - Se llama cuando el archivo está parseado y listo
  */
-export async function initFileUploadStep(container, { clientId, fileType, existingData, onComplete, autoDetect }) {
+export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }) {
   if (existingData) {
     renderAlreadyLoaded(container, existingData,
-      () => initFileUploadStep(container, { clientId, fileType, existingData: null, onComplete }),
+      () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
       onComplete
     );
     return;
@@ -142,7 +142,7 @@ export async function initFileUploadStep(container, { clientId, fileType, existi
       });
     } catch (err) {
       renderError(container, err.message,
-        () => initFileUploadStep(container, { clientId, fileType, existingData, onComplete, autoDetect }));
+        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }));
       return;
     }
 
@@ -153,7 +153,7 @@ export async function initFileUploadStep(container, { clientId, fileType, existi
       ({ headers, preview } = detectHeaders(arrayBuffer));
     } catch (err) {
       renderError(container, `No se pudo leer el Excel: ${err.message}`,
-        () => initFileUploadStep(container, { clientId, fileType, existingData, onComplete, autoDetect }));
+        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }));
       return;
     }
 
@@ -166,17 +166,17 @@ export async function initFileUploadStep(container, { clientId, fileType, existi
         renderAlreadyLoaded(
           container,
           data,
-          () => initFileUploadStep(container, { clientId, fileType, existingData: null, onComplete }),
+          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
           onComplete
         );
       } catch (err) {
         renderError(container, `Error al procesar: ${err.message}`,
-          () => initFileUploadStep(container, { clientId, fileType, existingData: null, onComplete }));
+          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }));
       }
       return;
     }
 
-    const savedProfile = await getFileProfile(clientId, fileType);
+    const savedProfile = await getFileProfile(clientCode, fileType);
     let savedMapping  = savedProfile?.mapping || null;
     let autoDetected  = false;
 
@@ -196,14 +196,14 @@ export async function initFileUploadStep(container, { clientId, fileType, existi
         renderLoadingProgress(container, 'parsing');
         try {
           const result = parseFile(arrayBuffer, fileType, mapping);
-          await saveFileProfile(clientId, fileType, mapping);
+          await saveFileProfile(clientCode, fileType, mapping);
 
-          const data = { ...result, mapping, fileName: file.name, fileType, headers, arrayBuffer, clientId };
+          const data = { ...result, mapping, fileName: file.name, fileType, headers, arrayBuffer, clientCode };
 
           renderAlreadyLoaded(
             container,
             data,
-            () => initFileUploadStep(container, { clientId, fileType, existingData: null, onComplete }),
+            () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
             onComplete
           );
 
@@ -215,22 +215,22 @@ export async function initFileUploadStep(container, { clientId, fileType, existi
                 renderLoadingProgress(container, 'parsing');
                 try {
                   const result = parseFile(arrayBuffer, fileType, m);
-                  await saveFileProfile(clientId, fileType, m);
-                  const data = { ...result, mapping: m, fileName: file.name, fileType, headers, arrayBuffer, clientId };
+                  await saveFileProfile(clientCode, fileType, m);
+                  const data = { ...result, mapping: m, fileName: file.name, fileType, headers, arrayBuffer, clientCode };
                   renderAlreadyLoaded(container, data,
-                    () => initFileUploadStep(container, { clientId, fileType, existingData: null, onComplete }),
+                    () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
                     onComplete);
                 } catch (e2) {
                   renderError(container, e2.message,
-                    () => initFileUploadStep(container, { clientId, fileType, existingData, onComplete }));
+                    () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete }));
                 }
               },
-              onCancel: () => initFileUploadStep(container, { clientId, fileType, existingData, onComplete }),
+              onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete }),
             })
           );
         }
       },
-      onCancel: () => initFileUploadStep(container, { clientId, fileType, existingData, onComplete, autoDetect }),
+      onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }),
     });
   });
 }
@@ -337,7 +337,7 @@ function renderError(container, msg, onRetry) {
 }
 
 function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
-  const { fileName, parseMetadata, fileType, mapping, headers, arrayBuffer, clientId: dataClientId } = existingData;
+  const { fileName, parseMetadata, fileType, mapping, headers, arrayBuffer, clientCode: dataClientCode } = existingData;
   const warns = parseMetadata?.warnings?.length
     ? `<span class="badge badge--warning" style="margin-left:var(--sp-2);">${parseMetadata.warnings.length} aviso(s)</span>` : '';
 
@@ -419,7 +419,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       });
       try {
         const result = parseFile(arrayBuffer, fileType, newMapping);
-        if (dataClientId) await saveFileProfile(dataClientId, fileType, newMapping).catch(() => {});
+        if (dataClientCode) await saveFileProfile(dataClientCode, fileType, newMapping).catch(() => {});
         const newData = { ...existingData, ...result, mapping: newMapping };
         // Re-render: el nuevo renderAlreadyLoaded llamará a onComplete con los datos actualizados
         renderAlreadyLoaded(container, newData, onReplace, onComplete);
