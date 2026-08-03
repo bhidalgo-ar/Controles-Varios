@@ -7,14 +7,18 @@
 // Cada entrada define:
 //   id              — identificador único (snake_case)
 //   label           — nombre visible al usuario
-//   scope           — 'general' (default, se ofrece a cualquier cliente) | 'convenio' | 'cliente'
-//   scopeMeta       — datos del scope, ej. { ccts: [...] } o { clients: [...] } — {} si no aplica
-//   appliesWhen(client) — predicado sobre el cliente que decide si el control es "aplicable"
-//                     (T4 de PLAN_v2.md). Los 10 controles de hoy son genéricos: siempre
-//                     aplican (() => true) — ningún control real depende todavía de un
-//                     atributo puntual del cliente. Cuando se construya uno que sí (ej. un
-//                     futuro control atado a `pluriempleo`/`paymentUsd`/`holding`), este es el
-//                     lugar para restringirlo — ver ejemplos de predicados en ARCHITECTURE.md §4.
+//   scope           — a qué universo de clientes se le ofrece el control:
+//                       'general'  → cualquier cliente
+//                       'sistema'  → scopeMeta.sourceSystems: ['meta4'] / ['axton']
+//                       'convenio' → scopeMeta.ccts: ['Comercio', ...]
+//                       'cliente'  → scopeMeta.clients: ['MARVAL', ...] (por `code`)
+//                     La resolución vive en js/controls/scope.js, no acá.
+//   scopeMeta       — datos del scope según el caso (ver arriba) — {} si scope es 'general'
+//   appliesWhen(client) — predicado fino sobre atributos del cliente, *además* del scope
+//                     (T4 de PLAN_v2.md). Hoy todos devuelven true: ningún control real
+//                     depende de un atributo puntual todavía. Cuando se construya uno que sí
+//                     (ej. atado a `pluriempleo`/`paymentUsd`/`holding`), este es el lugar
+//                     para restringirlo — ver ejemplos en ARCHITECTURE.md §4.
 //   description     — descripción breve
 //   tabRequired     — si necesita el Tabulado como archivo pivote
 //   additionalFiles — archivos adicionales requeridos: [{ key, label, fileType }]
@@ -23,6 +27,14 @@
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
+//
+// Sobre la clasificación actual (decisión de Guillermo, 2026-07-31 — ver
+// specs/segmentacion-controles-por-cliente.md): los 10 controles construidos
+// contra los reportes de M4 de Marval son hoy `scope: 'cliente'` de MARVAL. A
+// medida que se confirme que uno aplica a cualquier cliente Meta4, se lo
+// "promueve" cambiándolo a `scope: 'sistema'` con `sourceSystems: ['meta4']`.
+// El único genuinamente general es `agrupadores` (nómina vs resumen, con los
+// agrupadores configurables por cliente).
 
 import {
   runCatXEmpleados,
@@ -81,13 +93,19 @@ import {
   summarizeAgrupadores,
 } from './agrupadores.js';
 
+// Los 10 controles construidos contra los reportes de M4 de Marval comparten
+// clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
+// estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
+// `...MARVAL_ONLY` por:
+//     scope: 'sistema', scopeMeta: { sourceSystems: ['meta4'] },
+const MARVAL_ONLY = { scope: 'cliente', scopeMeta: { clients: ['MARVAL'] } };
+
 export const CONTROL_REGISTRY = {
 
   cat_x_empleados: {
     id:          'cat_x_empleados',
     label:       'EE x CATEG',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Empleados por Categoría. Compara el catálogo del sistema contra el Tabulado: '
       + 'valida activos, diferencias de cantidad, discrepancias de campo y distribución por puesto y centro de costo.',
@@ -112,8 +130,7 @@ export const CONTROL_REGISTRY = {
   brutos: {
     id:          'brutos',
     label:       'Brutos — Controlar',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza SAL_BASE y A_CTA_FUT_AUMEN del Reporte de Brutos contra '
       + 'las columnas configuradas en el Tabulado (SUELDO y A_CTA_FUT_AUMEN).',
@@ -141,8 +158,7 @@ export const CONTROL_REGISTRY = {
   brutos_reporte: {
     id:          'brutos_reporte',
     label:       'Brutos — Generar Reporte',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Genera el Reporte de Brutos directamente desde el Tabulado, '
       + 'sin necesitar el archivo de Brutos.',
@@ -167,8 +183,7 @@ export const CONTROL_REGISTRY = {
   gs_pers: {
     id:          'gs_pers',
     label:       'GS Pers — Controlar',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza GTOS_PERSONALES y DTO_COCHERA del Reporte de Gastos Personales y Cochera '
       + 'contra las columnas configuradas en el Tabulado.',
@@ -196,8 +211,7 @@ export const CONTROL_REGISTRY = {
   gs_pers_reporte: {
     id:          'gs_pers_reporte',
     label:       'GS Pers — Generar Reporte',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Genera el Reporte de Gastos Personales y Cochera directamente desde el Tabulado.',
     help: {
@@ -220,8 +234,7 @@ export const CONTROL_REGISTRY = {
   nr: {
     id:          'nr',
     label:       'Control NR — Controlar',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza los 18 conceptos No Remunerativos del Reporte de M4 contra '
       + 'las columnas configuradas en el Tabulado (Indemnizatorios y Otros NR).',
@@ -249,8 +262,7 @@ export const CONTROL_REGISTRY = {
   nr_reporte: {
     id:          'nr_reporte',
     label:       'Control NR — Generar Reporte',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Genera el Reporte de No Remunerativos directamente desde el Tabulado, '
       + 'sin necesitar el archivo de M4.',
@@ -276,8 +288,7 @@ export const CONTROL_REGISTRY = {
   rend_vs_tabu: {
     id:          'rend_vs_tabu',
     label:       'Rendimiento vs Tabulado',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza el Reporte de Rendimiento contra el Tabulado agrupado por centro de costo. '
       + 'Compara PRECIO, ASIG. ESTÍMULO, RETIROS, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL.',
@@ -303,8 +314,7 @@ export const CONTROL_REGISTRY = {
   rend_vs_asiento: {
     id:          'rend_vs_asiento',
     label:       'Rendimiento vs Asiento',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza el Reporte de Rendimiento de M4 contra la Contabilidad Desglosada (CONTA). '
       + 'Agrupa CONTA por CC × categoría (Σ Debe − Σ Haber) y compara contra el Rendimiento.',
@@ -335,8 +345,7 @@ export const CONTROL_REGISTRY = {
   rend_x_ee: {
     id:          'rend_x_ee',
     label:       'Rendimiento x EE',
-    scope:       'general',
-    scopeMeta:   {},
+    ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza el Costo Total por empleado del reporte de M4 contra el Costo Total '
       + 'calculado desde el Tabulado (PRECIO + ASIG. ESTÍMULO + CARGAS SS + PROV. MES + PROV. CCSS MES).',
