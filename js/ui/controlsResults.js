@@ -4,7 +4,7 @@
 // ordenada errores-primero) que responde "¿está bien?" de un vistazo.
 // Abajo: las tarjetas de detalle existentes, una por control, colapsadas.
 
-import { getControlRun, updateControlRun, getClient, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
+import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { periodToLabel }    from '../utils/dates.js';
@@ -29,7 +29,7 @@ export async function renderControlsResults(root, runId) {
   }
 
   const [client, resultsRows, runFiles, thresholdPctCfg] = await Promise.all([
-    getClient(run.clientId),
+    getClientByCode(run.clientCode),
     getControlRunResults(runId),
     getControlRunFiles(runId),
     getConfig('semaforoThresholdPct'),
@@ -55,7 +55,7 @@ export async function renderControlsResults(root, runId) {
           <span id="js-control-help"></span>
         </div>
         <div class="page-actions__buttons">
-          <a href="#/controls/${run.clientId}" class="btn btn--primary btn--sm btn--pill">▶ Nuevo control</a>
+          <a href="#/controls/${client?.id ?? ''}" class="btn btn--primary btn--sm btn--pill">▶ Nuevo control</a>
         </div>
       </div>
 
@@ -218,7 +218,7 @@ function openCtrlToggle(card) {
 // ── A4 — tier de cada control en la corrida previa (mismo cliente/período) ──
 
 async function getPrevTierByControlId(run, thresholdPct) {
-  const siblingRuns = await getControlRuns(run.clientId);
+  const siblingRuns = await getControlRuns(run.clientCode);
   const samePeriod = siblingRuns
     .filter(r => r.period === run.period)
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));

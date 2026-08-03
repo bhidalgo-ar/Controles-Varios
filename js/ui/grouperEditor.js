@@ -38,14 +38,14 @@ export async function renderGrouperEditor(root, clientId) {
   `;
 
   root.querySelector('#js-back-btn').addEventListener('click', () => { window.location.hash = '#/'; });
-  root.querySelector('#js-new-grouper-btn').addEventListener('click', () => showNewGrouperModal(root, clientId));
+  root.querySelector('#js-new-grouper-btn').addEventListener('click', () => showNewGrouperModal(root, client.code));
 
-  await reloadGroupers(root, clientId);
+  await reloadGroupers(root, client.code);
 }
 
-async function reloadGroupers(root, clientId) {
+async function reloadGroupers(root, clientCode) {
   const container = root.querySelector('#js-groupers-container');
-  const groupers = await getGroupers(clientId);
+  const groupers = await getGroupers(clientCode);
 
   if (groupers.length === 0) {
     container.innerHTML = `
@@ -74,7 +74,7 @@ async function reloadGroupers(root, clientId) {
     card.querySelector('.js-delete-grouper').addEventListener('click', async () => {
       if (!await showConfirm(`¿Borrar el agrupador "${grouper.name}"? Se eliminan también sus conceptos.`, { type: 'danger', confirmLabel: 'Borrar' })) return;
       await deleteGrouper(grouper.id);
-      await reloadGroupers(root, clientId);
+      await reloadGroupers(root, clientCode);
     });
 
     // Borrar concepto individual
@@ -82,7 +82,7 @@ async function reloadGroupers(root, clientId) {
       btn.addEventListener('click', async () => {
         const code = btn.dataset.code;
         await removeConceptFromGrouper(grouper.id, code);
-        await reloadGroupers(root, clientId);
+        await reloadGroupers(root, clientCode);
       });
     });
 
@@ -96,7 +96,7 @@ async function reloadGroupers(root, clientId) {
       try {
         await addConceptToGrouper(grouper.id, code);
         input.value = '';
-        await reloadGroupers(root, clientId);
+        await reloadGroupers(root, clientCode);
       } catch (err) {
         showToast(`Error al agregar el concepto: ${err.message}`, 'danger');
       }
@@ -143,7 +143,7 @@ function renderGrouperCard(grouper, concepts) {
   `;
 }
 
-function showNewGrouperModal(root, clientId) {
+function showNewGrouperModal(root, clientCode) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -176,9 +176,9 @@ function showNewGrouperModal(root, clientId) {
   overlay.querySelector('#js-confirm').addEventListener('click', async () => {
     const name = overlay.querySelector('#js-grouper-name').value.trim();
     if (!name) { showToast('El nombre del agrupador es obligatorio.', 'warning'); return; }
-    await createGrouper(clientId, name);
+    await createGrouper(clientCode, name);
     close();
-    await reloadGroupers(root, clientId);
+    await reloadGroupers(root, clientCode);
   });
 
   overlay.querySelector('#js-grouper-name').addEventListener('keydown', (e) => {

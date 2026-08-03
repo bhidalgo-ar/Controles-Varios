@@ -197,7 +197,7 @@ async function reloadList(root, state) {
 // control + fecha de la última corrida (de ese período, o la más reciente
 // de cualquier período si este mes no se corrió nada).
 async function buildClientRowData(client, period) {
-  const allRuns = await getControlRuns(client.id); // ya viene ordenado desc por createdAt
+  const allRuns = await getControlRuns(client.code); // ya viene ordenado desc por createdAt
   const runsForPeriod = allRuns.filter(r => r.period === period);
   const statusRun = runsForPeriod.find(r => r.isDefinitive) || runsForPeriod[0] || null;
   const lastRunOverall = allRuns[0] || null;

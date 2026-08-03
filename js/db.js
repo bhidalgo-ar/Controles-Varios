@@ -143,6 +143,78 @@ db.version(5).stores({
   }
 });
 
+// v6 — cierre de la migración a `clientCode` (T10, opcional, ver PLAN_v2.md
+// §T10 / DECISIONS.md D-011 y D-015). Las FK de `groupers`, `fileProfiles`,
+// `sessions` y `controlRuns` pasan de `clientId` a `clientCode`: se agrega
+// `clientCode` como índice nuevo y se saca `clientId` del índice (Dexie no
+// permite dejar de indexar un campo "a medias" — o está en la lista de
+// índices de `stores()` o no lo está). El campo `clientId` sigue presente en
+// los objetos ya guardados (Dexie no borra datos al sacar un índice), pero
+// ninguna escritura nueva lo llena ni ninguna consulta lo usa.
+//
+// `clientCatalogs` es la excepción: hoy su primary key ES `clientId` (no hay
+// `++id`), y Dexie no soporta cambiar la primary key de una tabla existente
+// (`UpgradeError: Not yet support for changing primary key` — confirmado
+// probándolo antes de escribir esta migración). Se agrega `clientCode` como
+// índice secundario y la tabla sigue usando `clientId` como primary key por
+// dentro; `getClientCatalog`/`saveClientCatalog`/`deleteClientCatalog` siguen
+// hablando en `clientCode` hacia afuera, resolviendo el `clientId` real sólo
+// para la operación de bajo nivel.
+db.version(6).stores({
+  clients:           '++id, &code, name, sourceSystem, active, team',
+  groupers:          '++id, clientCode, name',
+  grouperConcepts:   '++id, grouperId, conceptCode, [grouperId+conceptCode]',
+  fileProfiles:      '++id, clientCode, fileType, [clientCode+fileType]',
+  sessions:          '++id, clientCode, period, isDefinitive, [clientCode+period]',
+  sessionFiles:      '++id, sessionId, fileType',
+  sessionResults:    '++id, sessionId',
+  appConfig:         'key',
+  controlRuns:       '++id, clientCode, period, isDefinitive, createdAt, [clientCode+period]',
+  controlRunFiles:   '++id, controlRunId, fileType, [controlRunId+fileType]',
+  controlRunResults: '++id, controlRunId, controlId, [controlRunId+controlId]',
+  clientCatalogs:    'clientId, clientCode',
+  controlConfigs:    '[clientCode+controlId], clientCode, controlId, status',
+}).upgrade(async tx => {
+  const clients = await tx.table('clients').toArray();
+  const byId    = new Map(clients.map(c => [c.id, c]));
+  const orphaned = [];
+
+  // Resuelve clientId → code; si el cliente ya no existe (o quedó sin code
+  // por algún motivo), no se descarta en silencio — se anota para revisar,
+  // mismo criterio que usó la migración de v5.
+  const resolveCode = (clientId, table) => {
+    const client = byId.get(clientId);
+    if (client?.code) return client.code;
+    orphaned.push({ table, clientId });
+    return null;
+  };
+
+  await tx.table('groupers').toCollection().modify(row => {
+    const code = resolveCode(row.clientId, 'groupers');
+    if (code) row.clientCode = code;
+  });
+  await tx.table('fileProfiles').toCollection().modify(row => {
+    const code = resolveCode(row.clientId, 'fileProfiles');
+    if (code) row.clientCode = code;
+  });
+  await tx.table('sessions').toCollection().modify(row => {
+    const code = resolveCode(row.clientId, 'sessions');
+    if (code) row.clientCode = code;
+  });
+  await tx.table('controlRuns').toCollection().modify(row => {
+    const code = resolveCode(row.clientId, 'controlRuns');
+    if (code) row.clientCode = code;
+  });
+  await tx.table('clientCatalogs').toCollection().modify(row => {
+    const code = resolveCode(row.clientId, 'clientCatalogs');
+    if (code) row.clientCode = code;
+  });
+
+  if (orphaned.length) {
+    await tx.table('appConfig').put({ key: 'clientCodeMigrationOrphaned', value: orphaned });
+  }
+});
+
 // Convierte un nombre de cliente en un `code` legible (MAYÚSCULAS, sin
 // acentos, sin espacios). Usado tanto por el backfill de arriba como por
 // createClient() para clientes nuevos.
@@ -220,22 +292,28 @@ export async function updateClient(id, changes) {
 
 export async function deleteClient(id) {
   const cid = Number(id);
+  const client = await db.clients.get(cid);
+  const code = client?.code;
   // Borramos en cascada: primero los hijos, después el padre
   await db.transaction('rw',
     [db.clients, db.groupers, db.grouperConcepts, db.fileProfiles, db.clientCatalogs,
      db.sessions, db.sessionFiles, db.sessionResults],
     async () => {
-      const grouperIds = (await db.groupers.where('clientId').equals(cid).toArray()).map(g => g.id);
-      if (grouperIds.length) await db.grouperConcepts.where('grouperId').anyOf(grouperIds).delete();
-      await db.groupers.where('clientId').equals(cid).delete();
-      await db.fileProfiles.where('clientId').equals(cid).delete();
-      await db.clientCatalogs.where('clientId').equals(cid).delete();
-      const sessionIds = (await db.sessions.where('clientId').equals(cid).toArray()).map(s => s.id);
-      if (sessionIds.length) {
-        await db.sessionFiles.where('sessionId').anyOf(sessionIds).delete();
-        await db.sessionResults.where('sessionId').anyOf(sessionIds).delete();
+      if (code) {
+        const grouperIds = (await db.groupers.where('clientCode').equals(code).toArray()).map(g => g.id);
+        if (grouperIds.length) await db.grouperConcepts.where('grouperId').anyOf(grouperIds).delete();
+        await db.groupers.where('clientCode').equals(code).delete();
+        await db.fileProfiles.where('clientCode').equals(code).delete();
+        const sessionIds = (await db.sessions.where('clientCode').equals(code).toArray()).map(s => s.id);
+        if (sessionIds.length) {
+          await db.sessionFiles.where('sessionId').anyOf(sessionIds).delete();
+          await db.sessionResults.where('sessionId').anyOf(sessionIds).delete();
+        }
+        await db.sessions.where('clientCode').equals(code).delete();
       }
-      await db.sessions.where('clientId').equals(cid).delete();
+      // clientCatalogs sigue indexado por clientId (su primary key real —
+      // Dexie no permite cambiarla, ver el comentario en db.version(6)).
+      await db.clientCatalogs.delete(cid);
       await db.clients.delete(cid);
     }
   );
@@ -243,13 +321,13 @@ export async function deleteClient(id) {
 
 // ── AGRUPADORES ─────────────────────────────────────────────────────────
 
-export async function getGroupers(clientId) {
-  return db.groupers.where('clientId').equals(Number(clientId)).sortBy('name');
+export async function getGroupers(clientCode) {
+  return db.groupers.where('clientCode').equals(clientCode).sortBy('name');
 }
 
-export async function createGrouper(clientId, name, color = '') {
+export async function createGrouper(clientCode, name, color = '') {
   const now = new Date().toISOString();
-  return db.groupers.add({ clientId: Number(clientId), name: name.trim(), color, createdAt: now, updatedAt: now });
+  return db.groupers.add({ clientCode, name: name.trim(), color, createdAt: now, updatedAt: now });
 }
 
 export async function updateGrouper(id, changes) {
@@ -289,33 +367,40 @@ export async function removeConceptFromGrouper(grouperId, conceptCode) {
 // Un "perfil" es el mapeo de columnas que el usuario configuró la primera vez
 // que cargó ese tipo de archivo para ese cliente. Se reutiliza automáticamente.
 
-export async function getFileProfile(clientId, fileType) {
+export async function getFileProfile(clientCode, fileType) {
   return db.fileProfiles
-    .where('[clientId+fileType]').equals([Number(clientId), fileType]).first();
+    .where('[clientCode+fileType]').equals([clientCode, fileType]).first();
 }
 
-export async function saveFileProfile(clientId, fileType, mapping) {
+export async function saveFileProfile(clientCode, fileType, mapping) {
   const now = new Date().toISOString();
-  const existing = await getFileProfile(clientId, fileType);
+  const existing = await getFileProfile(clientCode, fileType);
   if (existing) {
     return db.fileProfiles.update(existing.id, { mapping, updatedAt: now });
   }
-  return db.fileProfiles.add({ clientId: Number(clientId), fileType, mapping, createdAt: now, updatedAt: now });
+  return db.fileProfiles.add({ clientCode, fileType, mapping, createdAt: now, updatedAt: now });
 }
 
 // ── CATÁLOGO DE CONCEPTOS POR CLIENTE ───────────────────────────────────
 // Cada cliente puede tener su propio catálogo de conceptos (códigos, descripciones,
 // clasificaciones y alias). Si no lo cargó, los parsers caen al CATALOGO_SEED.
 
-export async function getClientCatalog(clientId) {
-  return db.clientCatalogs.get(Number(clientId));
+export async function getClientCatalog(clientCode) {
+  return db.clientCatalogs.where('clientCode').equals(clientCode).first();
 }
 
-export async function saveClientCatalog(clientId, data) {
+// clientCatalogs sigue usando `clientId` como primary key real por dentro
+// (Dexie no permite cambiar la primary key de una tabla existente — ver el
+// comentario en db.version(6)). Se resuelve acá para que nada fuera de este
+// archivo tenga que saberlo.
+export async function saveClientCatalog(clientCode, data) {
+  const client = await getClientByCode(clientCode);
+  if (!client) throw new Error(`Cliente "${clientCode}" no encontrado.`);
   const now = new Date().toISOString();
-  const existing = await getClientCatalog(clientId);
+  const existing = await getClientCatalog(clientCode);
   const record = {
-    clientId:   Number(clientId),
+    clientId:   client.id,
+    clientCode,
     rows:       data.rows,
     fileName:   data.fileName,
     parseMetadata: data.parseMetadata,
@@ -325,14 +410,16 @@ export async function saveClientCatalog(clientId, data) {
   return db.clientCatalogs.put(record);
 }
 
-export async function deleteClientCatalog(clientId) {
-  return db.clientCatalogs.delete(Number(clientId));
+export async function deleteClientCatalog(clientCode) {
+  const client = await getClientByCode(clientCode);
+  if (!client) return;
+  return db.clientCatalogs.delete(client.id);
 }
 
 // ── SESIONES ─────────────────────────────────────────────────────────────
 
-export async function getSessions(clientId) {
-  const rows = await db.sessions.where('clientId').equals(Number(clientId)).toArray();
+export async function getSessions(clientCode) {
+  const rows = await db.sessions.where('clientCode').equals(clientCode).toArray();
   return rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
@@ -349,9 +436,9 @@ export async function updateSession(id, changes) {
   return db.sessions.update(Number(id), { ...changes, updatedAt: new Date().toISOString() });
 }
 
-export async function getDefinitiveSession(clientId, period) {
+export async function getDefinitiveSession(clientCode, period) {
   return db.sessions
-    .where('[clientId+period]').equals([Number(clientId), period])
+    .where('[clientCode+period]').equals([clientCode, period])
     .filter(s => s.isDefinitive === true).first();
 }
 
@@ -404,16 +491,16 @@ export async function setConfig(key, value) {
 // ── CONTROL RUNS ────────────────────────────────────────────────────────────
 // Un "control run" es una ejecución de uno o más controles para un cliente/período.
 
-export async function createControlRun(clientId, period, selectedControls, notes = '') {
+export async function createControlRun(clientCode, period, selectedControls, notes = '') {
   const now = new Date().toISOString();
   return db.controlRuns.add({
-    clientId: Number(clientId), period, selectedControls, notes,
+    clientCode, period, selectedControls, notes,
     isDefinitive: false, createdAt: now, updatedAt: now,
   });
 }
 
-export async function getControlRuns(clientId) {
-  const rows = await db.controlRuns.where('clientId').equals(Number(clientId)).toArray();
+export async function getControlRuns(clientCode) {
+  const rows = await db.controlRuns.where('clientCode').equals(clientCode).toArray();
   return rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 

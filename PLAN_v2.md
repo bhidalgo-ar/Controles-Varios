@@ -174,11 +174,11 @@ El cruce por agrupadores pasa a ser un control del registry con `scope: 'general
 
 ---
 
-### T10 — Cierre de la migración a `clientCode` · L · opcional
+### T10 — Cierre de la migración a `clientCode` · L · opcional · ✅ hecho (2026-07-31)
 
-FKs de `groupers`, `fileProfiles`, `sessions`, `controlRuns`, `clientCatalogs` a `clientCode` (DB v6, dual-write y después drop de `clientId`), llegando al schema que describe ARCHITECTURE §2.
+FKs de `groupers`, `fileProfiles`, `sessions`, `controlRuns` a `clientCode` (DB v6, agregando el índice nuevo y sacando `clientId` del índice — ver D-016 para por qué no es un "drop" literal). `clientCatalogs` es la excepción: Dexie no permite cambiar la primary key de una tabla existente, así que sigue usando `clientId` como PK por dentro, con `clientCode` como índice secundario resuelto en `db.js`.
 
-**Solo si algo funcional lo pide.** Después de T3-T6, el seed ya referencia clientes por `code` y las tablas locales pueden seguir usando `++id` sin costo para el usuario. Si nadie lo necesita, esta tajada no se hace y ARCHITECTURE §2 se ajusta al schema real.
+Ejecutada por decisión de Guillermo (2026-07-31) como deuda técnica preventiva, sin que hubiera un caso funcional bloqueado. Detalle completo (incluida la limitación de Dexie descubierta al implementarla) en `specs/plan-v2-t9-t10.md` y D-016 de `DECISIONS.md`. Las rutas de la URL no cambiaron — siguen usando el id numérico de siempre.
 
 ---
 
@@ -201,6 +201,8 @@ FKs de `groupers`, `fileProfiles`, `sessions`, `controlRuns`, `clientCatalogs` a
 `2.9` (relevar `controlConfigs` de los 21 clientes fuera de Marval) no es código: corre en paralelo desde T0 y alimenta T4 y T5.
 
 **Con Axton deprioritizado, el plan ejecutable hoy es T0 → T6, después T9 y T10 si hacen falta.** T7/T8 quedan documentadas pero fuera del backlog activo hasta nueva decisión.
+
+**Actualización 2026-07-31:** T9 y T10 se ejecutaron (ver sus secciones arriba). Con eso, el único ítem de este plan sin cerrar es Axton (T7/T8), deprioritizado sin fecha.
 
 ---
 

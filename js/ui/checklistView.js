@@ -35,7 +35,7 @@ export async function renderChecklist(root, clientId) {
     return;
   }
 
-  const allRuns = await getControlRuns(clientId);  // ordenados desc por createdAt
+  const allRuns = await getControlRuns(client.code);  // ordenados desc por createdAt
   const controlConfigsByControlId = new Map(
     (await getControlConfigsForClient(client.code) || []).map(cfg => [cfg.controlId, cfg])
   );
