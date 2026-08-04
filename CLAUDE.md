@@ -35,6 +35,9 @@
 ```
 controles-nomina/
 ├── CLAUDE.md            ← este archivo
+├── .claude/
+│   ├── settings.json    ← allowlist de permisos común del equipo (versionado)
+│   └── skills/          ← skills del proyecto (versionadas — ver §5.1)
 ├── PRD.md               ← qué hace la herramienta y por qué
 ├── ARCHITECTURE.md      ← cómo está construida
 ├── ROADMAP.md           ← qué viene después del MVP
@@ -109,6 +112,19 @@ Reglas mínimas no negociables:
 > ⚠ **Aviso de privacidad:** Esta herramienta procesa los datos 100% en tu navegador — nada se sube a internet. Aun así, **no compartas información personal identificable de empleados o clientes** fuera de los canales autorizados por H&A. Usá esta herramienta solo en equipos corporativos.
 
 Snippet HTML del banner: ver `SKILL.md` sección 5.
+
+### 5.1 Skills del proyecto
+
+Viven en `.claude/skills/` y **están versionadas** — las ve todo el equipo, no son
+configuración personal. Se invocan con `/<nombre>` o se disparan solas cuando el
+pedido coincide con su `description`.
+
+| Skill | Cuándo |
+|---|---|
+| `nuevo-control` | Agregar un control nuevo a la batería, o una variante "Generar Reporte" de uno existente. Cablea los 6 puntos de integración y aplica los patrones de UI de §11. |
+
+`.claude/settings.json` también se versiona (allowlist de comandos del proyecto).
+El resto de `.claude/` está en `.gitignore` — ver D-017 en `DECISIONS.md`.
 
 ---
 
@@ -228,4 +244,4 @@ Ideas validadas por Willy, todavía sin implementar salvo donde se indica:
 
 ---
 
-**Última actualización:** 14 de julio de 2026 — pendientes de UI/UX anotados (ver sección 11).
+**Última actualización:** 4 de agosto de 2026 — skills del proyecto versionadas en `.claude/skills/` (ver sección 5.1).

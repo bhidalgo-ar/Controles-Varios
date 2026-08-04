@@ -1,5 +1,11 @@
-# Carpeta interna de Claude Code (memoria del asistente, no va al repo)
-.claude/
+# Carpeta interna de Claude Code. Se ignora todo por defecto (memoria del
+# asistente, caché, transcripts) salvo dos cosas que sí se comparten con el
+# equipo: las skills del proyecto y el allowlist de permisos común.
+# Ojo: es `.claude/*` y no `.claude/` — con la barra, git no deja re-incluir
+# nada de adentro.
+.claude/*
+!.claude/skills/
+!.claude/settings.json
 
 # Archivos de sistema Windows
 Thumbs.db
