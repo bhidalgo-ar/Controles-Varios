@@ -7,6 +7,10 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs: agregar README.md — 2026-08-04
+
+- `README.md` — guía práctica de uso del repo: cómo levantar la app localmente (static server, por qué no funciona con doble click), flujo de uso básico, tabla de controles disponibles hoy (`CONTROL_REGISTRY`), modo admin, privacidad, cómo correr los tests (`npm run test:unit` / `test:e2e`) y estructura real del repo. Referenciado desde `CLAUDE.md` §3, §9 y §10 pero no existía hasta ahora.
+
 ### chore: skill `nuevo-control` + allowlist de permisos versionados — 2026-08-04
 
 - `.claude/skills/nuevo-control/SKILL.md` — guía operativa para agregar un control nuevo (o una variante "Generar Reporte" de uno existente): los 6 puntos de integración con referencias `archivo:línea` a `nr.js`, contratos de `run`/`summarize`/`renderResults`, patrones de UI obligatorios (hero de diferencias, ocultar filas/columnas sin valor real), mínimo de test exigido y errores frecuentes.
