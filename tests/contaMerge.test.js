@@ -33,10 +33,10 @@ function buildConta(rows) {
 
 {
   const abril = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
   ]);
   const mayo = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-05-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-05-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
   ]);
 
   const merged = mergeContaFiles([
@@ -55,12 +55,12 @@ function buildConta(rows) {
 
 {
   const abril = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
-    [1002, 'JUAN',  'PÉREZ', '3572', 'PROV CCSS',     '5208005', 'A-04-2', '10', 'PATENTES',  200, 50, 'PROVISIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
+    [1002, 'JUAN',  'PÉREZ', '8002', 'PROV CARGAS', '9990005', 'A-04-2', '10', 'CENTRO UNO',  200, 50, 'PROVISIONES'],
   ]);
   const abrilDeNuevo = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
-    [1002, 'JUAN',  'PÉREZ', '3572', 'PROV CCSS',     '5208005', 'A-04-2', '10', 'PATENTES',  200, 50, 'PROVISIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
+    [1002, 'JUAN',  'PÉREZ', '8002', 'PROV CARGAS', '9990005', 'A-04-2', '10', 'CENTRO UNO',  200, 50, 'PROVISIONES'],
   ]);
 
   const merged = mergeContaFiles([
@@ -81,8 +81,8 @@ function buildConta(rows) {
 
 {
   const conFilaRepetida = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
   ]);
   const merged = mergeContaFiles([
     { fileName: 'CONTA 04-2026.xlsx', parsedRows: conFilaRepetida.parsedRows, parseMetadata: conFilaRepetida.parseMetadata },
@@ -95,11 +95,11 @@ function buildConta(rows) {
 
 {
   const conDescarte1 = buildConta([
-    [1001, 'MARÍA', 'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-04-1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
-    [1003, 'ANA',   'DÍAZ',  '1003', 'SUELDO BÁSICO', '5208001', 'A-04-3', '',   'Null',      500, 0, 'REMUNERACIONES'],
+    [1001, 'MARÍA', 'GÓMEZ', '8001', 'SUELDO BASE', '9990001', 'A-04-1', '10', 'CENTRO UNO', 1000, 0, 'REMUNERACIONES'],
+    [1003, 'ANA',   'DÍAZ',  '8001', 'SUELDO BASE', '9990001', 'A-04-3', '',   'Null',      500, 0, 'REMUNERACIONES'],
   ]);
   const conDescarte2 = buildConta([
-    [1002, 'JUAN', 'PÉREZ', '1003', 'SUELDO BÁSICO', '5208001', 'A-05-1', '', 'null', 700, 0, 'REMUNERACIONES'],
+    [1002, 'JUAN', 'PÉREZ', '8001', 'SUELDO BASE', '9990001', 'A-05-1', '', 'null', 700, 0, 'REMUNERACIONES'],
   ]);
   const merged = mergeContaFiles([
     { fileName: 'CONTA 04-2026.xlsx', parsedRows: conDescarte1.parsedRows, parseMetadata: conDescarte1.parseMetadata },
