@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Rendimiento vs Asiento admite varios archivos de Contabilidad — 2026-08-05
+
+- `js/parsers/contaExcel.js` — `mergeContaFiles()`: concatena las filas parseadas de varios archivos de Contabilidad Desglosada (CONTA) y avisa (sin bloquear) si dos archivos distintos comparten filas idénticas — pensado para acumular varios meses en una sola corrida.
+- `js/ui/fileUpload.js` — `initContaMultiUpload()`: el paso de carga de CONTA pasa a aceptar selección/arrastre múltiple, con lista de archivos cargados y opción de quitar cualquiera antes de ejecutar. Es el único `additionalFile` con este comportamiento; el resto sigue siendo un archivo por slot.
+- `tests/contaMerge.test.js` — cubre el merge de meses distintos (sin falsos positivos de duplicado por `ID_CONTA`), la detección de un archivo subido dos veces, y que las repeticiones dentro de un mismo archivo no se marcan como duplicado cruzado. Sumado a `test:unit` en `package.json`.
+- Ver D-018 en `DECISIONS.md`.
+
 ### docs: agregar README.md — 2026-08-04
 
 - `README.md` — guía práctica de uso del repo: cómo levantar la app localmente (static server, por qué no funciona con doble click), flujo de uso básico, tabla de controles disponibles hoy (`CONTROL_REGISTRY`), modo admin, privacidad, cómo correr los tests (`npm run test:unit` / `test:e2e`) y estructura real del repo. Referenciado desde `CLAUDE.md` §3, §9 y §10 pero no existía hasta ahora.

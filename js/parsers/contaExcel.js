@@ -79,3 +79,53 @@ export function parseConta(arrayBuffer) {
     },
   };
 }
+
+/**
+ * Combina varios archivos de Contabilidad Desglosada ya parseados en uno solo
+ * (mismo formato, típicamente varios meses subidos juntos). Concatena las filas
+ * y detecta filas idénticas repetidas entre archivos distintos — señal de que
+ * el mismo período se subió dos veces por error.
+ *
+ * @param {Array<{ fileName: string, parsedRows: object[], parseMetadata: object }>} entries
+ * @returns {{ parsedRows: object[], parseMetadata: object }}
+ */
+export function mergeContaFiles(entries) {
+  const firstFileOf = new Map();   // firma de fila → nombre del primer archivo donde apareció
+  const dupCountByFile = new Map(); // nombre de archivo → cantidad de filas que repite de OTRO archivo
+  const parsedRows = [];
+  const files = [];
+  let totalRows = 0;
+  let descartadasSinCC = 0;
+
+  for (const entry of entries) {
+    let dupInThisFile = 0;
+    for (const row of entry.parsedRows) {
+      const sig = JSON.stringify(row);
+      const firstFile = firstFileOf.get(sig);
+      if (firstFile === undefined) {
+        firstFileOf.set(sig, entry.fileName);
+      } else if (firstFile !== entry.fileName) {
+        dupInThisFile++;
+      }
+      parsedRows.push(row);
+    }
+    if (dupInThisFile > 0) dupCountByFile.set(entry.fileName, dupInThisFile);
+
+    const fileTotalRows       = entry.parseMetadata?.totalRows ?? entry.parsedRows.length;
+    const fileDescartadasSinCC = entry.parseMetadata?.descartadasSinCC ?? 0;
+    totalRows        += fileTotalRows;
+    descartadasSinCC += fileDescartadasSinCC;
+    files.push({ fileName: entry.fileName, totalRows: fileTotalRows, descartadasSinCC: fileDescartadasSinCC });
+  }
+
+  return {
+    parsedRows,
+    parseMetadata: {
+      totalRows,
+      descartadasSinCC,
+      files,
+      duplicates: [...dupCountByFile.entries()].map(([fileName, count]) => ({ fileName, count })),
+      parsedAt: new Date().toISOString(),
+    },
+  };
+}
