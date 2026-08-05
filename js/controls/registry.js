@@ -93,6 +93,12 @@ import {
   summarizeAgrupadores,
 } from './agrupadores.js';
 
+import {
+  runAcreditacionesReporte,
+  renderAcreditacionesReporteResults,
+  summarizeAcreditacionesReporte,
+} from './acreditaciones.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -406,6 +412,41 @@ export const CONTROL_REGISTRY = {
     run:           runAgrupadores,
     summarize:     summarizeAgrupadores,
     renderResults: renderAgrupadoresResults,
+  },
+
+  // Primer control construido sobre un archivo de Axton (los otros 11 son de
+  // reportes Meta4). El export `contacred` tiene el mismo formato en todas las
+  // cuentas de Axton, así que arranca directo como control de sistema y no como
+  // control de un cliente puntual. Ver specs/control-acreditaciones-axton.md.
+  acreditaciones_reporte: {
+    id:          'acreditaciones_reporte',
+    label:       'Acreditaciones — Generar Reporte',
+    scope:       'sistema',
+    scopeMeta:   { sourceSystems: ['axton'] },
+    appliesWhen: () => true,
+    description: 'Ordena las acreditaciones del mes del export de Axton en un archivo limpio: '
+      + 'una hoja por acreditación (tipo de liquidación × fecha) más una hoja CONTROL que las '
+      + 'lista con su total y cierra contra el total del archivo de origen.',
+    help: {
+      what: 'Toma el export de Acreditaciones de Axton (una fila por legajo y liquidación) y lo '
+        + 'parte en una hoja por acreditación real: cada tipo de liquidación en cada fecha de '
+        + 'acreditación, mergeando los listados del mismo pago. La hoja CONTROL numera las listas '
+        + 'con su fecha y total, y cierra con fórmulas contra el total del archivo de Axton.',
+      how: [
+        'Bajá el export de Acreditaciones (contacred) del período desde Axton.',
+        'Cargalo en el Paso 2 cuando te lo pida.',
+        '(Opcional) Si el cliente tiene más de una empresa, elegí en "Opciones del reporte" si las listas se separan por empresa.',
+        'Ejecutá y descargá el .xlsx desde el resultado.',
+      ],
+    },
+    group:       { id: 'acreditaciones', label: 'Acreditaciones', mode: 'Generar Reporte' },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'acreditaciones', label: 'Acreditaciones (export de Axton)', fileType: 'acreditaciones_file' },
+    ],
+    run:           runAcreditacionesReporte,
+    summarize:     summarizeAcreditacionesReporte,
+    renderResults: renderAcreditacionesReporteResults,
   },
 
 };

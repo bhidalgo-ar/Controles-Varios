@@ -13,6 +13,7 @@ import { parseNr }     from '../parsers/nrParser.js';
 import { parseRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
 import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
+import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
@@ -108,6 +109,10 @@ const FIELD_DEFS = {
   conta_file:      [],
   // CC x Empleado: formato fijo, encabezados constantes
   cc_x_ee_file:    [],
+  // Acreditaciones (export contacred de Axton): formato fijo, igual en todas las
+  // cuentas de Axton. El parser resuelve las columnas por nombre y avisa cuáles
+  // faltan si el archivo no es el esperado.
+  acreditaciones_file: [],
 };
 
 // Tipos que soportan mapeo de nombre (horizontal: una fila por empleado)
@@ -487,7 +492,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       + (parseMetadata?.noRemu       ? ` · ${parseMetadata.noRemu} no_remu`          : '')
       + (parseMetadata?.aporte       ? ` · ${parseMetadata.aporte} aportes`          : '')
       + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
-  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file') {
+  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file') {
     metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
   } else {
     metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
@@ -791,6 +796,7 @@ function parseFile(arrayBuffer, fileType, mapping) {
     case 'rend_file':                   return parseRendimiento(arrayBuffer, mapping);
     case 'costo_total_file':            return parseCostoTotal(arrayBuffer, mapping);
     case 'cc_x_ee_file':                return parseCcXEmpleado(arrayBuffer);
+    case 'acreditaciones_file':         return parseAcreditaciones(arrayBuffer);
     case 'concept_catalog':             return parseConceptCatalog(arrayBuffer);
     default: throw new Error(`Tipo de archivo desconocido: "${fileType}".`);
   }
@@ -810,6 +816,7 @@ function fileTypeLabel(fileType) {
     costo_total_file:            'Reporte de Costo Total (por empleado)',
     conta_file:                  'Contabilidad Desglosada',
     cc_x_ee_file:                'CC x Empleado',
+    acreditaciones_file:         'Acreditaciones (export de Axton)',
     concept_catalog:             'Catálogo de Conceptos',
   }[fileType] || fileType;
 }

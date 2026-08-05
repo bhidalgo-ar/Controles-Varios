@@ -238,7 +238,14 @@ Y el ciclo de git de CLAUDE.md §7: commit → push → PR → merge a main.
 ## Errores concretos a no cometer
 
 - **No consolidar por legajo.** Diferencias falsas en todo empleado con más de una
-  liquidación en el mes. El bug más caro del repo.
+  liquidación en el mes. El bug más caro del repo. (Única excepción hasta hoy:
+  `acreditaciones.js`, donde la unidad del reporte es la acreditación y no el
+  empleado-mes — ver D-021. Si crees estar en ese caso, confirmalo con Willy.)
+- **Meter información de HR en un entregable que va a Finanzas.** Si el archivo que
+  genera el control lo recibe Finanzas/tesorería del cliente y no el equipo de
+  Payroll, no lleva dotación, conteos de empleados, altas/bajas ni atributos del
+  empleado: sólo lo necesario para pagar. Eso va en la pantalla de resultados, que
+  la ve el analista. Ver `CLAUDE.md` §6.5 y D-020.
 - **Confundir `null` con `0`.** `null` = sin dato, `0` = cero real. La diferencia
   se calcula solo si los dos lados son distintos de `null`.
 - **Comparar con `!==` en vez de tolerancia.** Siempre
