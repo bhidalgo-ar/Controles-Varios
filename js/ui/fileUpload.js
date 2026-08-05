@@ -12,7 +12,7 @@ import { parseGsPers } from '../parsers/gsPersParser.js';
 import { parseNr }     from '../parsers/nrParser.js';
 import { parseRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
-import { parseConta }       from '../parsers/contaExcel.js';
+import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
@@ -124,6 +124,13 @@ const TIPOS_CON_NOMBRE = ['nomina_maestra', 'resumen_tabulado_horizontal'];
  *   onComplete   {function(data)} - Se llama cuando el archivo está parseado y listo
  */
 export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }) {
+  // CONTA admite subir varios archivos del mismo formato en una sola corrida
+  // (ver initContaMultiUpload) — flujo aparte del resto, que es un archivo por slot.
+  if (fileType === 'conta_file') {
+    initContaMultiUpload(container, { existingData, onComplete });
+    return;
+  }
+
   if (existingData) {
     renderAlreadyLoaded(container, existingData,
       () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
@@ -157,8 +164,8 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       return;
     }
 
-    // Formatos fijos (sin mapping de columnas): catálogo, CONTA y CC x Empleado
-    if (fileType === 'concept_catalog' || fileType === 'conta_file' || fileType === 'cc_x_ee_file') {
+    // Formatos fijos (sin mapping de columnas): catálogo y CC x Empleado
+    if (fileType === 'concept_catalog' || fileType === 'cc_x_ee_file') {
       renderLoadingProgress(container, 'parsing');
       try {
         const result = parseFile(arrayBuffer, fileType, null);
@@ -233,6 +240,134 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }),
     });
   });
+}
+
+// ── Carga múltiple de Contabilidad Desglosada (CONTA) ─────────────────────────
+//
+// A diferencia del resto de los archivos (un archivo por slot), CONTA admite
+// subir varios Excel del mismo formato en una sola corrida — típicamente porque
+// se juntan varios meses en el mismo control. Cada archivo se parsea por
+// separado y las filas se concatenan (mergeContaFiles); se avisa sin bloquear
+// si dos archivos distintos comparten filas idénticas, señal de una carga
+// duplicada por error.
+
+function initContaMultiUpload(container, { existingData, onComplete }) {
+  let entries = existingData?.entries ? [...existingData.entries] : [];
+
+  const commit = (newEntries) => {
+    entries = newEntries;
+    if (entries.length === 0) {
+      render(null);
+      onComplete(null);
+      return;
+    }
+    const merged = mergeContaFiles(entries);
+    const data = {
+      parsedRows:    merged.parsedRows,
+      parseMetadata: merged.parseMetadata,
+      mapping:       {},
+      fileType:      'conta_file',
+      fileName: entries.length === 1
+        ? entries[0].fileName
+        : `${entries.length} archivos · ${merged.parsedRows.length} filas`,
+      entries,
+    };
+    render(data);
+    onComplete(data);
+  };
+
+  const addFiles = async (fileList) => {
+    const files = [...fileList].filter(f => {
+      if (!isValidExcelFile(f)) {
+        showToast(`"${f.name}" no es un Excel (.xlsx). Se lo ignoró.`, 'warning');
+        return false;
+      }
+      return true;
+    });
+    if (files.length === 0) return;
+
+    renderLoadingProgress(container, 'parsing');
+    const newEntries = [];
+    for (const file of files) {
+      try {
+        const arrayBuffer = await readFileAsArrayBuffer(file);
+        const { parsedRows, parseMetadata } = parseConta(arrayBuffer);
+        newEntries.push({ fileName: file.name, parsedRows, parseMetadata });
+      } catch (err) {
+        showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
+      }
+    }
+    commit([...entries, ...newEntries]);
+  };
+
+  function render(data) {
+    const dupWarningsHtml = (data?.parseMetadata?.duplicates || []).map(d => `
+      <div class="alert alert--warning" style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+        ⚠ <strong>${escHtml(d.fileName)}</strong> tiene ${d.count} fila(s) idénticas a otro archivo ya cargado
+        — revisá que no sea el mismo período subido dos veces.
+      </div>
+    `).join('');
+
+    const entriesHtml = entries.map((e, i) => {
+      const desc = e.parseMetadata?.descartadasSinCC ?? 0;
+      return `
+        <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--color-match-exact);background:var(--color-match-exact-bg);border-radius:var(--radius-md);font-size:var(--text-sm);">
+          <span style="color:var(--color-match-exact);font-weight:600;">✓</span>
+          <strong style="flex-shrink:0;">${escHtml(e.fileName)}</strong>
+          <span style="color:var(--color-text-muted);flex:1;">
+            ${e.parseMetadata?.totalRows ?? e.parsedRows.length} filas con CC
+            ${desc > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${desc} sin CC descartadas</span>` : ''}
+          </span>
+          <button type="button" class="btn btn--ghost btn--sm" data-conta-remove="${i}" style="flex-shrink:0;">✕ Quitar</button>
+        </div>
+      `;
+    }).join('');
+
+    const totalHtml = entries.length > 1
+      ? `<p class="text-muted" style="font-size:var(--text-sm);margin:var(--sp-1) 0 var(--sp-2);">Total combinado: ${data?.parseMetadata?.totalRows ?? 0} filas de ${entries.length} archivos.</p>`
+      : '';
+
+    container.innerHTML = `
+      ${entries.length ? `<div style="display:flex;flex-direction:column;gap:var(--sp-2);margin-bottom:var(--sp-2);">${entriesHtml}</div>${totalHtml}${dupWarningsHtml}` : ''}
+      <div class="file-drop" id="js-conta-drop">
+        <div class="file-drop__icon">📂</div>
+        <div class="file-drop__text">
+          <strong>Contabilidad Desglosada</strong> — arrastrá uno o varios .xlsx, o hacé clic para elegir
+          ${entries.length ? ' (se suman a los ya cargados)' : ''}
+        </div>
+        <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
+      </div>
+    `;
+
+    const dropZone  = container.querySelector('#js-conta-drop');
+    const fileInput = container.querySelector('#js-conta-file-input');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) addFiles(e.target.files);
+      fileInput.value = '';
+    });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('file-drop--dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('file-drop--dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('file-drop--dragover');
+      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+
+    container.querySelectorAll('[data-conta-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.contaRemove);
+        commit(entries.filter((_, j) => j !== idx));
+      });
+    });
+  }
+
+  render(existingData);
+  if (entries.length > 0) onComplete(existingData);
 }
 
 // ── Renders internos ──────────────────────────────────────────────────────────
@@ -354,10 +489,6 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
   } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file') {
     metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
-  } else if (fileType === 'conta_file') {
-    const desc = parseMetadata?.descartadasSinCC ?? 0;
-    metaLine = `${parseMetadata?.totalRows ?? 0} filas con CC`
-      + (desc > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${desc} sin CC descartadas</span>` : '');
   } else {
     metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
   }
@@ -659,7 +790,6 @@ function parseFile(arrayBuffer, fileType, mapping) {
     case 'nr_file':                     return parseNr(arrayBuffer, mapping);
     case 'rend_file':                   return parseRendimiento(arrayBuffer, mapping);
     case 'costo_total_file':            return parseCostoTotal(arrayBuffer, mapping);
-    case 'conta_file':                  return parseConta(arrayBuffer);
     case 'cc_x_ee_file':                return parseCcXEmpleado(arrayBuffer);
     case 'concept_catalog':             return parseConceptCatalog(arrayBuffer);
     default: throw new Error(`Tipo de archivo desconocido: "${fileType}".`);

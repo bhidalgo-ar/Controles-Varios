@@ -50,7 +50,7 @@ Definidos en `js/controls/registry.js`:
 | GS Pers (Controlar / Generar Reporte) | Reporte de GS Pers vs Tabulado |
 | Control NR (Controlar / Generar Reporte) | Reporte de NR vs Tabulado |
 | Rendimiento vs Tabulado | Reporte de Rendimiento vs Tabulado |
-| Rendimiento vs Asiento | Rendimiento vs Contabilidad Desglosada (+ CC x Empleado opcional) |
+| Rendimiento vs Asiento | Rendimiento vs Contabilidad Desglosada (+ CC x Empleado opcional). Admite subir varios archivos de Contabilidad a la vez (ej. varios meses juntos); se avisa si dos archivos comparten filas idénticas |
 | Rendimiento x EE | Rendimiento vs Costo Total por empleado |
 
 Las variantes "Generar Reporte" arman el archivo a controlar a partir del Tabulado, en vez de pedirlo cargado. Para agregar un control nuevo o una variante de uno existente, usar la skill `/nuevo-control` (ver `.claude/skills/nuevo-control/SKILL.md`) — cablea los 6 puntos de integración y aplica los patrones de UI obligatorios.
