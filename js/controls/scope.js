@@ -103,3 +103,32 @@ export function filterControlsForClient(controls, client, configByControlId) {
     controlAppliesToClient(c, client, configByControlId?.get(c.id))
   );
 }
+
+const SOURCE_SYSTEM_LABEL = { meta4: 'Meta4', axton: 'Axton' };
+
+/**
+ * Origen de un control para el wizard de ejecución (Paso 1) — dónde se agrupa
+ * y con qué chip se filtra. Deliberadamente separado del semáforo de
+ * diferencias (ok/warn/error): `tier` sólo tiene dos valores visuales
+ * ('general' | 'scoped') para no pisar esos colores; `label` es el texto
+ * específico (sistema, CCT o cliente) que se muestra en el chip.
+ *
+ * @param {object} ctrl   - entrada del CONTROL_REGISTRY
+ * @param {object} client - cliente actual (para el caso scope: 'cliente')
+ */
+export function controlOrigin(ctrl, client) {
+  const meta = ctrl.scopeMeta || {};
+  switch (ctrl.scope) {
+    case 'sistema': {
+      const labels = (meta.sourceSystems || []).map(s => SOURCE_SYSTEM_LABEL[s] || s);
+      return { tier: 'scoped', label: labels.join(' / ') || 'Sistema' };
+    }
+    case 'convenio':
+      return { tier: 'scoped', label: (meta.ccts || []).join(' / ') || 'Convenio' };
+    case 'cliente':
+      return { tier: 'scoped', label: client?.name || 'Cliente' };
+    case 'general':
+    default:
+      return { tier: 'general', label: 'General' };
+  }
+}

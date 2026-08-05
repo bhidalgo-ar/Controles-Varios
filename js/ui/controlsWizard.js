@@ -24,7 +24,7 @@ import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
-import { controlAppliesToClient, filterControlsForClient } from '../controls/scope.js';
+import { controlAppliesToClient, filterControlsForClient, controlOrigin } from '../controls/scope.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { autoDetectTabMapping }    from '../parsers/tabuladoControl.js';
 import { autoDetectCatMapping }    from '../parsers/catEmpleados.js';
@@ -145,7 +145,8 @@ export async function renderControlsWizard(root, clientId) {
     agrupadoresConfig:         savedAgrupadoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
     controlConfigsByControlId,
 
-    expandedGroups:            new Set(),  // grupos de controles cuyo panel de modos está abierto
+    originFilter:              null,       // label del chip de origen activo en Paso 1 (null = "Todos")
+    controlQuery:              '',         // texto del buscador de controles en Paso 1
     lastRunId:                 null,       // runId del último execute exitoso (null si quickRun)
     lastRunResults:            null,       // { [controlId]: results } del último execute exitoso
     lastRunIsDefinitive:       false,      // si el último run está marcado como definitivo
@@ -407,95 +408,94 @@ function buildHelpSection(state) {
   `;
 }
 
-// Agrupa los controles del REGISTRY por su `group.id`. Devuelve una lista de bloques
-// en el orden de definición del registry. Cada bloque es:
-//   - { kind: 'standalone', ctrl }                    → un solo control sin grupo
-//   - { kind: 'group', groupMeta, controls: [...] }   → varios controles bajo un mismo grupo
-function buildControlBlocks() {
-  const blocks  = [];
-  const seenIdx = new Map();  // groupId → posición en blocks
-  for (const ctrl of Object.values(CONTROL_REGISTRY)) {
-    if (!ctrl.group) {
-      blocks.push({ kind: 'standalone', ctrl });
-      continue;
-    }
-    const gid = ctrl.group.id;
-    if (seenIdx.has(gid)) {
-      blocks[seenIdx.get(gid)].controls.push(ctrl);
-    } else {
-      seenIdx.set(gid, blocks.length);
-      blocks.push({ kind: 'group', groupMeta: ctrl.group, controls: [ctrl] });
-    }
-  }
-  return blocks;
-}
-
-// Un grupo se renderiza expandido si: (a) el usuario lo abrió manualmente, o
-// (b) alguno de sus modos está activo.
-function isGroupExpanded(groupId, state) {
-  if (state.expandedGroups.has(groupId)) return true;
+// Lista plana de controles seleccionables para este cliente. Un control con
+// modos (Brutos, GS Pers, NR) aporta una fila por modo — el nombre de grupo
+// (`group.label`) queda como título y el modo (Controlar/Generar Reporte)
+// como badge, en vez del pill-con-expansión que tenía el diseño anterior.
+function computeSelectableUnits(state) {
   return Object.values(CONTROL_REGISTRY)
-    .some(c => c.group?.id === groupId && state.selectedControls.includes(c.id));
+    .filter(ctrl => controlAppliesToClient(ctrl, state.client, state.controlConfigsByControlId.get(ctrl.id)))
+    .map(ctrl => ({
+      ctrl,
+      name:   ctrl.group ? ctrl.group.label : ctrl.label,
+      mode:   ctrl.group ? ctrl.group.mode  : null,
+      origin: controlOrigin(ctrl, state.client),
+    }));
 }
 
-// Un bloque "aplica" a un cliente si aplica alguno de sus controles (un grupo
-// junta variantes del mismo control — Controlar/Generar Reporte — que en la
-// práctica comparten la misma clasificación). La resolución (override de admin
-// → scope/scopeMeta → appliesWhen) vive en js/controls/scope.js.
-export function blockAppliesToClient(block, client, configByControlId) {
-  const controls = block.kind === 'standalone' ? [block.ctrl] : block.controls;
-  return controls.some(c => controlAppliesToClient(c, client, configByControlId?.get(c.id)));
-}
-
-function renderBlockHtml(b, state) {
-  if (b.kind === 'standalone') {
-    const active = state.selectedControls.includes(b.ctrl.id);
-    return `
-      <button class="pill ${active ? 'pill--active' : ''}"
-              data-ctrl="${esc(b.ctrl.id)}"
-              title="${esc(b.ctrl.description)}">
-        ${esc(b.ctrl.label)}
-      </button>
-    `;
+// Chips de archivos que un control va a pedir en el Paso 2 — mismo criterio
+// que arma esa pantalla (Tabulado si tabRequired, + un chip por additionalFile).
+function unitFileChipsHtml(ctrl) {
+  const chips = [];
+  if (ctrl.tabRequired !== false) {
+    chips.push('<span class="control-recap-pill">Tabulado</span>');
   }
-  // Grupo con sub-modos
-  const groupId   = b.groupMeta.id;
-  const expanded  = isGroupExpanded(groupId, state);
-  const anyActive = b.controls.some(c => state.selectedControls.includes(c.id));
-  const arrow     = expanded ? '▾' : '▸';
-  const subsHtml  = expanded
-    ? `<div class="control-group__modes">
-         ${b.controls.map(c => {
-           const subActive = state.selectedControls.includes(c.id);
-           return `
-             <button class="pill pill--sub ${subActive ? 'pill--active' : ''}"
-                     data-ctrl="${esc(c.id)}"
-                     title="${esc(c.description)}">
-               ${esc(c.group.mode)}
-             </button>
-           `;
-         }).join('')}
-       </div>`
-    : '';
-  return `
-    <div class="control-group">
-      <button class="pill ${anyActive ? 'pill--active' : ''}"
-              data-group="${esc(groupId)}">
-        ${esc(b.groupMeta.label)} ${arrow}
-      </button>
-      ${subsHtml}
-    </div>
-  `;
+  for (const f of ctrl.additionalFiles) {
+    // f.label ya incluye "(opcional)" en los additionalFiles que lo son (ver registry.js)
+    chips.push(`<span class="control-recap-pill control-recap-pill--muted">${esc(f.label)}</span>`);
+  }
+  return chips.join('');
 }
 
 function renderStepControls(container, state, root) {
   // Sólo los controles que aplican a este cliente. Los que no aplican no se
   // muestran de ninguna forma (decisión de Guillermo, 2026-07-31): la vía para
   // ejecutar uno que el scope excluye es forzarlo desde #/admin con motivo.
-  const applicableBlocks = buildControlBlocks()
-    .filter(b => blockAppliesToClient(b, state.client, state.controlConfigsByControlId));
+  const units = computeSelectableUnits(state);
 
-  const blocksHtml = applicableBlocks.map(b => renderBlockHtml(b, state)).join('');
+  // Chips de filtro por origen — sólo los orígenes que efectivamente tiene
+  // este cliente (con 1 control general nunca va a aparecer un chip "Meta4").
+  const originCounts = new Map();  // label del origen → { tier, count }
+  for (const u of units) {
+    if (!originCounts.has(u.origin.label)) originCounts.set(u.origin.label, { tier: u.origin.tier, count: 0 });
+    originCounts.get(u.origin.label).count++;
+  }
+
+  const query = state.controlQuery.trim().toLowerCase();
+  const visibleUnits = units.filter(u => {
+    if (state.originFilter && u.origin.label !== state.originFilter) return false;
+    if (query) {
+      const haystack = `${u.name} ${u.mode || ''} ${u.ctrl.description}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
+
+  const filterChipsHtml = [
+    `<button class="ctrl-filter ${!state.originFilter ? 'is-active' : ''}" data-origin-filter="">
+       Todos <b>${units.length}</b>
+     </button>`,
+    ...[...originCounts.entries()].map(([label, { count }]) => `
+       <button class="ctrl-filter ${state.originFilter === label ? 'is-active' : ''}" data-origin-filter="${esc(label)}">
+         ${esc(label)} <b>${count}</b>
+       </button>`),
+  ].join('');
+
+  const rowsHtml = visibleUnits.map(u => {
+    const isOn = state.selectedControls.includes(u.ctrl.id);
+    return `
+      <button type="button" class="ctrl-row ${isOn ? 'ctrl-row--active' : ''}"
+              data-ctrl="${esc(u.ctrl.id)}" aria-pressed="${isOn}" title="${esc(u.ctrl.description)}">
+        <span class="ctrl-row__box" aria-hidden="true">✓</span>
+        <span class="ctrl-row__main">
+          <span class="ctrl-row__name">
+            ${esc(u.name)}
+            ${u.mode ? `<span class="ctrl-row__mode">${esc(u.mode)}</span>` : ''}
+            <span class="origin-badge origin-badge--${u.origin.tier}">${esc(u.origin.label)}</span>
+          </span>
+          <span class="ctrl-row__desc">${esc(u.ctrl.description)}</span>
+        </span>
+        <span class="ctrl-row__files">${unitFileChipsHtml(u.ctrl)}</span>
+      </button>`;
+  }).join('');
+
+  const selectedUnits = units.filter(u => state.selectedControls.includes(u.ctrl.id));
+  const asideSelectedHtml = selectedUnits.length
+    ? selectedUnits.map(u => `<span class="control-recap-pill">✓ ${esc(u.name)}${u.mode ? ' · ' + esc(u.mode) : ''}</span>`).join('')
+    : '<span class="text-sm text-muted">Ningún control seleccionado.</span>';
+  const asideFilesHtml = selectedUnits.length
+    ? (selectedUnits.map(u => unitFileChipsHtml(u.ctrl)).join('') || '<span class="text-sm text-muted">Ninguno.</span>')
+    : '<span class="text-sm text-muted">—</span>';
 
   container.innerHTML = `
     <h3 style="margin:0 0 var(--sp-1);">Paso 1 — Controles a ejecutar</h3>
@@ -519,48 +519,71 @@ function renderStepControls(container, state, root) {
 
     ${buildHelpSection(state)}
 
-    ${applicableBlocks.length ? `
-      <div style="display:flex;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap;">
-        <button class="btn btn--secondary btn--sm" id="js-select-all-ctrls">
-          ✓ Seleccionar todos
-        </button>
-        <button class="btn btn--ghost btn--sm" id="js-clear-ctrls">
-          ✕ Limpiar selección
-        </button>
-        <span class="text-muted" style="font-size:var(--text-sm);align-self:center;">
-          "Seleccionar todos" elige las variantes de Control de cada grupo (no las de Generar Reporte).
+    ${units.length ? `
+      <div class="ctrl-toolbar">
+        ${filterChipsHtml}
+        <input type="search" class="ctrl-search" id="js-ctrl-search"
+               placeholder="Buscar control…" value="${esc(state.controlQuery)}" aria-label="Buscar control">
+        <span style="margin-left:auto;display:flex;gap:var(--sp-2);">
+          <button class="btn btn--secondary btn--sm" id="js-select-all-ctrls">✓ Seleccionar todos</button>
+          <button class="btn btn--ghost btn--sm" id="js-clear-ctrls">✕ Limpiar</button>
         </span>
       </div>
-    ` : ''}
 
-    <div class="pill-group" id="js-control-pills" style="margin-bottom:var(--sp-3);">
-      ${blocksHtml || `
-        <div class="alert alert--info" style="margin:0;">
-          Todavía no hay controles asignados a <strong>${esc(state.client.name)}</strong>.
-          <br>
-          Los controles se asignan por cliente o por sistema de origen. Si este cliente
-          debería poder ejecutar alguno, se habilita desde el modo admin
-          (<a href="#/admin">#/admin</a> → Configuración de controles → "Forzado activo").
+      <div class="wizard-onepane" style="margin-bottom:var(--sp-3);">
+        <div class="wizard-onepane__main">
+          <div class="ctrl-rows" id="js-control-rows">
+            ${rowsHtml || '<div class="ctrl-rows__empty">Ningún control coincide con la búsqueda.</div>'}
+          </div>
         </div>
-      `}
-    </div>
+        <div class="wizard-onepane__side">
+          <div>
+            <span class="wizard-section-label">Vas a ejecutar (${selectedUnits.length})</span>
+            <div class="control-recap-pills">${asideSelectedHtml}</div>
+          </div>
+          <div>
+            <span class="wizard-section-label">Archivos que te van a pedir</span>
+            <div class="control-recap-pills">${asideFilesHtml}</div>
+            <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Se cargan en el paso siguiente.</p>
+          </div>
+        </div>
+      </div>
+    ` : `
+      <div class="alert alert--info" style="margin:0;">
+        Todavía no hay controles asignados a <strong>${esc(state.client.name)}</strong>.
+        <br>
+        Los controles se asignan por cliente o por sistema de origen. Si este cliente
+        debería poder ejecutar alguno, se habilita desde el modo admin
+        (<a href="#/admin">#/admin</a> → Configuración de controles → "Forzado activo").
+      </div>
+    `}
   `;
 
+  // Chips de filtro por origen
+  container.querySelectorAll('[data-origin-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.originFilter = btn.dataset.originFilter || null;
+      renderStepControls(container, state, root);
+    });
+  });
+
+  // Buscador — re-render controlado, con foco y cursor restaurados
+  container.querySelector('#js-ctrl-search')?.addEventListener('input', (e) => {
+    state.controlQuery = e.target.value;
+    renderStepControls(container, state, root);
+    const input = container.querySelector('#js-ctrl-search');
+    if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+  });
+
   // Botón "Seleccionar todos": selecciona las variantes "Controlar" de los
-  // controles que aplican a este cliente (`applicableBlocks` ya viene filtrado).
+  // controles que aplican a este cliente (ignora el filtro/búsqueda activos).
   container.querySelector('#js-select-all-ctrls')?.addEventListener('click', () => {
-    const applicableIds = new Set(applicableBlocks.flatMap(b => b.kind === 'standalone' ? [b.ctrl.id] : b.controls.map(c => c.id)));
-    const allControlarIds = Object.values(CONTROL_REGISTRY)
-      .filter(c => applicableIds.has(c.id) && (!c.group || c.group.mode === 'Controlar'))
-      .map(c => c.id);
+    const allControlarIds = units
+      .filter(u => !u.ctrl.group || u.ctrl.group.mode === 'Controlar')
+      .map(u => u.ctrl.id);
     state.selectedControls = [...allControlarIds];
     state.controlFiles = {};
     for (const id of allControlarIds) state.controlFiles[id] = {};
-    // Expandir todos los grupos que ahora tienen modos activos
-    for (const id of allControlarIds) {
-      const gid = CONTROL_REGISTRY[id]?.group?.id;
-      if (gid) state.expandedGroups.add(gid);
-    }
     renderStepControls(container, state, root);
     renderWizardNav(root, state);
   });
@@ -569,15 +592,14 @@ function renderStepControls(container, state, root) {
   container.querySelector('#js-clear-ctrls')?.addEventListener('click', () => {
     state.selectedControls = [];
     state.controlFiles = {};
-    state.expandedGroups = new Set();
     renderStepControls(container, state, root);
     renderWizardNav(root, state);
   });
 
-  // Click en sub-pill o en pill standalone: activa/desactiva ese control
-  container.querySelectorAll('[data-ctrl]').forEach(pill => {
-    pill.addEventListener('click', () => {
-      const id  = pill.dataset.ctrl;
+  // Click en una fila: activa/desactiva ese control
+  container.querySelectorAll('[data-ctrl]').forEach(row => {
+    row.addEventListener('click', () => {
+      const id  = row.dataset.ctrl;
       const idx = state.selectedControls.indexOf(id);
       if (idx >= 0) {
         state.selectedControls.splice(idx, 1);
@@ -585,33 +607,6 @@ function renderStepControls(container, state, root) {
       } else {
         state.selectedControls.push(id);
         state.controlFiles[id] = {};
-      }
-      renderStepControls(container, state, root);
-      renderWizardNav(root, state);
-    });
-  });
-
-  // Click en el pill principal de un grupo: toggle expansión.
-  // Si el grupo tenía modos activos, los desactiva (master OFF).
-  container.querySelectorAll('[data-group]').forEach(pill => {
-    pill.addEventListener('click', () => {
-      const gid = pill.dataset.group;
-      const controlsInGroup = Object.values(CONTROL_REGISTRY)
-        .filter(c => c.group?.id === gid);
-      const activeSubs = controlsInGroup.filter(c => state.selectedControls.includes(c.id));
-
-      if (activeSubs.length > 0) {
-        // Tiene modos activos → desactiva todo y colapsa
-        for (const c of activeSubs) {
-          const i = state.selectedControls.indexOf(c.id);
-          if (i >= 0) state.selectedControls.splice(i, 1);
-          delete state.controlFiles[c.id];
-        }
-        state.expandedGroups.delete(gid);
-      } else {
-        // Sin modos activos → toggle visual
-        if (state.expandedGroups.has(gid)) state.expandedGroups.delete(gid);
-        else state.expandedGroups.add(gid);
       }
       renderStepControls(container, state, root);
       renderWizardNav(root, state);
