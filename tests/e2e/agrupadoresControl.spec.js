@@ -59,7 +59,7 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
   await row.locator('.js-run-btn').click();
   await expect(page.locator('h3', { hasText: 'Paso 1 — Controles a ejecutar' })).toBeVisible();
 
-  await page.click('#js-control-pills button[data-ctrl="agrupadores"]');
+  await page.click('#js-control-rows button[data-ctrl="agrupadores"]');
   await page.click('#js-next-btn');
   await expect(page.locator('h3', { hasText: 'Paso 2 — Archivos' })).toBeVisible();
 

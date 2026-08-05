@@ -1169,7 +1169,8 @@
   font-family: var(--font-tool);
   margin: 0 calc(var(--sp-5) * -1);
 }
-.wizard-onepane__files { padding: 0 var(--sp-5); border-right: 1px solid var(--color-border); min-width: 0; }
+.wizard-onepane__files,
+.wizard-onepane__main  { padding: 0 var(--sp-5); border-right: 1px solid var(--color-border); min-width: 0; }
 .wizard-onepane__side  { padding: 0 var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-5); }
 
 .wizard-section-label {
@@ -1218,9 +1219,85 @@
 }
 .threshold-note { font-size: 11px; color: var(--t3); margin: var(--sp-2) 0 0; }
 
+/* ── Wizard — filtro de origen + buscador + lista de controles (Paso 1) ── */
+.ctrl-toolbar {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  margin-bottom: var(--sp-4); font-family: var(--font-tool);
+}
+.ctrl-filter {
+  appearance: none; cursor: pointer; font-family: var(--font-tool);
+  font-size: 12.5px; font-weight: 700; color: var(--t2);
+  background: var(--color-surface); border: 1px solid var(--line);
+  border-radius: var(--radius-full); padding: 5px 13px;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  transition: border-color .14s, color .14s, background .14s;
+}
+.ctrl-filter:hover { border-color: var(--celeste-border); color: var(--ink); }
+.ctrl-filter:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
+.ctrl-filter b { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--t3); font-weight: 700; }
+.ctrl-filter.is-active { background: var(--celeste); border-color: var(--celeste); color: #fff; }
+.ctrl-filter.is-active b { color: rgba(255, 255, 255, .75); }
+
+.ctrl-search {
+  font-family: var(--font-tool); font-size: 13px;
+  background: var(--color-surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius-full);
+  padding: 6px 14px; width: 200px; min-width: 140px;
+}
+.ctrl-search::placeholder { color: var(--t3); }
+.ctrl-search:focus-visible { outline: 3px solid var(--celeste); outline-offset: 1px; }
+
+.ctrl-rows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-family: var(--font-tool); }
+.ctrl-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: var(--sp-3); align-items: center; width: 100%;
+  padding: 10px 14px; text-align: left; cursor: pointer;
+  background: var(--color-surface); border: none; border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-tool); transition: background .12s;
+}
+.ctrl-rows .ctrl-row:last-child { border-bottom: none; }
+.ctrl-row:hover { background: var(--celeste-dim); }
+.ctrl-row:focus-visible { outline: 3px solid var(--celeste); outline-offset: -3px; }
+.ctrl-row--active { background: var(--celeste-dim); }
+.ctrl-row__box {
+  width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0;
+  border: 1.5px solid var(--line); background: var(--color-surface);
+  display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 700;
+}
+.ctrl-row--active .ctrl-row__box { background: var(--celeste); border-color: var(--celeste); color: #fff; }
+.ctrl-row__main { min-width: 0; }
+.ctrl-row__name { font-size: 13.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ctrl-row__mode {
+  font-size: 10.5px; font-weight: 600; color: var(--t2);
+  border: 1px solid var(--line); border-radius: 5px; padding: 0 5px;
+}
+.ctrl-row__desc {
+  display: block; font-size: 12px; color: var(--t3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ctrl-row__files { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 260px; }
+.ctrl-rows__empty {
+  padding: var(--sp-6); text-align: center; font-size: 13px; color: var(--t3);
+  font-style: italic; font-family: var(--font-tool);
+}
+
+/* Badge de origen — deliberadamente separado del semáforo de diferencias
+   (ok/warn/error, ver hero-ctrl-row): sólo dos variantes visuales, el texto
+   específico (sistema/CCT/cliente) es lo que distingue el chip, no el color. */
+.origin-badge {
+  display: inline-flex; align-items: center; font-size: 10px; font-weight: 700;
+  letter-spacing: .04em; padding: 1px 7px; border-radius: var(--radius-full);
+  border: 1px solid var(--line); background: var(--line-soft); color: var(--t2);
+  white-space: nowrap;
+}
+.origin-badge--scoped { border-color: var(--celeste-border); background: var(--celeste-dim); color: var(--celeste-deeper); }
+
+.control-recap-pill--muted { border-color: var(--line); background: var(--line-soft); color: var(--t2); }
+
 @media (max-width: 900px) {
   .wizard-onepane { grid-template-columns: 1fr; margin: 0; }
-  .wizard-onepane__files { border-right: none; padding: 0; margin-bottom: var(--sp-5); }
+  .wizard-onepane__files,
+  .wizard-onepane__main { border-right: none; padding: 0; margin-bottom: var(--sp-5); }
   .wizard-onepane__side { padding: 0; }
 }
 

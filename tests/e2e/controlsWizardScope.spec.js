@@ -18,15 +18,15 @@ test('un cliente nuevo sólo ve "Cruce por Agrupadores" — el resto son control
   await page.locator('.home-table__row', { hasText: 'Cliente Scope E2E' }).locator('.js-run-btn').click();
   await expect(page.locator('h3', { hasText: 'Paso 1 — Controles a ejecutar' })).toBeVisible();
 
-  await expect(page.locator('#js-control-pills')).toContainText('Cruce por Agrupadores');
-  await expect(page.locator('#js-control-pills button[data-ctrl="cat_x_empleados"]')).toHaveCount(0);
-  await expect(page.locator('#js-control-pills button[data-ctrl="brutos"]')).toHaveCount(0);
-  await expect(page.locator('#js-control-pills')).not.toContainText('Rendimiento vs Asiento');
+  await expect(page.locator('#js-control-rows')).toContainText('Cruce por Agrupadores');
+  await expect(page.locator('#js-control-rows button[data-ctrl="cat_x_empleados"]')).toHaveCount(0);
+  await expect(page.locator('#js-control-rows button[data-ctrl="brutos"]')).toHaveCount(0);
+  await expect(page.locator('#js-control-rows')).not.toContainText('Rendimiento vs Asiento');
 
   // Ya no existe la sección "Otros controles" (T4 la introdujo; esta tajada la retira).
   await expect(page.locator('summary', { hasText: 'Otros controles' })).toHaveCount(0);
 
-  // El pill del único control disponible sigue funcionando igual que antes.
-  await page.click('#js-control-pills button[data-ctrl="agrupadores"]');
-  await expect(page.locator('#js-control-pills button[data-ctrl="agrupadores"]')).toHaveClass(/pill--active/);
+  // La fila del único control disponible sigue funcionando igual que antes.
+  await page.click('#js-control-rows button[data-ctrl="agrupadores"]');
+  await expect(page.locator('#js-control-rows button[data-ctrl="agrupadores"]')).toHaveClass(/ctrl-row--active/);
 });
