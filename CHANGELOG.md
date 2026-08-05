@@ -7,6 +7,16 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Control Acreditaciones (Axton) — modo "Generar Reporte" — 2026-08-05
+
+- `js/parsers/acreditacionesParser.js` — parser del export `contacred` de Axton (formato fijo, igual en todas las cuentas de Axton): encuentra la fila de encabezados (la 1 es un separador), resuelve las columnas por nombre tolerando acentos y espacios duros, normaliza el CBU (viene con un espacio duro adelante) y descarta la fila de `TOTAL GENERAL`.
+- `js/controls/acreditaciones.js` — el control: agrupa las acreditaciones del mes por (tipo de liquidación × fecha de acreditación) mergeando los listados del mismo pago, normaliza los tipos por patrón con fallback al texto crudo de Axton, hereda la fecha de las filas huérfanas sólo cuando es unívoca (el resto va a `SIN ASIGNAR`), y exporta el .xlsx: hoja `CONTROL` con el cierre en fórmulas contra el total del archivo de origen, más una hoja por lista (`07 1Q 16-07`) con CUIT y CBU como texto. Corte por empresa configurable.
+- Pantalla de resultados con los patrones del proyecto: hero de listas con y sin alertas, tarjeta de cierre, filtro por tipo, paginación, buscador y menú de export; el conteo de empleados por lista, las alertas de integridad (sin importe, duplicado, CBU inválido o compartido, importe ≤ 0) y el corte por banco se muestran **sólo acá** y no en el .xlsx — ver D-020.
+- `js/controls/registry.js` — entrada `acreditaciones_reporte`, primer control con `scope: 'sistema'` para `sourceSystems: ['axton']` (lo ven los 8 clientes Axton). `js/ui/fileUpload.js` y `js/ui/controlsWizard.js` cablean el tipo de archivo y el toggle de corte por empresa.
+- `tests/acreditacionesControl.test.js` — 51 asserts: normalización de tipos, qué filas entran, merge y corte de listados, herencia de fecha, `SIN ASIGNAR`, cierre contra el origen, las cinco alertas, corte por empresa y las ramas de error. Sumado a `test:unit`.
+- `CLAUDE.md` §6.5 — guardrail nuevo: los entregables que van a Finanzas no llevan información de HR.
+- Ver `specs/control-acreditaciones-axton.md` y D-020 / D-021 en `DECISIONS.md`.
+
 ### feat: Rendimiento vs Asiento admite varios archivos de Contabilidad — 2026-08-05
 
 - `js/parsers/contaExcel.js` — `mergeContaFiles()`: concatena las filas parseadas de varios archivos de Contabilidad Desglosada (CONTA) y avisa (sin bloquear) si dos archivos distintos comparten filas idénticas — pensado para acumular varios meses en una sola corrida.

@@ -136,6 +136,7 @@ Esto es **crítico** y aplica a todo el código:
 2. **No loguear datos sensibles a consola.** En producción, los `console.log` de datos de empleados están prohibidos. En desarrollo, OK pero limpiar antes de mergear.
 3. **El export JSON de sesión incluye datos personales.** Avisar al usuario al exportar: "Este archivo contiene datos sensibles de empleados. Tratalo como información confidencial."
 4. **No telemetría, no analytics, no tracking.** Nada de Google Analytics, Sentry, etc.
+5. **Los entregables que van a Finanzas no llevan información de HR.** Cuando el archivo que genera un control lo recibe Finanzas/tesorería del cliente (no el equipo de Payroll), no puede incluir datos de HR: dotación, conteos de empleados por lista, altas y bajas, excepciones de empleados, atributos como jornalizado/mensualizado. En muchos clientes Finanzas no tiene acceso a esa información. Va sólo lo que hace falta para pagar: legajo, nombre, CUIT, CBU, banco, importe y fecha. Todo lo demás se muestra en la pantalla de resultados de la app, que la ve el analista. Ver D-020 en `DECISIONS.md`.
 
 ---
 
@@ -242,6 +243,12 @@ Ideas validadas por Willy, todavía sin implementar salvo donde se indica:
    - Brutos, EE x CATEG y Rendimiento x EE **ya tienen** algo equivalente (`chipEl` en `brutos.js`/`rendXEe.js`,
      `buildDiffChip` en `catXEmpleados.js`) — usarlos de referencia de estilo.
 
+3. **Modo "Controlar" de Acreditaciones (Axton).**
+   El modo "Generar Reporte" ya está (`acreditaciones_reporte` en el registry, ver
+   `specs/control-acreditaciones-axton.md`). Falta el cruce de las acreditaciones contra el Tabulado, que
+   Willy dejó para definir después. Cuando se defina, entra como segunda entrada del mismo `group`
+   (`{ id: 'acreditaciones', mode: 'Controlar' }`) reusando el parser y la normalización de tipos.
+
 ---
 
-**Última actualización:** 4 de agosto de 2026 — skills del proyecto versionadas en `.claude/skills/` (ver sección 5.1).
+**Última actualización:** 5 de agosto de 2026 — guardrail de §6.5 (los entregables que van a Finanzas no llevan información de HR) y pendiente §11.3 (modo "Controlar" de Acreditaciones).

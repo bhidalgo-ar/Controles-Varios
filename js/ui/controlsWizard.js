@@ -38,6 +38,7 @@ import { currentPeriod, periodOptions } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
 import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
 import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
+import { renderAcreditacionesConfigEditor, DEFAULT_ACREDITACIONES_CONFIG } from '../controls/acreditaciones.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
 
@@ -80,6 +81,7 @@ const AUTO_DETECT = {
 const BRUTOS_IDS  = ['brutos', 'brutos_reporte'];
 const GS_PERS_IDS = ['gs_pers', 'gs_pers_reporte'];
 const NR_IDS      = ['nr', 'nr_reporte'];
+const ACREDITACIONES_IDS = ['acreditaciones_reporte'];
 
 // Controles que usan la agrupación de conceptos de Rend vs Tabulado
 const REND_GROUPING_IDS = ['rend_vs_tabu', 'rend_x_ee'];
@@ -97,12 +99,13 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, groupers, allControlConfigs] = await Promise.all([
+  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, groupers, allControlConfigs] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(client.code),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
     getControlConfig(client.code, 'rva_config'),
     getControlConfig(client.code, 'agrupadores_config'),
+    getControlConfig(client.code, 'acreditaciones_config'),
     getGroupers(client.code),
     getControlConfigsForClient(client.code),
   ]);
@@ -143,6 +146,8 @@ export async function renderControlsWizard(root, clientId) {
     // mismo criterio que rvaConfig arriba.
     groupers:                  groupers || [],
     agrupadoresConfig:         savedAgrupadoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
+    // Config del reporte de Acreditaciones (Axton): corte por empresa.
+    acreditacionesConfig:      savedAcreditacionesConfig?.params || { ...DEFAULT_ACREDITACIONES_CONFIG },
     controlConfigsByControlId,
 
     originFilter:              null,       // label del chip de origen activo en Paso 1 (null = "Todos")
@@ -850,6 +855,19 @@ function renderStepFiles(container, state, root) {
       });
     }
 
+    // Opciones del reporte de Acreditaciones (corte por empresa)
+    if (ACREDITACIONES_IDS.includes(controlId)) {
+      const cfgWrapper = document.createElement('div');
+      cfgWrapper.style.marginBottom = 'var(--sp-3)';
+      filesArea.appendChild(cfgWrapper);
+
+      renderAcreditacionesConfigEditor(cfgWrapper, {
+        config:        state.acreditacionesConfig,
+        openByDefault: false,
+        onChange:      (newConfig) => { state.acreditacionesConfig = newConfig; },
+      });
+    }
+
     // Editor de "Agrupadores y umbrales" del Cruce por Agrupadores
     if (controlId === 'agrupadores') {
       const cfgWrapper = document.createElement('div');
@@ -1344,6 +1362,9 @@ async function executeControls(state, statusEl, container, root) {
     if (state.selectedControls.includes('agrupadores') && state.agrupadoresConfig) {
       await saveControlConfig(state.client.code, 'agrupadores_config', { params: state.agrupadoresConfig });
     }
+    if (state.selectedControls.some(id => ACREDITACIONES_IDS.includes(id)) && state.acreditacionesConfig) {
+      await saveControlConfig(state.client.code, 'acreditaciones_config', { params: state.acreditacionesConfig });
+    }
 
     // El run en sí se crea sólo si NO es quickRun
     let runId = null;
@@ -1389,6 +1410,9 @@ async function executeControls(state, statusEl, container, root) {
       }
       if (controlId === 'rend_vs_asiento' && state.rvaConfig) {
         mapping.rvaConfig = state.rvaConfig;
+      }
+      if (ACREDITACIONES_IDS.includes(controlId)) {
+        mapping.acreditacionesConfig = state.acreditacionesConfig || { ...DEFAULT_ACREDITACIONES_CONFIG };
       }
       if (controlId === 'agrupadores') {
         const cfg           = state.agrupadoresConfig || {};

@@ -3,8 +3,9 @@
 //   node --input-type=module < tests/controlsScope.test.js
 //
 // Ver specs/segmentacion-controles-por-cliente.md. Confirma que:
-//   - Marval (MARVAL, meta4) ve los 11 controles.
-//   - Un cliente nuevo cualquiera (meta4 o axton) ve sólo "agrupadores".
+//   - Marval (MARVAL, meta4) ve los 11 controles de Meta4.
+//   - Un cliente Meta4 nuevo ve sólo "agrupadores".
+//   - Un cliente Axton ve "agrupadores" + el reporte de Acreditaciones (D-021).
 //   - scope 'sistema' aplica por sourceSystem, no por cliente puntual.
 //   - el override de admin (controlConfigs.status) gana por sobre el scope.
 
@@ -27,22 +28,32 @@ const nuevoAx = { code: 'NUEVOAX', sourceSystem: 'axton', ccts: [], attributes: 
 
 // ── Clasificación actual (decisión de Guillermo, 2026-07-31) ────────────────
 
-assert('Marval ve los 11 controles',
-  filterControlsForClient(allControls, marval).length === 11);
+assert('Marval ve los 11 controles de Meta4 (no el de Axton)',
+  filterControlsForClient(allControls, marval).map(c => c.id).join(',').includes('acreditaciones_reporte') === false
+  && filterControlsForClient(allControls, marval).length === 11);
 
 assert('un cliente Meta4 nuevo ve sólo "agrupadores"',
   filterControlsForClient(allControls, nuevoM4).map(c => c.id).join(',') === 'agrupadores');
 
-assert('un cliente Axton nuevo ve sólo "agrupadores"',
-  filterControlsForClient(allControls, nuevoAx).map(c => c.id).join(',') === 'agrupadores');
+// D-021: el reporte de Acreditaciones es el primer control con scope 'sistema'
+// para Axton, así que un cliente Axton ya no ve sólo "agrupadores".
+assert('un cliente Axton ve "agrupadores" + el reporte de Acreditaciones',
+  filterControlsForClient(allControls, nuevoAx).map(c => c.id).sort().join(',')
+    === 'acreditaciones_reporte,agrupadores');
 
 assert('los 10 controles de Marval son scope "cliente"',
-  allControls.filter(c => c.id !== 'agrupadores').every(c => c.scope === 'cliente'));
+  allControls
+    .filter(c => c.id !== 'agrupadores' && c.id !== 'acreditaciones_reporte')
+    .every(c => c.scope === 'cliente'));
+
+assert('acreditaciones_reporte es scope "sistema" de Axton',
+  CONTROL_REGISTRY.acreditaciones_reporte.scope === 'sistema'
+  && CONTROL_REGISTRY.acreditaciones_reporte.scopeMeta.sourceSystems.join(',') === 'axton');
 
 assert('agrupadores es scope "general"',
   CONTROL_REGISTRY.agrupadores.scope === 'general');
 
-// ── scope 'sistema' (mecanismo, sin ningún control real usándolo todavía) ──
+// ── scope 'sistema' (el mecanismo, más allá del control de Axton que ya lo usa) ──
 
 const controlDeSistema = { id: 'x', scope: 'sistema', scopeMeta: { sourceSystems: ['meta4'] } };
 assert('scope sistema: aplica a un cliente meta4', scopeMatchesClient(controlDeSistema, nuevoM4) === true);
