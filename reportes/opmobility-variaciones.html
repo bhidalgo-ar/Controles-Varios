@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPmobility — Reportes de Variación | Hidalgo &amp; Asociados</title>
+
+<script>
+/* Tema antes del primer paint — evita el flash de color incorrecto (hya-brand §10.4) */
+(function () {
+  var t = localStorage.getItem('theme') ||
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Source+Sans+Pro:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --celeste: #00ACD4;
+  --celeste-dark: #0090B4;
+  --celeste-deeper: #007896;
+  --celeste-dim: rgba(0, 172, 212, 0.10);
+  --celeste-border: rgba(0, 172, 212, 0.30);
+  --gris: #8C837B;
+
+  --ink: #15263D;
+  --t1: #1E3A5F;
+  --t2: #4A6080;
+  --t3: #8FA3BA;
+
+  --paper: #FCFCFB;
+  --white: #FFFFFF;
+  --line: #E7E6E6;
+  --line-soft: #EFEEEC;
+
+  --ok: #22C55E;   --ok-bg: rgba(34,197,94,0.10);   --ok-bd: rgba(34,197,94,0.30);   --ok-tx: #177A50;
+  --warn: #F59E0B; --warn-bg: rgba(245,158,11,0.12); --warn-bd: rgba(245,158,11,0.32); --warn-tx: #9A5A0B;
+  --error: #E85518; --error-bg: rgba(232,85,24,0.10); --error-bd: rgba(232,85,24,0.30); --error-tx: #C0420F;
+  --neutral: #8C837B; --neutral-bg: rgba(140,131,123,0.12); --neutral-bd: rgba(140,131,123,0.30); --neutral-tx: #6B635C;
+
+  --r-sm: 8px;
+  --r: 14px;
+  --r-full: 9999px;
+  --sh-sm: 0 1px 4px rgba(30,58,95,0.06);
+  --sh: 0 6px 24px rgba(30,58,95,0.09);
+  --sh-celeste: 0 8px 28px rgba(0,172,212,0.18);
+
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --t: 0.22s;
+
+  --font: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif;
+  --serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+
+  --hdr-h: 73px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --celeste: #1FBEE0;
+  --celeste-dark: #16A6C6;
+  --celeste-deeper: #5AD2EE;
+  --celeste-dim: rgba(31,190,224,0.14);
+  --celeste-border: rgba(31,190,224,0.34);
+  --gris: #9FB1C2;
+  --ink: #EAF1F8;
+  --t1: #DCE6F0;
+  --t2: #92A6BC;
+  --t3: #5F758D;
+  --paper: #0B1521;
+  --white: #111E2C;
+  --line: #23364A;
+  --line-soft: #1A2837;
+  --ok-bg: rgba(34,197,94,0.15);   --ok-bd: rgba(34,197,94,0.36);   --ok-tx: #4ADE80;
+  --warn-bg: rgba(245,158,11,0.15); --warn-bd: rgba(245,158,11,0.36); --warn-tx: #FBBF24;
+  --error-bg: rgba(232,85,24,0.16); --error-bd: rgba(232,85,24,0.42); --error-tx: #FB8254;
+  --neutral-bg: rgba(140,131,123,0.18); --neutral-bd: rgba(140,131,123,0.34); --neutral-tx: #B6ABA0;
+  --sh-sm: 0 1px 4px rgba(0,0,0,0.40);
+  --sh: 0 8px 28px rgba(0,0,0,0.50);
+  --sh-celeste: 0 8px 28px rgba(31,190,224,0.22);
+}
+[data-theme="dark"] .hdr { background: rgba(11,21,33,0.85); }
+[data-theme="dark"] .rt thead th { background: #16263A; }
+[data-theme="dark"] .rt tbody tr:nth-child(even) { background: rgba(255,255,255,0.025); }
+[data-theme="dark"] .rt tfoot td { background: #16263A; }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; color-scheme: light; }
+body {
+  background: var(--paper); color: var(--t1);
+  font-family: var(--font); line-height: 1.55; min-height: 100vh;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease);
+}
+.num { font-variant-numeric: tabular-nums; }
+.main { max-width: 1280px; margin: 0 auto; padding: 0 40px 72px; }
+@media (max-width: 640px) { .hdr-in, .main, .foot-in { padding-left: 22px; padding-right: 22px; } }
+
+/* ---------- Header ---------- */
+.hdr {
+  background: rgba(252,252,251,0.85); border-bottom: 1px solid var(--line);
+  padding: 15px 0; position: sticky; top: 0; z-index: 50;
+  backdrop-filter: saturate(180%) blur(8px);
+}
+.hdr-in { max-width: 1280px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.hdr-brand { display: flex; align-items: center; gap: 13px; }
+.iso { width: 42px; height: 42px; border-radius: 50%; background: var(--celeste); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; letter-spacing: -0.5px; flex: none; }
+.wm { display: flex; flex-direction: column; line-height: 1.25; }
+.wm b { font-weight: 700; font-size: 1rem; color: var(--ink); letter-spacing: -0.01em; }
+.wm b .amp { color: var(--gris); font-weight: 400; font-style: italic; }
+.wm span { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--celeste); }
+.hdr-r { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); text-transform: uppercase; border: 1px solid var(--line); border-radius: var(--r-full); padding: 7px 15px; background: var(--white); }
+.hdr-r .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.hdr-actions { display: flex; align-items: center; gap: 10px; }
+.btn-theme { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 38px; height: 38px; border-radius: var(--r-full); border: 1px solid var(--line); background: var(--white); color: var(--t2); cursor: pointer; transition: border-color var(--t) var(--ease), color var(--t) var(--ease); }
+.btn-theme:hover { border-color: var(--celeste); color: var(--celeste); }
+.btn-theme .ico-sun { display: none; }
+[data-theme="dark"] .btn-theme .ico-moon { display: none; }
+[data-theme="dark"] .btn-theme .ico-sun { display: block; }
+@media (max-width: 860px) { .hdr-r { display: none; } }
+
+/* ---------- Privacidad ---------- */
+.privacy { display: flex; gap: 14px; align-items: flex-start; background: var(--white); border: 1px solid var(--line); border-radius: var(--r); padding: 11px 16px; box-shadow: var(--sh-sm); margin-top: 20px; }
+.privacy .lock { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--celeste-dim); color: var(--celeste); display: inline-flex; align-items: center; justify-content: center; }
+.privacy p { font-size: 0.86rem; color: var(--t2); line-height: 1.5; }
+.privacy b { color: var(--ink); font-weight: 700; }
+
+/* ---------- Hero ---------- */
+.hero { display: grid; grid-template-columns: 1.5fr 1fr; margin-top: 18px; background: var(--white); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh-sm); overflow: hidden; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+.hero-l { padding: 24px 30px 22px; display: flex; flex-direction: column; }
+.hero-eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--celeste); margin-bottom: 12px; }
+.hero h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.5rem, 2.4vw, 2.05rem); line-height: 1.06; color: var(--ink); letter-spacing: -0.01em; }
+.hero h1 .accent { color: var(--celeste); }
+.hero-sub { margin-top: 9px; font-size: 0.9rem; line-height: 1.5; color: var(--t2); text-wrap: pretty; }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: auto; padding-top: 16px; }
+.hero-meta .mi { display: inline-flex; align-items: center; gap: 8px; font-size: 0.84rem; color: var(--t2); font-weight: 600; }
+.hero-meta .mi .bullet { width: 7px; height: 7px; border-radius: 50%; background: var(--celeste); flex: none; }
+.hero-meta .mi b { color: var(--ink); font-weight: 800; }
+.hero-r { position: relative; padding: 22px 26px; border-left: 1px solid var(--line); background: linear-gradient(180deg, rgba(0,172,212,0.035), rgba(0,172,212,0) 60%); display: flex; flex-direction: column; gap: 12px; }
+.hero-steps { display: flex; flex-direction: column; gap: 9px; }
+.hstep { display: flex; align-items: baseline; gap: 12px; }
+.hstep .hs-no { font-family: var(--serif); font-size: 1.05rem; color: var(--celeste); line-height: 1; min-width: 1.5em; }
+.hstep .hs-tx { font-size: 0.85rem; color: var(--t2); line-height: 1.35; }
+.hstep .hs-tx b { color: var(--ink); font-weight: 700; }
+
+/* ---------- Bloques y tabs ---------- */
+.block { padding: 26px 0 0; }
+.block-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 18px; }
+.block-no { font-family: var(--serif); font-weight: 400; font-size: 1.9rem; line-height: 0.8; color: var(--t3); flex: none; min-width: 1.5em; }
+.block-titles .eyebrow { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--celeste); margin-bottom: 3px; }
+.block-titles h2 { font-family: var(--serif); font-weight: 400; font-size: 1.35rem; color: var(--ink); letter-spacing: -0.01em; line-height: 1.1; }
+.block-rule { flex: 1; height: 1px; background: var(--line); align-self: center; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: var(--r-full); border: 1px solid var(--line); background: var(--white); color: var(--t2); font-family: inherit; font-size: 0.86rem; font-weight: 700; cursor: pointer; transition: border-color var(--t) var(--ease), color var(--t) var(--ease); }
+.tab:hover { border-color: var(--celeste-border); color: var(--celeste-deeper); }
+.tab.active { border-color: var(--ink); color: var(--ink); }
+.tab.active::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--celeste); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.card { background: var(--white); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 24px; box-shadow: var(--sh-sm); margin-bottom: 18px; }
+.card + .card { margin-top: 0; }
+.card h3 { font-family: var(--serif); font-weight: 400; font-size: 1.1rem; color: var(--ink); }
+.card .desc { font-size: 0.85rem; color: var(--t2); margin-top: 4px; }
+.card .desc code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; color: var(--celeste-deeper); }
+
+/* ---------- Dropzones ---------- */
+.dropzones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 720px) { .dropzones { grid-template-columns: 1fr; } }
+.dz { position: relative; border: 1.5px dashed var(--line); background: var(--white); border-radius: var(--r); padding: 20px; text-align: center; cursor: pointer; transition: border-color var(--t) var(--ease), background var(--t) var(--ease), box-shadow var(--t) var(--ease), transform var(--t) var(--ease); }
+.dz:hover { border-color: var(--celeste-border); box-shadow: var(--sh); transform: translateY(-2px); }
+.dz.drag { border-color: var(--celeste); border-style: solid; background: var(--celeste-dim); }
+.dz.filled { border-style: solid; border-color: var(--ok-bd); background: var(--ok-bg); }
+.dz input[type=file] { display: none; }
+.dz .dz-ico { width: 50px; height: 50px; border-radius: 50%; margin: 0 auto 12px; background: var(--celeste-dim); color: var(--celeste); display: inline-flex; align-items: center; justify-content: center; transition: background var(--t), color var(--t); }
+.dz.filled .dz-ico { background: rgba(34,197,94,0.14); color: var(--ok-tx); }
+.dz .dz-title { font-weight: 700; font-size: 1.02rem; color: var(--ink); }
+.dz .dz-hint { font-size: 0.8rem; color: var(--t3); margin-top: 5px; }
+.dz .dz-files { font-size: 0.83rem; color: var(--ok-tx); margin-top: 9px; font-weight: 700; word-break: break-word; }
+
+/* ---------- Períodos guardados ---------- */
+.plist { border: 1px solid var(--line); border-radius: var(--r-sm); margin-top: 10px; max-height: 230px; overflow-y: auto; }
+.pitem { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); cursor: pointer; transition: background var(--t) var(--ease); }
+.pitem:last-child { border-bottom: none; }
+.pitem:hover { background: var(--celeste-dim); }
+.pitem.selected { background: var(--celeste-dim); box-shadow: inset 3px 0 0 var(--celeste); }
+.pitem .pi-name { font-weight: 700; font-size: 0.88rem; color: var(--ink); }
+.pitem .pi-meta { font-size: 0.75rem; color: var(--t3); }
+.pitem .pi-del { border: 1px solid var(--line); background: var(--white); color: var(--t3); border-radius: var(--r-full); width: 26px; height: 26px; flex: none; cursor: pointer; font-family: inherit; line-height: 1; }
+.pitem .pi-del:hover { border-color: var(--error-bd); color: var(--error-tx); }
+.pempty { padding: 18px 16px; text-align: center; color: var(--t3); font-size: 0.84rem; }
+
+.label { display: block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--celeste); margin-bottom: 4px; }
+.hint { font-size: 0.75rem; color: var(--t3); margin-top: 6px; }
+.field { margin-top: 18px; }
+.check { display: inline-flex; align-items: center; gap: 9px; font-size: 0.85rem; color: var(--t2); cursor: pointer; margin-top: 14px; }
+.check input { width: 16px; height: 16px; accent-color: var(--celeste); }
+
+/* ---------- Botones ---------- */
+.btn { display: inline-flex; align-items: center; gap: 8px; border-radius: var(--r-full); font-family: inherit; font-weight: 700; letter-spacing: 0.01em; cursor: pointer; border: none; white-space: nowrap; transition: background var(--t) var(--ease), box-shadow var(--t) var(--ease), opacity var(--t) var(--ease), border-color var(--t) var(--ease), color var(--t) var(--ease); }
+.btn-primary { background: var(--celeste); color: #fff; padding: 12px 28px; font-size: 0.92rem; }
+.btn-primary:hover:not(:disabled) { background: var(--celeste-dark); box-shadow: var(--sh-celeste); }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--t2); padding: 9px 18px; font-size: 0.85rem; }
+.btn-ghost:hover { border-color: var(--celeste); color: var(--celeste); }
+.btn-danger { background: transparent; border: 1px solid var(--line); color: var(--error-tx); padding: 9px 18px; font-size: 0.85rem; }
+.btn-danger:hover { border-color: var(--error-bd); background: var(--error-bg); }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; align-items: center; }
+
+/* ---------- Mensajes ---------- */
+.msg { display: none; gap: 12px; align-items: flex-start; border-radius: var(--r); padding: 13px 16px; margin-top: 18px; font-size: 0.88rem; border: 1px solid var(--line); }
+.msg.show { display: flex; }
+.msg.info { background: var(--celeste-dim); border-color: var(--celeste-border); color: var(--celeste-deeper); }
+.msg.ok { background: var(--ok-bg); border-color: var(--ok-bd); color: var(--ok-tx); }
+.msg.warn { background: var(--warn-bg); border-color: var(--warn-bd); color: var(--warn-tx); }
+.msg.error { background: var(--error-bg); border-color: var(--error-bd); color: var(--error-tx); }
+.msg ul { margin: 6px 0 0 18px; }
+
+/* ---------- Resultados en pantalla ---------- */
+.results { display: none; margin-top: 26px; }
+.results.show { display: block; }
+.verdict { display: flex; align-items: center; gap: 16px; border-radius: var(--r); padding: 18px 22px; margin-bottom: 16px; border: 1px solid var(--line); background: var(--white); }
+.verdict .v-ico { width: 46px; height: 46px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
+.verdict .v-title { font-family: var(--serif); font-weight: 400; font-size: 1.5rem; line-height: 1.05; color: var(--ink); letter-spacing: -0.01em; }
+.verdict .v-title b { font-family: var(--font); font-weight: 800; }
+.verdict .v-sub { font-size: 0.86rem; color: var(--t2); margin-top: 4px; }
+.verdict.v-ok { background: var(--ok-bg); border-color: var(--ok-bd); }
+.verdict.v-ok .v-ico { background: var(--ok); color: #fff; }
+.verdict.v-ok .v-title b { color: var(--ok-tx); }
+.verdict.v-warn { background: var(--warn-bg); border-color: var(--warn-bd); }
+.verdict.v-warn .v-ico { background: var(--warn); color: #fff; }
+.verdict.v-warn .v-title b { color: var(--warn-tx); }
+
+.runctx { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r); background: var(--white); padding: 4px; margin-bottom: 18px; box-shadow: var(--sh-sm); }
+.rc { display: flex; flex-direction: column; gap: 2px; padding: 8px 18px; }
+.rc + .rc { border-left: 1px solid var(--line-soft); }
+.rc-l { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t3); }
+.rc-v { font-size: 0.88rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rc-v.celeste { color: var(--celeste-deeper); }
+
+.toolbar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* ---------- Documento del reporte (lo que sale al PDF) ---------- */
+.report-doc { background: #FFFFFF; color: #15263D; border: 1px solid var(--line); border-radius: var(--r); padding: 26px 28px; overflow-x: auto; }
+.rd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 2px solid var(--celeste); padding-bottom: 12px; margin-bottom: 16px; }
+.rd-brand { display: flex; align-items: center; gap: 12px; }
+.rd-head h1 { font-family: var(--serif); font-weight: 400; font-size: 1.25rem; line-height: 1.1; color: #15263D; }
+.rd-head .rd-type { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--celeste-deeper); margin-bottom: 3px; }
+.rd-head .rd-meta { font-size: 0.78rem; color: #4A6080; line-height: 1.5; margin-top: 4px; }
+.rd-head .rd-right { text-align: right; font-size: 0.75rem; color: #4A6080; white-space: nowrap; }
+.rd-head .rd-badge { display: inline-block; background: var(--celeste); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 4px 12px; border-radius: var(--r-full); }
+
+.rd-section { margin-bottom: 18px; }
+.rd-section + .rd-section { margin-top: 26px; }
+.rd-section-title { font-family: var(--serif); font-weight: 400; font-size: 1.05rem; color: #15263D; padding-bottom: 5px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.rd-section-title span { font-size: 0.72rem; font-family: var(--font); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--celeste-deeper); display: block; }
+
+table.rt { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+table.rt thead th { background: #F7F9FB; color: #4A6080; text-align: left; padding: 8px 10px; border: 1px solid var(--line); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; }
+table.rt th.r, table.rt td.r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.rt th.c, table.rt td.c { text-align: center; }
+table.rt tbody td { padding: 6px 10px; border: 1px solid var(--line-soft); }
+table.rt tbody tr:nth-child(even) { background: #FAFCFE; }
+table.rt tbody td.leg { color: #4A6080; font-variant-numeric: tabular-nums; width: 66px; }
+table.rt .pos { color: #177A50; }
+table.rt .neg { color: #C0420F; }
+table.rt .zero { color: #8C837B; }
+table.rt tfoot td { padding: 9px 10px; border: 1px solid var(--line); background: #F0F4F8; font-weight: 800; font-variant-numeric: tabular-nums; color: #15263D; }
+.rd-foot { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--line-soft); font-size: 0.68rem; color: #8C837B; line-height: 1.5; }
+
+/* ---------- Footer app ---------- */
+.foot { border-top: 1px solid var(--line); padding: 38px 0 46px; color: var(--gris); font-size: 0.84rem; margin-top: 56px; }
+.foot-in { max-width: 1280px; margin: 0 auto; padding: 0 40px; }
+.foot-top { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.foot-top span { font-weight: 700; font-size: 1.05rem; color: var(--ink); }
+.foot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 22px; }
+.foot-grid div { line-height: 1.6; color: var(--t2); }
+.foot-grid strong { display: block; color: var(--celeste); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+.foot-legal { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line-soft); font-size: 0.74rem; color: var(--t3); }
+
+/* ---------- Impresión / PDF: A4 horizontal ---------- */
+@media print {
+  @page { size: A4 landscape; margin: 12mm 10mm; }
+  html, body { background: #fff !important; color: #15263D !important; }
+  .no-print { display: none !important; }
+  .main { max-width: none; margin: 0; padding: 0; }
+  .results { margin: 0; }
+  .report-doc { border: none; border-radius: 0; padding: 0; overflow: visible; background: #fff; }
+  table.rt { font-size: 0.68rem; }
+  table.rt thead { display: table-header-group; }
+  table.rt tfoot { display: table-footer-group; }
+  table.rt tr { page-break-inside: avoid; }
+  .rd-section.break-before { page-break-before: always; }
+  .rd-head { page-break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<header class="hdr no-print">
+  <div class="hdr-in">
+    <div class="hdr-brand">
+      <img src="https://hidalgoyasociados.com.ar/wp-content/uploads/2023/10/ha-iso.png"
+           alt="Hidalgo &amp; Asociados" width="42" height="42" style="border-radius:50%;flex:none;"
+           onerror="this.outerHTML='&lt;div class=&quot;iso&quot;&gt;H&amp;amp;A&lt;/div&gt;'">
+      <div class="wm">
+        <b>Hidalgo <span class="amp">&amp;</span> Asociados</b>
+        <span>Reportes de Variación — OPmobility</span>
+      </div>
+    </div>
+    <div class="hdr-actions">
+      <div class="hdr-r"><span class="dot"></span> Procesamiento 100% local</div>
+      <button class="btn-theme" id="btn-theme" aria-label="Cambiar tema">
+        <svg class="ico-sun" width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <svg class="ico-moon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Aviso de privacidad — obligatorio antes de cualquier input (hya-brand §10.8) -->
+  <div class="privacy no-print">
+    <span class="lock" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="10" width="16" height="11" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M8 10V7.5a4 4 0 0 1 8 0V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <p><b>Aviso de privacidad:</b> esta herramienta procesa los datos <b>100% en tu navegador</b> — nada se sube a internet.
+    Aun así, <b>no compartas información personal identificable de empleados o clientes</b> fuera de los canales autorizados por H&amp;A.
+    Usala solo en equipos corporativos. El JSON de períodos guardados contiene datos sensibles: tratalo como información confidencial.</p>
+  </div>
+
+  <section class="hero no-print">
+    <div class="hero-l">
+      <div class="hero-eyebrow">Tabulado vs tabulado · período anterior vs actual</div>
+      <h1>Variación de conceptos liquidados<br><span class="accent">OPmobility C-Power Argentina S.A.</span></h1>
+      <p class="hero-sub">Compara el tabulado de conceptos liquidados de dos períodos y muestra la variación por empleado.
+      No se cruza contra ningún otro sistema: siempre es el mismo tipo de archivo, mes anterior contra mes actual.</p>
+      <div class="hero-meta">
+        <span class="mi"><span class="bullet"></span>Entrada: <b>tabulado .xls</b> (HTML del sistema de payroll)</span>
+        <span class="mi"><span class="bullet"></span>Salida: <b>PDF A4 horizontal</b></span>
+        <span class="mi"><span class="bullet"></span>Conceptos matcheados <b>por código de header</b></span>
+      </div>
+    </div>
+    <div class="hero-r">
+      <div class="hero-steps">
+        <div class="hstep"><span class="hs-no">1</span><span class="hs-tx">Elegí el reporte: <b>Variación Sueldos</b> o <b>Variación Conceptos</b>.</span></div>
+        <div class="hstep"><span class="hs-no">2</span><span class="hs-tx">Subí el <b>tabulado del período actual</b>. La primera vez, subí también el del período anterior.</span></div>
+        <div class="hstep"><span class="hs-no">3</span><span class="hs-tx">Elegí el <b>período guardado</b> contra el cual comparar.</span></div>
+        <div class="hstep"><span class="hs-no">4</span><span class="hs-tx">Generá el reporte y <b>exportá a PDF</b>. El período actual queda guardado para el mes que viene.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="block no-print">
+    <div class="block-head">
+      <span class="block-no">01</span>
+      <div class="block-titles">
+        <div class="eyebrow">Reporte a generar</div>
+        <h2>Elegí el reporte</h2>
+      </div>
+      <span class="block-rule"></span>
+    </div>
+    <div class="tabs" id="tabs"></div>
+  </div>
+
+  <div id="panels"></div>
+
+</div>
+
+<footer class="foot no-print">
+  <div class="foot-in">
+    <div class="foot-top">
+      <div class="iso" style="width:36px;height:36px;font-size:14px;">H&amp;A</div>
+      <span>Hidalgo &amp; Asociados</span>
+    </div>
+    <div class="foot-grid">
+      <div><strong>Pacheco de Melo</strong>Pacheco de Melo 1833, Piso 6°<br>C1126AAA — C.A.B.A.</div>
+      <div><strong>Tucumán</strong>Tucumán 829, Piso 1° y 5°<br>C1049AAQ — C.A.B.A.</div>
+      <div><strong>Neuquén</strong>Fotheringham 478<br>Neuquén Capital</div>
+      <div><strong>Contacto</strong>info_ar@bhidalgo.com.ar<br>+54 11 2284 2031</div>
+    </div>
+    <div class="foot-legal">
+      Hidalgo &amp; Asociados © 1987–2026. Herramienta interna del equipo de Payroll — procesamiento 100% local, sin telemetría. hidalgoyasociados.com.ar
+    </div>
+  </div>
+</footer>
+
+<script>
+'use strict';
+
+/* ============================================================
+   1. CONFIGURACION POR CLIENTE
+   Se define una vez y queda guardada en localStorage (persistencia §7).
+   Los conceptos se matchean por CODIGO del header ("1010 - Horas Normales" -> "1010"),
+   nunca por posicion de columna: la cantidad de columnas cambia entre meses.
+   ============================================================ */
+const CONFIG_VERSION = 1;
+const CONFIG_KEY = 'opmobility_config_reportes';
+
+const DEFAULT_CONFIG = {
+  version: CONFIG_VERSION,
+  clienteId: 'opmobility',
+  clienteNombre: 'OPmobility C-Power Argentina S.A.',
+  reportes: [
+    {
+      id: 'sueldos',
+      titulo: 'Variación Sueldos',
+      descripcion: 'Suma de los conceptos 899999 (jornales) y 1000 (mensuales) en una sola columna de comparación. Cada empleado liquida por uno de los dos; el que falte se toma como 0.',
+      // combinar: true -> una sola tabla con la suma de todos los conceptos
+      combinar: true,
+      conceptos: [
+        { codigo: '899999', alias: 'Jornales' },
+        { codigo: '1000', alias: 'Mensuales' }
+      ]
+    },
+    {
+      id: 'conceptos',
+      titulo: 'Variación Conceptos',
+      descripcion: 'Conceptos 2517 (Premio de progreso) y 2519 (Premio productividad), cada uno en su propia sección y en página nueva del PDF.',
+      // combinar: false -> una seccion por concepto
+      combinar: false,
+      conceptos: [
+        { codigo: '2517', alias: 'Premio de progreso' },
+        { codigo: '2519', alias: 'Premio productividad' }
+      ]
+    }
+  ]
+};
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (!raw) return DEFAULT_CONFIG;
+    const cfg = JSON.parse(raw);
+    if (!cfg || cfg.version !== CONFIG_VERSION || !Array.isArray(cfg.reportes)) return DEFAULT_CONFIG;
+    return cfg;
+  } catch (err) {
+    return DEFAULT_CONFIG;
+  }
+}
+
+function saveConfig(cfg) {
+  try {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  } catch (err) {
+    /* Sin localStorage la app sigue funcionando en modo "primera vez". */
+  }
+}
+
+const CONFIG = loadConfig();
+saveConfig(CONFIG);
+
+const MESES = {
+  '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril', '05': 'Mayo', '06': 'Junio',
+  '07': 'Julio', '08': 'Agosto', '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+};
+
+const EPS = 0.005; // tolerancia de comparación de importes (medio centavo)
+
+/* ============================================================
+   2. UTILIDADES DE FORMATO Y NUMEROS (es-AR)
+   ============================================================ */
+function toNumber(raw) {
+  if (raw === null || raw === undefined) return 0;
+  let s = String(raw).replace(/\u00a0/g, ' ').trim();
+  if (s === '' || s === '-') return 0;
+  let negativo = false;
+  if (/^\(.*\)$/.test(s)) { negativo = true; s = s.slice(1, -1); }
+  if (s.startsWith('-')) { negativo = true; s = s.slice(1); }
+  s = s.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  if (!isFinite(n)) return 0;
+  return negativo ? -n : n;
+}
+
+function fmtMoney(n) {
+  return (Math.abs(n) < EPS ? 0 : n)
+    .toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtPct(pct) {
+  if (pct === null) return 's/base';
+  const signo = pct > 0 ? '+' : '';
+  return signo + pct.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+}
+
+function fmtInt(n) {
+  return n.toLocaleString('es-AR');
+}
+
+function claseVar(n) {
+  if (n > EPS) return 'pos';
+  if (n < -EPS) return 'neg';
+  return 'zero';
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ============================================================
+   3. PARSER DEL TABULADO
+   El .xls es HTML disfrazado exportado por el sistema de payroll.
+   ============================================================ */
+function decodeTabulado(buffer) {
+  // El export viene en Windows-1252 / ISO-8859-1 (sin declarar charset).
+  const bytes = new Uint8Array(buffer);
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  // Si aparece el caracter de reemplazo, el archivo no era UTF-8.
+  if (utf8.indexOf('�') === -1) return utf8;
+  return new TextDecoder('windows-1252').decode(bytes);
+}
+
+function codigoDeHeader(texto) {
+  const m = String(texto).trim().match(/^(\d+)\s*-\s*/);
+  return m ? m[1] : null;
+}
+
+function limpiarCelda(el) {
+  return (el.textContent || '').replace(/\u00a0/g, ' ').trim();
+}
+
+/**
+ * Parsea un tabulado y devuelve solo los conceptos pedidos.
+ * @param {ArrayBuffer} buffer contenido del archivo
+ * @param {Array<{codigo:string}>} conceptos conceptos a extraer
+ * @param {string} nombreArchivo para los mensajes de error
+ */
+function parseTabulado(buffer, conceptos, nombreArchivo) {
+  const html = decodeTabulado(buffer);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const table = doc.querySelector('table');
+  if (!table) {
+    throw new Error(`No se encontró ninguna tabla en "${nombreArchivo}". Verificá que sea el tabulado exportado por el sistema de payroll.`);
+  }
+
+  const texto = (doc.body.textContent || '').replace(/\u00a0/g, ' ');
+
+  // Período: "Periodo: 03/2025 - 03/2025" o "PERIODO 03/2025"
+  const mPeriodo = texto.match(/periodo:?\s*(\d{2})\/(\d{4})/i);
+  if (!mPeriodo) {
+    throw new Error(`No se pudo detectar el período (texto "Periodo: MM/AAAA") en "${nombreArchivo}".`);
+  }
+  const mes = mPeriodo[1];
+  const anio = mPeriodo[2];
+  if (!MESES[mes]) {
+    throw new Error(`El período detectado en "${nombreArchivo}" es inválido: ${mes}/${anio}.`);
+  }
+
+  // Quincena: "Tipo: 2da Quincena c/ sobregiro"
+  const mTipo = texto.match(/tipo:\s*(1ra|1era|2da)\s*quincena/i);
+  const quincena = mTipo ? (mTipo[1].toLowerCase().charAt(0) === '1' ? 1 : 2) : null;
+
+  // Empresa: "EA: OPmobility C-Power Argentina S.A. | Usuario: ..."
+  const mEmpresa = texto.match(/EA:\s*([^|]+)\|/i);
+  const empresa = mEmpresa ? mEmpresa[1].trim() : CONFIG.clienteNombre;
+
+  // Headers de concepto en <th>: "CODIGO - Nombre"
+  const headers = Array.from(doc.querySelectorAll('th')).map(limpiarCelda);
+  const idxPorCodigo = {};
+  const nombrePorCodigo = {};
+  headers.forEach((h, i) => {
+    const cod = codigoDeHeader(h);
+    if (cod !== null && idxPorCodigo[cod] === undefined) {
+      idxPorCodigo[cod] = i;
+      nombrePorCodigo[cod] = h;
+    }
+  });
+
+  // Cantidad de celdas de una fila de empleado = la mas frecuente entre las filas anchas.
+  // La fila TOTAL GENERAL tiene colspan=3 en la primera celda, asi que queda 2 celdas corta:
+  // no sirve para mapear columnas, solo para validar sumas.
+  const filas = Array.from(table.querySelectorAll('tr'));
+  const conteo = {};
+  filas.forEach(tr => {
+    const n = tr.querySelectorAll('td').length;
+    if (n > 10) conteo[n] = (conteo[n] || 0) + 1;
+  });
+  let esperado = null, maxCount = -1;
+  Object.keys(conteo).forEach(len => {
+    if (conteo[len] > maxCount) { maxCount = conteo[len]; esperado = parseInt(len, 10); }
+  });
+  if (!esperado) {
+    throw new Error(`No se pudo determinar la estructura de columnas de "${nombreArchivo}".`);
+  }
+
+  // Conceptos pedidos: los que no están en este período se tratan como 0 (no es error).
+  const codigos = conceptos.map(c => c.codigo);
+  const faltantes = codigos.filter(cod => idxPorCodigo[cod] === undefined);
+
+  const empleados = {};
+  let filaTotal = null;
+  filas.forEach(tr => {
+    const celdas = Array.from(tr.querySelectorAll('td'));
+    if (celdas.length === esperado - 2 && /TOTAL GENERAL/i.test(tr.textContent || '')) {
+      filaTotal = celdas;
+      return;
+    }
+    if (celdas.length !== esperado) return;
+    const legajo = limpiarCelda(celdas[0]);
+    if (!/^\d+$/.test(legajo)) return;
+    const valores = {};
+    codigos.forEach(cod => {
+      const idx = idxPorCodigo[cod];
+      valores[cod] = idx === undefined ? 0 : toNumber(limpiarCelda(celdas[idx]));
+    });
+    empleados[legajo] = { legajo, nombre: limpiarCelda(celdas[1]), valores };
+  });
+
+  const cantidadEmpleados = Object.keys(empleados).length;
+  if (cantidadEmpleados === 0) {
+    throw new Error(`No se encontró ninguna fila de empleado en "${nombreArchivo}".`);
+  }
+
+  // Validación de sumas contra la fila TOTAL GENERAL (desfasada 2 columnas por el colspan=3).
+  const validaciones = [];
+  if (filaTotal) {
+    codigos.forEach(cod => {
+      const idx = idxPorCodigo[cod];
+      if (idx === undefined) return;
+      const idxTotal = idx - 2;
+      if (idxTotal < 0 || idxTotal >= filaTotal.length) return;
+      const totalArchivo = toNumber(limpiarCelda(filaTotal[idxTotal]));
+      const totalCalculado = Object.keys(empleados)
+        .reduce((acc, leg) => acc + empleados[leg].valores[cod], 0);
+      validaciones.push({
+        codigo: cod,
+        totalArchivo,
+        totalCalculado,
+        coincide: Math.abs(totalArchivo - totalCalculado) < 0.05
+      });
+    });
+  }
+
+  const periodKey = quincena ? `${anio}-${mes}-Q${quincena}` : `${anio}-${mes}`;
+
+  return {
+    periodKey,
+    mes,
+    anio,
+    quincena,
+    mesLabel: `${MESES[mes]} ${anio}`,
+    periodLabel: quincena ? `${quincena}ª Quincena ${MESES[mes]} ${anio}` : `${MESES[mes]} ${anio}`,
+    empresa,
+    nombreArchivo,
+    nombrePorCodigo,
+    faltantes,
+    validaciones,
+    empleados,
+    cantidadEmpleados,
+    fechaCarga: new Date().toISOString()
+  };
+}
+
+/* ============================================================
+   4. PERSISTENCIA DE PERIODOS
+   ============================================================ */
+function storageKey(reporteId) {
+  return `${CONFIG.clienteId}_${reporteId}_periodos`;
+}
+
+function getPeriodos(reporteId) {
+  try {
+    const raw = localStorage.getItem(storageKey(reporteId));
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function setPeriodos(reporteId, periodos) {
+  try {
+    localStorage.setItem(storageKey(reporteId), JSON.stringify(periodos));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function guardarPeriodo(reporteId, periodo) {
+  const periodos = getPeriodos(reporteId);
+  periodos[periodo.periodKey] = periodo;
+  return setPeriodos(reporteId, periodos);
+}
+
+/* ============================================================
+   5. COMPARACION
+   ============================================================ */
+function construirFila(legajo, empAnt, empAct, codigos) {
+  const nombre = (empAct && empAct.nombre) || (empAnt && empAnt.nombre) || '(sin nombre)';
+  let anterior = 0, actual = 0;
+  codigos.forEach(cod => {
+    if (empAnt && empAnt.valores[cod] !== undefined) anterior += empAnt.valores[cod];
+    if (empAct && empAct.valores[cod] !== undefined) actual += empAct.valores[cod];
+  });
+  const varAbs = actual - anterior;
+  // Sin base en el período anterior el porcentaje no existe: se informa "s/base".
+  const varPct = Math.abs(anterior) < EPS ? null : (varAbs / anterior) * 100;
+  return { legajo, nombre, anterior, actual, varAbs, varPct, presenteAnt: !!empAnt, presenteAct: !!empAct };
+}
+
+function construirSecciones(reporte, periodoAnterior, periodoActual, ocultarSinValor) {
+  const legajos = Array.from(new Set(
+    Object.keys(periodoAnterior.empleados).concat(Object.keys(periodoActual.empleados))
+  )).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+
+  const grupos = reporte.combinar
+    ? [{ codigos: reporte.conceptos.map(c => c.codigo), titulo: null, subtitulo: null }]
+    : reporte.conceptos.map(c => {
+        const nombreReal = periodoActual.nombrePorCodigo[c.codigo] ||
+                           periodoAnterior.nombrePorCodigo[c.codigo] ||
+                           `${c.codigo} - ${c.alias}`;
+        return { codigos: [c.codigo], titulo: `Concepto ${nombreReal}`, subtitulo: 'Variación por empleado' };
+      });
+
+  return grupos.map(g => {
+    let filas = legajos.map(leg =>
+      construirFila(leg, periodoAnterior.empleados[leg], periodoActual.empleados[leg], g.codigos)
+    );
+    // §11.1 del CLAUDE.md: opcionalmente mostrar solo lo que tiene valor real.
+    if (ocultarSinValor) {
+      filas = filas.filter(f => Math.abs(f.anterior) >= EPS || Math.abs(f.actual) >= EPS);
+    }
+    const totalAnt = filas.reduce((s, f) => s + f.anterior, 0);
+    const totalAct = filas.reduce((s, f) => s + f.actual, 0);
+    const totalVar = totalAct - totalAnt;
+    const conVariacion = filas.filter(f => Math.abs(f.varAbs) >= EPS).length;
+    return {
+      titulo: g.titulo,
+      subtitulo: g.subtitulo,
+      codigos: g.codigos,
+      filas,
+      totalAnt,
+      totalAct,
+      totalVar,
+      totalPct: Math.abs(totalAnt) < EPS ? null : (totalVar / totalAnt) * 100,
+      conVariacion,
+      sinVariacion: filas.length - conVariacion
+    };
+  });
+}
+
+/* ============================================================
+   6. RENDER DEL DOCUMENTO DEL REPORTE (lo que sale al PDF)
+   ============================================================ */
+function renderSeccion(sec, periodoAnterior, periodoActual, primera) {
+  const filasHtml = sec.filas.map(f => {
+    const cls = claseVar(f.varAbs);
+    return `<tr>
+      <td class="leg c">${esc(f.legajo)}</td>
+      <td>${esc(f.nombre)}</td>
+      <td class="r">${fmtMoney(f.anterior)}</td>
+      <td class="r">${fmtMoney(f.actual)}</td>
+      <td class="r ${cls}">${fmtMoney(f.varAbs)}</td>
+      <td class="r ${cls}">${fmtPct(f.varPct)}</td>
+    </tr>`;
+  }).join('');
+
+  const clsTotal = claseVar(sec.totalVar);
+  const tituloHtml = sec.titulo
+    ? `<div class="rd-section-title"><span>${esc(sec.subtitulo || '')}</span>${esc(sec.titulo)}</div>`
+    : '';
+
+  return `
+    <div class="rd-section ${primera ? '' : 'break-before'}">
+      ${tituloHtml}
+      <table class="rt">
+        <thead>
+          <tr>
+            <th class="c">Legajo</th>
+            <th>Apellido y Nombre</th>
+            <th class="r">${esc(periodoAnterior.mesLabel)}</th>
+            <th class="r">${esc(periodoActual.mesLabel)}</th>
+            <th class="r">Variación $</th>
+            <th class="r">Variación %</th>
+          </tr>
+        </thead>
+        <tbody>${filasHtml}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">TOTAL GENERAL — ${fmtInt(sec.filas.length)} empleados</td>
+            <td class="r">${fmtMoney(sec.totalAnt)}</td>
+            <td class="r">${fmtMoney(sec.totalAct)}</td>
+            <td class="r ${clsTotal}">${fmtMoney(sec.totalVar)}</td>
+            <td class="r ${clsTotal}">${fmtPct(sec.totalPct)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+}
+
+function renderReporte(reporte, periodoAnterior, periodoActual, secciones) {
+  const empresa = periodoActual.empresa || CONFIG.clienteNombre;
+  const empleados = secciones.reduce((max, s) => Math.max(max, s.filas.length), 0);
+  const hoy = new Date().toLocaleDateString('es-AR');
+
+  const quincenas = [periodoAnterior, periodoActual]
+    .filter(p => p.quincena)
+    .map(p => `${p.quincena}ª quinc. ${MESES[p.mes]}`)
+    .join(' / ');
+
+  return `
+    <div class="rd-head">
+      <div class="rd-brand">
+        <div class="iso">H&amp;A</div>
+        <div>
+          <div class="rd-type">${esc(reporte.titulo)}</div>
+          <h1>${esc(empresa)}</h1>
+          <div class="rd-meta">
+            Período comparado: <b>${esc(periodoAnterior.mesLabel)} vs ${esc(periodoActual.mesLabel)}</b>
+            ${quincenas ? `<br>Liquidaciones: ${esc(quincenas)}` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="rd-right">
+        <div class="rd-badge">${fmtInt(empleados)} empleados</div>
+        <div style="margin-top:8px;">Emitido el ${esc(hoy)}</div>
+      </div>
+    </div>
+    ${secciones.map((sec, i) => renderSeccion(sec, periodoAnterior, periodoActual, i === 0)).join('')}
+    <div class="rd-foot">
+      Fuente: tabulado de conceptos liquidados de ${esc(empresa)} — ${esc(periodoAnterior.periodLabel)} y ${esc(periodoActual.periodLabel)}.
+      Comparación por legajo; los conceptos se identifican por código de header del tabulado.
+      Un empleado sin el concepto liquidado en un período se computa como 0,00.
+      <br>Hidalgo &amp; Asociados · info_ar@bhidalgo.com.ar · +54 11 2284 2031 — documento con datos confidenciales de nómina.
+    </div>`;
+}
+
+/* ============================================================
+   7. UI: armado de tabs y paneles
+   ============================================================ */
+const estado = {}; // reporteId -> { periodoSeleccionado, archivos, ultimoResultado }
+
+function el(id) { return document.getElementById(id); }
+
+function panelHtml(reporte, indice) {
+  const codigos = reporte.conceptos.map(c => `<code>${esc(c.codigo)}</code> ${esc(c.alias)}`).join(' · ');
+  return `
+  <div class="panel" id="panel-${reporte.id}">
+    <div class="block no-print">
+      <div class="block-head">
+        <span class="block-no">0${indice + 2}</span>
+        <div class="block-titles">
+          <div class="eyebrow">${esc(reporte.combinar ? 'Una sola columna de comparación' : 'Una sección por concepto')}</div>
+          <h2>${esc(reporte.titulo)}</h2>
+        </div>
+        <span class="block-rule"></span>
+      </div>
+
+      <div class="card">
+        <h3>Tabulado del período actual</h3>
+        <p class="desc">${esc(reporte.descripcion)}<br>Conceptos: ${codigos}</p>
+
+        <div class="dropzones">
+          <label class="dz" id="dz-${reporte.id}-act">
+            <input type="file" id="file-${reporte.id}-act" accept=".xls,.xlsx,.html,.htm">
+            <span class="dz-ico">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <div class="dz-title">Tabulado a procesar</div>
+            <div class="dz-hint">Período actual · .xls exportado del sistema de payroll</div>
+            <div class="dz-files" id="dzf-${reporte.id}-act"></div>
+          </label>
+
+          <label class="dz" id="dz-${reporte.id}-ant">
+            <input type="file" id="file-${reporte.id}-ant" accept=".xls,.xlsx,.html,.htm">
+            <span class="dz-ico">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <div class="dz-title">Tabulado del período anterior</div>
+            <div class="dz-hint">Opcional — solo la primera vez, o si el período no está guardado</div>
+            <div class="dz-files" id="dzf-${reporte.id}-ant"></div>
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="label">Comparar contra un período guardado</span>
+          <div class="plist" id="plist-${reporte.id}"></div>
+          <p class="hint">Los períodos se guardan en este navegador. Si subís el tabulado anterior, no hace falta elegir ninguno.</p>
+        </div>
+
+        <label class="check"><input type="checkbox" id="chk-${reporte.id}"> Ocultar empleados sin valores en ninguno de los dos períodos</label>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="gen-${reporte.id}" disabled>Generar reporte</button>
+          <button class="btn btn-ghost" id="exp-${reporte.id}">Exportar períodos (JSON)</button>
+          <button class="btn btn-ghost" id="impbtn-${reporte.id}">Importar períodos (JSON)</button>
+          <input type="file" id="imp-${reporte.id}" accept=".json" style="display:none">
+          <button class="btn btn-danger" id="clr-${reporte.id}">Borrar períodos guardados</button>
+        </div>
+
+        <div class="msg" id="msg-${reporte.id}"></div>
+      </div>
+    </div>
+
+    <div class="results" id="res-${reporte.id}">
+      <div class="no-print" id="hero-${reporte.id}"></div>
+      <div class="toolbar no-print">
+        <button class="btn btn-ghost" id="print-${reporte.id}">Exportar / Imprimir a PDF</button>
+      </div>
+      <div class="report-doc" id="doc-${reporte.id}"></div>
+    </div>
+  </div>`;
+}
+
+function mostrarMensaje(reporteId, tipo, html) {
+  const box = el(`msg-${reporteId}`);
+  box.className = `msg show ${tipo}`;
+  box.innerHTML = `<div>${html}</div>`;
+}
+
+function limpiarMensaje(reporteId) {
+  const box = el(`msg-${reporteId}`);
+  box.className = 'msg';
+  box.innerHTML = '';
+}
+
+function renderPeriodos(reporte) {
+  const cont = el(`plist-${reporte.id}`);
+  const periodos = getPeriodos(reporte.id);
+  const keys = Object.keys(periodos).sort().reverse();
+  const st = estado[reporte.id];
+
+  if (keys.length === 0) {
+    cont.innerHTML = '<div class="pempty">Todavía no hay períodos guardados. Subí también el tabulado del período anterior para arrancar.</div>';
+    st.periodoSeleccionado = null;
+    actualizarBotonGenerar(reporte);
+    return;
+  }
+
+  if (st.periodoSeleccionado && !periodos[st.periodoSeleccionado]) st.periodoSeleccionado = null;
+
+  cont.innerHTML = '';
+  keys.forEach(key => {
+    const p = periodos[key];
+    const fecha = p.fechaCarga ? new Date(p.fechaCarga).toLocaleDateString('es-AR') : '—';
+    const item = document.createElement('div');
+    item.className = 'pitem' + (st.periodoSeleccionado === key ? ' selected' : '');
+    item.innerHTML = `
+      <div>
+        <div class="pi-name">${esc(p.periodLabel || key)}</div>
+        <div class="pi-meta">${fmtInt(p.cantidadEmpleados || 0)} empleados · guardado el ${esc(fecha)}</div>
+      </div>
+      <button class="pi-del" title="Quitar este período" aria-label="Quitar este período">×</button>`;
+    item.addEventListener('click', () => {
+      st.periodoSeleccionado = st.periodoSeleccionado === key ? null : key;
+      renderPeriodos(reporte);
+    });
+    item.querySelector('.pi-del').addEventListener('click', ev => {
+      ev.stopPropagation();
+      const actuales = getPeriodos(reporte.id);
+      delete actuales[key];
+      setPeriodos(reporte.id, actuales);
+      if (st.periodoSeleccionado === key) st.periodoSeleccionado = null;
+      renderPeriodos(reporte);
+    });
+    cont.appendChild(item);
+  });
+  actualizarBotonGenerar(reporte);
+}
+
+function actualizarBotonGenerar(reporte) {
+  const st = estado[reporte.id];
+  const tieneActual = !!st.archivos.act;
+  const tieneAnterior = !!st.archivos.ant || !!st.periodoSeleccionado;
+  el(`gen-${reporte.id}`).disabled = !(tieneActual && tieneAnterior);
+}
+
+function conectarDropzone(reporte, slot) {
+  const zona = el(`dz-${reporte.id}-${slot}`);
+  const input = el(`file-${reporte.id}-${slot}`);
+  const nombre = el(`dzf-${reporte.id}-${slot}`);
+  const st = estado[reporte.id];
+
+  function setArchivo(file) {
+    st.archivos[slot] = file || null;
+    zona.classList.toggle('filled', !!file);
+    nombre.textContent = file ? file.name : '';
+    actualizarBotonGenerar(reporte);
+  }
+
+  input.addEventListener('change', () => setArchivo(input.files[0] || null));
+  ['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => {
+    e.preventDefault(); zona.classList.add('drag');
+  }));
+  ['dragleave', 'dragend', 'drop'].forEach(ev => zona.addEventListener(ev, () => zona.classList.remove('drag')));
+  zona.addEventListener('drop', e => {
+    e.preventDefault();
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) { input.value = ''; setArchivo(file); }
+  });
+}
+
+function leerArchivo(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error(`No se pudo leer el archivo "${file.name}".`));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function renderHero(reporte, periodoAnterior, periodoActual, secciones, avisos) {
+  // Un empleado cuenta como "con variación" si varió en al menos un concepto del reporte.
+  const legajos = new Set();
+  const conDiferencia = new Set();
+  secciones.forEach(sec => sec.filas.forEach(f => {
+    legajos.add(f.legajo);
+    if (Math.abs(f.varAbs) >= EPS) conDiferencia.add(f.legajo);
+  }));
+  const conVariacion = conDiferencia.size;
+  const sinVariacion = legajos.size - conVariacion;
+  const hayVariacion = conVariacion > 0;
+
+  const chips = secciones.map(sec => `
+    <div class="rc">
+      <span class="rc-l">${esc(sec.titulo ? sec.titulo.replace(/^Concepto\s+/, '') : reporte.titulo)}</span>
+      <span class="rc-v ${claseVar(sec.totalVar)}">${fmtMoney(sec.totalVar)} · ${fmtPct(sec.totalPct)}</span>
+    </div>`).join('');
+
+  const avisosHtml = avisos.length
+    ? `<div class="msg warn show" style="margin-top:0;margin-bottom:16px;"><div><b>Avisos del procesamiento</b><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div></div>`
+    : '';
+
+  el(`hero-${reporte.id}`).innerHTML = `
+    ${avisosHtml}
+    <div class="verdict ${hayVariacion ? 'v-warn' : 'v-ok'}">
+      <span class="v-ico">${hayVariacion ? '!' : '✓'}</span>
+      <div>
+        <div class="v-title"><b>${fmtInt(conVariacion)}</b> con variación · <b>${fmtInt(sinVariacion)}</b> sin variación</div>
+        <div class="v-sub">${esc(reporte.titulo)} — ${esc(periodoAnterior.mesLabel)} vs ${esc(periodoActual.mesLabel)}.
+        ${hayVariacion ? 'Revisá las filas en verde (aumento) y rojo (baja).' : 'Ningún empleado cambió su importe entre los dos períodos.'}</div>
+      </div>
+    </div>
+    <div class="runctx">
+      <div class="rc"><span class="rc-l">Período anterior</span><span class="rc-v">${esc(periodoAnterior.periodLabel)}</span></div>
+      <div class="rc"><span class="rc-l">Período actual</span><span class="rc-v celeste">${esc(periodoActual.periodLabel)}</span></div>
+      <div class="rc"><span class="rc-l">Empleados</span><span class="rc-v">${fmtInt(secciones[0].filas.length)}</span></div>
+      ${chips}
+    </div>`;
+}
+
+function juntarAvisos(reporte, periodoAnterior, periodoActual) {
+  const avisos = [];
+  [periodoAnterior, periodoActual].forEach(p => {
+    if (p.faltantes.length) {
+      avisos.push(`En <b>${esc(p.periodLabel)}</b> no se liquidaron los conceptos ${p.faltantes.map(c => `<code>${esc(c)}</code>`).join(', ')} — se computan en 0,00.`);
+    }
+    p.validaciones.filter(v => !v.coincide).forEach(v => {
+      avisos.push(`En <b>${esc(p.periodLabel)}</b> el total del concepto <code>${esc(v.codigo)}</code> no coincide con la fila TOTAL GENERAL del tabulado: archivo ${fmtMoney(v.totalArchivo)} vs calculado ${fmtMoney(v.totalCalculado)}.`);
+    });
+  });
+  if (periodoAnterior.cantidadEmpleados !== periodoActual.cantidadEmpleados) {
+    avisos.push(`La dotación cambió entre períodos: ${fmtInt(periodoAnterior.cantidadEmpleados)} empleados en ${esc(periodoAnterior.periodLabel)} vs ${fmtInt(periodoActual.cantidadEmpleados)} en ${esc(periodoActual.periodLabel)}.`);
+  }
+  return avisos;
+}
+
+async function generar(reporte) {
+  const st = estado[reporte.id];
+  const boton = el(`gen-${reporte.id}`);
+  boton.disabled = true;
+  try {
+    mostrarMensaje(reporte.id, 'info', 'Procesando el tabulado…');
+
+    const bufferActual = await leerArchivo(st.archivos.act);
+    const periodoActual = parseTabulado(bufferActual, reporte.conceptos, st.archivos.act.name);
+
+    let periodoAnterior;
+    if (st.archivos.ant) {
+      const bufferAnterior = await leerArchivo(st.archivos.ant);
+      periodoAnterior = parseTabulado(bufferAnterior, reporte.conceptos, st.archivos.ant.name);
+    } else {
+      periodoAnterior = getPeriodos(reporte.id)[st.periodoSeleccionado];
+      if (!periodoAnterior) {
+        mostrarMensaje(reporte.id, 'error', 'No se encontró el período guardado que elegiste. Volvé a seleccionarlo de la lista.');
+        return;
+      }
+    }
+
+    if (periodoAnterior.periodKey === periodoActual.periodKey) {
+      mostrarMensaje(reporte.id, 'error', `Los dos tabulados son del mismo período (${esc(periodoActual.periodLabel)}). Verificá los archivos.`);
+      return;
+    }
+
+    // El período más viejo va siempre a la izquierda, sin importar en qué orden se cargaron.
+    let anterior = periodoAnterior, actual = periodoActual;
+    if (anterior.periodKey > actual.periodKey) { anterior = periodoActual; actual = periodoAnterior; }
+
+    const ocultarSinValor = el(`chk-${reporte.id}`).checked;
+    const secciones = construirSecciones(reporte, anterior, actual, ocultarSinValor);
+
+    if (secciones.every(sec => sec.filas.length === 0)) {
+      mostrarMensaje(reporte.id, 'warn', 'Ningún empleado tiene valores en los conceptos configurados para estos dos períodos. Destildá el filtro de ocultar sin valores o revisá los conceptos del reporte.');
+      return;
+    }
+
+    el(`doc-${reporte.id}`).innerHTML = renderReporte(reporte, anterior, actual, secciones);
+    renderHero(reporte, anterior, actual, secciones, juntarAvisos(reporte, anterior, actual));
+    el(`res-${reporte.id}`).classList.add('show');
+    st.ultimoResultado = { anterior, actual };
+
+    // Guardar ambos períodos para las próximas comparaciones (persistencia §7).
+    const guardadoAnt = guardarPeriodo(reporte.id, anterior);
+    const guardadoAct = guardarPeriodo(reporte.id, actual);
+    st.periodoSeleccionado = actual.periodKey;
+    renderPeriodos(reporte);
+
+    if (guardadoAnt && guardadoAct) {
+      mostrarMensaje(reporte.id, 'ok', `Reporte generado: <b>${esc(anterior.mesLabel)} vs ${esc(actual.mesLabel)}</b>. Los dos períodos quedaron guardados en este navegador — el mes que viene alcanza con subir el tabulado nuevo.`);
+    } else {
+      mostrarMensaje(reporte.id, 'warn', `Reporte generado: <b>${esc(anterior.mesLabel)} vs ${esc(actual.mesLabel)}</b>. No se pudieron guardar los períodos en este navegador (almacenamiento lleno o bloqueado): exportá el JSON para no perderlos.`);
+    }
+    el(`res-${reporte.id}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    mostrarMensaje(reporte.id, 'error', `No se pudo generar el reporte. ${esc(err.message)}`);
+  } finally {
+    actualizarBotonGenerar(reporte);
+  }
+}
+
+function exportarJson(reporte) {
+  const periodos = getPeriodos(reporte.id);
+  if (Object.keys(periodos).length === 0) {
+    mostrarMensaje(reporte.id, 'warn', 'No hay períodos guardados para exportar.');
+    return;
+  }
+  const payload = {
+    tipo: 'opmobility-variaciones-periodos',
+    version: CONFIG_VERSION,
+    clienteId: CONFIG.clienteId,
+    clienteNombre: CONFIG.clienteNombre,
+    reporteId: reporte.id,
+    reporteConfig: reporte,
+    exportadoEl: new Date().toISOString(),
+    periodos
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${CONFIG.clienteId}_${reporte.id}_periodos.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  mostrarMensaje(reporte.id, 'warn', 'Archivo descargado. <b>Contiene datos sensibles de empleados: tratalo como información confidencial</b> y no lo compartas fuera de los canales autorizados por H&amp;A.');
+}
+
+function importarJson(reporte, file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || data.tipo !== 'opmobility-variaciones-periodos' || !data.periodos) {
+        throw new Error('El archivo no es un JSON de períodos de esta herramienta.');
+      }
+      if (data.reporteId !== reporte.id) {
+        throw new Error(`El archivo corresponde al reporte "${data.reporteId}", no a "${reporte.id}".`);
+      }
+      const actuales = getPeriodos(reporte.id);
+      let sumados = 0;
+      Object.keys(data.periodos).forEach(key => {
+        const p = data.periodos[key];
+        if (p && p.periodKey && p.empleados) { actuales[key] = p; sumados++; }
+      });
+      if (!setPeriodos(reporte.id, actuales)) {
+        throw new Error('No se pudo guardar en el almacenamiento del navegador.');
+      }
+      renderPeriodos(reporte);
+      mostrarMensaje(reporte.id, 'ok', `Se importaron ${fmtInt(sumados)} período(s).`);
+    } catch (err) {
+      mostrarMensaje(reporte.id, 'error', `No se pudo importar el archivo. ${esc(err.message)}`);
+    }
+  };
+  reader.onerror = () => mostrarMensaje(reporte.id, 'error', 'No se pudo leer el archivo JSON.');
+  reader.readAsText(file, 'utf-8');
+}
+
+function conectarPanel(reporte) {
+  estado[reporte.id] = { periodoSeleccionado: null, archivos: { act: null, ant: null }, ultimoResultado: null };
+
+  conectarDropzone(reporte, 'act');
+  conectarDropzone(reporte, 'ant');
+  renderPeriodos(reporte);
+
+  el(`gen-${reporte.id}`).addEventListener('click', () => generar(reporte));
+  el(`print-${reporte.id}`).addEventListener('click', () => window.print());
+  el(`exp-${reporte.id}`).addEventListener('click', () => exportarJson(reporte));
+  el(`impbtn-${reporte.id}`).addEventListener('click', () => el(`imp-${reporte.id}`).click());
+  el(`imp-${reporte.id}`).addEventListener('change', ev => {
+    const file = ev.target.files[0];
+    if (file) importarJson(reporte, file);
+    ev.target.value = '';
+  });
+  el(`clr-${reporte.id}`).addEventListener('click', () => {
+    if (!confirm('¿Borrar todos los períodos guardados de este reporte? No se puede deshacer.')) return;
+    setPeriodos(reporte.id, {});
+    estado[reporte.id].periodoSeleccionado = null;
+    renderPeriodos(reporte);
+    mostrarMensaje(reporte.id, 'info', 'Períodos guardados eliminados.');
+  });
+  el(`chk-${reporte.id}`).addEventListener('change', () => {
+    if (estado[reporte.id].ultimoResultado) {
+      mostrarMensaje(reporte.id, 'info', 'Cambiaste el filtro de filas: volvé a generar el reporte para aplicarlo.');
+    }
+  });
+}
+
+function activarTab(reporteId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.reporte === reporteId));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${reporteId}`));
+}
+
+function iniciar() {
+  const tabs = el('tabs');
+  const panels = el('panels');
+
+  CONFIG.reportes.forEach((reporte, i) => {
+    const tab = document.createElement('button');
+    tab.className = 'tab';
+    tab.dataset.reporte = reporte.id;
+    tab.textContent = reporte.titulo;
+    tab.addEventListener('click', () => activarTab(reporte.id));
+    tabs.appendChild(tab);
+
+    panels.insertAdjacentHTML('beforeend', panelHtml(reporte, i));
+  });
+
+  CONFIG.reportes.forEach(conectarPanel);
+  activarTab(CONFIG.reportes[0].id);
+
+  el('btn-theme').addEventListener('click', () => {
+    const siguiente = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', siguiente);
+    try { localStorage.setItem('theme', siguiente); } catch (err) { /* modo privado */ }
+  });
+}
+
+iniciar();
+</script>
+
+</body>
+</html>
