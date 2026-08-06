@@ -7,6 +7,17 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Control Acumuladores Ganancias (Axton) — 2026-08-06
+
+- `js/parsers/acumuladoresParser.js` — parser del export `repacumuladores` de Axton (formato fijo: fila 1 encabezados, datos desde la 2). Resuelve columnas por nombre tolerando acentos y espacios duros; matchea acumuladores por `Nro` (columna numérica), no por el texto (el origen mezcla acentuación entre cuentas).
+- `js/controls/acumuladoresGanancias.js` — el control: consolida por legajo las filas `Operacion` vacía (valores del mes propio, sumando las liquidaciones del legajo — 204 de 308 legajos de POP tienen dos), calcula la doceava parte del mes (excluye SAC 1ra cuota y Retenciones) y el SAC teórico como suma de las doceavas de todos los meses subidos. Arma la hoja `MM-AAAA` (mes de proceso + SAC teórico acumulado) y la hoja `DATOS` (acumulado del año, **sólo del crudo más nuevo** — no se suman los crudos entre sí), con `TOTAL` sin "Excluye del SAC teórico". Control de generación: `status: 'info'`, sin semáforo ni hero de diferencias.
+- `js/ui/fileUpload.js` — `initAcumuladoresMultiUpload()`: un crudo por cada mes de la ventana del SAC teórico (2 para RG 4030, hasta 8 para RG 4003), reusando el mecanismo de `initContaMultiUpload` (D-018) en vez de tocar el contrato del registry. Cada archivo lleva además un período editable (`<input type="month">`), inferido de la fecha de generación del nombre del archivo y corregible a mano.
+- `js/ui/tabs.js` — componente nuevo y reusable de solapas accesibles (`initTabs`, patrón WAI-ARIA tabs), primera vez que el proyecto necesita este patrón en una pantalla de resultados. Usado para las tablas `MM-AAAA` / `DATOS`, al estilo del motor SIRADIG F572 de H&A que pidió Guillermo como referencia visual.
+- Pantalla de resultados: tira de KPIs (legajos, sin movimiento en el mes, SAC teórico total, meses en ventana + régimen), banda de alertas de la validación de ventana, solapas por tabla, buscador y paginación por tabla, fila de totales, y un único menú de export al final que arma el `.xlsx` con ambas hojas.
+- `js/controls/registry.js` — entrada `acumuladores_ganancias`, segundo control `scope: 'sistema'` de `sourceSystems: ['axton']` (después de Acreditaciones, D-021).
+- `tests/acumuladoresGananciasControl.test.js` — cubre la consolidación por legajo (regresión de doble liquidación), la doceava parte, el SAC teórico acumulado, que `DATOS` sale sólo del crudo más nuevo, la distinción `null`/`0`, la validación de ventana RG 4003/RG 4030 y el override de códigos de acumulador. Sumado a `test:unit`. `tests/controlsRegistryScope.test.js` y `tests/controlsScope.test.js` actualizados (15 controles; un cliente Axton ve ahora 3).
+- Ver `specs/control-acumuladores-ganancias.md`, `specs/referencia-patron-siradig.md` y D-026 en `DECISIONS.md`.
+
 ### docs: aclarar que OPmobility es el nombre nuevo de Plastic Omnium — 2026-08-06
 
 - `DECISIONS.md` D-024 — deja explícito que **OPmobility es el nombre comercial nuevo del grupo Plastic Omnium**, no una empresa distinta, y que eso no cambia nada del sistema: Pilar (`POP`, Axton) y Florida (`POF`, Meta4) siguen siendo dos clientes únicos e independientes, cada uno con su scope y su histórico. Sin cambios de código ni de datos — los `name` del seed no se tocan hasta que Guillermo pida el rename explícitamente.

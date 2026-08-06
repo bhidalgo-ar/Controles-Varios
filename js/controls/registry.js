@@ -108,6 +108,12 @@ import {
   summarizeAcreditacionesReporte,
 } from './acreditaciones.js';
 
+import {
+  runAcumuladoresGanancias,
+  renderAcumuladoresResults,
+  summarizeAcumuladoresGanancias,
+} from './acumuladoresGanancias.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -462,6 +468,38 @@ export const CONTROL_REGISTRY = {
     run:           runAcreditacionesReporte,
     summarize:     summarizeAcreditacionesReporte,
     renderResults: renderAcreditacionesReporteResults,
+  },
+
+  // Segundo control Axton del proyecto, después de acreditaciones (D-021). Control
+  // de generación: arma el archivo mensual de Acumuladores de Ganancias desde los
+  // crudos repacumuladores, sin comparar nada contra el Tabulado. Ver
+  // specs/control-acumuladores-ganancias.md.
+  acumuladores_ganancias: {
+    id:          'acumuladores_ganancias',
+    label:       'Acumuladores Ganancias',
+    scope:       'sistema',
+    scopeMeta:   { sourceSystems: ['axton'] },
+    appliesWhen: () => true,
+    description: 'Genera el archivo mensual de Acumuladores de Ganancias desde los crudos repacumuladores '
+      + 'de Axton (uno por mes de la ventana del SAC teórico), con la doceava parte y el acumulado del año.',
+    help: {
+      what: 'Reemplaza las dos tablas dinámicas encadenadas y el VLOOKUP que hoy arma el analista a mano: '
+        + 'toma un crudo repacumuladores por cada mes que entra en el cálculo del SAC teórico (2 para RG 4030, '
+        + 'hasta 8 para RG 4003) y arma la hoja del mes de proceso más la hoja DATOS con el acumulado del año.',
+      how: [
+        'Elegí el régimen (RG 4003 o RG 4030) en "Régimen y códigos de acumulador".',
+        'Bajá de Axton un crudo repacumuladores por cada mes de la ventana y subilos todos juntos.',
+        'Revisá el período detectado de cada archivo y corregilo si no coincide con el mes de los datos.',
+        'Ejecutá y descargá el .xlsx (hojas MM-AAAA y DATOS) desde el resultado.',
+      ],
+    },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'acumuladores', label: 'Acumuladores (export repacumuladores de Axton) — uno por mes', fileType: 'acumuladores_file' },
+    ],
+    run:           runAcumuladoresGanancias,
+    summarize:     summarizeAcumuladoresGanancias,
+    renderResults: renderAcumuladoresResults,
   },
 
   variaciones_sueldos: {
