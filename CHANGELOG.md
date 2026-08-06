@@ -7,6 +7,11 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs: aclarar que OPmobility es el nombre nuevo de Plastic Omnium — 2026-08-06
+
+- `DECISIONS.md` D-024 — deja explícito que **OPmobility es el nombre comercial nuevo del grupo Plastic Omnium**, no una empresa distinta, y que eso no cambia nada del sistema: Pilar (`POP`, Axton) y Florida (`POF`, Meta4) siguen siendo dos clientes únicos e independientes, cada uno con su scope y su histórico. Sin cambios de código ni de datos — los `name` del seed no se tocan hasta que Guillermo pida el rename explícitamente.
+- `specs/reporte-variaciones-opmobility.md` — nota aclaratoria al tope: este documento es sólo sobre Florida (`POF`); Pilar tiene su propio control (Acreditaciones, `specs/control-acreditaciones-axton.md`).
+
 ### feat: Variación entre períodos como control de la app (POF) + soporte de Tabulado HTML — 2026-08-06
 
 - `js/parsers/tabuladoHtml.js` — parser del Tabulado que llega como `.xls` pero es HTML (export del sistema de liquidación de OPmobility / Plastic Omnium Florida). Hasta ahora la app **no podía leer ese archivo**: SheetJS no lo reconoce como HTML y lo parte por las comas de los `style=`. Deduce el ancho real de las filas, corta los encabezados en ese ancho (descarta la segunda fila de `<th>` con "Imp"), devuelve la fila `TOTAL GENERAL` aparte (tiene `colspan=3`, va corrida 2 columnas) y saca del encabezado la razón social, el período y la quincena. Va con regex y no con DOMParser para que corra igual en Node.
