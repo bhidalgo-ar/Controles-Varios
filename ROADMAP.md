@@ -58,8 +58,8 @@ Prioridad 1 (más alta) a 10 (más baja). Esfuerzo: S (<1 día) · M (1-3 días)
 | 3.1 | Adaptador Axton para los 7 clientes restantes (Siasa, COELSA, Red Bull, Plastic Omnium Pilar, Epiroc, Geopagos, Poincenot, Coty) | 2 | L | Post-piloto Merz |
 | 3.2 | Registro de cobertura mensual vía monday.com (item por corrida: cliente, período, control, estado, cantidad de diferencias — sin datos de empleados) | 2 | M | Resuelve visibilidad de equipo sin backend propio |
 | 3.3 | Jerarquía cliente → entidad operable (Sportline, Carrier, Lowsedo, Poincenot) | 4 | L | Solo si un caso real lo exige |
-| 3.4 | Control de Netos (Sportline) — implementación | 2 | M | Diseño ya validado, ver `CONTROL_NETOS.md` |
-| 3.5 | Gross-up calculator (AFA, concepto 1017) reemplazando goal-seek de Excel | 3 | M | Segundo control nuevo priorizado |
+| 3.4 | Control de Netos (Sportline) — implementación | 2 | M | Diseño ya validado, ver `specs/spec-control-netos.md` |
+| 3.5 | Gross-up calculator (AFA, concepto 1017) reemplazando goal-seek de Excel | 3 | M | Segundo control nuevo priorizado, ver `specs/spec-gross-up.md` |
 | 3.6 | Export a Excel multi-hoja | 3 | M | Pendiente de v1 |
 | 3.7 | Export/import JSON de sesión | 4 | M | Pendiente de v1 |
 | 3.8 | Control de escala salarial por convenio (Comercio: COELSA, Red Bull, TIM, Sportline, Carrier) | 5 | M | Primer control real de `scope: convenio` |
