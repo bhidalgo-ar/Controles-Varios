@@ -103,15 +103,37 @@ anticipos → vacaciones → 1era quincena → liquidación final).
 
 ### 4. Fecha de acreditación faltante
 
-Si una fila no tiene fecha, hereda la de su **misma liquidación cruda** cuando esa
-liquidación tiene **una sola** fecha conocida en el archivo. Si tiene más de una
-(caso típico de los anticipos, que se pagan en varias fechas del mes), la fila va
-a la hoja `SIN ASIGNAR`.
+**Ancla principal: el Listado.** Un Listado es un envío real al banco — si algún
+empleado de ese Listado tiene fecha, todos la comparten. Una fila sin fecha
+hereda la de su Listado cuando ese Listado tiene **una sola** fecha conocida
+entre todos sus empleados.
+
+**Fallback: la liquidación cruda, sólo para filas sin Listado.** Si la fila no
+tiene Listado (el caso menos común — un anticipo suelto sin listado ni fecha),
+se busca una fecha única entre todas las filas que comparten el mismo texto de
+liquidación, tenga o no Listado. Si hay más de una fecha en el mes (caso típico
+de los anticipos, que se pagan varias veces), no se adivina.
+
+**Si no hay ancla resoluble, la fila va a un grupo pendiente — nunca a filas
+sueltas.** La clave del grupo es el Listado (`L:<listado>`) o, si no hay
+Listado, la liquidación cruda (`Q:<liquidación>`). Esto es deliberado: cuando
+**todos** los empleados de un Listado están sin fecha (agosto de POP: el
+Listado 18336 completo, 13 empleados, ningún dato de fecha en el archivo), el
+reporte lo trata como **un solo** problema a resolver — una alerta, no trece
+(D-025) — y ofrece un campo para asignar la fecha a mano en la pantalla de
+resultados.
+
+**Asignación manual y regeneración (D-025).** Al asignar una fecha a un grupo
+pendiente, sus filas se unen a la lista existente de ese mismo tipo+fecha si
+hay una, o forman una lista nueva si no — exactamente la misma regla de
+agrupación que las fechas que vienen del archivo. El reporte (pantalla + .xlsx
+exportable) se regenera al instante, sin volver a cargar el archivo ni pasar
+por el wizard. La asignación se puede deshacer.
 
 Esto deja afuera, a propósito, las reclasificaciones de criterio: en julio de POP
 un anticipo de 1.337.491 sin listado ni fecha lo puso el analista a mano en la
-hoja de 1era Quincena. El reporte no adivina eso — lo manda a `SIN ASIGNAR` y lo
-avisa en la app.
+hoja de 1era Quincena. El reporte no adivina eso — lo manda a un grupo pendiente
+y lo avisa en la app; es el analista quien decide qué fecha corresponde.
 
 ### 5. Corte por empresa
 
@@ -178,14 +200,21 @@ ocultar filas/columnas sin valor real, paginación, buscador y menú de export.
 Alertas que calcula la app:
 
 - fila en listado de pago **sin importe**;
-- filas **sin asignar** (fecha no resoluble);
+- **grupo pendiente** (un Listado, o una liquidación sin Listado, completo sin
+  fecha resoluble) — una alerta por grupo, no una por empleado (D-025);
 - **duplicado exacto** (mismo legajo, importe, fecha y tipo más de una vez);
 - **CBU compartido** entre dos legajos distintos;
 - **CBU inválido** (largo distinto de 22 o con caracteres no numéricos);
 - **neto ≤ 0**.
 
-En el archivo de julio de POP no salta ninguna salvo las 4 filas sin importe y
-la fila sin asignar — el resto sale limpio.
+Cada grupo pendiente tiene, en la misma pantalla, un campo de fecha y un botón
+"Asignar" — al usarlo, el reporte (pantalla y .xlsx) se regenera con esa fecha
+aplicada. Las asignaciones del run quedan listadas con un botón "Deshacer".
+
+En el archivo de julio de POP no salta ninguna alerta salvo las 4 filas sin
+importe y el grupo pendiente del anticipo de NEIRA — el resto sale limpio. En el
+archivo de agosto, el Listado 18336 (13 empleados, ninguno con fecha) aparece
+como un solo grupo pendiente, no como 13 alertas sueltas.
 
 ## Verificación contra el archivo real
 
@@ -195,10 +224,18 @@ El reporte generado sobre el export de julio de POP tiene que dar:
   3.050.000 / 679.083,12 / 4.900.000 / 2.490.000 / 7.663.072,73 / 228.072.216 /
   230.113 / 3.300.000 / 528.175,76 / 2.000.000 / 25.142.085,13 /
   173.511.494,10 / 363.376.148,53);
-- `SIN ASIGNAR` con 1 fila de 1.337.491 (el anticipo que el analista reclasificó
-  a mano);
+- 1 grupo pendiente (clave `Q:Anticipo de sueldo...`, sin Listado) con 1 fila de
+  1.337.491 (el anticipo que el analista reclasificó a mano);
 - `TOTAL ACREDITADO` 824.942.388,37 + sin asignar 1.337.491 = 826.279.879,37 =
   `TOTAL GENERAL` del origen, `Diferencia` 0,00.
 
 La lista 7 da 228.072.216 y no 229.409.707 justamente porque el 1.337.491 del
 criterio manual queda separado.
+
+Sobre el export de agosto de POP (`contacred.20260806...`, 23 filas, Listados
+18335/18336/18338/18339, todos "Anticipo de sueldo"): tiene que dar 2 listas
+(18335 → 2026-08-04, 6 empleados, 3.630.000; 18338+18339 → 2026-08-06,
+4 empleados, 1.200.000) y **1** grupo pendiente (`L:18336`, 13 empleados,
+9.950.000) — no 13 alertas sueltas. Al asignarle 2026-08-04 al grupo pendiente,
+se une a la lista del 18335 (mismo tipo A, misma fecha): 19 empleados,
+13.580.000, `Diferencia` sigue en 0,00.
