@@ -14,6 +14,7 @@ import { parseRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
 import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
+import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
@@ -113,6 +114,10 @@ const FIELD_DEFS = {
   // cuentas de Axton. El parser resuelve las columnas por nombre y avisa cuáles
   // faltan si el archivo no es el esperado.
   acreditaciones_file: [],
+  // Acumuladores (export repacumuladores de Axton): formato fijo, igual en
+  // todas las cuentas de Axton. Se sube uno por mes de la ventana del SAC
+  // teórico (additionalFiles[].multi: true) — ver control acumuladores_ganancias.
+  acumuladores_file: [],
   // Tabulado del período anterior (control de Variaciones): mismas columnas que
   // el Tabulado del período actual, así que comparte los FIELD_DEFS de tab_control.
   tab_prev_file: [
@@ -139,6 +144,14 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
   // (ver initContaMultiUpload) — flujo aparte del resto, que es un archivo por slot.
   if (fileType === 'conta_file') {
     initContaMultiUpload(container, { existingData, onComplete });
+    return;
+  }
+
+  // Acumuladores (Axton): un crudo por cada mes de la ventana del SAC teórico —
+  // mismo flujo multi-archivo que CONTA, pero cada archivo lleva además un
+  // período editable (ver initAcumuladoresMultiUpload).
+  if (fileType === 'acumuladores_file') {
+    initAcumuladoresMultiUpload(container, { existingData, onComplete });
     return;
   }
 
@@ -381,6 +394,147 @@ function initContaMultiUpload(container, { existingData, onComplete }) {
   if (entries.length > 0) onComplete(existingData);
 }
 
+// ── Carga múltiple de Acumuladores (Axton) ────────────────────────────────────
+//
+// El control Acumuladores Ganancias necesita un crudo `repacumuladores` por
+// cada mes de la ventana del SAC teórico (RG 4030: 2 meses · RG 4003: hasta 8).
+// Mismo flujo que initContaMultiUpload (N archivos del mismo tipo, sin mapping),
+// con una diferencia: cada archivo lleva un período propio ('YYYY-MM'), inferido
+// de la fecha de generación en el nombre del archivo y editable a mano (la fecha
+// de generación no siempre cae en el mes de los datos — ver
+// specs/control-acumuladores-ganancias.md). Las filas se concatenan tageadas con
+// `_period`/`_fileName`; acumuladoresGanancias.js las agrupa por período, no por
+// archivo — no le importa cuántos crudos hubo, sólo qué período tiene cada fila.
+function initAcumuladoresMultiUpload(container, { existingData, onComplete }) {
+  let entries = existingData?.entries ? [...existingData.entries] : [];
+
+  const commit = (newEntries) => {
+    entries = newEntries;
+    if (entries.length === 0) { render(null); onComplete(null); return; }
+    const parsedRows = entries.flatMap(e =>
+      e.parsedRows.map(r => ({ ...r, _period: e.period || null, _fileName: e.fileName }))
+    );
+    const data = {
+      parsedRows,
+      parseMetadata: { totalRows: parsedRows.length, files: entries.length },
+      mapping:  {},
+      fileType: 'acumuladores_file',
+      fileName: entries.length === 1
+        ? entries[0].fileName
+        : `${entries.length} archivos · ${parsedRows.length} filas`,
+      entries,
+    };
+    render(data);
+    onComplete(data);
+  };
+
+  const addFiles = async (fileList) => {
+    const files = [...fileList].filter(f => {
+      if (!isValidExcelFile(f)) {
+        showToast(`"${f.name}" no es un Excel (.xlsx). Se lo ignoró.`, 'warning');
+        return false;
+      }
+      return true;
+    });
+    if (files.length === 0) return;
+
+    renderLoadingProgress(container, 'parsing');
+    const newEntries = [];
+    for (const file of files) {
+      try {
+        const arrayBuffer = await readFileAsArrayBuffer(file);
+        const { parsedRows, parseMetadata } = parseAcumuladores(arrayBuffer);
+        newEntries.push({ fileName: file.name, period: inferPeriodFromFileName(file.name), parsedRows, parseMetadata });
+      } catch (err) {
+        showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
+      }
+    }
+    commit([...entries, ...newEntries]);
+  };
+
+  function render(data) {
+    const entriesHtml = entries.map((e, i) => `
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid ${e.period ? 'var(--color-match-exact)' : 'var(--color-warning)'};background:${e.period ? 'var(--color-match-exact-bg)' : 'var(--color-warning-bg)'};border-radius:var(--radius-md);font-size:var(--text-sm);">
+        <span style="color:${e.period ? 'var(--color-match-exact)' : 'var(--color-warning)'};font-weight:600;">${e.period ? '✓' : '⚠'}</span>
+        <strong style="flex-shrink:0;">${escHtml(e.fileName)}</strong>
+        <span style="color:var(--color-text-muted);">${e.parseMetadata?.totalRows ?? e.parsedRows.length} filas</span>
+        <label style="display:flex;align-items:center;gap:var(--sp-2);margin-left:auto;">
+          Período
+          <input type="month" class="form-input" style="width:auto;padding:2px 8px;" data-acum-period="${i}" value="${e.period || ''}">
+        </label>
+        <button type="button" class="btn btn--ghost btn--sm" data-acum-remove="${i}">✕ Quitar</button>
+      </div>
+    `).join('');
+
+    const pendingCount = entries.filter(e => !e.period).length;
+    const warningHtml = pendingCount > 0
+      ? `<div class="alert alert--warning" style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+           ⚠ Asigná el período a ${pendingCount} archivo${pendingCount === 1 ? '' : 's'} antes de ejecutar.
+         </div>`
+      : '';
+
+    container.innerHTML = `
+      ${entries.length ? `<div style="display:flex;flex-direction:column;gap:var(--sp-2);margin-bottom:var(--sp-2);">${entriesHtml}</div>${warningHtml}` : ''}
+      <div class="file-drop" id="js-acum-drop">
+        <div class="file-drop__icon">📂</div>
+        <div class="file-drop__text">
+          <strong>Acumuladores (Axton)</strong> — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir
+          ${entries.length ? ' (se suman a los ya cargados)' : ''}
+        </div>
+        <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-acum-file-input">
+      </div>
+    `;
+
+    const dropZone  = container.querySelector('#js-acum-drop');
+    const fileInput = container.querySelector('#js-acum-file-input');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) addFiles(e.target.files);
+      fileInput.value = '';
+    });
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('file-drop--dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('file-drop--dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('file-drop--dragover');
+      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+
+    container.querySelectorAll('[data-acum-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.acumRemove);
+        commit(entries.filter((_, j) => j !== idx));
+      });
+    });
+
+    container.querySelectorAll('[data-acum-period]').forEach(input => {
+      input.addEventListener('change', () => {
+        const idx = Number(input.dataset.acumPeriod);
+        commit(entries.map((e, j) => j === idx ? { ...e, period: input.value } : e));
+      });
+    });
+  }
+
+  render(existingData);
+  if (entries.length > 0) onComplete(existingData);
+}
+
+// El nombre trae la fecha de GENERACIÓN del export, no necesariamente el mes de
+// los datos ('repacumuladores.20260728.102501' → 2026-07-28) — se usa sólo como
+// punto de partida; el analista lo corrige si no corresponde.
+function inferPeriodFromFileName(name) {
+  const m = String(name).match(/(\d{4})(\d{2})(\d{2})/);
+  if (!m) return '';
+  const [, y, mo] = m;
+  const monthNum = Number(mo);
+  if (monthNum < 1 || monthNum > 12) return '';
+  return `${y}-${mo}`;
+}
+
 // ── Renders internos ──────────────────────────────────────────────────────────
 
 function renderDropZone(container, fileType, onFile) {
@@ -498,7 +652,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       + (parseMetadata?.noRemu       ? ` · ${parseMetadata.noRemu} no_remu`          : '')
       + (parseMetadata?.aporte       ? ` · ${parseMetadata.aporte} aportes`          : '')
       + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
-  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'tab_prev_file') {
+  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'acumuladores_file' || fileType === 'tab_prev_file') {
     metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
   } else {
     metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
@@ -804,6 +958,7 @@ function parseFile(arrayBuffer, fileType, mapping) {
     case 'costo_total_file':            return parseCostoTotal(arrayBuffer, mapping);
     case 'cc_x_ee_file':                return parseCcXEmpleado(arrayBuffer);
     case 'acreditaciones_file':         return parseAcreditaciones(arrayBuffer);
+    case 'acumuladores_file':           return parseAcumuladores(arrayBuffer);
     case 'concept_catalog':             return parseConceptCatalog(arrayBuffer);
     default: throw new Error(`Tipo de archivo desconocido: "${fileType}".`);
   }
@@ -824,6 +979,7 @@ function fileTypeLabel(fileType) {
     conta_file:                  'Contabilidad Desglosada',
     cc_x_ee_file:                'CC x Empleado',
     acreditaciones_file:         'Acreditaciones (export de Axton)',
+    acumuladores_file:           'Acumuladores (export de Axton)',
     tab_prev_file:               'Tabulado del período anterior',
     concept_catalog:             'Catálogo de Conceptos',
   }[fileType] || fileType;

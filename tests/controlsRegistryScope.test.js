@@ -31,8 +31,10 @@ const controls = Object.values(CONTROL_REGISTRY);
 // D-023: se agregaron "variaciones_sueldos" y "variaciones_conceptos" (13º y 14º),
 // los primeros que cruzan el Tabulado contra el Tabulado de otro período — ver
 // specs/reporte-variaciones-opmobility.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023)',
-  controls.length === 14);
+// Se agregó "acumuladores_ganancias" (15º), segundo control sobre un archivo de
+// Axton — ver specs/control-acumuladores-ganancias.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias',
+  controls.length === 15);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');
