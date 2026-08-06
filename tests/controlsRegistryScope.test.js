@@ -28,8 +28,11 @@ const controls = Object.values(CONTROL_REGISTRY);
 // reimplementado como control del registry — ver specs/plan-v2-t9-t10.md).
 // D-021: se agregó "acreditaciones_reporte" (12º), el primer control sobre un
 // archivo de Axton — ver specs/control-acreditaciones-axton.md.
-assert('el registry tiene los 10 controles de siempre + agrupadores (T9) + acreditaciones (D-021)',
-  controls.length === 12);
+// D-023: se agregaron "variaciones_sueldos" y "variaciones_conceptos" (13º y 14º),
+// los primeros que cruzan el Tabulado contra el Tabulado de otro período — ver
+// specs/reporte-variaciones-opmobility.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023)',
+  controls.length === 14);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

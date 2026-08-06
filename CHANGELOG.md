@@ -7,6 +7,17 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Variación entre períodos como control de la app (POF) + soporte de Tabulado HTML — 2026-08-06
+
+- `js/parsers/tabuladoHtml.js` — parser del Tabulado que llega como `.xls` pero es HTML (export del sistema de liquidación de OPmobility / Plastic Omnium Florida). Hasta ahora la app **no podía leer ese archivo**: SheetJS no lo reconoce como HTML y lo parte por las comas de los `style=`. Deduce el ancho real de las filas, corta los encabezados en ese ancho (descarta la segunda fila de `<th>` con "Imp"), devuelve la fila `TOTAL GENERAL` aparte (tiene `colspan=3`, va corrida 2 columnas) y saca del encabezado la razón social, el período y la quincena. Va con regex y no con DOMParser para que corra igual en Node.
+- `js/parsers/tabuladoControl.js` — `detectHeaders` y `parseTabuladoControl` detectan el formato por contenido (`isHtmlTabulado`) y derivan a la rama HTML; la rama de Excel queda intacta. `autoDetectTabMapping` acepta varios nombres por columna (`EMPLEADO` o `LEGAJO`, …), así el Tabulado de OPmobility se auto-detecta sin mapeo manual.
+- `js/controls/variaciones.js` — los controles **Variación Sueldos** (899999 + 1000 sumados) y **Variación Conceptos** (2517 y 2519, uno por sección). Consolidan por legajo, ocultan filas y conceptos sin valor real, hero de empleados con y sin variación, avisos de conceptos no liquidados y de cambio de dotación, export a .xlsx/CSV/portapapeles y botón "Imprimir / PDF" con el entregable A4 horizontal.
+- `js/ui/controlsWizard.js` + `js/db.js` (`getRunFileFromPeriod`) — el período anterior se resuelve reusando el Tabulado ya cargado en la corrida del mes anterior del cliente; si ese mes no se corrió, se pide como archivo adicional opcional (`tab_prev_file`). `run()` sigue siendo sincrónico.
+- `js/controls/registry.js` — entradas `variaciones_sueldos` y `variaciones_conceptos`, `scope: 'cliente'` de `POF`, agrupadas bajo "Variación entre períodos". POF pasa de 1 control a 3.
+- `tests/variacionesControl.test.js` — 57 asserts: parser HTML (ancho, headers, TOTAL GENERAL, metadata), auto-detección de columnas, comparación entre períodos, suma de 899999+1000, **consolidación de un legajo con dos liquidaciones**, altas y bajas del mes, concepto no liquidado y las ramas de error. Sumado a `test:unit`.
+- Verificado en el navegador con los dos tabulados reales (2ª quincena de marzo y abril 2025, 71 empleados): los totales cierran al centavo contra la fila `TOTAL GENERAL` del tabulado y las columnas se auto-detectan solas.
+- Ver `specs/reporte-variaciones-opmobility.md` y D-023 en `DECISIONS.md`.
+
 ### feat: reporte de Variación de Conceptos Liquidados de OPmobility — 2026-08-06
 
 - `reportes/opmobility-variaciones.html` — HTML standalone (se abre con doble click, sin ES modules ni CDNs obligatorios) que compara el tabulado de OPmobility C-Power Argentina S.A. entre dos períodos y muestra la variación por empleado, con exportación a PDF A4 horizontal. Dos reportes: **Variación Sueldos** (`899999` + `1000` sumados en una columna) y **Variación Conceptos** (`2517` y `2519`, cada uno en su sección y en página nueva).

@@ -19,6 +19,7 @@ import {
   getGroupers,
   getGrouperConcepts,
   getControlConfigsForClient,
+  getRunFileFromPeriod,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
@@ -34,7 +35,7 @@ import { autoDetectNrMapping }          from '../parsers/nrParser.js';
 import { autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
 import { autoDetectCostoTotalMapping }  from '../parsers/costoTotalParser.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
-import { currentPeriod, periodOptions } from '../utils/dates.js';
+import { currentPeriod, periodOptions, previousPeriod, periodToLabel } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
 import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
 import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
@@ -75,6 +76,8 @@ const AUTO_DETECT = {
   nr_file:           autoDetectNrMapping,
   rend_file:         autoDetectRendimientoMapping,
   costo_total_file:  autoDetectCostoTotalMapping,
+  // El Tabulado del período anterior es el mismo archivo que el Tabulado.
+  tab_prev_file:     autoDetectTabMapping,
 };
 
 // IDs de controles agrupados (para validación y detección de grupos seleccionados)
@@ -82,6 +85,7 @@ const BRUTOS_IDS  = ['brutos', 'brutos_reporte'];
 const GS_PERS_IDS = ['gs_pers', 'gs_pers_reporte'];
 const NR_IDS      = ['nr', 'nr_reporte'];
 const ACREDITACIONES_IDS = ['acreditaciones_reporte'];
+const VARIACIONES_IDS    = ['variaciones_sueldos', 'variaciones_conceptos'];
 
 // Controles que usan la agrupación de conceptos de Rend vs Tabulado
 const REND_GROUPING_IDS = ['rend_vs_tabu', 'rend_x_ee'];
@@ -1433,6 +1437,24 @@ async function executeControls(state, statusEl, container, root) {
         if (fileData) {
           mapping[fileSpec.key]         = fileData.mapping || {};
           mapping[`${fileSpec.key}Rows`] = fileData.parsedRows || [];
+        }
+      }
+
+      // Variaciones compara el Tabulado del período actual contra el del período
+      // anterior. Si ese Tabulado ya quedó cargado en la corrida del mes anterior
+      // del mismo cliente, se reusa y el analista no tiene que volver a subirlo;
+      // si no está, el control pide el archivo (additionalFiles) y avisa.
+      if (VARIACIONES_IDS.includes(controlId)) {
+        const subido = state.controlFiles[controlId]?.tab_prev;
+        if (subido?.parsedRows?.length) {
+          // El propio archivo dice a qué período corresponde (encabezado del Tabulado).
+          mapping.variacionesPrevFilePeriod = subido.parseMetadata?.period || null;
+        } else {
+          const prevPeriod = previousPeriod(state.period);
+          const prevFile   = await getRunFileFromPeriod(state.client?.code, prevPeriod, 'tab_control');
+          if (prevFile) {
+            mapping.variacionesPrev = { period: prevPeriod, rows: prevFile.parsedRows };
+          }
         }
       }
 
