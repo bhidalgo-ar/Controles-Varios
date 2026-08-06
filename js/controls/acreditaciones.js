@@ -7,9 +7,10 @@
 //
 // Modo 2 — "Controlar": pendiente (cruce contra el Tabulado).
 //
-// Las reglas de agrupación, herencia de fecha y normalización de tipos están
-// documentadas en specs/control-acreditaciones-axton.md — se reconstruyeron
-// contra el archivo que el equipo armaba a mano y cierran al centavo.
+// Las reglas de agrupación, herencia de fecha, normalización de tipos y
+// asignación manual de fecha están documentadas en
+// specs/control-acreditaciones-axton.md — se reconstruyeron contra archivos
+// reales y cierran al centavo.
 //
 // El .xlsx generado va a Finanzas del cliente: NO lleva información de HR
 // (dotación, conteos de empleados, altas/bajas). Eso vive sólo en esta pantalla.
@@ -24,6 +25,10 @@ export const DEFAULT_ACREDITACIONES_CONFIG = {
   // Cuando el archivo trae más de una Empresa, ¿las listas se parten por empresa?
   // Con una sola empresa (el caso de POP) el flag no tiene efecto.
   splitByEmpresa: true,
+  // Fechas asignadas a mano por el analista para listados/liquidaciones que el
+  // archivo de Axton no trae con fecha resoluble — ver D-022. Clave = anchorKey
+  // ('L:<listado>' o 'Q:<liquidación cruda>'), valor = 'YYYY-MM-DD'.
+  dateOverrides: {},
 };
 
 // ── Tipos de liquidación ──────────────────────────────────────────────────────
@@ -103,72 +108,147 @@ export function runAcreditacionesReporte(acredRows, _tabRows, mapping) {
 
   // Una fila entra al reporte si tiene Listado o Neto. Las que no tienen ninguno
   // de los dos son liquidaciones que no acreditan (provisiones) — ruido del export.
-  const acred     = acredRows.filter(r => r.listado !== '' || r.neto !== null);
+  const acred = acredRows.filter(r => r.listado !== '' || r.neto !== null);
   const descartadas = acredRows.length - acred.length;
 
   if (acred.length === 0) {
     return { error: 'El archivo no tiene ninguna acreditación: todas las filas están sin importe y sin listado.' };
   }
 
-  // Fechas conocidas por liquidación cruda, para heredarlas en las filas que no
-  // la traen. Sólo se hereda cuando la liquidación tiene UNA sola fecha: si tiene
-  // varias (los anticipos se pagan en varias fechas del mes), la fila queda sin
-  // asignar y la resuelve el analista — no se adivina.
-  const datesByLiq = new Map();
-  for (const r of acred) {
-    if (!r.fecha_acreditacion) continue;
-    if (!datesByLiq.has(r.liquidacion)) datesByLiq.set(r.liquidacion, new Set());
-    datesByLiq.get(r.liquidacion).add(r.fecha_acreditacion);
-  }
-  const inheritedDate = (liq) => {
-    const dates = datesByLiq.get(liq);
-    return dates && dates.size === 1 ? [...dates][0] : null;
-  };
-
-  const empresas = [...new Set(acred.map(r => r.empresa).filter(Boolean))].sort();
-  const splitByEmpresa = cfg.splitByEmpresa && empresas.length > 1;
-
-  // Filas del reporte, ya tipadas y con la fecha resuelta.
-  const rows = acred.map(r => {
-    const tipo  = normalizeLiqType(r.liquidacion);
-    const fecha = r.fecha_acreditacion || inheritedDate(r.liquidacion);
-    return {
-      legajo:   r.legajo,
-      nombre:   r.apellido_nombre,
-      cuit:     r.cuit,
-      neto:     r.neto,
-      fecha,
-      banco:    r.banco,
-      cbu:      r.cbu,
-      listado:  r.listado,
-      liqRaw:   r.liquidacion,
-      empresa:  r.empresa,
-      uo:       r.uo_cliente,
-      tipo,
-      alerts:   [],
-    };
-  });
-
+  // Filas tipadas con su fecha NATIVA (tal como vino en el archivo, puede ser
+  // null). flagRowAlerts corre sobre esa fecha nativa — la resolución de fecha
+  // (herencia o asignación manual) es un paso posterior y no debe afectar la
+  // detección de duplicados/CBU, que mira el dato tal como llegó.
+  const rows = buildTypedRows(acred);
   flagRowAlerts(rows);
 
-  // ── Agrupación en listas: (tipo, fecha) [+ empresa] ────────────────────────
-  const groups = new Map();
-  const unassignedRows = [];
+  // totalOrigen: suma de Neto de TODAS las filas del archivo (incluidas las
+  // descartadas), tal como lo informa Axton. Es el ancla independiente del
+  // reporte — ver buildReport().
+  const totalOrigen = round2(acredRows.reduce((acc, r) => acc + (r.neto ?? 0), 0));
+  const cliente = acredRows.find(r => r.cliente)?.cliente || acred.find(r => r.empresa)?.empresa || '';
+
+  const report = buildReport(rows, cfg, descartadas, totalOrigen, mapping.period || '');
+  return { ...report, cliente };
+}
+
+function buildTypedRows(acred) {
+  return acred.map(r => ({
+    legajo:  r.legajo,
+    nombre:  r.apellido_nombre,
+    cuit:    r.cuit,
+    neto:    r.neto,
+    fecha:   r.fecha_acreditacion,   // nativa — null si Axton no la trajo
+    banco:   r.banco,
+    cbu:     r.cbu,
+    listado: r.listado,
+    liqRaw:  r.liquidacion,
+    empresa: r.empresa,
+    uo:      r.uo_cliente,
+    tipo:    normalizeLiqType(r.liquidacion),
+    alerts:  [],
+  }));
+}
+
+/**
+ * Clave de anclaje para una fila sin fecha resuelta: el Listado si lo tiene
+ * (es la unidad real del banco — el mismo número siempre comparte fecha), o el
+ * texto crudo de la liquidación si no (fallback para filas sin Listado). Se usa
+ * tanto para la herencia automática como para las asignaciones manuales.
+ */
+function anchorKeyOf(row) {
+  return row.listado ? `L:${row.listado}` : `Q:${row.liqRaw}`;
+}
+
+/** Etiqueta legible de un anchorKey, para mostrarlo en la UI sin guardar estado aparte. */
+function describeAnchorKey(key) {
+  if (key.startsWith('L:')) return `Listado ${key.slice(2)}`;
+  return `Liquidación "${cleanLiqLabel(key.slice(2))}"`;
+}
+
+/**
+ * Arma listas, grupos pendientes, cierre, bancos y alertas a partir de las filas
+ * ya tipadas (con sus alertas de integridad ya calculadas). Es una función pura
+ * de (rows, cfg) — no muta `rows` — así se puede volver a llamar con otro
+ * `dateOverrides` cada vez que el analista asigna una fecha a mano, sin perder
+ * ni duplicar nada. Ver assignAcreditacionesDate().
+ */
+function buildReport(rows, cfg, descartadas, totalOrigen, period) {
+  const dateOverrides = cfg.dateOverrides || {};
+
+  // Fechas conocidas por Listado — el ancla principal. Un Listado es un envío
+  // real al banco: si algún empleado de ese Listado tiene fecha, todos la
+  // comparten. Fallback (sólo para filas sin Listado): fechas conocidas por el
+  // texto crudo de la liquidación, igual que antes de D-022.
+  const datesByListado = new Map();
+  const datesByLiqRaw  = new Map();
+  for (const r of rows) {
+    if (!r.fecha) continue;
+    if (r.listado) {
+      if (!datesByListado.has(r.listado)) datesByListado.set(r.listado, new Set());
+      datesByListado.get(r.listado).add(r.fecha);
+    }
+    if (!datesByLiqRaw.has(r.liqRaw)) datesByLiqRaw.set(r.liqRaw, new Set());
+    datesByLiqRaw.get(r.liqRaw).add(r.fecha);
+  }
+
+  // Resuelve la fecha de cada fila sin mutar el objeto original.
+  const resolved = [];               // [{ row, fecha }]
+  const pendingRowsByKey = new Map();
 
   for (const row of rows) {
-    if (!row.fecha) { unassignedRows.push(row); continue; }
-    const key = [row.tipo.code, row.fecha, splitByEmpresa ? row.empresa : ''].join('|');
+    if (row.fecha) { resolved.push({ row, fecha: row.fecha }); continue; }
+
+    const key = anchorKeyOf(row);
+    if (dateOverrides[key]) { resolved.push({ row, fecha: dateOverrides[key] }); continue; }
+
+    if (row.listado) {
+      const dates = datesByListado.get(row.listado);
+      if (dates && dates.size === 1) { resolved.push({ row, fecha: [...dates][0] }); continue; }
+    } else {
+      const dates = datesByLiqRaw.get(row.liqRaw);
+      if (dates && dates.size === 1) { resolved.push({ row, fecha: [...dates][0] }); continue; }
+    }
+
+    if (!pendingRowsByKey.has(key)) pendingRowsByKey.set(key, []);
+    pendingRowsByKey.get(key).push(row);
+  }
+
+  // ── Grupos pendientes: TODOS los empleados de ese Listado (o liquidación,
+  // si no hay Listado) están sin fecha resoluble. Una alerta por grupo, no una
+  // por empleado — y una fecha para asignar, no catorce (D-022).
+  const pendingGroups = [...pendingRowsByKey.entries()]
+    .map(([key, groupRows]) => {
+      const first = groupRows[0];
+      return {
+        key,
+        listado: first.listado || '',
+        liqRaw:  first.liqRaw,
+        tipo:    first.tipo,
+        rows:    [...groupRows].sort(byNombre),
+        count:   groupRows.length,
+        total:   sumNeto(groupRows),
+      };
+    })
+    .sort((a, b) => a.tipo.order - b.tipo.order || (a.listado || a.liqRaw).localeCompare(b.listado || b.liqRaw));
+
+  // ── Agrupación en listas: (tipo, fecha) [+ empresa] ────────────────────────
+  const empresas = [...new Set(rows.map(r => r.empresa).filter(Boolean))].sort();
+  const splitByEmpresa = cfg.splitByEmpresa && empresas.length > 1;
+
+  const groups = new Map();
+  for (const { row, fecha } of resolved) {
+    const key = [row.tipo.code, fecha, splitByEmpresa ? row.empresa : ''].join('|');
     if (!groups.has(key)) {
       groups.set(key, {
-        code:    row.tipo.code,
-        label:   row.tipo.label,
-        order:   row.tipo.order,
-        fecha:   row.fecha,
-        empresa: splitByEmpresa ? row.empresa : '',
-        rows:    [],
+        code: row.tipo.code, label: row.tipo.label, order: row.tipo.order,
+        fecha, empresa: splitByEmpresa ? row.empresa : '', rows: [],
       });
     }
-    groups.get(key).rows.push(row);
+    // Clon con la fecha ya resuelta: cada fila de una lista necesita su propia
+    // fecha (para el .xlsx), aunque haya llegado por herencia o asignación
+    // manual — `row` original queda intacto para poder recalcular después.
+    groups.get(key).rows.push({ ...row, fecha });
   }
 
   const listas = [...groups.values()]
@@ -188,20 +268,9 @@ export function runAcreditacionesReporte(acredRows, _tabRows, mapping) {
       alerts:   g.rows.filter(r => r.alerts.length > 0).length,
     }));
 
-  const sinAsignar = unassignedRows.length > 0
-    ? {
-        rows:  [...unassignedRows].sort(byNombre),
-        total: sumNeto(unassignedRows),
-        count: unassignedRows.length,
-      }
-    : null;
-
   // ── Cierre contra el origen ────────────────────────────────────────────────
-  // totalOrigen viene del parser (suma de Neto de TODAS las filas del archivo,
-  // antes de descartar ninguna). Es el ancla independiente del reporte.
   const totalAcreditado = round2(listas.reduce((acc, l) => acc + l.total, 0));
-  const sinAsignarTotal = sinAsignar ? sinAsignar.total : 0;
-  const totalOrigen     = round2(acredRows.reduce((acc, r) => acc + (r.neto ?? 0), 0));
+  const sinAsignarTotal = round2(pendingGroups.reduce((acc, g) => acc + g.total, 0));
   const diferencia      = round2(totalAcreditado + sinAsignarTotal - totalOrigen);
 
   // ── Cortes que se muestran en la app (no van al .xlsx) ─────────────────────
@@ -217,33 +286,30 @@ export function runAcreditacionesReporte(acredRows, _tabRows, mapping) {
     .map(b => ({ ...b, total: round2(b.total) }))
     .sort((a, b) => b.total - a.total);
 
-  const listaLabelOf = new Map();
-  for (const l of listas) for (const r of l.rows) listaLabelOf.set(r, listaLabel(l));
+  // ── Alertas para la pantalla: una por fila con problema de integridad, más
+  // UNA por grupo pendiente (no una por cada empleado del grupo) ─────────────
+  const rowAlerts = [
+    ...listas.flatMap(l => l.rows.map(r => ({ r, lista: listaLabel(l) }))),
+    ...pendingGroups.flatMap(g => g.rows.map(r => ({ r, lista: 'SIN ASIGNAR' }))),
+  ]
+    .filter(({ r }) => r.alerts.length > 0)
+    .flatMap(({ r, lista }) => r.alerts.map(a => ({
+      tipo: a.tipo, detalle: a.detalle, legajo: r.legajo, nombre: r.nombre, lista, neto: r.neto,
+    })));
 
-  const alerts = [
-    ...rows
-      .filter(r => r.alerts.length > 0)
-      .flatMap(r => r.alerts.map(a => ({
-        tipo:    a.tipo,
-        detalle: a.detalle,
-        legajo:  r.legajo,
-        nombre:  r.nombre,
-        lista:   listaLabelOf.get(r) || 'SIN ASIGNAR',
-        neto:    r.neto,
-      }))),
-    ...(sinAsignar ? sinAsignar.rows.map(r => ({
-      tipo:    'sin_asignar',
-      detalle: `Sin fecha de acreditación — la liquidación "${cleanLiqLabel(r.liqRaw)}" tiene varias fechas en el mes`,
-      legajo:  r.legajo,
-      nombre:  r.nombre,
-      lista:   'SIN ASIGNAR',
-      neto:    r.neto,
-    })) : []),
-  ];
+  const pendingAlerts = pendingGroups.map(g => ({
+    tipo:    'sin_asignar',
+    detalle: `${g.listado ? `Listado ${g.listado}` : 'Sin listado'} — "${cleanLiqLabel(g.liqRaw)}" — ningún empleado de este grupo tiene fecha de acreditación. Asignala manualmente para poder exportar.`,
+    legajo:  '—',
+    nombre:  `${g.count} empleado${g.count === 1 ? '' : 's'}`,
+    lista:   'SIN ASIGNAR',
+    neto:    g.total,
+  }));
 
   return {
     summary: {
       listas:          listas.length,
+      pendingGroups:   pendingGroups.length,
       acreditaciones:  rows.length,
       descartadas,
       totalAcreditado,
@@ -254,14 +320,49 @@ export function runAcreditacionesReporte(acredRows, _tabRows, mapping) {
       bancos:          bancos.length,
     },
     listas,
-    sinAsignar,
+    sinAsignar: pendingGroups,
     bancos,
-    alerts,
-    cliente:  acredRows.find(r => r.cliente)?.cliente || acred.find(r => r.empresa)?.empresa || '',
+    alerts: [...rowAlerts, ...pendingAlerts],
     empresas,
     splitByEmpresa,
-    period:   mapping.period || '',
+    period,
+    // Estado interno para poder regenerar el reporte con otras fechas
+    // asignadas a mano sin volver a parsear el archivo — ver
+    // assignAcreditacionesDate() / unassignAcreditacionesDate().
+    _rows:        rows,
+    _descartadas: descartadas,
+    _totalOrigen: totalOrigen,
+    _cfg:         cfg,
   };
+}
+
+/**
+ * Asigna a mano la fecha de acreditación de un grupo pendiente (identificado
+ * por su `key`, ver anchorKeyOf/describeAnchorKey) y regenera el reporte
+ * completo con esa fecha aplicada. El grupo se mergea con la lista existente
+ * de su mismo tipo+fecha si hay una, o forma una lista nueva si no.
+ *
+ * @param {object} results - resultado de runAcreditacionesReporte (o de una
+ *   asignación anterior — encadenable)
+ * @param {string} groupKey - `pendingGroup.key`
+ * @param {string} isoDate  - 'YYYY-MM-DD'
+ */
+export function assignAcreditacionesDate(results, groupKey, isoDate) {
+  const dateOverrides = { ...(results._cfg?.dateOverrides || {}), [groupKey]: isoDate };
+  return regenerateAcreditaciones(results, dateOverrides);
+}
+
+/** Deshace una asignación manual (el grupo vuelve a SIN ASIGNAR). */
+export function unassignAcreditacionesDate(results, groupKey) {
+  const dateOverrides = { ...(results._cfg?.dateOverrides || {}) };
+  delete dateOverrides[groupKey];
+  return regenerateAcreditaciones(results, dateOverrides);
+}
+
+function regenerateAcreditaciones(results, dateOverrides) {
+  const cfg    = { ...(results._cfg || DEFAULT_ACREDITACIONES_CONFIG), dateOverrides };
+  const report = buildReport(results._rows, cfg, results._descartadas, results._totalOrigen, results.period);
+  return { ...report, cliente: results.cliente };
 }
 
 /**
@@ -321,20 +422,21 @@ export function summarizeAcreditacionesReporte(results) {
   const s = results.summary;
   const cierraOk = Math.abs(s.diferencia) <= 0.01;
 
-  // "Unidad" del semáforo = la lista de acreditación. Si el cierre contra el
-  // archivo de origen no da cero, el reporte entero es sospechoso: se marcan
-  // todas las listas para que el semáforo quede en rojo, no sólo las que tienen
-  // una alerta puntual.
+  // "Unidad" del semáforo = la lista de acreditación. Un grupo pendiente (sin
+  // fecha resoluble) cuenta como una unidad más — todavía no es una lista, pero
+  // tiene que dejar de estarlo. Si el cierre contra el archivo de origen no da
+  // cero, el reporte entero es sospechoso: se marcan todas las unidades.
+  const unitsTotal    = s.listas + s.pendingGroups;
   const unitsWithDiff = cierraOk
-    ? s.listasConAlerta + (results.sinAsignar ? 1 : 0)
-    : s.listas;
+    ? s.listasConAlerta + s.pendingGroups
+    : unitsTotal;
 
   const insights = [];
   if (!cierraOk) {
     insights.push({ type: 'warning', label: 'diferencia contra el total del archivo de Axton', value: fmtNum(s.diferencia) });
   }
-  if (results.sinAsignar) {
-    insights.push({ type: 'warning', label: 'acreditaciones sin fecha asignable', value: results.sinAsignar.count });
+  if (s.pendingGroups > 0) {
+    insights.push({ type: 'warning', label: 'listados sin fecha de acreditación', value: s.pendingGroups });
   }
   if (s.listasConAlerta > 0) {
     insights.push({ type: 'warning', label: 'listas con alguna alerta', value: s.listasConAlerta });
@@ -345,7 +447,7 @@ export function summarizeAcreditacionesReporte(results) {
     headline: `${s.listas} acreditación${s.listas === 1 ? '' : 'es'} · ${fmtNum(s.totalAcreditado)} acreditado`,
     insights,
     unit: 'lista',
-    unitsTotal: s.listas,
+    unitsTotal,
     unitsWithDiff,
     diffTotalAmount: Math.abs(s.diferencia),
     worstCase: null,
@@ -372,198 +474,290 @@ export function renderAcreditacionesReporteResults(results, container) {
     return;
   }
 
-  const { listas, summary: s } = results;
+  // draw() reconstruye toda la pantalla a partir de `res`. Se vuelve a llamar
+  // cada vez que el analista asigna o deshace una fecha manual (D-022) — así el
+  // botón "Exportar" siempre referencia el resultado más reciente, sin volver
+  // a pasar por el wizard.
+  function draw(res) {
+    const { listas, sinAsignar: pendingGroups, summary: s } = res;
 
-  if (listas.length === 0 && !results.sinAsignar) {
-    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin datos.</p>`;
-    return;
+    if (listas.length === 0 && pendingGroups.length === 0) {
+      container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin datos.</p>`;
+      return;
+    }
+
+    const cierraOk = Math.abs(s.diferencia) <= 0.01;
+    const listasOk = listas.length - s.listasConAlerta;
+
+    container.innerHTML = '';
+
+    // ── Hero: listas sin alerta vs con alerta ───────────────────────────────
+    const hero = document.createElement('div');
+    hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
+    hero.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-size:1.8em;font-weight:700;color:var(--color-success);">${listasOk}</span>
+        <span style="font-size:var(--text-sm);color:var(--color-text-muted);">lista${listasOk === 1 ? '' : 's'} sin alertas</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-size:1.8em;font-weight:700;color:${s.listasConAlerta > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${s.listasConAlerta}</span>
+        <span style="font-size:var(--text-sm);color:var(--color-text-muted);">con alertas</span>
+      </div>
+      <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
+        ${s.acreditaciones} acreditacion${s.acreditaciones === 1 ? '' : 'es'} · ${fmtNum(s.totalAcreditado)}
+        ${s.descartadas > 0 ? `<br>${s.descartadas} fila${s.descartadas === 1 ? '' : 's'} sin importe ni listado (descartadas)` : ''}
+      </div>
+    `;
+    container.appendChild(hero);
+
+    // ── Cierre contra el archivo de Axton ───────────────────────────────────
+    const cierre = document.createElement('div');
+    const cierreColor = cierraOk ? 'var(--color-success)' : 'var(--color-danger)';
+    cierre.style.cssText = `display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid ${cierreColor};border-radius:var(--radius-md);background:var(--color-surface);`;
+    cierre.innerHTML = cierraOk
+      ? `<span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
+         <span>El reporte cierra exacto contra el archivo de Axton: ${fmtNum(s.totalOrigen)}
+         ${pendingGroups.length > 0 ? ` (${fmtNum(s.totalAcreditado)} en listas + ${fmtNum(s.sinAsignarTotal)} sin asignar)` : ''}.</span>`
+      : `<span style="font-size:var(--text-xl);color:var(--color-danger);">⚠</span>
+         <span><strong>El reporte no cierra contra el archivo de Axton.</strong>
+         Listas ${fmtNum(s.totalAcreditado)} + sin asignar ${fmtNum(s.sinAsignarTotal)}
+         − archivo ${fmtNum(s.totalOrigen)} = <strong style="color:var(--color-danger);">${fmtNum(s.diferencia)}</strong>.</span>`;
+    container.appendChild(cierre);
+
+    // ── Grupos pendientes: asignar fecha a mano ─────────────────────────────
+    if (pendingGroups.length > 0) renderPendingBox(res, pendingGroups, container, draw);
+
+    // ── Fechas asignadas a mano en este run (con "deshacer") ────────────────
+    const overrides = res._cfg?.dateOverrides || {};
+    if (Object.keys(overrides).length > 0) renderOverridesBox(res, overrides, container, draw);
+
+    // ── Toolbar: filtro por tipo + buscador + exportar ──────────────────────
+    const typesPresent = [...new Map(listas.map(l => [l.code, l])).values()]
+      .sort((a, b) => a.order - b.order);
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'results-toolbar';
+
+    const leftGroup = document.createElement('div');
+    leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
+
+    const filterGroup = document.createElement('div');
+    filterGroup.className = 'form-group';
+    filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
+    filterGroup.innerHTML = `
+      <label class="form-label" style="font-size:var(--text-sm);">Filtrar por tipo de liquidación</label>
+      <select class="form-select form-select--sm" data-acred-type-filter>
+        <option value="all">Todos los tipos (${typesPresent.length})</option>
+        ${typesPresent.map(t => `<option value="${esc(t.code)}">${esc(t.label)}</option>`).join('')}
+      </select>
+    `;
+
+    const searchEl = document.createElement('div');
+    leftGroup.appendChild(filterGroup);
+    leftGroup.appendChild(searchEl);
+
+    const exportEl = document.createElement('div');
+    toolbar.appendChild(leftGroup);
+    toolbar.appendChild(exportEl);
+    container.appendChild(toolbar);
+
+    if (listas.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'text-muted';
+      p.style.padding = 'var(--sp-4)';
+      p.textContent = 'Todavía no hay ninguna lista formada: asigná una fecha a los grupos pendientes de arriba.';
+      container.appendChild(p);
+      return;
+    }
+
+    // El export siempre incluye TODAS las listas, sin importar el filtro de
+    // pantalla. El .xlsx es el entregable del control (el reporte en sí).
+    const csvHeaders = ['Lista', ...(res.splitByEmpresa ? ['Empresa'] : []), 'Liquidación', 'Fecha de acred', 'Fecha de paga', 'Listado', 'Total'];
+    const csvRows = () => listas.map(l => [
+      l.n,
+      ...(res.splitByEmpresa ? [l.empresa] : []),
+      l.label, fmtDate(l.fecha), fmtDate(l.fecha), l.listados.join(' + '), fmtNum(l.total),
+    ]);
+
+    renderExportMenu(exportEl, {
+      onExcel: () => exportAcreditacionesToXlsx(res),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acreditaciones_${periodSuffix(res.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    });
+
+    // ── Tabla de listas ────────────────────────────────────────────────────
+    const tableHost = document.createElement('div');
+    container.appendChild(tableHost);
+
+    function renderTable(selectedCode) {
+      const shown = selectedCode === 'all' ? listas : listas.filter(l => l.code === selectedCode);
+      // Columnas que no aportan nada no se muestran (CLAUDE.md §11.1).
+      const showEmpresa = res.splitByEmpresa;
+      const showAlerts  = shown.some(l => l.alerts > 0);
+
+      tableHost.style.overflowX = 'auto';
+      tableHost.innerHTML = `
+        <table class="data-table data-table--compact">
+          <thead>
+            <tr>
+              <th style="text-align:center;">Lista</th>
+              ${showEmpresa ? '<th>Empresa</th>' : ''}
+              <th>Liquidación</th>
+              <th>Fecha de acreditación</th>
+              <th>Listado</th>
+              <th style="text-align:right;">Empleados</th>
+              <th style="text-align:right;">Total</th>
+              ${showAlerts ? '<th style="text-align:center;">Alertas</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${shown.map(l => `
+              <tr>
+                <td style="text-align:center;font-weight:600;">${l.n}</td>
+                ${showEmpresa ? `<td>${esc(l.empresa)}</td>` : ''}
+                <td><span class="badge">${esc(l.code)}</span> ${esc(l.label)}</td>
+                <td>${esc(fmtDate(l.fecha))}</td>
+                <td style="font-size:0.85em;color:var(--color-text-muted);">${esc(l.listados.join(' + ')) || '—'}</td>
+                <td style="text-align:right;">${l.count}</td>
+                <td style="text-align:right;font-weight:600;">${fmtNum(l.total)}</td>
+                ${showAlerts ? `<td style="text-align:center;${l.alerts > 0 ? 'color:var(--color-danger);font-weight:700;' : ''}">${l.alerts || '—'}</td>` : ''}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
+          Mostrando ${shown.length} de ${listas.length} lista${listas.length === 1 ? '' : 's'}.
+          Cada lista es una hoja del .xlsx.
+          ${res.splitByEmpresa ? `Las listas se parten por empresa (${res.empresas.length} empresas en el archivo).` : ''}
+          El conteo de empleados y las alertas se ven acá: el .xlsx que va a Finanzas no los incluye.
+        </p>
+      `;
+
+      const tbodyEl = tableHost.querySelector('tbody');
+      const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
+      initSearchCombobox(searchEl, {
+        rows: shown,
+        trEls: pagination.dataRows,
+        getLabel: l => `${l.n} — ${l.label} ${fmtDate(l.fecha)}`,
+        label: 'Buscar lista',
+        pagination,
+      });
+    }
+
+    filterGroup.querySelector('[data-acred-type-filter]')
+      .addEventListener('change', (e) => renderTable(e.target.value));
+    renderTable('all');
+
+    // ── Bancos (corte para tesorería) ───────────────────────────────────────
+    const bancosBox = document.createElement('details');
+    bancosBox.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);';
+    bancosBox.innerHTML = `
+      <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-primary);">
+        Acreditaciones por banco (${res.bancos.length})
+      </summary>
+      <div style="overflow-x:auto;margin-top:var(--sp-3);">
+        <table class="data-table data-table--compact">
+          <thead>
+            <tr><th>Banco</th><th style="text-align:right;">Acreditaciones</th><th style="text-align:right;">Total</th></tr>
+          </thead>
+          <tbody>
+            ${res.bancos.map(b => `
+              <tr>
+                <td>${esc(b.banco)}</td>
+                <td style="text-align:right;">${b.count}</td>
+                <td style="text-align:right;">${fmtNum(b.total)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    container.appendChild(bancosBox);
+
+    // ── Alertas (sólo si hay) ────────────────────────────────────────────────
+    if (res.alerts.length > 0) renderAlertsTable(res, container);
   }
 
-  const cierraOk    = Math.abs(s.diferencia) <= 0.01;
-  const listasOk    = listas.length - s.listasConAlerta;
+  draw(results);
+}
 
-  container.innerHTML = '';
+/** Sección "grupos pendientes": una fila por Listado/liquidación sin fecha resoluble, con input de fecha + botón Asignar. */
+function renderPendingBox(res, pendingGroups, container, draw) {
+  const box = document.createElement('div');
+  box.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-warning);border-radius:var(--radius-md);background:var(--color-surface);';
 
-  // ── Hero: listas sin alerta vs con alerta ─────────────────────────────────
-  const hero = document.createElement('div');
-  hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
-  hero.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:var(--color-success);">${listasOk}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">lista${listasOk === 1 ? '' : 's'} sin alertas</span>
+  box.innerHTML = `
+    <div style="font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-warning-text,var(--color-text));margin-bottom:var(--sp-2);">
+      ⚠ ${pendingGroups.length} grupo${pendingGroups.length === 1 ? '' : 's'} sin fecha de acreditación — asignala para poder exportarl${pendingGroups.length === 1 ? 'o' : 'os'}
     </div>
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:${s.listasConAlerta > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${s.listasConAlerta}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">con alertas</span>
-    </div>
-    <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
-      ${s.acreditaciones} acreditacion${s.acreditaciones === 1 ? '' : 'es'} · ${fmtNum(s.totalAcreditado)}
-      ${s.descartadas > 0 ? `<br>${s.descartadas} fila${s.descartadas === 1 ? '' : 's'} sin importe ni listado (descartadas)` : ''}
-    </div>
-  `;
-  container.appendChild(hero);
-
-  // ── Cierre contra el archivo de Axton ─────────────────────────────────────
-  const cierre = document.createElement('div');
-  const cierreColor = cierraOk ? 'var(--color-success)' : 'var(--color-danger)';
-  cierre.style.cssText = `display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid ${cierreColor};border-radius:var(--radius-md);background:var(--color-surface);`;
-  cierre.innerHTML = cierraOk
-    ? `<span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-       <span>El reporte cierra exacto contra el archivo de Axton: ${fmtNum(s.totalOrigen)}
-       ${results.sinAsignar ? ` (${fmtNum(s.totalAcreditado)} en listas + ${fmtNum(s.sinAsignarTotal)} sin asignar)` : ''}.</span>`
-    : `<span style="font-size:var(--text-xl);color:var(--color-danger);">⚠</span>
-       <span><strong>El reporte no cierra contra el archivo de Axton.</strong>
-       Listas ${fmtNum(s.totalAcreditado)} + sin asignar ${fmtNum(s.sinAsignarTotal)}
-       − archivo ${fmtNum(s.totalOrigen)} = <strong style="color:var(--color-danger);">${fmtNum(s.diferencia)}</strong>.</span>`;
-  container.appendChild(cierre);
-
-  // ── Toolbar: filtro por tipo + buscador + exportar ────────────────────────
-  const typesPresent = [...new Map(listas.map(l => [l.code, l])).values()]
-    .sort((a, b) => a.order - b.order);
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-
-  const leftGroup = document.createElement('div');
-  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
-  const filterGroup = document.createElement('div');
-  filterGroup.className = 'form-group';
-  filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
-  filterGroup.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Filtrar por tipo de liquidación</label>
-    <select class="form-select form-select--sm" data-acred-type-filter>
-      <option value="all">Todos los tipos (${typesPresent.length})</option>
-      ${typesPresent.map(t => `<option value="${esc(t.code)}">${esc(t.label)}</option>`).join('')}
-    </select>
-  `;
-
-  const searchEl = document.createElement('div');
-  leftGroup.appendChild(filterGroup);
-  leftGroup.appendChild(searchEl);
-
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(leftGroup);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
-
-  // El export siempre incluye TODAS las listas, sin importar el filtro de
-  // pantalla. El .xlsx es el entregable del control (el reporte en sí).
-  const csvHeaders = ['Lista', ...(results.splitByEmpresa ? ['Empresa'] : []), 'Liquidación', 'Fecha de acred', 'Fecha de paga', 'Listado', 'Total'];
-  const csvRows = () => listas.map(l => [
-    l.n,
-    ...(results.splitByEmpresa ? [l.empresa] : []),
-    l.label, fmtDate(l.fecha), fmtDate(l.fecha), l.listados.join(' + '), fmtNum(l.total),
-  ]);
-
-  renderExportMenu(exportEl, {
-    onExcel: () => exportAcreditacionesToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acreditaciones_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
-  });
-
-  // ── Tabla de listas ──────────────────────────────────────────────────────
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function renderTable(selectedCode) {
-    const shown = selectedCode === 'all' ? listas : listas.filter(l => l.code === selectedCode);
-    // Columnas que no aportan nada no se muestran (CLAUDE.md §11.1).
-    const showEmpresa = results.splitByEmpresa;
-    const showAlerts  = shown.some(l => l.alerts > 0);
-
-    tableHost.style.overflowX = 'auto';
-    tableHost.innerHTML = `
+    <div style="overflow-x:auto;">
       <table class="data-table data-table--compact">
         <thead>
           <tr>
-            <th style="text-align:center;">Lista</th>
-            ${showEmpresa ? '<th>Empresa</th>' : ''}
-            <th>Liquidación</th>
-            <th>Fecha de acreditación</th>
             <th>Listado</th>
+            <th>Liquidación</th>
             <th style="text-align:right;">Empleados</th>
             <th style="text-align:right;">Total</th>
-            ${showAlerts ? '<th style="text-align:center;">Alertas</th>' : ''}
+            <th>Fecha de acreditación</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          ${shown.map(l => `
+          ${pendingGroups.map(g => `
             <tr>
-              <td style="text-align:center;font-weight:600;">${l.n}</td>
-              ${showEmpresa ? `<td>${esc(l.empresa)}</td>` : ''}
-              <td><span class="badge">${esc(l.code)}</span> ${esc(l.label)}</td>
-              <td>${esc(fmtDate(l.fecha))}</td>
-              <td style="font-size:0.85em;color:var(--color-text-muted);">${esc(l.listados.join(' + ')) || '—'}</td>
-              <td style="text-align:right;">${l.count}</td>
-              <td style="text-align:right;font-weight:600;">${fmtNum(l.total)}</td>
-              ${showAlerts ? `<td style="text-align:center;${l.alerts > 0 ? 'color:var(--color-danger);font-weight:700;' : ''}">${l.alerts || '—'}</td>` : ''}
-            </tr>
-          `).join('')}
-          ${results.sinAsignar && selectedCode === 'all' ? `
-            <tr>
-              <td style="text-align:center;color:var(--color-danger);font-weight:700;">—</td>
-              ${showEmpresa ? '<td>—</td>' : ''}
-              <td colspan="3" style="color:var(--color-danger);">SIN ASIGNAR — sin fecha de acreditación resoluble</td>
-              <td style="text-align:right;">${results.sinAsignar.count}</td>
-              <td style="text-align:right;font-weight:600;">${fmtNum(results.sinAsignar.total)}</td>
-              ${showAlerts ? `<td style="text-align:center;color:var(--color-danger);font-weight:700;">${results.sinAsignar.count}</td>` : ''}
-            </tr>` : ''}
-        </tbody>
-      </table>
-      <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-        Mostrando ${shown.length} de ${listas.length} lista${listas.length === 1 ? '' : 's'}.
-        Cada lista es una hoja del .xlsx.
-        ${results.splitByEmpresa ? `Las listas se parten por empresa (${results.empresas.length} empresas en el archivo).` : ''}
-        El conteo de empleados y las alertas se ven acá: el .xlsx que va a Finanzas no los incluye.
-      </p>
-    `;
-
-    const tbodyEl = tableHost.querySelector('tbody');
-    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-    initSearchCombobox(searchEl, {
-      rows: shown,
-      // slice: la fila de SIN ASIGNAR va al final del tbody y no es una lista
-      // numerada — queda fuera del buscador.
-      trEls: pagination.dataRows.slice(0, shown.length),
-      getLabel: l => `${l.n} — ${l.label} ${fmtDate(l.fecha)}`,
-      label: 'Buscar lista',
-      pagination,
-    });
-  }
-
-  filterGroup.querySelector('[data-acred-type-filter]')
-    .addEventListener('change', (e) => renderTable(e.target.value));
-  renderTable('all');
-
-  // ── Bancos (corte para tesorería) ────────────────────────────────────────
-  const bancosBox = document.createElement('details');
-  bancosBox.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);';
-  bancosBox.innerHTML = `
-    <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-primary);">
-      Acreditaciones por banco (${results.bancos.length})
-    </summary>
-    <div style="overflow-x:auto;margin-top:var(--sp-3);">
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr><th>Banco</th><th style="text-align:right;">Acreditaciones</th><th style="text-align:right;">Total</th></tr>
-        </thead>
-        <tbody>
-          ${results.bancos.map(b => `
-            <tr>
-              <td>${esc(b.banco)}</td>
-              <td style="text-align:right;">${b.count}</td>
-              <td style="text-align:right;">${fmtNum(b.total)}</td>
+              <td>${esc(g.listado || '(sin listado)')}</td>
+              <td><span class="badge">${esc(g.tipo.code)}</span> ${esc(g.tipo.label)}</td>
+              <td style="text-align:right;">${g.count}</td>
+              <td style="text-align:right;font-weight:600;">${fmtNum(g.total)}</td>
+              <td><input type="date" class="form-input" style="width:auto;padding:var(--sp-1) var(--sp-2);" data-pending-date data-key="${esc(g.key)}"></td>
+              <td><button type="button" class="btn btn--primary btn--sm" data-pending-apply data-key="${esc(g.key)}">Asignar</button></td>
             </tr>
           `).join('')}
         </tbody>
       </table>
     </div>
+    <p class="text-muted" style="font-size:var(--text-sm);margin:var(--sp-2) 0 0;">
+      Ningún empleado de estos grupos tiene fecha de acreditación en el archivo de Axton.
+      Al asignarla, el grupo se une a la lista existente de esa fecha o forma una lista nueva.
+    </p>
   `;
-  container.appendChild(bancosBox);
 
-  // ── Alertas (sólo si hay) ────────────────────────────────────────────────
-  if (results.alerts.length > 0) renderAlertsTable(results, container);
+  container.appendChild(box);
+
+  box.querySelectorAll('[data-pending-apply]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const input = box.querySelector(`[data-pending-date][data-key="${cssEsc(key)}"]`);
+      if (!input.value) { input.focus(); return; }
+      draw(assignAcreditacionesDate(res, key, input.value));
+    });
+  });
+}
+
+/** Lista de fechas asignadas a mano en este run, con "deshacer" por cada una. */
+function renderOverridesBox(res, overrides, container, draw) {
+  const box = document.createElement('div');
+  box.style.cssText = 'margin:var(--sp-3);padding:var(--sp-2) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);font-size:var(--text-sm);';
+
+  box.innerHTML = `
+    <span class="text-muted">Fechas asignadas a mano en este run:</span>
+    <ul style="margin:var(--sp-1) 0 0;padding-left:var(--sp-4);">
+      ${Object.entries(overrides).map(([key, date]) => `
+        <li>
+          ${esc(describeAnchorKey(key))} → <strong>${esc(fmtDate(date))}</strong>
+          <button type="button" class="btn btn--ghost btn--sm" data-undo-key="${esc(key)}" style="margin-left:var(--sp-2);">Deshacer</button>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+
+  container.appendChild(box);
+
+  box.querySelectorAll('[data-undo-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      draw(unassignAcreditacionesDate(res, btn.dataset.undoKey));
+    });
+  });
 }
 
 function renderAlertsTable(results, container) {
@@ -662,7 +856,8 @@ export function renderAcreditacionesConfigEditor(container, opts = {}) {
 // ── Export a Excel — el entregable del control ────────────────────────────────
 
 /**
- * Arma el .xlsx: hoja CONTROL + una hoja por lista (+ SIN ASIGNAR si hay).
+ * Arma el .xlsx: hoja CONTROL + una hoja por lista (+ SIN ASIGNAR si queda
+ * algún grupo sin fecha resuelta).
  *
  * Lo que NO va acá, a propósito (D-020): conteo de empleados, bloque de
  * excepciones, alertas de integridad y cortes por banco. Este archivo lo recibe
@@ -675,7 +870,7 @@ export function renderAcreditacionesConfigEditor(container, opts = {}) {
 export async function exportAcreditacionesToXlsx(results) {
   await loadExcelJS();
 
-  const { listas, sinAsignar, summary: s } = results;
+  const { listas, sinAsignar: pendingGroups, summary: s } = results;
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
@@ -771,11 +966,12 @@ export async function exportAcreditacionesToXlsx(results) {
     detailSheets.push({ lista: l, ...addDetailSheet(name, title, l.rows) });
   }
 
-  const sinAsignarSheet = sinAsignar
+  const pendingRows = pendingGroups.flatMap(g => g.rows);
+  const sinAsignarSheet = pendingRows.length > 0
     ? addDetailSheet(
         'SIN ASIGNAR',
         `${results.cliente} · Sin fecha de acreditación asignable · ${periodToLabel(results.period)}`,
-        sinAsignar.rows
+        [...pendingRows].sort(byNombre)
       )
     : null;
 
@@ -942,6 +1138,13 @@ function colLetter(n) {
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Escapa un valor para usarlo dentro de un selector CSS attribute ([data-x="…"]) —
+// las claves de grupo (`L:18336`, `Q:Anticipo de sueldo…`) pueden traer comillas
+// o caracteres especiales si el texto crudo de Axton los trae.
+function cssEsc(str) {
+  return window.CSS?.escape ? CSS.escape(str) : String(str).replace(/["\\]/g, '\\$&');
 }
 
 function dateSuffix() {

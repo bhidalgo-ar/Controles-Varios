@@ -32,6 +32,14 @@
 - Verificado contra los dos tabulados reales de muestra (2ª quincena de marzo y de abril 2025, 71 empleados): los totales cierran al centavo contra la fila `TOTAL GENERAL` del tabulado.
 - Ver `specs/reporte-variaciones-opmobility.md` y D-022 en `DECISIONS.md`.
 
+### fix: Acreditaciones — ancla de fecha por Listado, alertas unificadas y asignación manual — 2026-08-06
+
+- `js/controls/acreditaciones.js` — la herencia de fecha de acreditación ahora ancla primero por Listado (la unidad real del banco) y sólo cae al texto de la liquidación cuando la fila no tiene Listado. Corrige el caso en que un Listado entero (todos sus empleados) queda sin fecha resoluble en el archivo: antes generaba una alerta idéntica por cada empleado, ahora es **un solo grupo pendiente**.
+- Nuevo: `assignAcreditacionesDate()` / `unassignAcreditacionesDate()` — el analista asigna a mano la fecha de un grupo pendiente desde la propia pantalla de resultados (campo de fecha + botón "Asignar" por grupo) y el reporte (pantalla y .xlsx) se regenera al instante, sin recargar el archivo ni volver al wizard. El grupo se mergea con la lista existente de su mismo tipo+fecha si hay una, o forma una lista nueva. Las asignaciones quedan listadas con un botón "Deshacer".
+- `results.sinAsignar` pasa de un objeto único a un array de grupos (`{ key, listado, liqRaw, tipo, rows, count, total }`) — cambio de forma interno del control, sin impacto en el registry ni en otros módulos.
+- `tests/acreditacionesControl.test.js` — cubre el nuevo ancla por Listado, el fallback por liquidación cruda cuando no hay Listado, la unificación de alertas por grupo, la asignación manual (merge con lista existente / lista nueva / deshacer / encadenar asignaciones sin duplicar datos) y que julio de POP sigue dando el mismo resultado (regresión).
+- Ver `specs/control-acreditaciones-axton.md` y D-025 en `DECISIONS.md`.
+
 ### feat: Control Acreditaciones (Axton) — modo "Generar Reporte" — 2026-08-05
 
 - `js/parsers/acreditacionesParser.js` — parser del export `contacred` de Axton (formato fijo, igual en todas las cuentas de Axton): encuentra la fila de encabezados (la 1 es un separador), resuelve las columnas por nombre tolerando acentos y espacios duros, normaliza el CBU (viene con un espacio duro adelante) y descarta la fila de `TOTAL GENERAL`.
