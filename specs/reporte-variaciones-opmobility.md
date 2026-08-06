@@ -1,7 +1,12 @@
 # Reporte de Variación de Conceptos Liquidados — OPmobility
 
-**Cliente:** OPmobility C-Power Argentina S.A. (apodo interno del equipo: "Florida" / "Plastic Florida").
-En archivos, encabezados y configuración se usa siempre **OPmobility**, que es el nombre que trae el header del tabulado.
+**Cliente:** OPmobility C-Power Argentina S.A. (apodo interno del equipo: "Florida" / "Plastic Florida"),
+código `POF` — **OPmobility es el nombre comercial nuevo del grupo Plastic Omnium**, no una empresa distinta.
+El grupo tiene otra sede que el equipo trata como **cliente único e independiente**: Plastic Omnium /
+OPmobility **Pilar** (código `POP`, Axton, control de Acreditaciones — `specs/control-acreditaciones-axton.md`).
+Este documento es sólo sobre Florida (`POF`); no aplica a Pilar. Ver D-024 en `DECISIONS.md`.
+En archivos, encabezados y configuración de este control se usa siempre **OPmobility**, que es el nombre que
+trae el header del tabulado.
 
 **Entregables (dos, y conviven a propósito):**
 
