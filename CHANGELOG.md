@@ -7,6 +7,15 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: reporte de Variación de Conceptos Liquidados de OPmobility — 2026-08-06
+
+- `reportes/opmobility-variaciones.html` — HTML standalone (se abre con doble click, sin ES modules ni CDNs obligatorios) que compara el tabulado de OPmobility C-Power Argentina S.A. entre dos períodos y muestra la variación por empleado, con exportación a PDF A4 horizontal. Dos reportes: **Variación Sueldos** (`899999` + `1000` sumados en una columna) y **Variación Conceptos** (`2517` y `2519`, cada uno en su sección y en página nueva).
+- Parser del tabulado (`.xls` que en realidad es HTML del sistema de payroll): decodifica Windows-1252, saca período, quincena y razón social del propio encabezado del archivo, y matchea los conceptos **por código del `<th>`** — nunca por posición, porque la cantidad de columnas cambia entre meses (83 en marzo 2025, 84 en abril). La fila `TOTAL GENERAL` (corrida 2 columnas por el `colspan=3`) se usa sólo para validar sumas, y la validación sale como aviso en pantalla.
+- Persistencia entre períodos: al generar el reporte los dos períodos quedan guardados en `localStorage`, así el mes siguiente alcanza con subir el tabulado nuevo. Export/import JSON del histórico, con aviso de datos confidenciales al exportar.
+- Pantalla con los patrones del proyecto: aviso de privacidad antes de cualquier input, hero de empleados con y sin variación, tira de contexto con los totales por concepto, avisos de conceptos no liquidados / totales que no cierran / cambio de dotación, y el filtro de ocultar filas sin valor real (apagado por defecto).
+- Verificado contra los dos tabulados reales de muestra (2ª quincena de marzo y de abril 2025, 71 empleados): los totales cierran al centavo contra la fila `TOTAL GENERAL` del tabulado.
+- Ver `specs/reporte-variaciones-opmobility.md` y D-022 en `DECISIONS.md`.
+
 ### feat: Control Acreditaciones (Axton) — modo "Generar Reporte" — 2026-08-05
 
 - `js/parsers/acreditacionesParser.js` — parser del export `contacred` de Axton (formato fijo, igual en todas las cuentas de Axton): encuentra la fila de encabezados (la 1 es un separador), resuelve las columnas por nombre tolerando acentos y espacios duros, normaliza el CBU (viene con un espacio duro adelante) y descarta la fila de `TOTAL GENERAL`.

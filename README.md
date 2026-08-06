@@ -56,6 +56,14 @@ Definidos en `js/controls/registry.js`:
 
 Las variantes "Generar Reporte" arman el archivo a controlar a partir del Tabulado, en vez de pedirlo cargado. Para agregar un control nuevo o una variante de uno existente, usar la skill `/nuevo-control` (ver `.claude/skills/nuevo-control/SKILL.md`) — cablea los 6 puntos de integración y aplica los patrones de UI obligatorios.
 
+### Reportes standalone (fuera de la app)
+
+Algunos entregables no son un control de la batería sino un HTML aparte que se abre solo. Viven en `reportes/`:
+
+| Archivo | Qué hace |
+|---|---|
+| `reportes/opmobility-variaciones.html` | Compara el tabulado de OPmobility C-Power Argentina S.A. entre dos períodos (mes anterior vs mes actual) y arma los reportes de **Variación Sueldos** y **Variación Conceptos** por empleado, con exportación a PDF A4 horizontal. No usa ES modules: se abre con doble click. Guarda el período procesado en `localStorage`, así el mes siguiente alcanza con subir el tabulado nuevo. Ver `specs/reporte-variaciones-opmobility.md` |
+
 ### Modo admin
 
 `#/admin` habilita editar clientes y la configuración de controles (`controlConfigs`), y exportar el seed (`hya-controles-config.json`) que se distribuye al resto del equipo. Está protegido por contraseña (hash SHA-256 local) — es una barrera contra el acceso accidental, no un control de seguridad real (ver `ARCHITECTURE.md` §7 y `DECISIONS.md` D-013). La contraseña no vive en este README; pedísela a Willy.
