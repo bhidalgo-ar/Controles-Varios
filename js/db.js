@@ -530,6 +530,35 @@ export async function getControlRunFiles(controlRunId) {
   return db.controlRunFiles.where('controlRunId').equals(Number(controlRunId)).toArray();
 }
 
+/**
+ * Devuelve el archivo de un tipo dado, tal como quedó cargado en la corrida de
+ * controles de un período anterior del mismo cliente. Lo usa el control de
+ * Variaciones, que compara el Tabulado del período actual contra el del período
+ * anterior: si ese mes ya se corrió, el archivo no hace falta pedirlo de nuevo.
+ *
+ * Si hay más de una corrida para el mismo período (pasa: se corre varias veces
+ * durante el mes) se toma la más reciente que tenga el archivo.
+ *
+ * @param {string} clientCode
+ * @param {string} period  'AAAA-MM'
+ * @param {string} fileType
+ * @returns {Promise<{parsedRows: object[], parseMetadata: object, mapping: object, fileName: string}|null>}
+ */
+export async function getRunFileFromPeriod(clientCode, period, fileType) {
+  if (!clientCode || !period) return null;
+  const runs = await db.controlRuns
+    .where('[clientCode+period]').equals([clientCode, period]).toArray();
+  if (runs.length === 0) return null;
+
+  runs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  for (const run of runs) {
+    const file = await db.controlRunFiles
+      .where('[controlRunId+fileType]').equals([run.id, fileType]).first();
+    if (file && Array.isArray(file.parsedRows) && file.parsedRows.length > 0) return file;
+  }
+  return null;
+}
+
 // ── RESULTADOS DE CONTROL RUN ───────────────────────────────────────────────
 
 export async function saveControlRunResults(controlRunId, controlId, results) {

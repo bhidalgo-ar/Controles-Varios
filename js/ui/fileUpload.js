@@ -113,6 +113,12 @@ const FIELD_DEFS = {
   // cuentas de Axton. El parser resuelve las columnas por nombre y avisa cuáles
   // faltan si el archivo no es el esperado.
   acreditaciones_file: [],
+  // Tabulado del período anterior (control de Variaciones): mismas columnas que
+  // el Tabulado del período actual, así que comparte los FIELD_DEFS de tab_control.
+  tab_prev_file: [
+    { key: 'empleadoColumn',        label: 'Columna de Empleado (ID)',           required: true  },
+    { key: 'apellidoNombreColumn',  label: 'Columna de Apellido y Nombre',       required: false },
+  ],
 };
 
 // Tipos que soportan mapeo de nombre (horizontal: una fila por empleado)
@@ -492,7 +498,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       + (parseMetadata?.noRemu       ? ` · ${parseMetadata.noRemu} no_remu`          : '')
       + (parseMetadata?.aporte       ? ` · ${parseMetadata.aporte} aportes`          : '')
       + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
-  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file') {
+  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'tab_prev_file') {
     metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
   } else {
     metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
@@ -789,6 +795,7 @@ function parseFile(arrayBuffer, fileType, mapping) {
     case 'resumen_largo_excel':         return parseResumenLargo(arrayBuffer, mapping);
     case 'resumen_tabulado_horizontal': return parseResumenTabulado(arrayBuffer, mapping);
     case 'tab_control':                 return parseTabuladoControl(arrayBuffer, mapping);
+    case 'tab_prev_file':               return parseTabuladoControl(arrayBuffer, mapping);
     case 'cat_empleados':               return parseCatEmpleados(arrayBuffer, mapping);
     case 'brutos_file':                 return parseBrutos(arrayBuffer, mapping);
     case 'gs_pers_file':                return parseGsPers(arrayBuffer, mapping);
@@ -817,6 +824,7 @@ function fileTypeLabel(fileType) {
     conta_file:                  'Contabilidad Desglosada',
     cc_x_ee_file:                'CC x Empleado',
     acreditaciones_file:         'Acreditaciones (export de Axton)',
+    tab_prev_file:               'Tabulado del período anterior',
     concept_catalog:             'Catálogo de Conceptos',
   }[fileType] || fileType;
 }

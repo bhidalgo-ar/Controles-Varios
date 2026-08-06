@@ -5,20 +5,41 @@
 //   EMPLEADO, APELLIDO Y NOMBRE, PUESTO, ID_CENTRO_COSTO, CENTRO_COSTO, DEPTO(UNIDAD), CUIL
 //
 /* global XLSX */
-export { detectHeaders } from './nominaMaestra.js';
+import { detectHeaders as detectHeadersXlsx } from './nominaMaestra.js';
+import {
+  isHtmlTabulado,
+  parseHtmlTabulado,
+  htmlTabuladoToObjects,
+} from './tabuladoHtml.js';
 
-// Columnas estándar del Tabulado (nombre exacto → clave de mapping)
+// Columnas estándar del Tabulado (nombre exacto → clave de mapping).
+// Cada clave admite varios nombres posibles: el Tabulado de Meta4 los trae en
+// mayúsculas con guión bajo, y el de los sistemas que exportan HTML (OPmobility)
+// los trae en formato título ("Legajo", "Apellido y Nombre").
 const TAB_STD_COLS = {
-  'EMPLEADO':         'empleadoColumn',
-  'APELLIDO Y NOMBRE': 'apellidoNombreColumn',
-  'PUESTO':           'puestoColumn',
-  'ID_CENTRO_COSTO':  'idCCColumn',
-  'CENTRO_COSTO':     'ccColumn',
-  'DEPTO(UNIDAD)':    'deptoColumn',
-  'CUIL':             'cuilColumn',
+  empleadoColumn:       ['EMPLEADO', 'LEGAJO'],
+  apellidoNombreColumn: ['APELLIDO Y NOMBRE'],
+  puestoColumn:         ['PUESTO'],
+  idCCColumn:           ['ID_CENTRO_COSTO'],
+  ccColumn:             ['CENTRO_COSTO'],
+  deptoColumn:          ['DEPTO(UNIDAD)'],
+  cuilColumn:           ['CUIL'],
 };
 
 const TAB_REQUIRED_KEYS = ['empleadoColumn'];
+
+/**
+ * Devuelve los encabezados del Tabulado, sea un Excel real o HTML disfrazado
+ * de .xls (ver `tabuladoHtml.js`).
+ *
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {{ headers: string[], preview: any[][] }}
+ */
+export function detectHeaders(arrayBuffer) {
+  if (!isHtmlTabulado(arrayBuffer)) return detectHeadersXlsx(arrayBuffer);
+  const { headers, rows } = parseHtmlTabulado(arrayBuffer);
+  return { headers, preview: rows.slice(0, 3) };
+}
 
 /**
  * Intenta detectar automáticamente el mapping a partir de los encabezados.
@@ -29,11 +50,13 @@ const TAB_REQUIRED_KEYS = ['empleadoColumn'];
  */
 export function autoDetectTabMapping(headers) {
   const mapping = {};
-  for (const [colName, key] of Object.entries(TAB_STD_COLS)) {
-    const idx = headers.findIndex(h =>
-      h === colName || h.toLowerCase() === colName.toLowerCase()
-    );
-    if (idx >= 0) mapping[key] = headers[idx];
+  for (const [key, nombres] of Object.entries(TAB_STD_COLS)) {
+    for (const colName of nombres) {
+      const idx = headers.findIndex(h =>
+        h === colName || String(h).trim().toLowerCase() === colName.toLowerCase()
+      );
+      if (idx >= 0) { mapping[key] = headers[idx]; break; }
+    }
   }
   const allRequired = TAB_REQUIRED_KEYS.every(k => mapping[k]);
   return allRequired ? mapping : null;
@@ -48,6 +71,8 @@ export function autoDetectTabMapping(headers) {
  * @returns {{ parsedRows: object[], parseMetadata: object }}
  */
 export function parseTabuladoControl(arrayBuffer, mapping) {
+  if (isHtmlTabulado(arrayBuffer)) return parseTabuladoControlHtml(arrayBuffer, mapping);
+
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
@@ -74,6 +99,42 @@ export function parseTabuladoControl(arrayBuffer, mapping) {
     parseMetadata: {
       totalRows: parsedRows.length,
       parsedAt:  new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Rama del Tabulado que llega como HTML disfrazado de .xls.
+ * Devuelve la misma forma que la rama de Excel, más la metadata que el propio
+ * archivo trae en su encabezado (razón social, período y quincena) — la usa el
+ * control de Variaciones para saber a qué período corresponde el archivo.
+ */
+function parseTabuladoControlHtml(arrayBuffer, mapping) {
+  const parsed = parseHtmlTabulado(arrayBuffer);
+  const empCol = mapping.empleadoColumn;
+  if (!empCol) throw new Error('No se configuró la columna de Empleado.');
+
+  const rows = htmlTabuladoToObjects(parsed);
+  const parsedRows = rows.filter(row => {
+    const emp = row[empCol];
+    return emp !== null && emp !== undefined && String(emp).trim() !== '';
+  });
+
+  if (parsedRows.length === 0) {
+    throw new Error('El archivo está vacío o no tiene filas de datos.');
+  }
+
+  return {
+    parsedRows,
+    parseMetadata: {
+      totalRows: parsedRows.length,
+      parsedAt:  new Date().toISOString(),
+      format:    'html',
+      empresa:   parsed.meta.empresa,
+      period:    parsed.meta.period,
+      quincena:  parsed.meta.quincena,
+      totalRow:  parsed.totalRow,
+      headers:   parsed.headers,
     },
   };
 }

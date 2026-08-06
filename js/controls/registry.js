@@ -94,6 +94,15 @@ import {
 } from './agrupadores.js';
 
 import {
+  runVariacionesSueldos,
+  summarizeVariacionesSueldos,
+  renderVariacionesSueldosResults,
+  runVariacionesConceptos,
+  summarizeVariacionesConceptos,
+  renderVariacionesConceptosResults,
+} from './variaciones.js';
+
+import {
   runAcreditacionesReporte,
   renderAcreditacionesReporteResults,
   summarizeAcreditacionesReporte,
@@ -105,6 +114,12 @@ import {
 // `...MARVAL_ONLY` por:
 //     scope: 'sistema', scopeMeta: { sourceSystems: ['meta4'] },
 const MARVAL_ONLY = { scope: 'cliente', scopeMeta: { clients: ['MARVAL'] } };
+
+// Plastic Omnium Florida (OPmobility C-Power Argentina S.A.). Los códigos de
+// concepto de Variaciones (899999/1000/2517/2519) son de la liquidación de este
+// cliente; para otro cliente los códigos son otros. Se promueve a 'sistema'
+// cuando se confirme contra un segundo cliente, igual que los de Marval (D-015).
+const POF_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POF'] } };
 
 export const CONTROL_REGISTRY = {
 
@@ -447,6 +462,66 @@ export const CONTROL_REGISTRY = {
     run:           runAcreditacionesReporte,
     summarize:     summarizeAcreditacionesReporte,
     renderResults: renderAcreditacionesReporteResults,
+  },
+
+  variaciones_sueldos: {
+    id:          'variaciones_sueldos',
+    label:       'Variación Sueldos',
+    ...POF_ONLY,
+    appliesWhen: () => true,
+    description: 'Compara el Tabulado del período actual contra el del período anterior y muestra, '
+      + 'por empleado, la variación del sueldo (concepto 899999 de jornales + 1000 de mensuales '
+      + 'sumados en una sola columna).',
+    help: {
+      what: 'Único control que cruza el Tabulado contra el Tabulado de otro período: mes anterior vs '
+        + 'mes actual. Suma los conceptos 899999 (jornales) y 1000 (mensuales) por empleado — cada uno '
+        + 'liquida por uno de los dos — y muestra la variación en pesos y en porcentaje, con total general. '
+        + 'Si el Tabulado del mes anterior ya se cargó en la corrida de ese mes, se reusa solo.',
+      how: [
+        'Elegí el período actual arriba y cargá su Tabulado en el Paso 2.',
+        'Si el mes anterior no se corrió en la app, cargá también "Tabulado del período anterior".',
+        'Ejecutá y revisá los empleados con variación en la pantalla de resultados.',
+        'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
+      ],
+    },
+    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Sueldos' },
+    tabRequired: true,
+    additionalFiles: [
+      { key: 'tab_prev', label: 'Tabulado del período anterior (opcional si ya se corrió ese mes)', fileType: 'tab_prev_file', optional: true },
+    ],
+    run:           runVariacionesSueldos,
+    summarize:     summarizeVariacionesSueldos,
+    renderResults: renderVariacionesSueldosResults,
+  },
+
+  variaciones_conceptos: {
+    id:          'variaciones_conceptos',
+    label:       'Variación Conceptos',
+    ...POF_ONLY,
+    appliesWhen: () => true,
+    description: 'Compara el Tabulado del período actual contra el del período anterior para los '
+      + 'conceptos 2517 (Premio de progreso) y 2519 (Premio productividad), cada uno en su propia '
+      + 'sección con su total.',
+    help: {
+      what: 'Misma comparación que Variación Sueldos (Tabulado del mes anterior vs mes actual), pero '
+        + 'sobre los premios: 2517 (Premio de progreso) y 2519 (Premio productividad). Cada concepto va '
+        + 'en su propia sección, con el código y el nombre tal como figuran en el Tabulado, y arranca en '
+        + 'página nueva del PDF.',
+      how: [
+        'Elegí el período actual arriba y cargá su Tabulado en el Paso 2.',
+        'Si el mes anterior no se corrió en la app, cargá también "Tabulado del período anterior".',
+        'Ejecutá y revisá cada concepto en su sección.',
+        'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
+      ],
+    },
+    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Conceptos' },
+    tabRequired: true,
+    additionalFiles: [
+      { key: 'tab_prev', label: 'Tabulado del período anterior (opcional si ya se corrió ese mes)', fileType: 'tab_prev_file', optional: true },
+    ],
+    run:           runVariacionesConceptos,
+    summarize:     summarizeVariacionesConceptos,
+    renderResults: renderVariacionesConceptosResults,
   },
 
 };

@@ -3,8 +3,16 @@
 **Cliente:** OPmobility C-Power Argentina S.A. (apodo interno del equipo: "Florida" / "Plastic Florida").
 En archivos, encabezados y configuración se usa siempre **OPmobility**, que es el nombre que trae el header del tabulado.
 
-**Entregable:** `reportes/opmobility-variaciones.html` — HTML standalone, se abre con doble click
-(no usa ES modules ni CDNs obligatorios), con exportación a PDF vía impresión del navegador.
+**Entregables (dos, y conviven a propósito):**
+
+1. **Controles de la app** — `variaciones_sueldos` y `variaciones_conceptos` en el `CONTROL_REGISTRY`,
+   scope de cliente `POF`, agrupados bajo "Variación entre períodos". Es el camino normal: reusa el
+   Tabulado que ya se cargó en la corrida del mes anterior, así que se sube un solo archivo por mes.
+   Ver D-023.
+2. **HTML standalone** — `reportes/opmobility-variaciones.html`, se abre con doble click sin servidor.
+   Sirve para correr el reporte fuera de la app (o sin el histórico del cliente cargado). Ver D-022.
+
+Los dos aplican las mismas reglas de parseo y de comparación que se describen abajo.
 
 **Origen:** documento base validado por Gaby y Guille (`Documento_Base_Claude_Code_OPmobility.docx`),
 más dos tabulados reales de muestra (2ª quincena de marzo y de abril 2025) y los PDF de referencia del cliente.
@@ -89,8 +97,30 @@ Con los dos tabulados reales de muestra (2ª quincena marzo 2025 y 2ª quincena 
 | Acentos en nombres (`ACUÑA`, `MORENO JUAN JOSÉ`) | Correctos (decodificación Windows-1252) |
 | Orden de carga invertido (anterior en el slot de actual) | Se ordena por período: el más viejo siempre queda a la izquierda |
 | Impresión a PDF A4 horizontal, 2 secciones | Salto de página entre secciones, `thead` repetido |
+| Lectura del tabulado por la app (`detectHeaders` + `parseTabuladoControl` en el navegador) | 83 encabezados, 71 empleados, período y quincena detectados del propio archivo |
+| Auto-detección de columnas (`autoDetectTabMapping`) | Mapea `Legajo`, `Apellido y Nombre` y `CUIL` sin intervención del analista |
+| Scope del control | POF ve los 2 controles nuevos; Marval y Plastic Omnium Pilar quedan igual |
 
-## 7. Pendiente
+## 7. Cómo se resuelve el período anterior (en la app)
+
+Antes de ejecutar, el wizard busca el Tabulado de la corrida del mes anterior del mismo cliente
+(`getRunFileFromPeriod` sobre `controlRunFiles`, que ya guardaba las filas parseadas por período) y lo
+pasa al control por `mapping.variacionesPrev`. Si ese mes no se corrió, el control pide el archivo como
+adicional **opcional** (`tab_prev_file`) y, si tampoco está, devuelve un error que explica las dos salidas.
+El archivo subido tiene prioridad sobre el guardado.
+
+En la pantalla de resultados se avisa de dónde salió el período anterior.
+
+## 8. Diferencias entre la app y el HTML standalone
+
+| | App (controles) | HTML standalone |
+|---|---|---|
+| Período anterior | Se reusa de la corrida del mes anterior; se pide solo si falta | Se guarda en `localStorage`, con export/import JSON |
+| Empleado sin el concepto en un período | `—` en pantalla (convención del proyecto), `0,00` en el PDF | `0,00` |
+| Salidas | .xlsx, CSV, portapapeles y PDF | PDF |
+| Requiere servidor | Sí (la app usa ES modules) | No |
+
+## 9. Pendiente
 
 - El documento base menciona una población de **mensuales que liquida por el código `1000`**. En los dos
   tabulados de muestra ese concepto no aparece (los 71 empleados liquidan por `899999`). La lógica está y se
