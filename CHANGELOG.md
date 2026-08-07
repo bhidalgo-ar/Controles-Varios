@@ -7,6 +7,14 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Acumuladores Ganancias — tope previsional único y scatter "¿quién tributa?" — 2026-08-07
+
+- **Tope previsional: uno solo, sobre la base.** `topeJubilacion`/`topeObraSocial` (dos montos independientes) se reemplazan por `topeBaseImponible` + `alicuotaJubilacion` (11%) / `alicuotaObraSocial` (3%), editables. Jubilación y obra social comparten la misma base imponible máxima y se diferencian por alícuota: el techo de cada retención sale de `base × alícuota`. El editor muestra en vivo los techos derivados. La base sigue vacía por default — nunca se inventa el valor regulatorio.
+- **Scatter rediseñado al modelo del mockup.** La línea deja de ser la mediana diagonal de impuesto/total (estadísticamente poco útil con un impuesto progresivo) y pasa a ser el **piso real de tributación**: una vertical en el total anual más bajo al que efectivamente se le retuvo. Tres grupos: Tributa · No tributa · **Fuera de patrón** (sin impuesto pero por encima del piso), con leyenda, ejes rotulados y tooltip por legajo.
+- **Chequeo nuevo `fueraDePatron`**, que además lleva esos casos a "Casos para revisar" con redacción neutral (puede haber deducciones — SIRADIG, cargas de familia — que la app no ve). Un legajo sin fila 1150 cuenta como impuesto 0, no como "sin dato", igual en el gráfico y en el chequeo.
+- `tests/acumuladoresGananciasControl.test.js` — 54 asserts (7 nuevos): techo derivado por alícuota, alícuota editable, base alta sin casos, `fueraDePatron` detectado/descartado y sin piso.
+- Ver D-031 en `DECISIONS.md`.
+
 ### fix: Acumuladores Ganancias — se saca el gate de PIN del editor de umbrales — 2026-08-07
 
 - `js/controls/acumuladoresGanancias.js` — la sección de umbrales de chequeos (topes de jubilación/obra social, multiplicador de "salto grande", on/off por chequeo) ya no está detrás de un PIN: queda como un `<details>` visible y editable directo, igual que "Régimen y códigos de acumulador". Pedido explícito de Guillermo tras revisar la pantalla mergeada — el equipo de Payroll es de confianza para tocar estos valores sin fricción.
