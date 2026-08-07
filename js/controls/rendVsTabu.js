@@ -3,6 +3,10 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 //
 // Compara el Reporte de Rendimiento de M4 (por CC) contra el Tabulado.
 // Calcula PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES
@@ -88,7 +92,6 @@ const fmt = v => v === null
 
 const THRESHOLD = 0.01;
 const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
-const diffStyle = d => hasDiff(d) ? 'color:var(--color-danger);font-weight:600;' : '';
 
 // Construye mapa código numérico → clave de columna a partir de los headers del Tabulado.
 // Soporta formato "1003-SUELDO" (extrae "1003") o nombre numérico exacto "1003".
@@ -266,13 +269,69 @@ export function runRendVsTabu(rendRows, tabRows, mapping) {
 // ── renderRendVsTabuResults ───────────────────────────────────────────────────
 
 export function renderRendVsTabuResults(results, container) {
-  const { rows, meta } = results;
+  const { rows } = results;
 
   if (rows.length === 0) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin datos.</p>`;
     return;
   }
 
+  const totalsAll = {};
+  for (const c of COLS) totalsAll[c.dKey] = rows.reduce((s, r) => s + (r[c.dKey] ?? 0), 0);
+  const componentCols = COLS.filter(c => c.key !== 'total');
+  const ccsWithDiff = rows.filter(r => componentCols.some(c => hasDiff(r[c.dKey])));
+  const okCount = rows.length - ccsWithDiff.length;
+  const sinTabCount = rows.filter(r => r.sinTabData).length;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = ccsWithDiff.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: ccsWithDiff.length === 0
+          ? 'Rendimiento y Tabulado coinciden en todos los centros de costo.'
+          : `${ccsWithDiff.length} de ${rows.length} centros de costo tienen diferencia.`,
+        body: ccsWithDiff.length === 0
+          ? `${rows.length} centro${rows.length === 1 ? '' : 's'} de costo verificados, sin diferencias.`
+          : `Diferencia total de <strong>${fmt(totalsAll.dTotal)}</strong> en COSTO TOTAL (Tab − Rend). El detalle completo está en la solapa «Detalle».`,
+      });
+
+      renderTiles(panel, [
+        { label: 'Centros de costo', value: rows.length,
+          sub: sinTabCount > 0 ? `${sinTabCount} sin datos en Tabulado` : 'todos con datos en Tabulado' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: ccsWithDiff.length, tone: ccsWithDiff.length > 0 ? 'error' : 'ok' },
+        { label: 'Dif. COSTO TOTAL', value: fmt(totalsAll.dTotal), tone: hasDiff(totalsAll.dTotal) ? 'error' : 'ok' },
+      ]);
+
+      if (ccsWithDiff.length > 0) {
+        const top = [...ccsWithDiff].sort((a, b) => Math.abs(b.dTotal ?? 0) - Math.abs(a.dTotal ?? 0)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${ccsWithDiff.length}`,
+          items: top.map(r => {
+            const diffCols = componentCols.filter(c => hasDiff(r[c.dKey]))
+              .sort((a, b) => Math.abs(r[b.dKey]) - Math.abs(r[a.dKey]));
+            const worst = diffCols[0];
+            const rest = diffCols.length - 1;
+            return {
+              sev: diffCols.length > 1 ? 'hi' : 'lo',
+              who: r.ccName || `CC ${r.ccCode}`,
+              sub: r.ccName ? `CC ${r.ccCode}` : null,
+              what: `${worst.label}: diferencia de ${fmt(Math.abs(r[worst.dKey]))}`,
+              why: rest > 0 ? `y ${rest} columna${rest === 1 ? '' : 's'} más con diferencia (Tab − Rend).` : 'Tab − Rend.',
+              right: `<span class="${mvClass(r[worst.dKey])}">${mvArrow(r[worst.dKey])} ${fmtSigned(r[worst.dKey])}</span>`,
+            };
+          }),
+        });
+      }
+    },
+    detalle(panel) { renderRendVsTabuDetalle(panel, { rows, results }); },
+  });
+}
+
+function renderRendVsTabuDetalle(container, { rows, results }) {
   // Acumuladores para fila de totales
   const totals = {};
   for (const c of COLS) {
@@ -286,9 +345,19 @@ export function renderRendVsTabuResults(results, container) {
     }
   }
 
+  // §11.1 — de las 5 columnas componentes, ocultar las que no tienen ninguna
+  // diferencia en ningún CC (COSTO TOTAL siempre se muestra: es el agregado).
+  // Si no hay ninguna diferencia en absoluto, se muestran todas — no tiene
+  // sentido "ocultar todo".
+  const componentCols = COLS.filter(c => c.key !== 'total');
+  const componentsWithDiff = componentCols.filter(c => rows.some(r => hasDiff(r[c.dKey])));
+  const visibleComponents = componentsWithDiff.length > 0 ? componentsWithDiff : componentCols;
+  const hiddenCount = componentCols.length - visibleComponents.length;
+  const cols = [...visibleComponents, COLS[COLS.length - 1]]; // + COSTO TOTAL al final, siempre
+
   // ── Encabezados ───────────────────────────────────────────────────────────
   const { conceptConfig: cc, colByCode: cbc } = results.meta || {};
-  const hdr1 = COLS.map(c => {
+  const hdr1 = cols.map(c => {
     if (c.key === 'total' || !cc || !cbc) {
       return `<th colspan="3" style="text-align:center;background:${c.hdr};">${esc(c.label)}</th>`;
     }
@@ -313,19 +382,21 @@ export function renderRendVsTabuResults(results, container) {
     return `<th colspan="3" style="text-align:center;background:${c.hdr};">${esc(c.label)}${conceptDetail}</th>`;
   }).join('');
 
-  const hdr2 = COLS.map(c => `
+  const hdr2 = cols.map(c => `
     <th style="text-align:right;background:${c.hdr};">Rend</th>
     <th style="text-align:right;background:${c.hdr};">Tab</th>
     <th style="text-align:right;background:${c.hdr};"><strong>CTRL</strong><br>
       <small style="font-weight:400;white-space:nowrap;">Tab−Rend</small></th>
   `).join('');
 
+  const maxAbsDiff = Math.max(1, ...rows.flatMap(r => cols.map(c => Math.abs(r[c.dKey] ?? 0))));
+
   // ── Filas de datos ─────────────────────────────────────────────────────────
   const dataRows = rows.map(r => {
-    const cells = COLS.map(c => `
+    const cells = cols.map(c => `
       <td style="text-align:right;background:${c.bg};">${fmt(r[c.rKey])}</td>
       <td style="text-align:right;background:${c.bg};">${fmt(r[c.tKey])}</td>
-      <td style="text-align:right;background:${c.bg};${diffStyle(r[c.dKey])}">${fmt(r[c.dKey])}</td>
+      ${diffCellHtml(r[c.dKey], { max: maxAbsDiff, background: c.bg })}
     `).join('');
     const rowStyle = r.sinTabData ? ' style="opacity:0.55;"' : '';
     return `
@@ -338,12 +409,12 @@ export function renderRendVsTabuResults(results, container) {
   }).join('');
 
   // ── Fila de totales ────────────────────────────────────────────────────────
-  const totRow = COLS.map(c => {
+  const totRow = cols.map(c => {
     const d = totals[c.tKey] - totals[c.rKey];
     return `
       <td style="text-align:right;background:${c.hdr};font-weight:600;">${fmt(totals[c.rKey])}</td>
       <td style="text-align:right;background:${c.hdr};font-weight:600;">${fmt(totals[c.tKey])}</td>
-      <td style="text-align:right;background:${c.hdr};font-weight:600;${diffStyle(d)}">${fmt(d)}</td>
+      ${diffCellHtml(d, { background: c.hdr })}
     `;
   }).join('');
 
@@ -354,12 +425,17 @@ export function renderRendVsTabuResults(results, container) {
   const exportEl = document.createElement('div');
   toolbar.appendChild(searchEl);
   toolbar.appendChild(exportEl);
+  container.appendChild(toolbar);
 
-  // Tabla — la fila de TOTAL GENERAL NO va en el tbody inicial: se agrega
-  // después de armar la paginación, para que quede siempre visible (no es
-  // una fila de datos real, no debe ocultarse ni entrar en la búsqueda).
+  if (hiddenCount > 0) {
+    const note = document.createElement('p');
+    note.className = 'text-muted';
+    note.style.cssText = 'font-size:var(--text-sm);padding:0 var(--sp-3);';
+    note.textContent = `Se ocultan ${hiddenCount} columna${hiddenCount === 1 ? '' : 's'} sin ninguna diferencia. El .xlsx exportado incluye las 6.`;
+    container.appendChild(note);
+  }
+
   const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
   tableWrap.innerHTML = `
     <table class="data-table data-table--compact">
       <thead>
@@ -375,24 +451,19 @@ export function renderRendVsTabuResults(results, container) {
       <tbody>
         ${dataRows}
       </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" style="font-weight:600;white-space:nowrap;">TOTAL GENERAL</td>
+          ${totRow}
+        </tr>
+      </tfoot>
     </table>
   `;
-
-  container.innerHTML = '';
-  container.appendChild(toolbar);
   container.appendChild(tableWrap);
 
   // Paginación (clientes con muchos CC) + buscador por código/nombre de CC
   const tbodyEl = tableWrap.querySelector('tbody');
   const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-
-  const totalRowEl = document.createElement('tr');
-  totalRowEl.style.background = 'var(--color-surface)';
-  totalRowEl.innerHTML = `
-    <td colspan="2" style="font-weight:600;white-space:nowrap;">TOTAL GENERAL</td>
-    ${totRow}
-  `;
-  tbodyEl.appendChild(totalRowEl);
 
   initSearchCombobox(searchEl, {
     rows,
@@ -402,6 +473,7 @@ export function renderRendVsTabuResults(results, container) {
     label: 'Buscar centro de costo',
     placeholder: 'Código o nombre de CC…',
   });
+  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2 });
 
   const csvHeaders = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [`${c.label} (Rend)`, `${c.label} (Tab)`, `${c.label} (CTRL)`])];
   const csvRows = () => rows.map(r => [r.ccCode, r.ccName, ...COLS.flatMap(c => [fmt(r[c.rKey]), fmt(r[c.tKey]), fmt(r[c.dKey])])]);

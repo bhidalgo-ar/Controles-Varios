@@ -18,6 +18,7 @@
 
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodToLabel } from '../utils/dates.js';
 
@@ -474,6 +475,11 @@ export function renderAcreditacionesReporteResults(results, container) {
     return;
   }
 
+  // Se recuerda la solapa activa entre draws: asignar/deshacer una fecha
+  // manual (D-022) reconstruye toda la pantalla, y no tiene sentido devolver
+  // al analista al Resumen si estaba trabajando en el Detalle.
+  let activeTabId = 'resumen';
+
   // draw() reconstruye toda la pantalla a partir de `res`. Se vuelve a llamar
   // cada vez que el analista asigna o deshace una fecha manual (D-022) — así el
   // botón "Exportar" siempre referencia el resultado más reciente, sin volver
@@ -491,38 +497,50 @@ export function renderAcreditacionesReporteResults(results, container) {
 
     container.innerHTML = '';
 
-    // ── Hero: listas sin alerta vs con alerta ───────────────────────────────
-    const hero = document.createElement('div');
-    hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
-    hero.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-size:1.8em;font-weight:700;color:var(--color-success);">${listasOk}</span>
-        <span style="font-size:var(--text-sm);color:var(--color-text-muted);">lista${listasOk === 1 ? '' : 's'} sin alertas</span>
-      </div>
-      <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-size:1.8em;font-weight:700;color:${s.listasConAlerta > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${s.listasConAlerta}</span>
-        <span style="font-size:var(--text-sm);color:var(--color-text-muted);">con alertas</span>
-      </div>
-      <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
-        ${s.acreditaciones} acreditacion${s.acreditaciones === 1 ? '' : 'es'} · ${fmtNum(s.totalAcreditado)}
-        ${s.descartadas > 0 ? `<br>${s.descartadas} fila${s.descartadas === 1 ? '' : 's'} sin importe ni listado (descartadas)` : ''}
-      </div>
-    `;
-    container.appendChild(hero);
+    renderResumenDetalle(container, {
+      activeId: activeTabId,
+      onChange(id) { activeTabId = id; },
+      resumen(panel) {
+        renderVerdict(panel, {
+          tone: cierraOk ? 'ok' : 'error',
+          title: cierraOk
+            ? `El reporte cierra exacto contra el archivo de Axton: ${fmtNum(s.totalOrigen)}.`
+            : 'El reporte no cierra contra el archivo de Axton.',
+          body: cierraOk
+            ? (pendingGroups.length > 0
+                ? `${fmtNum(s.totalAcreditado)} en listas + ${fmtNum(s.sinAsignarTotal)} sin asignar.`
+                : null)
+            : `Listas ${fmtNum(s.totalAcreditado)} + sin asignar ${fmtNum(s.sinAsignarTotal)} − archivo ${fmtNum(s.totalOrigen)} = <strong>${fmtNum(s.diferencia)}</strong>.`,
+        });
 
-    // ── Cierre contra el archivo de Axton ───────────────────────────────────
-    const cierre = document.createElement('div');
-    const cierreColor = cierraOk ? 'var(--color-success)' : 'var(--color-danger)';
-    cierre.style.cssText = `display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid ${cierreColor};border-radius:var(--radius-md);background:var(--color-surface);`;
-    cierre.innerHTML = cierraOk
-      ? `<span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-         <span>El reporte cierra exacto contra el archivo de Axton: ${fmtNum(s.totalOrigen)}
-         ${pendingGroups.length > 0 ? ` (${fmtNum(s.totalAcreditado)} en listas + ${fmtNum(s.sinAsignarTotal)} sin asignar)` : ''}.</span>`
-      : `<span style="font-size:var(--text-xl);color:var(--color-danger);">⚠</span>
-         <span><strong>El reporte no cierra contra el archivo de Axton.</strong>
-         Listas ${fmtNum(s.totalAcreditado)} + sin asignar ${fmtNum(s.sinAsignarTotal)}
-         − archivo ${fmtNum(s.totalOrigen)} = <strong style="color:var(--color-danger);">${fmtNum(s.diferencia)}</strong>.</span>`;
-    container.appendChild(cierre);
+        renderTiles(panel, [
+          { label: 'Acreditaciones', value: s.acreditaciones, sub: fmtNum(s.totalAcreditado) },
+          { label: 'Listas sin alertas', value: listasOk, tone: 'ok' },
+          { label: 'Listas con alertas', value: s.listasConAlerta, tone: s.listasConAlerta > 0 ? 'error' : 'ok' },
+          ...(pendingGroups.length > 0 ? [{ label: 'Grupos sin fecha', value: pendingGroups.length, tone: 'warn' }] : []),
+          ...(s.descartadas > 0 ? [{ label: 'Filas descartadas', value: s.descartadas, sub: 'sin importe ni listado' }] : []),
+        ]);
+
+        if (res.alerts.length > 0) {
+          const top = res.alerts.slice(0, 5);
+          renderIssues(panel, {
+            heading: `Casos para revisar · ${top.length} de ${res.alerts.length}`,
+            items: top.map(a => ({
+              who: a.nombre || `Legajo ${a.legajo}`,
+              sub: a.nombre ? `Legajo ${a.legajo} · ${a.lista}` : a.lista,
+              what: ALERT_LABEL[a.tipo] || a.tipo,
+              why: a.detalle,
+              right: fmtNum(a.neto),
+            })),
+          });
+        }
+      },
+      detalle(panel) { drawDetalle(res, panel); },
+    });
+  }
+
+  function drawDetalle(res, container) {
+    const { listas, sinAsignar: pendingGroups } = res;
 
     // ── Grupos pendientes: asignar fecha a mano ─────────────────────────────
     if (pendingGroups.length > 0) renderPendingBox(res, pendingGroups, container, draw);
@@ -595,7 +613,6 @@ export function renderAcreditacionesReporteResults(results, container) {
       const showEmpresa = res.splitByEmpresa;
       const showAlerts  = shown.some(l => l.alerts > 0);
 
-      tableHost.style.overflowX = 'auto';
       tableHost.innerHTML = `
         <table class="data-table data-table--compact">
           <thead>
@@ -642,6 +659,7 @@ export function renderAcreditacionesReporteResults(results, container) {
         label: 'Buscar lista',
         pagination,
       });
+      enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
     }
 
     filterGroup.querySelector('[data-acred-type-filter]')
@@ -775,7 +793,6 @@ function renderAlertsTable(results, container) {
   header.appendChild(searchEl);
 
   const tableHost = document.createElement('div');
-  tableHost.style.overflowX = 'auto';
   tableHost.innerHTML = `
     <table class="data-table data-table--compact">
       <thead>
@@ -808,6 +825,7 @@ function renderAlertsTable(results, container) {
     getLabel: a => `${a.legajo} — ${a.nombre}`,
     pagination,
   });
+  enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
 }
 
 // ── Editor de configuración (Paso 2 del wizard) ───────────────────────────────

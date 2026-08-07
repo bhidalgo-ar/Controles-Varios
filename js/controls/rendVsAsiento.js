@@ -1,6 +1,10 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 //
 // Compara el Reporte de Rendimiento de M4 (por CC) contra la Contabilidad
 // Desglosada (CONTA). Para cada CC, agrupa las filas de CONTA clasificando
@@ -793,12 +797,71 @@ export function renderRendVsAsientoResults(results, container) {
     return;
   }
 
-  const { rows, ccsSoloEnConta, summary, meta } = results;
+  const { rows, ccsSoloEnConta, summary } = results;
 
   if (!rows || rows.length === 0) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin datos.</p>`;
     return;
   }
+
+  const componentCols = COLS.filter(c => c.key !== 'total');
+  const totalsAll = {};
+  for (const c of COLS) totalsAll[c.dKey] = rows.reduce((s, r) => s + (r[c.dKey] ?? 0), 0);
+  const ccsWithDiff = rows.filter(r => componentCols.some(c => hasDiff(r[c.dKey])));
+  const okCount = rows.length - ccsWithDiff.length;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = ccsWithDiff.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: ccsWithDiff.length === 0
+          ? 'Rendimiento y CONTA coinciden en todos los centros de costo.'
+          : `${ccsWithDiff.length} de ${rows.length} centros de costo tienen diferencia.`,
+        body: ccsWithDiff.length === 0
+          ? `${rows.length} centro${rows.length === 1 ? '' : 's'} de costo verificados, sin diferencias.`
+          : `Diferencia total de <strong>${fmt(totalsAll.dTotal)}</strong> en COSTO TOTAL (CONTA − Rend). El detalle completo está en la solapa «Detalle».`,
+      });
+
+      const tiles = [
+        { label: 'Centros de costo', value: rows.length,
+          sub: summary?.sinContaData > 0 ? `${summary.sinContaData} sin datos en CONTA` : 'todos con datos en CONTA' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: ccsWithDiff.length, tone: ccsWithDiff.length > 0 ? 'error' : 'ok' },
+        { label: 'Dif. COSTO TOTAL', value: fmt(totalsAll.dTotal), tone: hasDiff(totalsAll.dTotal) ? 'error' : 'ok' },
+      ];
+      if (ccsSoloEnConta?.length) tiles.push({ label: 'CCs sólo en CONTA', value: ccsSoloEnConta.length, tone: 'warn' });
+      renderTiles(panel, tiles);
+
+      if (ccsWithDiff.length > 0) {
+        const top = [...ccsWithDiff].sort((a, b) => Math.abs(b.dTotal ?? 0) - Math.abs(a.dTotal ?? 0)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${ccsWithDiff.length}`,
+          items: top.map(r => {
+            const diffCols = componentCols.filter(c => hasDiff(r[c.dKey]))
+              .sort((a, b) => Math.abs(r[b.dKey]) - Math.abs(r[a.dKey]));
+            const worst = diffCols[0];
+            const rest = diffCols.length - 1;
+            return {
+              sev: diffCols.length > 1 ? 'hi' : 'lo',
+              who: r.ccName || `CC ${r.ccCode}`,
+              sub: r.ccName ? `CC ${r.ccCode}` : null,
+              what: `${worst.label}: diferencia de ${fmt(Math.abs(r[worst.dKey]))}`,
+              why: rest > 0 ? `y ${rest} columna${rest === 1 ? '' : 's'} más con diferencia (CONTA − Rend).` : 'CONTA − Rend.',
+              right: `<span class="${mvClass(r[worst.dKey])}">${mvArrow(r[worst.dKey])} ${fmtSigned(r[worst.dKey])}</span>`,
+            };
+          }),
+        });
+      }
+    },
+    detalle(panel) { renderRendVsAsientoDetalle(panel, results); },
+  });
+}
+
+function renderRendVsAsientoDetalle(container, results) {
+  const { rows, ccsSoloEnConta, summary, meta } = results;
 
   const accountNames = meta?.accountNames || {};
   const conceptNames = meta?.conceptNames || {};
@@ -1008,7 +1071,6 @@ export function renderRendVsAsientoResults(results, container) {
 
   // Tabla principal
   const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
   tableWrap.innerHTML = `
     ${badgesHtml}
     <table class="data-table data-table--compact" id="js-rva-table">
@@ -1027,6 +1089,10 @@ export function renderRendVsAsientoResults(results, container) {
     ${orphansHtml}
   `;
   container.appendChild(tableWrap);
+  // Sticky CC + Centro de Costo — sobrevive a los sorts porque enhanceGrid
+  // sólo agrega clases CSS (posicionales), y el sort de abajo reemplaza el
+  // <tbody> pero nunca el <thead> ni la estructura de columnas.
+  enhanceGrid(tableWrap.querySelector('#js-rva-table'), { stickyCols: 2 });
 
   // Eventos de la tabla principal por DELEGACIÓN (un solo listener en el wrapper):
   // - click en celda CONTA → modal de zoom (conceptos + empleados)
