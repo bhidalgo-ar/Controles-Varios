@@ -3,6 +3,10 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 //
 // Modo 1 — "Controlar": cruza los 18 conceptos NR del Reporte de M4
 //   contra las columnas configuradas en el Tabulado.
@@ -177,44 +181,73 @@ export function renderNrResults(results, container) {
     return;
   }
 
-  const rowHasDiff = r => NR_CONCEPTS.some(c => isDif(r.valores[c.key].ctrl));
+  const rowDiffConcepts = r => NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl));
+  const rowHasDiff = r => rowDiffConcepts(r).length > 0;
+  const rowDiffAmount = r => rowDiffConcepts(r).reduce((s, c) => s + Math.abs(r.valores[c.key].ctrl), 0);
 
   // Empleados con algún valor NR (los "evaluables"); dentro de ellos, los que tienen diferencia.
   const relevantRows = rows.filter(hasAnyNrValue);
   const diffRows     = relevantRows.filter(rowHasDiff);
   const okCount      = relevantRows.length - diffRows.length;
   const noNrCount    = rows.length - relevantRows.length;
+  const totalDiffAmount = diffRows.reduce((s, r) => s + rowDiffAmount(r), 0);
 
   container.innerHTML = '';
 
-  // ── Hero: sin diferencia vs con diferencia ────────────────────────────────
-  const hero = document.createElement('div');
-  hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
-  hero.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:var(--color-success);">${okCount}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">sin diferencia</span>
-    </div>
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:${diffRows.length > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${diffRows.length}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">con diferencia</span>
-    </div>
-    <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
-      ${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores NR
-      ${noNrCount > 0 ? `<br>${noNrCount} sin valores NR (no se muestran)` : ''}
-    </div>
-  `;
-  container.appendChild(hero);
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: diffRows.length === 0
+          ? 'Todos los empleados con valores NR coinciden con el Tabulado.'
+          : `${diffRows.length} de ${relevantRows.length} empleados con NR tienen alguna diferencia.`,
+        body: diffRows.length === 0
+          ? `${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores no remunerativos, verificados contra el Tabulado sin diferencias.`
+          : `Diferencia total de <strong>${fmtNum(totalDiffAmount)}</strong> entre los 18 conceptos no remunerativos. El detalle completo está en la solapa «Detalle».`,
+      });
 
+      renderTiles(panel, [
+        { label: 'Empleados con NR', value: relevantRows.length,
+          sub: noNrCount > 0 ? `${noNrCount} sin valores NR (no se muestran)` : 'del total del Tabulado' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
+        { label: 'Diferencia total', value: fmtNum(totalDiffAmount), tone: diffRows.length > 0 ? 'error' : 'ok' },
+      ]);
+
+      if (diffRows.length > 0) {
+        const top = [...diffRows].sort((a, b) => rowDiffAmount(b) - rowDiffAmount(a)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
+          items: top.map(r => {
+            const concepts = rowDiffConcepts(r).sort((a, b) => Math.abs(r.valores[b.key].ctrl) - Math.abs(r.valores[a.key].ctrl));
+            const worst = concepts[0];
+            const worstVal = r.valores[worst.key].ctrl;
+            const rest = concepts.length - 1;
+            return {
+              sev: concepts.length > 1 ? 'hi' : 'lo',
+              who: `Legajo ${r.legajo}`,
+              what: `${worst.label}: diferencia de ${fmtNum(Math.abs(worstVal))}`,
+              why: rest > 0 ? `y ${rest} concepto${rest === 1 ? '' : 's'} más con diferencia (Tab − NR).` : 'Tab − NR.',
+              right: `<span class="${mvClass(worstVal)}">${mvArrow(worstVal)} ${fmtSigned(worstVal)}</span>`,
+            };
+          }),
+        });
+      }
+    },
+    detalle(panel) { renderNrDetalle(panel, { relevantRows, diffRows, results }); },
+  });
+}
+
+function renderNrDetalle(container, { diffRows, results }) {
   // Si no hay ninguna diferencia, la tabla no aporta nada: mostramos el OK y salimos.
   if (diffRows.length === 0) {
-    const ok = document.createElement('div');
-    ok.style.cssText = 'display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid var(--color-success);border-radius:var(--radius-md);background:var(--color-surface);';
-    ok.innerHTML = `
-      <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-      <span>Todos los empleados con valores NR coinciden con el Tabulado. No hay diferencias para revisar.</span>
+    container.innerHTML = `
+      <div style="display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid var(--color-success);border-radius:var(--radius-md);background:var(--color-surface);">
+        <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
+        <span>Todos los empleados con valores NR coinciden con el Tabulado. No hay diferencias para revisar.</span>
+      </div>
     `;
-    container.appendChild(ok);
     return;
   }
 
@@ -286,8 +319,10 @@ export function renderNrResults(results, container) {
       : NR_CONCEPTS.filter(c => c.key === selectedKey);
 
     const hiddenCols = NR_CONCEPTS.length - shownConcepts.length;
+    const maxAbs = Math.max(1, ...shownRows.flatMap(r => shownConcepts.map(c => Math.abs(r.valores[c.key].ctrl ?? 0))));
+    const totals = {};
+    for (const c of shownConcepts) totals[c.key] = shownRows.reduce((s, r) => s + (r.valores[c.key].ctrl ?? 0), 0);
 
-    tableHost.style.overflowX = 'auto';
     tableHost.innerHTML = `
       <table class="data-table data-table--compact">
         <thead>
@@ -307,20 +342,21 @@ export function renderNrResults(results, container) {
               <tr>
                 <td>${esc(r.legajo)}</td>
                 <td style="text-align:center;font-weight:700;color:var(--color-danger);">${difs}</td>
-                ${shownConcepts.map(c => {
-                  const v      = r.valores[c.key];
-                  const hasDif = isDif(v.ctrl);
-                  const style  = `text-align:right;background:${cellBg(c)};${hasDif ? 'color:var(--color-danger);font-weight:600;' : ''}`;
-                  return `<td style="${style}">${fmtNum(v.ctrl)}</td>`;
-                }).join('')}
+                ${shownConcepts.map(c => diffCellHtml(r.valores[c.key].ctrl, { max: maxAbs, background: cellBg(c) })).join('')}
               </tr>
             `;
           }).join('')}
         </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>TOTAL</strong></td>
+            ${shownConcepts.map(c => diffCellHtml(totals[c.key], { background: c.group === 'indem' ? INDEM_HDR : OTROS_HDR })).join('')}
+          </tr>
+        </tfoot>
       </table>
       <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
         Mostrando ${shownRows.length} empleado${shownRows.length === 1 ? '' : 's'} con diferencia.
-        Valores: Tab − NR (rojo = diferencia).
+        Valores: Tab − NR.
         ${hiddenCols > 0 ? `Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} sin diferencias.` : ''}
         Exportá el .xlsx para ver los valores originales de cada fuente.
       </p>
@@ -337,6 +373,7 @@ export function renderNrResults(results, container) {
       label: 'Buscar legajo',
       pagination,
     });
+    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
   }
 
   filterGroup.querySelector('[data-nr-concept-filter]')
@@ -407,45 +444,47 @@ export function renderNrReporteResults(results, container) {
     return;
   }
 
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
-
   // Sólo empleados con algún valor NR distinto de cero.
   const relevantRows = rows.filter(reporteRowHasValue);
   const noNrCount    = rows.length - relevantRows.length;
+  const conceptsWithValue = NR_CONCEPTS.filter(c =>
+    relevantRows.some(r => r[c.key] !== null && Math.abs(r[c.key]) > 0.01)
+  );
 
   container.innerHTML = '';
 
-  // ── Hero: cuántos empleados entran al reporte ─────────────────────────────
-  const hero = document.createElement('div');
-  hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
-  hero.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:var(--color-wordmark);">${relevantRows.length}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">empleado${relevantRows.length === 1 ? '' : 's'} con valores NR</span>
-    </div>
-    ${noNrCount > 0 ? `
-      <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
-        ${noNrCount} sin valores NR (no se muestran)
-      </div>` : ''}
-  `;
-  container.appendChild(hero);
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      renderVerdict(panel, {
+        tone: relevantRows.length > 0 ? 'info' : 'warn',
+        title: relevantRows.length > 0
+          ? `Reporte de NR generado — ${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores.`
+          : 'Ningún empleado tiene valores NR distintos de cero en este período.',
+        body: relevantRows.length > 0
+          ? `Armado directo desde el Tabulado, con ${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor. El detalle completo está en la solapa «Detalle».`
+          : null,
+      });
+      renderTiles(panel, [
+        { label: 'Empleados con NR', value: relevantRows.length },
+        { label: 'Sin valores NR', value: noNrCount, sub: 'no entran al reporte' },
+        { label: 'Conceptos con valor', value: `${conceptsWithValue.length} / 18` },
+      ]);
+    },
+    detalle(panel) { renderNrReporteDetalle(panel, { relevantRows, conceptsWithValue, results }); },
+  });
+}
+
+function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, results }) {
+  const fmtTxt = v => v === null ? '—' : esc(String(v));
 
   if (relevantRows.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'text-muted';
-    empty.style.padding = 'var(--sp-4)';
-    empty.textContent = 'Ningún empleado tiene valores NR distintos de cero en este período.';
-    container.appendChild(empty);
+    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún empleado tiene valores NR distintos de cero en este período.</p>`;
     return;
   }
 
   const filteredResults = { ...results, rows: relevantRows };
 
   // ── Toolbar: filtro por concepto + buscador (izquierda) + exportar (derecha) ─
-  const conceptsWithValue = NR_CONCEPTS.filter(c =>
-    relevantRows.some(r => r[c.key] !== null && Math.abs(r[c.key]) > 0.01)
-  );
-
   const toolbar = document.createElement('div');
   toolbar.className = 'results-toolbar';
 
@@ -506,7 +545,6 @@ export function renderNrReporteResults(results, container) {
 
     const hiddenCols = NR_CONCEPTS.length - shownConcepts.length;
 
-    tableHost.style.overflowX = 'auto';
     tableHost.innerHTML = `
       <table class="data-table data-table--compact">
         <thead>
@@ -561,6 +599,7 @@ export function renderNrReporteResults(results, container) {
       getLabel: r => r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`,
       pagination,
     });
+    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
   }
 
   filterGroup.querySelector('[data-nr-concept-filter]')
