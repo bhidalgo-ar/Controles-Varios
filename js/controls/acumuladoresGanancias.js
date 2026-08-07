@@ -14,7 +14,7 @@
 // Reglas de cálculo completas en specs/control-acumuladores-ganancias.md.
 
 import { initTabs } from '../ui/tabs.js';
-import { renderVerdict, renderTiles, renderIssues, renderChecks, enhanceGrid } from '../ui/resultBlocks.js';
+import { renderVerdict, renderTiles, renderIssues, renderMinorObservations, renderChecks, enhanceGrid } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -315,7 +315,9 @@ function computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, 
     for (const row of datosRows) {
       if (!row.cuil) {
         issues.push({
-          type: 'cuil', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          // 'minor': calidad del dato de origen, no una diferencia a revisar —
+          // va a "Observaciones menores", no al listado principal (ver D-027 / spec §2).
+          type: 'cuil', sev: 'minor', legajo: row.legajo, nombre: row.nombre,
           what: 'No trae CUIL en el crudo de Axton.',
           why:  'Puede ser un dato faltante en el origen — no bloquea el reporte.',
         });
@@ -679,10 +681,14 @@ function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal,
     { label: 'Meses en ventana', value: periods.length, sub: regimenLabel },
   ]);
 
-  if (issues.length > 0) {
+  const mainIssues  = issues.filter(i => i.sev !== 'minor');
+  const minorIssues = issues.filter(i => i.sev === 'minor');
+  const mainLegajos = new Set(mainIssues.map(i => i.legajo)).size;
+
+  if (mainIssues.length > 0) {
     renderIssues(panel, {
-      heading: 'Casos para revisar',
-      items: issues.map(i => ({
+      heading: `Casos para revisar · ${mainLegajos} legajo${mainLegajos === 1 ? '' : 's'}`,
+      items: mainIssues.map(i => ({
         sev: i.sev, who: `Legajo ${i.legajo} — ${i.nombre}`, what: i.what, why: i.why,
       })),
     });
@@ -692,6 +698,12 @@ function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal,
     p.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-3);';
     p.textContent = 'Sin casos para revisar.';
     panel.appendChild(p);
+  }
+
+  if (minorIssues.length > 0) {
+    renderMinorObservations(panel, minorIssues.map(i => ({
+      who: `Legajo ${i.legajo} — ${i.nombre}`, what: i.what, why: i.why,
+    })));
   }
 
   renderChecks(panel, { heading: 'Chequeos de coherencia', items: coherenceChecks });
@@ -822,21 +834,39 @@ function renderFichasTab(panel, { mes, datos, issues }) {
   }
   const mesByLegajo = new Map(mes.rows.map(r => [r.legajo, r]));
 
-  const fichas = datos.rows.map(d => ({
-    legajo: d.legajo, nombre: d.nombre, cuil: d.cuil,
-    datos: d, mes: mesByLegajo.get(d.legajo) || null,
-    tieneMovimiento: mesByLegajo.has(d.legajo) ? hasMovement(mesByLegajo.get(d.legajo)) : false,
-    issues: issuesByLegajo.get(d.legajo) || [],
-  }));
+  const fichas = datos.rows.map(d => {
+    const legajoIssues = issuesByLegajo.get(d.legajo) || [];
+    return {
+      legajo: d.legajo, nombre: d.nombre, cuil: d.cuil,
+      datos: d, mes: mesByLegajo.get(d.legajo) || null,
+      tieneMovimiento: mesByLegajo.has(d.legajo) ? hasMovement(mesByLegajo.get(d.legajo)) : false,
+      issues: legajoIssues,
+      revisar: legajoIssues.filter(i => i.sev !== 'minor'),
+      minorWhats: [...new Set(legajoIssues.filter(i => i.sev === 'minor').map(i => i.what))],
+    };
+  });
+
+  // Opciones del filtro de severidad — derivadas de los issues presentes en
+  // este run, no hardcodeadas: "Con algo para revisar" agrupa todo lo no-minor,
+  // y cada texto `minor` distinto (ej. "no trae CUIL") es su propia opción,
+  // separada de "revisar" (D-027 / spec §3).
+  const minorTexts = [...new Set(fichas.flatMap(f => f.minorWhats))];
+  const filterOptions = [
+    { value: 'todos', label: `Todos (${fichas.length})` },
+    { value: 'revisar', label: `Con algo para revisar (${fichas.filter(f => f.revisar.length > 0).length})` },
+    ...minorTexts.map((what, idx) => ({
+      value: `minor:${idx}`, what,
+      label: `${what} (${fichas.filter(f => f.minorWhats.includes(what)).length})`,
+    })),
+    { value: 'sinMov', label: `Sin movimiento (${fichas.filter(f => !f.tieneMovimiento).length})` },
+  ];
 
   const toolbar = document.createElement('div');
   toolbar.className = 'results-toolbar';
   toolbar.innerHTML = `
     <input type="text" class="form-input" data-fichas-search placeholder="Buscar legajo o nombre…" style="max-width:220px;padding:6px 10px;">
-    <select class="form-input" data-fichas-filter style="max-width:200px;">
-      <option value="todos">Todos</option>
-      <option value="revisar">Con algo para revisar</option>
-      <option value="sinMov">Sin movimiento</option>
+    <select class="form-input" data-fichas-filter style="max-width:260px;">
+      ${filterOptions.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
     </select>
     <select class="form-input" data-fichas-sort style="max-width:200px;">
       <option value="bruto">Mayor bruto (DATOS)</option>
@@ -862,8 +892,12 @@ function renderFichasTab(panel, { mes, datos, issues }) {
 
     let shown = fichas.filter(f => {
       if (q && !`${f.legajo} ${f.nombre}`.toLowerCase().includes(q)) return false;
-      if (filter === 'revisar' && f.issues.length === 0) return false;
+      if (filter === 'revisar' && f.revisar.length === 0) return false;
       if (filter === 'sinMov' && f.tieneMovimiento) return false;
+      if (filter.startsWith('minor:')) {
+        const what = minorTexts[Number(filter.split(':')[1])];
+        if (!f.minorWhats.includes(what)) return false;
+      }
       return true;
     });
 
@@ -894,7 +928,8 @@ function renderFichasList(host, fichas) {
       <summary style="cursor:pointer;padding:var(--sp-2) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;list-style:none;">
         <strong>${esc(f.legajo)}</strong>
         <span>${esc(f.nombre)}</span>
-        ${f.issues.length > 0 ? `<span class="text-muted" style="font-size:var(--text-sm);">⚠ ${f.issues.length} para revisar</span>` : ''}
+        ${f.revisar.length > 0 ? `<span class="text-muted" style="font-size:var(--text-sm);">⚠ ${f.revisar.length} para revisar</span>` : ''}
+        ${f.minorWhats.map(w => `<span class="rb-chip-minor" title="${esc(w)}">${esc(w.length > 28 ? w.slice(0, 27) + '…' : w)}</span>`).join('')}
         ${!f.tieneMovimiento ? `<span class="text-muted" style="font-size:var(--text-sm);">sin movimiento en el mes</span>` : ''}
         <span style="margin-left:auto;font-size:var(--text-sm);" class="text-muted">TOTAL: ${fmtNum(f.datos.total)}</span>
       </summary>
@@ -917,7 +952,7 @@ function renderFichasList(host, fichas) {
       </div>
       ${f.issues.length > 0 ? `
         <div style="padding:0 var(--sp-3) var(--sp-3);">
-          ${f.issues.map(i => `<div style="font-size:var(--text-sm);color:var(--color-text-muted);">⚠ ${esc(i.what)}</div>`).join('')}
+          ${f.issues.map(i => `<div style="font-size:var(--text-sm);color:var(--color-text-muted);">${i.sev === 'minor' ? 'i' : '⚠'} ${esc(i.what)}</div>`).join('')}
         </div>` : ''}
     </details>
   `).join('');

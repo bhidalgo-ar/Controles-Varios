@@ -11,6 +11,7 @@ import { periodToLabel }    from '../utils/dates.js';
 import { formatAmount }     from '../utils/currency.js';
 import { showToast }        from './toast.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
+import { renderResultsContextBar } from './resultsHeader.js';
 
 const TIER_RANK = { error: 0, warn: 1, ok: 2, info: 3 };
 const TIER_DOT  = { error: 'error', warn: 'warn', ok: 'ok', info: 'neutral' };
@@ -43,44 +44,57 @@ export async function renderControlsResults(root, runId) {
         hour: '2-digit', minute: '2-digit',
       })
     : '';
+  const clientePeriodo = `${client?.name ?? 'Cliente'} · ${periodLabel}`;
+  const backTarget = { label: '← Volver a los controles', href: `#/controls/${client?.id ?? ''}` };
 
   root.innerHTML = `
+    <div id="js-results-ctx-bar"></div>
     <div class="page-content">
-      <div class="page-actions">
-        <div class="page-actions__title">
-          <a href="#/" class="btn btn--ghost btn--sm">← Inicio</a>
-          <h2 style="margin:0 0 0 var(--sp-3);">
-            ${esc(client?.name ?? 'Cliente')} — Controles ${esc(periodLabel)}
-          </h2>
-          <span id="js-control-help"></span>
-        </div>
-        <div class="page-actions__buttons">
-          <a href="#/controls/${client?.id ?? ''}" class="btn btn--primary btn--sm btn--pill">▶ Nuevo control</a>
-        </div>
-      </div>
-
-      <div class="alert alert--info" style="margin-bottom:var(--sp-3);font-size:var(--text-sm);">
-        Ejecutado el ${esc(createdAt)}
-        ${run.notes ? ` &nbsp;·&nbsp; <em>${esc(run.notes)}</em>` : ''}
-      </div>
-
-      <div id="js-status-banner" style="margin-bottom:var(--sp-4);"></div>
-
       <div id="js-hero"></div>
       <div id="js-control-sections"></div>
     </div>
   `;
 
-  renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
-
-  // Banner Borrador / Definitivo con toggle
-  const bannerEl = root.querySelector('#js-status-banner');
-  renderRunStatusBanner(bannerEl, run);
-
+  const ctxBarEl   = root.querySelector('#js-results-ctx-bar');
   const heroEl     = root.querySelector('#js-hero');
   const sectionsEl = root.querySelector('#js-control-sections');
 
+  // Cabecera 1C: barra de contexto sticky (ver js/ui/resultsHeader.js) — el
+  // toggle Borrador/Definitivo re-renderiza sólo esta barra, no la pantalla.
+  let isDefinitive = run.isDefinitive === true;
+  function mountCtxBar(tier, verdictLine) {
+    renderResultsContextBar(ctxBarEl, {
+      tier, clientePeriodo, verdictLine, back: backTarget,
+      run: {
+        createdAtLabel: createdAt,
+        periodNote: run.notes || null,
+        isQuickRun: false,
+        isDefinitive,
+        onToggleDefinitive: async () => {
+          const newValue = !isDefinitive;
+          try {
+            await updateControlRun(run.id, { isDefinitive: newValue });
+            isDefinitive = newValue;
+            mountCtxBar(tier, verdictLine);
+            showToast(newValue ? '✅ Marcado como definitivo' : '↩ Vuelto a borrador', 'success');
+          } catch (err) {
+            showToast(`Error: ${err.message}`, 'danger');
+          }
+        },
+        onReconfigure: () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
+        onRerun:       () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
+      },
+    });
+    const nameEl = ctxBarEl.querySelector('.results-ctx-bar__name');
+    if (nameEl) {
+      const helpSlot = document.createElement('span');
+      nameEl.insertAdjacentElement('afterend', helpSlot);
+      renderHelpPopover(helpSlot, CONTROL_HELP);
+    }
+  }
+
   if (resultsRows.length === 0) {
+    mountCtxBar('info', 'Sin resultados guardados.');
     sectionsEl.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">📭</div>
@@ -118,6 +132,8 @@ export async function renderControlsResults(root, runId) {
   const { html: heroHtml, pctOk, overallTier } = buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId);
   heroEl.innerHTML = heroHtml;
   animateHeroGauge(heroEl, pctOk, overallTier);
+
+  mountCtxBar(overallTier === 'info' ? 'info' : overallTier, buildContextLine(controlSummaries));
 
   // Una tarjeta colapsable por control (mismo orden que el hero: errores primero)
   for (const item of controlSummaries) {
@@ -466,43 +482,27 @@ function animateHeroGauge(heroEl, pctOk, overallTier) {
   requestAnimationFrame(tick);
 }
 
-// ── Banner Borrador / Definitivo ─────────────────────────────────────────────
+// ── Línea de veredicto de la barra de contexto ───────────────────────────────
+// Condensa lo que antes mostraba el banner Borrador/Definitivo + el resumen
+// del hero en una sola oración — el hero de abajo (Opción B, sin tocar) sigue
+// siendo la fuente completa del detalle.
 
-function renderRunStatusBanner(bannerEl, run) {
-  if (!bannerEl || !run) return;
+function buildContextLine(controlSummaries) {
+  const checked = controlSummaries.filter(c => c.tier !== 'info');
+  if (checked.length === 0) return 'Esta corrida sólo incluye controles de generación de reporte.';
 
-  const isDef = run.isDefinitive === true;
-  const icon  = isDef ? '✅' : '📝';
-  const title = isDef ? 'Definitivo' : 'Borrador';
-  const desc  = isDef
-    ? 'Este run aparece en el checklist mensual.'
-    : 'Este run no aparece en el checklist hasta que lo marques como definitivo.';
-  const btnLabel = isDef ? '↩ Volver a borrador' : '📌 Marcar como definitivo';
-  const borderCol = isDef ? 'var(--color-match-exact, #00a651)' : 'var(--color-border)';
-  const bgCol = isDef ? 'rgba(0,166,81,0.06)' : 'var(--color-surface)';
+  const okCount    = checked.filter(c => c.tier === 'ok').length;
+  const warnCount  = checked.filter(c => c.tier === 'warn').length;
+  const errorCount = checked.filter(c => c.tier === 'error').length;
 
-  bannerEl.innerHTML = `
-    <div style="padding:var(--sp-3) var(--sp-4);border:1px solid ${borderCol};border-radius:var(--radius-md);background:${bgCol};display:flex;align-items:center;gap:var(--sp-3);">
-      <span style="font-size:1.4em;">${icon}</span>
-      <div style="flex:1;">
-        <strong>${title}</strong>
-        <p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">${esc(desc)}</p>
-      </div>
-      <button class="btn ${isDef ? 'btn--ghost' : 'btn--primary'} btn--sm" id="js-toggle-definitive">${btnLabel}</button>
-    </div>
-  `;
-
-  bannerEl.querySelector('#js-toggle-definitive').addEventListener('click', async () => {
-    const newValue = !run.isDefinitive;
-    try {
-      await updateControlRun(run.id, { isDefinitive: newValue });
-      run.isDefinitive = newValue;
-      renderRunStatusBanner(bannerEl, run);
-      showToast(newValue ? '✅ Marcado como definitivo' : '↩ Vuelto a borrador', 'success');
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'danger');
-    }
-  });
+  if (errorCount === 0 && warnCount === 0) {
+    return `${okCount} de ${checked.length} control${checked.length === 1 ? '' : 'es'} en verde — sin diferencias.`;
+  }
+  const bits = [];
+  if (errorCount > 0) bits.push(`${errorCount} en rojo`);
+  if (warnCount  > 0) bits.push(`${warnCount} en amarillo`);
+  if (okCount    > 0) bits.push(`${okCount} en verde`);
+  return `${bits.join(' · ')}.`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
