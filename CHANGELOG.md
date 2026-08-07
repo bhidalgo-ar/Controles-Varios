@@ -17,7 +17,7 @@
 - `tests/variacionesControl.test.js` — 12 asserts nuevos (69 en total): detección de escala real (0/50%/70%/100% simulado con 0/5.000/7.000/10.000), causa por ausencia, `null` como escalón 0 sólo si el legajo está presente ese período, variación de Bruto.
 - Verificado en el navegador con los dos tabulados reales: coincide al legajo con el análisis manual (23 bajaron de escalón, 14 sin causa, matriz 40/8/9/4 en la fila 100%→*), y el reporte de Variación Sueldos muestra correctamente "0 variación" en vez de mezclar el hallazgo con la caída del Bruto (que es de otros conceptos).
 - Explorado visualmente primero en tres direcciones de diseño antes de codear: `https://claude.ai/code/artifact/a69789a0-65e7-4b43-84af-b06a9c448491`. La tercera dirección ("ficha por legajo") queda pendiente — ver `ROADMAP.md`.
-- Ver D-025 en `DECISIONS.md`.
+- Ver D-028 en `DECISIONS.md`.
 
 ### feat: rediseño de la pantalla de resultados en los 9 controles restantes — 2026-08-07
 
