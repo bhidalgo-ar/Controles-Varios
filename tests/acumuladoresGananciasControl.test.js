@@ -212,5 +212,63 @@ assert('summarize() no calcula unitsTotal/unitsWithDiff (no hay cruce)',
 const summaryError = ctrl.summarize(ctrl.run([], [], { period: '2026-08' }));
 assert('summarize() de un error devuelve status "error"', summaryError.status === 'error');
 
+// ── Fase 1 — chequeos de pantalla (nunca tocan el .xlsx) ──────────────────────
+
+assert('results.checks existe y trae reconciliation/issues/coherenceChecks',
+  results.checks && Array.isArray(results.checks.issues) && Array.isArray(results.checks.coherenceChecks));
+assert('con datos consistentes, la reconciliación cierra 100%',
+  results.checks.reconciliation.ok === results.checks.reconciliation.total
+  && results.checks.reconciliation.total === results.datos.rows.length);
+assert('CUIL: legajo 1/2/3 (mkRow sin CUIL) salen como "casos para revisar"',
+  results.checks.issues.filter(i => i.type === 'cuil').length === 3);
+assert('legajo 3 (sin movimiento en agosto) sale como caso "sinMovimiento"',
+  results.checks.issues.some(i => i.type === 'sinMovimiento' && i.legajo === '3'));
+assert('legajo 1 y 2 (con movimiento) no salen como "sinMovimiento"',
+  !results.checks.issues.some(i => i.type === 'sinMovimiento' && (i.legajo === '1' || i.legajo === '2')));
+
+// CUIL presente para un legajo → no debe aparecer como caso "cuil".
+const rowsConCuil = rows.map(r => r.legajo === '1' ? { ...r, cuil: '20-11111111-1' } : r);
+const resultsConCuil = ctrl.run(rowsConCuil, [], { period: '2026-08' });
+assert('con CUIL presente en TODAS las filas del legajo 1, no sale como caso "cuil"',
+  !resultsConCuil.checks.issues.some(i => i.type === 'cuil' && i.legajo === '1'));
+
+// ── Salto grande (requiere ≥2 archivos) ───────────────────────────────────────
+// Legajo 4: julio con bruto 100.000, agosto con bruto 500.000 → salto x5 (> 2x).
+const rowsSalto = [
+  ...rows,
+  mkRow('2026-07', '4', 'DIAZ LUIS', 1100, '', 100000),
+  mkRow('2026-08', '4', 'DIAZ LUIS', 1100, '', 500000),
+];
+const resultsSalto = ctrl.run(rowsSalto, [], { period: '2026-08' });
+assert('legajo 4 con bruto x5 vs. el mes anterior sale como "saltoGrande"',
+  resultsSalto.checks.issues.some(i => i.type === 'saltoGrande' && i.legajo === '4'));
+assert('legajo 1 (110.000 vs 100.000, x1.1) no sale como "saltoGrande" con el multiplicador default (2x)',
+  !resultsSalto.checks.issues.some(i => i.type === 'saltoGrande' && i.legajo === '1'));
+
+const resultsSinSalto = ctrl.run(rows.filter(r => r._period === '2026-08'), [], { period: '2026-08' });
+assert('con un solo archivo subido, "saltoGrande" no aplica (no hay mes anterior con qué comparar)',
+  !resultsSinSalto.checks.issues.some(i => i.type === 'saltoGrande'));
+
+// ── Coherencia de topes (apagado por default, nunca inventa el valor) ─────────
+assert('sin tope configurado, el chequeo de topes se muestra "apagado" (ok) con detail explicativo',
+  results.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === true && /sin tope configurado/.test(c.detail)));
+
+const resultsConTope = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { topeJubilacion: 10000 }, // legajo 1 retiene 11.000 en agosto > 10.000
+});
+assert('con tope de jubilación configurado en 10.000, el legajo 1 (retiene 11.000) sale como caso "tope"',
+  resultsConTope.checks.issues.some(i => i.type === 'tope' && i.legajo === '1'));
+assert('con tope configurado, el chequeo de coherencia de jubilación pasa a "no ok"',
+  resultsConTope.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === false));
+
+// ── on/off por chequeo ─────────────────────────────────────────────────────────
+const resultsSinChecks = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { checksEnabled: { reconciliacion: false, cuil: false, sinMovimiento: false, saltoGrande: false, topes: false } },
+});
+assert('con todos los chequeos apagados, no hay issues ni coherenceChecks',
+  resultsSinChecks.checks.issues.length === 0 && resultsSinChecks.checks.coherenceChecks.length === 0);
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

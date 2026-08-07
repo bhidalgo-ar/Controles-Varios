@@ -238,3 +238,10 @@ este scope, el agente para y avisa — no amplía el alcance por su cuenta.
 regulatorios y columnas del padrón quedan explícitamente abiertos hasta que
 Guillermo los resuelva). El caso del legajo 137 quedó cerrado el 2026-08-07:
 no resoluble sin el Tabulado, se muestra genérico.
+
+**Cerrada:** 2026-08-07 — implementación completa (ver D-029 en
+`DECISIONS.md`). Las 3 direcciones están integradas en
+`renderAcumuladoresResults`, el editor de config con PIN funciona, 47 asserts
+en verde (`npm run test:unit`, 15 suites), verificado en navegador con
+Playwright sobre datos sintéticos. Topes regulatorios siguen en `null` (nunca
+inventados) hasta que Guillermo cargue el valor vigente vía el editor.
