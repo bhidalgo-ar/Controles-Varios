@@ -232,99 +232,105 @@ const resultsConCuil = ctrl.run(rowsConCuil, [], { period: '2026-08' });
 assert('con CUIL presente en TODAS las filas del legajo 1, no sale como caso "cuil"',
   !resultsConCuil.checks.issues.some(i => i.type === 'cuil' && i.legajo === '1'));
 
-// ── Salto grande (requiere ≥2 archivos) ───────────────────────────────────────
-// Legajo 4: julio con bruto 100.000, agosto con bruto 500.000 → salto x5 (> 2x).
-const rowsSalto = [
-  ...rows,
-  mkRow('2026-07', '4', 'DIAZ LUIS', 1100, '', 100000),
-  mkRow('2026-08', '4', 'DIAZ LUIS', 1100, '', 500000),
+// ── SAC teórico: el chequeo central de este reporte ───────────────────────────
+// Ver D-033: los chequeos de tope previsional y de tributación de Ganancias
+// están replegados detrás de EXTRAS_GANANCIAS_HABILITADOS (apagado), así que no
+// se testean acá. El foco es el SAC teórico.
+
+assert('el chequeo de coherencia "SAC teórico calculado" va primero',
+  results.checks.coherenceChecks[0]?.label === 'SAC teórico calculado');
+assert('sacStats cuenta cuántos legajos tienen SAC teórico',
+  results.checks.sacStats.total === results.mes.rows.length
+  && results.checks.sacStats.calculados === 3);
+assert('con los 3 legajos calculados, el chequeo del SAC teórico está ok',
+  results.checks.coherenceChecks[0].ok === true
+  && results.checks.coherenceChecks[0].detail === '3/3');
+
+// No se pudo calcular: legajo 20 sólo tiene SUMA en agosto, ninguna fila de mes
+// en ningún crudo → no hay doceava de dónde sacar el SAC teórico.
+const rowsSinDoceava = [...rows, mkRow('2026-08', '20', 'SOLO SUMA', 1100, 'SUMA', 900000)];
+const resultsSinDoceava = ctrl.run(rowsSinDoceava, [], { period: '2026-08' });
+assert('un legajo sin ninguna fila de mes sale como "sacNoCalculado"',
+  resultsSinDoceava.checks.issues.some(i => i.type === 'sacNoCalculado' && i.legajo === '20'));
+assert('su SAC teórico queda en null (no en cero)',
+  resultsSinDoceava.mes.rows.find(r => r.legajo === '20').sacTeorico === null);
+assert('"sacNoCalculado" baja el contador del chequeo de coherencia',
+  resultsSinDoceava.checks.coherenceChecks[0].ok === false
+  && resultsSinDoceava.checks.coherenceChecks[0].detail === '3/4');
+
+// Parcial: legajo 21 sólo liquidó en julio, le falta la doceava de un mes de la
+// ventana. Se usa una ventana de 3 meses para que el mes faltante no sea el de
+// proceso (ese caso ya lo cubre "sinMovimiento" y no se duplica).
+const rowsParcial = [
+  mkRow('2026-06', '21', 'ALTA TARDIA', 1100, '', 120000),
+  mkRow('2026-08', '21', 'ALTA TARDIA', 1100, '', 120000),
+  mkRow('2026-08', '21', 'ALTA TARDIA', 1100, 'SUMA', 240000),
+  mkRow('2026-06', '22', 'COMPLETO', 1100, '', 100000),
+  mkRow('2026-07', '22', 'COMPLETO', 1100, '', 100000),
+  mkRow('2026-08', '22', 'COMPLETO', 1100, '', 100000),
+  mkRow('2026-08', '22', 'COMPLETO', 1100, 'SUMA', 300000),
 ];
-const resultsSalto = ctrl.run(rowsSalto, [], { period: '2026-08' });
-assert('legajo 4 con bruto x5 vs. el mes anterior sale como "saltoGrande"',
-  resultsSalto.checks.issues.some(i => i.type === 'saltoGrande' && i.legajo === '4'));
-assert('legajo 1 (110.000 vs 100.000, x1.1) no sale como "saltoGrande" con el multiplicador default (2x)',
-  !resultsSalto.checks.issues.some(i => i.type === 'saltoGrande' && i.legajo === '1'));
+const resultsParcial = ctrl.run(rowsParcial, [], { period: '2026-08', acumuladoresConfig: { regimen: 'RG4003' } });
+assert('un legajo sin doceava en un mes intermedio de la ventana sale como "sacParcial"',
+  resultsParcial.checks.issues.some(i => i.type === 'sacParcial' && i.legajo === '21'));
+assert('el aviso dice con cuántos meses de la ventana se armó',
+  resultsParcial.checks.issues.some(i => i.type === 'sacParcial' && /2 de 3 meses/.test(i.what)));
+assert('el legajo que liquidó todos los meses no sale como "sacParcial"',
+  !resultsParcial.checks.issues.some(i => i.type === 'sacParcial' && i.legajo === '22'));
 
-const resultsSinSalto = ctrl.run(rows.filter(r => r._period === '2026-08'), [], { period: '2026-08' });
-assert('con un solo archivo subido, "saltoGrande" no aplica (no hay mes anterior con qué comparar)',
-  !resultsSinSalto.checks.issues.some(i => i.type === 'saltoGrande'));
+// Negativo: las deducciones del mes superan al gravado.
+const rowsNegativo = [
+  mkRow('2026-08', '30', 'NEGATIVO', 1100, '', 10000),
+  mkRow('2026-08', '30', 'NEGATIVO', 1120, '', 50000),
+  mkRow('2026-08', '30', 'NEGATIVO', 1100, 'SUMA', 10000),
+];
+const resultsNegativo = ctrl.run(rowsNegativo, [], { period: '2026-08' });
+assert('un SAC teórico negativo sale como caso "sacNegativo"',
+  resultsNegativo.checks.issues.some(i => i.type === 'sacNegativo' && i.legajo === '30'));
 
-// ── Coherencia de topes ───────────────────────────────────────────────────────
-// El tope previsional es UNO SOLO y aplica sobre la BASE imponible: jubilación
-// y obra social comparten la misma base máxima y derivan su techo por alícuota.
-assert('sin base imponible configurada, el chequeo de topes se muestra "apagado" (ok) con detail explicativo',
-  results.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === true && /sin base imponible/.test(c.detail)));
+// Doceava atípica: un mes que se sale de la línea de los otros del mismo legajo.
+const rowsAtipica = [
+  mkRow('2026-07', '40', 'RETROACTIVO', 1100, '', 100000),
+  mkRow('2026-08', '40', 'RETROACTIVO', 1100, '', 900000),
+  mkRow('2026-08', '40', 'RETROACTIVO', 1100, 'SUMA', 1000000),
+  mkRow('2026-07', '41', 'PAREJO', 1100, '', 100000),
+  mkRow('2026-08', '41', 'PAREJO', 1100, '', 110000),
+  mkRow('2026-08', '41', 'PAREJO', 1100, 'SUMA', 210000),
+];
+const resultsAtipica = ctrl.run(rowsAtipica, [], { period: '2026-08' });
+assert('una doceava muy distinta de las otras del mismo legajo sale como "doceavaAtipica"',
+  resultsAtipica.checks.issues.some(i => i.type === 'doceavaAtipica' && i.legajo === '40'));
+assert('un legajo con doceavas parejas no sale como "doceavaAtipica"',
+  !resultsAtipica.checks.issues.some(i => i.type === 'doceavaAtipica' && i.legajo === '41'));
+assert('sale un solo aviso de doceava atípica por legajo',
+  resultsAtipica.checks.issues.filter(i => i.type === 'doceavaAtipica' && i.legajo === '40').length === 1);
 
-// Base 90.000 → techo jubilación = 11% = 9.900. El legajo 1 retiene 11.000 en
-// agosto, así que lo supera; obra social retiene 3.300 contra un techo de 2.700.
+// Un solo caso de SAC teórico por legajo: el más grave gana.
+assert('un legajo sin SAC teórico no acumula además el aviso de "parcial"',
+  !resultsSinDoceava.checks.issues.some(i => i.type === 'sacParcial' && i.legajo === '20'));
+
+// ── Extras replegados (D-033): no deben aparecer con el flag apagado ─────────
 const resultsConTope = ctrl.run(rows, [], {
   period: '2026-08',
   acumuladoresConfig: { topeBaseImponible: 90000 },
 });
-assert('con base 90.000 (techo jub. 9.900), el legajo 1 que retiene 11.000 sale como caso "tope"',
-  resultsConTope.checks.issues.some(i => i.type === 'tope' && i.legajo === '1'));
-assert('el detalle del caso explica de dónde sale el techo (alícuota sobre la base)',
-  resultsConTope.checks.issues.some(i => i.type === 'tope' && /11% de la base m.xima/.test(i.why)));
-assert('con base configurada, el chequeo de coherencia de jubilación pasa a "no ok"',
-  resultsConTope.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === false));
+assert('con los extras apagados, cargar una base imponible no genera casos de "tope"',
+  !resultsConTope.checks.issues.some(i => i.type === 'tope'));
+assert('con los extras apagados, no hay chequeos de coherencia de topes',
+  !resultsConTope.checks.coherenceChecks.some(c => /bajo el tope/.test(c.label)));
 
-// Una base alta deja a todos por debajo del techo: no hay casos ni check en rojo.
-const resultsBaseAlta = ctrl.run(rows, [], {
-  period: '2026-08',
-  acumuladoresConfig: { topeBaseImponible: 10000000 },
-});
-assert('con una base bien alta, ningún legajo supera el techo',
-  !resultsBaseAlta.checks.issues.some(i => i.type === 'tope')
-  && resultsBaseAlta.checks.coherenceChecks.filter(c => /bajo el tope/.test(c.label)).every(c => c.ok));
-
-// La alícuota es editable: con 1% el techo baja a 900 y el legajo 1 lo supera igual.
-const resultsAlicuota = ctrl.run(rows, [], {
-  period: '2026-08',
-  acumuladoresConfig: { topeBaseImponible: 90000, alicuotaJubilacion: 1 },
-});
-assert('la alícuota es configurable: con 1% el techo de jubilación baja a 900',
-  resultsAlicuota.checks.issues.some(i => i.type === 'tope' && /1% de la base m.xima/.test(i.why)));
-
-// ── Fuera de patrón de tributación ────────────────────────────────────────────
-// Legajo 10: total anual alto (2.000.000) pero SIN impuesto retenido, mientras
-// que el legajo 1 sí tributa con un total más bajo → queda "fuera de patrón".
-const rowsPatron = [
-  ...rows,
-  mkRow('2026-08', '10', 'ALTO SIN IMPUESTO', 1100, 'SUMA', 2000000),
-];
+const rowsPatron = [...rows, mkRow('2026-08', '10', 'ALTO SIN IMPUESTO', 1100, 'SUMA', 2000000)];
 const resultsPatron = ctrl.run(rowsPatron, [], { period: '2026-08' });
-assert('un legajo con total sobre el piso de tributación pero sin impuesto sale como "fueraDePatron"',
-  resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && i.legajo === '10'));
-assert('el legajo 1, que sí tributa, no sale como "fueraDePatron"',
-  !resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && i.legajo === '1'));
-assert('"fueraDePatron" se redacta en neutral (menciona deducciones posibles), nunca como error confirmado',
-  resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && /deducciones/.test(i.why)));
-
-// Sin nadie que tribute, no hay piso con qué comparar: el chequeo no aplica.
-const sinTributantes = ctrl.run(
-  rows.filter(r => r.nro !== 1150), [], { period: '2026-08' }
-);
-assert('si ningún legajo tiene impuesto retenido, "fueraDePatron" no aplica (no hay piso)',
-  !sinTributantes.checks.issues.some(i => i.type === 'fueraDePatron'));
+assert('con los extras apagados, no se reportan casos de "fueraDePatron"',
+  !resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron'));
 
 // ── on/off por chequeo ─────────────────────────────────────────────────────────
 const resultsSinChecks = ctrl.run(rows, [], {
   period: '2026-08',
-  acumuladoresConfig: { checksEnabled: { reconciliacion: false, cuil: false, sinMovimiento: false, saltoGrande: false, topes: false } },
+  acumuladoresConfig: { checksEnabled: { reconciliacion: false, cuil: false, sinMovimiento: false, sacTeorico: false } },
 });
 assert('con todos los chequeos apagados, no hay issues ni coherenceChecks',
   resultsSinChecks.checks.issues.length === 0 && resultsSinChecks.checks.coherenceChecks.length === 0);
-
-// ── Piso de Ganancias (referencia para el scatter, sin cálculo de impuesto) ──
-assert('sin pisoGananciasMensual configurado, results.pisoGananciasAnualAprox es null',
-  results.pisoGananciasAnualAprox === null);
-
-const resultsConPiso = ctrl.run(rows, [], {
-  period: '2026-08',
-  acumuladoresConfig: { pisoGananciasMensual: 3502511 },
-});
-assert('con pisoGananciasMensual = 3.502.511, el anual aproximado es x12 (42.030.132)',
-  Math.abs(resultsConPiso.pisoGananciasAnualAprox - 42030132) < 0.01);
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

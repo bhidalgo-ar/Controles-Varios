@@ -7,6 +7,15 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### refactor: Acumuladores Ganancias vuelve al foco del SAC teórico — 2026-08-07
+
+- Los chequeos pasan a ser sobre el SAC teórico, que es lo que este reporte existe para calcular: **no se pudo calcular** (no liquidó en ningún mes de la ventana), **parcial** (armado con menos meses de los subidos), **negativo** (las deducciones superaron al gravado) y **doceava atípica** (un mes que se sale de la línea de los otros del mismo legajo). El veredicto, un tile nuevo y el primer chequeo de coherencia hablan de esto.
+- `saltoGrande` (bruto mes contra mes) se reemplaza por `doceavaAtipica`, medida sobre la doceava — el insumo real del SAC teórico — y contra la mediana de los propios meses del legajo.
+- **Los chequeos de tope previsional y el gráfico de tributación de Ganancias se repliegan** detrás de `EXTRAS_GANANCIAS_HABILITADOS = false`: el código queda entero, un solo flag lo devuelve. Se iban del objetivo del reporte y arrastraban consideraciones que no puede sostener — la más clara, que la cuota del SAC tiene su propio tope (50% del mensual), con lo cual el chequeo de topes estaba mal justo para lo único que este reporte calcula.
+- Se mantienen reconciliación aritmética, CUIL faltante y "sin movimiento en el mes" — hablan de si el reporte salió bien, no de Ganancias.
+- `tests/acumuladoresGananciasControl.test.js` — 58 asserts.
+- Ver D-033 en `DECISIONS.md`.
+
 ### feat: Acumuladores Ganancias — piso de Ganancias como referencia en el scatter — 2026-08-07
 
 - Nuevo campo de config `pisoGananciasMensual` (bruto mensual, soltero sin cargas — el caso más simple, AFIP, dejar vacío por default) que agrega una segunda línea de referencia al scatter "¿Quién tributa?": el "Piso AFIP aprox." (`pisoGananciasMensual × 12`) al lado del "Piso real de tributación" (observado en los datos). Permite comparar de un vistazo si están cerca o muy alejados.
