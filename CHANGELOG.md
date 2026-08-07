@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Variación entre períodos — escalón, causas de ausencia y matriz de transición — 2026-08-07
+
+- `js/controls/variaciones.js` — rediseño de la pantalla de resultados sobre los hallazgos reales de los tabulados de OPmobility: el premio de progreso (`2517`) se paga en escalones fijos (0/50%/70%/100%), no en importe libre, y 14 de 23 empleados que bajaron de escalón no tienen ninguna licencia/ausencia/franco/permiso cargado que lo explique.
+  - `detectarEscala()` / `escalonDe()` — detección genérica (no hardcodeada) de si un concepto se paga en un puñado de valores fijos que se repiten, mirando los dos períodos juntos. Un legajo presente sin dato en el concepto es escalón 0%; un legajo ausente del Tabulado ese período (alta/baja) no tiene escalón.
+  - `CODIGOS_AUSENCIA` + `sumaAusencias()` — conceptos de licencia/ausencia/franco/permiso conocidos, para distinguir una baja de escalón que se explica sola de una que hay que preguntar.
+  - `resolverColumnaBruto()` — variación del Bruto total del Tabulado, mostrada como contexto (nunca como titular del veredicto: el titular es siempre sobre el hallazgo propio del reporte).
+  - Pantalla con dos solapas (`initTabs`): **"Qué cambió y por qué"** (veredicto, tiles, legajos para poder explicar, matriz de transición de escalones) como pantalla principal, y **"Detalle"** (la tabla completa, con columna de Escalón agregada) como solapa secundaria.
+- `tests/variacionesControl.test.js` — 12 asserts nuevos (69 en total): detección de escala real (0/50%/70%/100% simulado con 0/5.000/7.000/10.000), causa por ausencia, `null` como escalón 0 sólo si el legajo está presente ese período, variación de Bruto.
+- Verificado en el navegador con los dos tabulados reales: coincide al legajo con el análisis manual (23 bajaron de escalón, 14 sin causa, matriz 40/8/9/4 en la fila 100%→*), y el reporte de Variación Sueldos muestra correctamente "0 variación" en vez de mezclar el hallazgo con la caída del Bruto (que es de otros conceptos).
+- Explorado visualmente primero en tres direcciones de diseño antes de codear: `https://claude.ai/code/artifact/a69789a0-65e7-4b43-84af-b06a9c448491`. La tercera dirección ("ficha por legajo") queda pendiente — ver `ROADMAP.md`.
+- Ver D-028 en `DECISIONS.md`.
+
 ### feat: rediseño de la pantalla de resultados en los 9 controles restantes — 2026-08-07
 
 - `js/ui/resultBlocks.js` — módulo nuevo con los bloques que hoy repetía cada control a mano (`style.cssText` armado por control): veredicto (ícono + titular en prosa + cifras), tiles (label/valor/subtexto), casos para revisar (severidad + qué + por qué + valor con signo), chequeos de coherencia (chips que se ven discretos si dan bien), y `renderResumenDetalle()` que envuelve `initTabs` en las dos solapas fijas de todo control: **Resumen** (veredicto + tiles + casos) arriba de **Detalle** (la tabla completa, sin cambios en qué filas o columnas exporta). Sacado del patrón validado en NR/Acumuladores Ganancias y de dos exploraciones de diseño revisadas con Guillermo.

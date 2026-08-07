@@ -251,6 +251,80 @@ assert('el concepto ausente se reporta como faltante',
 assert('el concepto ausente se computa en 0 y da variación negativa',
   Math.abs(rFaltante.rows[0].valores['2519'].diff + 2000) < 0.01);
 
+// ── Detección de escalón, causas de ausencia y variación de Bruto ────────────
+// Reproduce el hallazgo real de OPmobility: el premio de progreso no es un
+// importe libre, es uno de un puñado de valores fijos (acá 0/5.000/7.000/10.000
+// en vez de los 0/50%/70%/100% reales) — y una baja de escalón se puede
+// explicar si el legajo tiene una licencia cargada ese mismo período.
+
+const C1530 = '1530 - Lic. Enfermedad';
+
+const prevEscala = [
+  fila('1', 'PEREZ JUAN',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('2', 'GOMEZ ANA',    { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('3', 'LOPEZ LUIS',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('4', 'DIAZ MARIA',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),
+  fila('5', 'RUIZ PEDRO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),
+  fila('6', 'TORRES SARA',  { [C2517]: '7.000,00',  Bruto: '40.000,00' }),
+];
+const actEscala = [
+  fila('1', 'PEREZ JUAN',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),                      // sin cambio (100%)
+  fila('2', 'GOMEZ ANA',    { [C2517]: '7.000,00',  Bruto: '45.000,00' }),                       // bajó 100→70, sin causa
+  fila('3', 'LOPEZ LUIS',   { [C2517]: '0,00', [C1530]: '5.000,00', Bruto: '35.000,00' }),       // bajó 100→0, con licencia
+  fila('4', 'DIAZ MARIA',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),                       // sin cambio (50%)
+  fila('5', 'RUIZ PEDRO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),                       // sin cambio (0%)
+  fila('6', 'TORRES SARA',  { [C2517]: '10.000,00', Bruto: '43.000,00' }),                       // subió 70→100
+];
+const rEscala = runVariacionesConceptos([], actEscala, conPrev(prevEscala));
+const g2517 = rEscala.grupos.find(g => g.key === '2517');
+assert('detecta la escala 0/5.000/7.000/10.000 en el concepto 2517',
+  JSON.stringify(g2517.escala) === JSON.stringify([0, 5000, 7000, 10000]));
+
+const leg2 = rEscala.rows.find(r => r.legajo === '2').valores['2517'];
+assert('leg. 2: escalón 100% → 70%', leg2.escalonAnterior === 100 && leg2.escalonActual === 70);
+assert('leg. 2 no tiene licencia cargada en el período actual',
+  rEscala.rows.find(r => r.legajo === '2').ausenciaActual === 0);
+
+const leg3 = rEscala.rows.find(r => r.legajo === '3').valores['2517'];
+assert('leg. 3: escalón 100% → 0%', leg3.escalonAnterior === 100 && leg3.escalonActual === 0);
+assert('leg. 3 tiene licencia cargada en el período actual: la baja se explica sola',
+  rEscala.rows.find(r => r.legajo === '3').ausenciaActual === 5000);
+
+const leg6 = rEscala.rows.find(r => r.legajo === '6').valores['2517'];
+assert('leg. 6: escalón 70% → 100% (subió)', leg6.escalonAnterior === 70 && leg6.escalonActual === 100);
+
+const g2519sinescala = rEscala.grupos.find(g => g.key === '2519');
+assert('2519 no tiene suficientes datos para escala: queda en null', g2519sinescala.escala === null);
+
+assert('la columna de Sueldos (suma de dos conceptos) nunca detecta escala',
+  runVariacionesSueldos([], actEscala, conPrev(prevEscala)).grupos[0].escala === undefined
+  || runVariacionesSueldos([], actEscala, conPrev(prevEscala)).grupos[0].escala === null);
+
+// El Tabulado real no trae "0,00" explícito para un concepto no liquidado: la
+// celda viene vacía y el parser la deja en null. Un legajo presente ese período
+// sin ese concepto liquidó 0 del escalón — pero un alta/baja (no presente) no.
+const prevNull = [
+  ...prevEscala,
+  fila('7', 'AGUIRRE OMAR', {}),   // sin 2517 en ninguno de los dos: escalón 0 → 0, no es caso
+];
+const actNull = [
+  ...actEscala,
+  fila('7', 'AGUIRRE OMAR', {}),
+  fila('8', 'PAZ CARLOS', { [C2517]: '10.000,00', Bruto: '50.000,00' }),   // alta del mes
+];
+const rNull = runVariacionesConceptos([], actNull, conPrev(prevNull));
+const leg7 = rNull.rows.find(r => r.legajo === '7').valores['2517'];
+assert('un legajo presente sin el concepto liquidado es escalón 0% en los dos períodos',
+  leg7.escalonAnterior === 0 && leg7.escalonActual === 0);
+const leg8 = rNull.rows.find(r => r.legajo === '8').valores['2517'];
+assert('el alta del mes no tiene escalón anterior (no estaba en el Tabulado, no es "0%") — '
+  + 'así "casosDeEscalon" nunca lo toma como una baja de escalón',
+  leg8.escalonAnterior === null && leg8.escalonActual === 100);
+
+assert('el Bruto total se suma de la columna "Bruto" del Tabulado',
+  Math.abs(rEscala.bruto.anterior - 240000) < 0.01 && Math.abs(rEscala.bruto.actual - 223000) < 0.01);
+assert('la variación de Bruto es negativa (cayó)', rEscala.bruto.diff < 0);
+
 // ── Ramas de error ───────────────────────────────────────────────────────────
 
 assert('run() sin Tabulado actual devuelve error',
