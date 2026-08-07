@@ -223,25 +223,28 @@ Estos archivos se actualizan a medida que el proyecto evoluciona. Claude Code pu
 
 ## 11. Pendientes anotados por Willy (sesión 2026-07-14)
 
-Ideas validadas por Willy, todavía sin implementar salvo donde se indica:
+Ideas validadas por Willy. §11.1 y §11.2 se generalizaron a los 9 controles restantes el 2026-08-07
+(ver `js/ui/resultBlocks.js` y la entrada del `CHANGELOG.md` de esa fecha) — quedan documentadas como
+referencia del patrón, no como pendiente.
 
-1. **Ocultar filas/columnas sin datos reales — generalizar a todos los controles.**
-   El drilldown de Rendimiento vs Asiento (`buildDrillRollup` en `js/controls/rendVsAsiento.js`) arma sus
-   tablas a partir del detalle real de asientos: sólo aparecen conceptos y empleados con movimiento, nunca
-   filas vacías de un catálogo fijo. Aplicar ese mismo criterio ("mostrar solo lo que tiene valor real") al
-   resto de los controles, que hoy listan filas fijas aunque estén todas en cero. Primer paso ya hecho en
-   Control NR (`hasAnyNrValue` en `js/controls/nr.js` → `renderNrResults`): filtra legajos sin ningún valor
-   NR antes de armar la tabla.
+1. **Ocultar filas/columnas sin datos reales — generalizado.**
+   Patrón: filtrar por `hasAnyValue`-style antes de armar la tabla (`hasAnyNrValue` en `nr.js`, y su
+   equivalente en `brutos.js`/`gsPers.js`), ocultar columnas/grupos sin ninguna diferencia
+   (`rendVsTabu.js`), y un toggle "sólo con diferencia / todos" para distribuciones que coinciden 1:1
+   (`catXEmpleados.js`, las tablas por Puesto/CC). Rendimiento vs Asiento ya lo hacía desde antes
+   (`buildDrillRollup` en `js/controls/rendVsAsiento.js`).
 
-2. **Hero de "empleados bien vs con diferencia" en cada control.**
-   Piloteado en Control NR (`renderNrResults`, `js/controls/nr.js`): tarjeta simple arriba de la tabla con
-   el conteo de empleados sin diferencias vs con diferencias. Falta reproducir el patrón (adaptado a la
-   forma de cada control) en:
-   - `gsPers.js` (`renderGsPersResults`) — hoy no tiene ningún resumen arriba de la tabla.
-   - `rendVsTabu.js` (`renderRendVsTabuResults`) — ídem.
-   - `rendVsAsiento.js` (`renderRendVsAsientoResults`) — es una grilla CC × categoría, requiere más adaptación.
-   - Brutos, EE x CATEG y Rendimiento x EE **ya tienen** algo equivalente (`chipEl` en `brutos.js`/`rendXEe.js`,
-     `buildDiffChip` en `catXEmpleados.js`) — usarlos de referencia de estilo.
+2. **Veredicto + tiles arriba de la tabla — generalizado.**
+   `js/ui/resultBlocks.js` saca el patrón a un módulo: `renderVerdict` (ícono + titular en prosa),
+   `renderTiles` (label/valor/subtexto), `renderIssues` ("casos para revisar" con severidad y por qué) y
+   `renderChecks` (chequeos de coherencia). `renderResumenDetalle()` envuelve todo en dos solapas fijas —
+   **Resumen** (estos bloques) y **Detalle** (la tabla completa, buscador + paginación + export, sin
+   cambios en qué exporta). Aplicado a los 9 controles que faltaban: `nr.js`, `brutos.js`, `gsPers.js`,
+   `catXEmpleados.js`, `rendVsTabu.js`, `rendXEe.js`, `rendVsAsiento.js`, `agrupadores.js`,
+   `acreditaciones.js`. Variación entre períodos y Acumuladores Ganancias quedan para otra tanda (Willy
+   los está encarando por otro lado).
+   Para un control nuevo: usar `resultBlocks.js` desde el principio en vez de armar el hero a mano — ver
+   `nr.js` como referencia.
 
 3. **Modo "Controlar" de Acreditaciones (Axton).**
    El modo "Generar Reporte" ya está (`acreditaciones_reporte` en el registry, ver
@@ -251,4 +254,4 @@ Ideas validadas por Willy, todavía sin implementar salvo donde se indica:
 
 ---
 
-**Última actualización:** 5 de agosto de 2026 — guardrail de §6.5 (los entregables que van a Finanzas no llevan información de HR) y pendiente §11.3 (modo "Controlar" de Acreditaciones).
+**Última actualización:** 7 de agosto de 2026 — §11.1/§11.2 generalizados a los 9 controles restantes vía `js/ui/resultBlocks.js` (pendiente §11.3, modo "Controlar" de Acreditaciones).

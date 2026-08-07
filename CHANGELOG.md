@@ -7,6 +7,16 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: rediseño de la pantalla de resultados en los 9 controles restantes — 2026-08-07
+
+- `js/ui/resultBlocks.js` — módulo nuevo con los bloques que hoy repetía cada control a mano (`style.cssText` armado por control): veredicto (ícono + titular en prosa + cifras), tiles (label/valor/subtexto), casos para revisar (severidad + qué + por qué + valor con signo), chequeos de coherencia (chips que se ven discretos si dan bien), y `renderResumenDetalle()` que envuelve `initTabs` en las dos solapas fijas de todo control: **Resumen** (veredicto + tiles + casos) arriba de **Detalle** (la tabla completa, sin cambios en qué filas o columnas exporta). Sacado del patrón validado en NR/Acumuladores Ganancias y de dos exploraciones de diseño revisadas con Guillermo.
+- `js/ui/resultBlocks.js` también trae la "planilla con superpoderes": `enhanceGrid()` (sticky de header/footer/primeras 1-2 columnas vía clases CSS posicionales — sobrevive a que un control reconstruya el `<tbody>` al ordenar, como `rendVsAsiento.js`) y `diffCellHtml()`/`mvArrow()`/`fmtSigned()` (la diferencia nunca se codifica sólo por color: siempre lleva flecha ▲▼ y signo, con una barra de magnitud opcional en la celda).
+- Aplicado a los 9 controles que faltaban (Variación entre períodos y Acumuladores Ganancias quedan para otra tanda): `nr.js`, `brutos.js`, `gsPers.js` (Controlar + Generar Reporte los tres), `catXEmpleados.js`, `rendVsTabu.js`, `rendXEe.js`, `rendVsAsiento.js`, `agrupadores.js`, `acreditaciones.js`.
+- De paso, dos controles que nunca habían tenido resumen arriba de la tabla (pendiente §11.2 de `CLAUDE.md`) lo tienen ahora: **GS Pers** y **Brutos** — los dos además pasan a filtrar por defecto los legajos sin valor real (§11.1) y sacan la columna "Legajo" duplicada que traía la tabla.
+- **Rendimiento vs Tabulado** oculta las columnas sin ninguna diferencia (mismo criterio que ya usaba Control NR); **EE x CATEG** hace lo mismo con las filas de las distribuciones por Puesto/CC que coinciden 1:1 (con un toggle para volver a verlas todas).
+- CSS nuevo en `css/components.css` bajo el prefijo `rb-` (result blocks) — mismos tokens de `tokens.css` que ya usa el veredicto agregado de toda la corrida (`hero-*` en `controlsResults.js`), pero a nivel de un control individual.
+- Verificado con `npm run test:unit` (sin cambios de contrato en `run()`/`summarize()`, sólo en `renderResults()`) y con un harness de DOM real (jsdom, no comiteado) que ejercita las 12 rutas de render (Resumen + Detalle) de los 9 controles con datos sintéticos — sin excepciones ni fugas de `undefined`/`NaN`/`[object Object]` en el HTML. La verificación visual en navegador contra archivos reales queda pendiente para la próxima sesión con Willy: este entorno no tiene salida de red hacia los CDN de Dexie/SheetJS que la app necesita para bootstrapear.
+
 ### feat: Control Acumuladores Ganancias (Axton) — 2026-08-06
 
 - `js/parsers/acumuladoresParser.js` — parser del export `repacumuladores` de Axton (formato fijo: fila 1 encabezados, datos desde la 2). Resuelve columnas por nombre tolerando acentos y espacios duros; matchea acumuladores por `Nro` (columna numérica), no por el texto (el origen mezcla acentuación entre cuentas).
