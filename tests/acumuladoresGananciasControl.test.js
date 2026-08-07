@@ -249,18 +249,63 @@ const resultsSinSalto = ctrl.run(rows.filter(r => r._period === '2026-08'), [], 
 assert('con un solo archivo subido, "saltoGrande" no aplica (no hay mes anterior con qué comparar)',
   !resultsSinSalto.checks.issues.some(i => i.type === 'saltoGrande'));
 
-// ── Coherencia de topes (apagado por default, nunca inventa el valor) ─────────
-assert('sin tope configurado, el chequeo de topes se muestra "apagado" (ok) con detail explicativo',
-  results.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === true && /sin tope configurado/.test(c.detail)));
+// ── Coherencia de topes ───────────────────────────────────────────────────────
+// El tope previsional es UNO SOLO y aplica sobre la BASE imponible: jubilación
+// y obra social comparten la misma base máxima y derivan su techo por alícuota.
+assert('sin base imponible configurada, el chequeo de topes se muestra "apagado" (ok) con detail explicativo',
+  results.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === true && /sin base imponible/.test(c.detail)));
 
+// Base 90.000 → techo jubilación = 11% = 9.900. El legajo 1 retiene 11.000 en
+// agosto, así que lo supera; obra social retiene 3.300 contra un techo de 2.700.
 const resultsConTope = ctrl.run(rows, [], {
   period: '2026-08',
-  acumuladoresConfig: { topeJubilacion: 10000 }, // legajo 1 retiene 11.000 en agosto > 10.000
+  acumuladoresConfig: { topeBaseImponible: 90000 },
 });
-assert('con tope de jubilación configurado en 10.000, el legajo 1 (retiene 11.000) sale como caso "tope"',
+assert('con base 90.000 (techo jub. 9.900), el legajo 1 que retiene 11.000 sale como caso "tope"',
   resultsConTope.checks.issues.some(i => i.type === 'tope' && i.legajo === '1'));
-assert('con tope configurado, el chequeo de coherencia de jubilación pasa a "no ok"',
+assert('el detalle del caso explica de dónde sale el techo (alícuota sobre la base)',
+  resultsConTope.checks.issues.some(i => i.type === 'tope' && /11% de la base m.xima/.test(i.why)));
+assert('con base configurada, el chequeo de coherencia de jubilación pasa a "no ok"',
   resultsConTope.checks.coherenceChecks.some(c => /jubilaci.n/i.test(c.label) && c.ok === false));
+
+// Una base alta deja a todos por debajo del techo: no hay casos ni check en rojo.
+const resultsBaseAlta = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { topeBaseImponible: 10000000 },
+});
+assert('con una base bien alta, ningún legajo supera el techo',
+  !resultsBaseAlta.checks.issues.some(i => i.type === 'tope')
+  && resultsBaseAlta.checks.coherenceChecks.filter(c => /bajo el tope/.test(c.label)).every(c => c.ok));
+
+// La alícuota es editable: con 1% el techo baja a 900 y el legajo 1 lo supera igual.
+const resultsAlicuota = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { topeBaseImponible: 90000, alicuotaJubilacion: 1 },
+});
+assert('la alícuota es configurable: con 1% el techo de jubilación baja a 900',
+  resultsAlicuota.checks.issues.some(i => i.type === 'tope' && /1% de la base m.xima/.test(i.why)));
+
+// ── Fuera de patrón de tributación ────────────────────────────────────────────
+// Legajo 10: total anual alto (2.000.000) pero SIN impuesto retenido, mientras
+// que el legajo 1 sí tributa con un total más bajo → queda "fuera de patrón".
+const rowsPatron = [
+  ...rows,
+  mkRow('2026-08', '10', 'ALTO SIN IMPUESTO', 1100, 'SUMA', 2000000),
+];
+const resultsPatron = ctrl.run(rowsPatron, [], { period: '2026-08' });
+assert('un legajo con total sobre el piso de tributación pero sin impuesto sale como "fueraDePatron"',
+  resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && i.legajo === '10'));
+assert('el legajo 1, que sí tributa, no sale como "fueraDePatron"',
+  !resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && i.legajo === '1'));
+assert('"fueraDePatron" se redacta en neutral (menciona deducciones posibles), nunca como error confirmado',
+  resultsPatron.checks.issues.some(i => i.type === 'fueraDePatron' && /deducciones/.test(i.why)));
+
+// Sin nadie que tribute, no hay piso con qué comparar: el chequeo no aplica.
+const sinTributantes = ctrl.run(
+  rows.filter(r => r.nro !== 1150), [], { period: '2026-08' }
+);
+assert('si ningún legajo tiene impuesto retenido, "fueraDePatron" no aplica (no hay piso)',
+  !sinTributantes.checks.issues.some(i => i.type === 'fueraDePatron'));
 
 // ── on/off por chequeo ─────────────────────────────────────────────────────────
 const resultsSinChecks = ctrl.run(rows, [], {
@@ -269,6 +314,17 @@ const resultsSinChecks = ctrl.run(rows, [], {
 });
 assert('con todos los chequeos apagados, no hay issues ni coherenceChecks',
   resultsSinChecks.checks.issues.length === 0 && resultsSinChecks.checks.coherenceChecks.length === 0);
+
+// ── Piso de Ganancias (referencia para el scatter, sin cálculo de impuesto) ──
+assert('sin pisoGananciasMensual configurado, results.pisoGananciasAnualAprox es null',
+  results.pisoGananciasAnualAprox === null);
+
+const resultsConPiso = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { pisoGananciasMensual: 3502511 },
+});
+assert('con pisoGananciasMensual = 3.502.511, el anual aproximado es x12 (42.030.132)',
+  Math.abs(resultsConPiso.pisoGananciasAnualAprox - 42030132) < 0.01);
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

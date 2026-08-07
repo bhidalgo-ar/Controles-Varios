@@ -41,17 +41,29 @@ export const DEFAULT_ACUMULADORES_CONFIG = {
   codigos: { ...ACUMULADORES },  // override por cliente, si otra cuenta Axton numera distinto
   // Umbrales de los chequeos de pantalla (Fase 1) — nunca se usan para tocar el
   // .xlsx exportado, sólo para "casos para revisar" en la pantalla de resultados.
-  // Los topes son datos regulatorios (AFIP) que esta app NO puede inventar:
-  // quedan en null (chequeo apagado, con aviso) hasta que Guillermo cargue el
-  // valor vigente vía el editor con PIN.
-  topeJubilacion:            null,  // monto tope mensual de la retención de jubilación (1120)
-  topeObraSocial:            null,  // monto tope mensual de la retención de obra social (1122)
+  // El tope previsional es UNO SOLO y aplica sobre la BASE imponible, no sobre
+  // el monto retenido: jubilación y obra social comparten la misma base máxima
+  // y se diferencian por su alícuota. La retención máxima de cada uno sale de
+  // `topeBaseImponible × alícuota`. El tope es un dato regulatorio (AFIP,
+  // actualización RIPTE) que esta app NO puede inventar: queda en null (chequeo
+  // apagado, con aviso) hasta que se cargue el valor vigente en el editor.
+  topeBaseImponible:         null,  // base imponible máxima mensual (misma para 1120 y 1122)
+  alicuotaJubilacion:        11,    // % sobre la base (Ley 24.241) — editable
+  alicuotaObraSocial:        3,     // % sobre la base (Ley 23.660) — editable
+  // Piso de Ganancias 4ta categoría: a diferencia del previsional, NO es un
+  // número único para todos — depende de cargas de familia (soltero/casado/
+  // hijos), que este control no tiene. Se carga sólo el caso más simple
+  // (soltero, sin cargas) como referencia aproximada: el bruto mensual x 12 no
+  // debería tener a nadie tributando por debajo. Se actualiza por AFIP cada
+  // semestre (enero y julio) — hay que revisarlo con esa frecuencia.
+  pisoGananciasMensual:      null,  // bruto mensual soltero sin cargas (AFIP, deducciones personales)
   saltoGrandeMultiplicador:  2,     // "salto grande" = el mes actual es > Nx o < 1/Nx el mes anterior
   checksEnabled: {
     reconciliacion: true,
     cuil:           true,
     sinMovimiento:  true,
     saltoGrande:    true,
+    fueraDePatron:  true,
     topes:          true,
   },
 };
@@ -224,6 +236,13 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
   const prevData   = prevPeriod ? perFile.get(prevPeriod) : null;
   const checks = computeChecks({ mesRows, datosRows, prevData, cfg, CODES });
 
+  // Referencia aproximada para el scatter: bruto mensual (soltero sin cargas) x
+  // 12. Es un caso base, no un cálculo real de Ganancias — se documenta en
+  // renderScatter y nunca se usa para nada más que dibujar esta línea.
+  const pisoGananciasAnualAprox = (cfg.pisoGananciasMensual === null || cfg.pisoGananciasMensual === undefined)
+    ? null
+    : round2(cfg.pisoGananciasMensual * 12);
+
   return {
     mes:       { rows: mesRows },
     datos:     { rows: datosRows },
@@ -233,6 +252,7 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     regimen:   cfg.regimen,
     alerts,
     checks,
+    pisoGananciasAnualAprox,
   };
 }
 
@@ -315,24 +335,48 @@ function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
     }
   }
 
+  // ── Fuera de patrón de tributación ─────────────────────────────────────────
+  // No se le retuvo nada en el año, pero su total anual está por encima del
+  // total más bajo al que SÍ se le retuvo. Es lo único afirmable sin la escala
+  // legal — y se dice en neutral: puede haber deducciones que lo expliquen.
+  if (enabled.fueraDePatron) {
+    const conImpuesto = datosRows.filter(r => isVal(r.total) && r.impuesto !== null && r.impuesto > 0.01);
+    if (conImpuesto.length > 0) {
+      const minTrib = Math.min(...conImpuesto.map(r => r.total));
+      for (const row of datosRows) {
+        if (!isVal(row.total) || row.total < minTrib) continue;
+        if (row.impuesto !== null && row.impuesto > 0.01) continue;
+        issues.push({
+          type: 'fueraDePatron', sev: 'hi', legajo: row.legajo, nombre: row.nombre,
+          what: 'Total anual sobre el piso de tributación, pero sin impuesto retenido.',
+          why:  `Total anual: ${fmtNum(row.total)} · El más bajo con retención es ${fmtNum(minTrib)}. `
+            + 'Puede tener deducciones que lo justifiquen (SIRADIG, cargas de familia) — la app no las ve.',
+        });
+      }
+    }
+  }
+
   // ── Coherencia de topes (sólo si están configurados) ───────────────────────
   const coherenceChecks = [];
   if (enabled.topes) {
+    // Un solo tope de base imponible; cada concepto deriva su techo por alícuota.
+    const base = cfg.topeBaseImponible;
+    const techo = alic => (base === null || base === undefined) ? null : round2(base * (alic / 100));
     const topeChecks = [
-      { key: 'retJubilacion', tope: cfg.topeJubilacion, label: 'Retención de jubilación bajo el tope' },
-      { key: 'retObraSocial', tope: cfg.topeObraSocial, label: 'Retención de obra social bajo el tope' },
+      { key: 'retJubilacion', tope: techo(cfg.alicuotaJubilacion ?? 11), alic: cfg.alicuotaJubilacion ?? 11, label: 'Retención de jubilación bajo el tope' },
+      { key: 'retObraSocial', tope: techo(cfg.alicuotaObraSocial ?? 3),  alic: cfg.alicuotaObraSocial ?? 3,  label: 'Retención de obra social bajo el tope' },
     ];
     for (const tc of topeChecks) {
       if (tc.tope === null || tc.tope === undefined) {
-        coherenceChecks.push({ label: tc.label, detail: 'sin tope configurado (editor con PIN)', ok: true });
+        coherenceChecks.push({ label: tc.label, detail: 'sin base imponible máxima configurada', ok: true });
         continue;
       }
       const excedidos = mesRows.filter(r => r[tc.key] !== null && r[tc.key] > tc.tope);
       for (const row of excedidos) {
         issues.push({
           type: 'tope', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
-          what: `${tc.label.replace(' bajo el tope', '')} supera el tope configurado.`,
-          why:  `Retenido: ${fmtNum(row[tc.key])} · Tope: ${fmtNum(tc.tope)}.`,
+          what: `${tc.label.replace(' bajo el tope', '')} supera el techo del tope.`,
+          why:  `Retenido: ${fmtNum(row[tc.key])} · Techo: ${fmtNum(tc.tope)} (${tc.alic}% de la base máxima ${fmtNum(base)}).`,
         });
       }
       coherenceChecks.push({ label: tc.label, detail: `${mesRows.length - excedidos.length}/${mesRows.length}`, ok: excedidos.length === 0 });
@@ -521,6 +565,7 @@ export function renderAcumuladoresResults(results, container) {
     tabs: [
       { id: 'resumen',  label: 'Resumen',  render: (panel) => renderResumenTab(panel, {
           datos, mesRows: mes.rows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks,
+          pisoGananciasAnualAprox: results.pisoGananciasAnualAprox,
         }) },
       { id: 'fichas',   label: 'Fichas',   render: (panel) => renderFichasTab(panel, { mes, datos, issues }) },
       { id: 'planilla', label: 'Planilla', render: (panel) => renderPlanillaTab(panel, {
@@ -547,7 +592,7 @@ export function renderAcumuladoresResults(results, container) {
 
 // ── Dirección A — Resumen (tiles + casos para revisar + chequeos + scatter) ──
 
-function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks }) {
+function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks, pisoGananciasAnualAprox }) {
   renderTiles(panel, [
     { label: 'Legajos', value: datos.rows.length },
     { label: 'Sin movimiento en el mes', value: sinMovCount, tone: sinMovCount > 0 ? 'warn' : undefined },
@@ -572,56 +617,117 @@ function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal,
 
   renderChecks(panel, { heading: 'Chequeos de coherencia', items: coherenceChecks });
 
-  renderScatter(panel, datos.rows);
+  renderScatter(panel, datos.rows, pisoGananciasAnualAprox);
 }
 
 /**
  * Dispersión total anual gravado (DATOS.total) vs. impuesto retenido
- * (DATOS.impuesto). La "línea de piso" es la mediana de impuesto/total entre
- * los legajos con ambos valores > 0 — calculada de los propios datos, nunca de
- * una escala legal externa. Los puntos muy por debajo de esa mediana quedan
- * marcados como "para revisar", nunca como "error" (ver spec §3, caso 1561).
+ * (DATOS.impuesto = acumulador 1150). Ojo: la app **no calcula** el impuesto —
+ * lo lee tal cual del crudo de Axton. Acá sólo lo grafica.
+ *
+ * El "piso real de tributación" es el total anual MÁS BAJO entre los legajos a
+ * los que Axton efectivamente les retuvo algo. Es un valor observado en estos
+ * datos, NO el mínimo no imponible legal (que la app no conoce). Sirve para lo
+ * único que puede afirmarse sin la escala: a la derecha de esa línea y sobre el
+ * eje (impuesto 0) no debería haber casi nadie — quien caiga ahí queda como
+ * "fuera de patrón", en texto neutral, nunca como error (spec §3, caso 1561).
+ *
+ * `pisoGananciasAnualAprox`, si está cargado, agrega una SEGUNDA línea: el piso
+ * legal aproximado de Ganancias (bruto mensual soltero sin cargas × 12, dato de
+ * AFIP). Es el caso más simple posible — no vale para nadie con cónyuge o
+ * hijos — y sólo sirve para comparar de un vistazo contra el piso observado:
+ * si están muy lejos uno del otro, algo amerita revisión (código de acumulador
+ * mal mapeado, deducciones atípicas, etc.), nunca una certeza por sí sola.
  */
-function renderScatter(panel, datosRows) {
+function renderScatter(panel, datosRows, pisoGananciasAnualAprox = null) {
+  // `impuesto === null` = el crudo no trae fila 1150 para ese legajo, o sea que
+  // no se le retuvo nada. Para el gráfico eso es un 0 real (mismo criterio que
+  // el chequeo `fueraDePatron`), no un "sin dato" que haya que excluir.
   const points = datosRows
-    .filter(r => isVal(r.total) && r.total > 0 && r.impuesto !== null)
-    .map(r => ({ legajo: r.legajo, nombre: r.nombre, x: r.total, y: Math.max(0, r.impuesto) }));
+    .filter(r => isVal(r.total) && r.total > 0)
+    .map(r => ({ legajo: r.legajo, nombre: r.nombre, x: r.total, y: Math.max(0, r.impuesto ?? 0) }));
 
   if (points.length < 3) return; // muy pocos puntos para que un gráfico aporte algo
 
-  const ratios = points.filter(p => p.y > 0.01).map(p => p.y / p.x).sort((a, b) => a - b);
-  if (ratios.length === 0) return;
-  const piso = ratios[Math.floor(ratios.length / 2)]; // mediana
+  const tributan = points.filter(p => p.y > 0.01);
+  if (tributan.length === 0) return;
+  const minTrib = Math.min(...tributan.map(p => p.x)); // piso real observado
 
-  const maxX = Math.max(...points.map(p => p.x));
-  const maxY = Math.max(...points.map(p => p.y), piso * maxX);
-  const W = 640, H = 260, PAD = 40;
-  const sx = v => PAD + (v / maxX) * (W - 2 * PAD);
-  const sy = v => H - PAD - (v / maxY) * (H - 2 * PAD);
+  // 't' tributa · 'f' fuera de patrón (no tributa pero está sobre el piso) · 'n' no tributa
+  const clase = p => p.y > 0.01 ? 't' : (p.x >= minTrib ? 'f' : 'n');
+  const grupos = { t: 0, n: 0, f: 0 };
+  for (const p of points) grupos[clase(p)]++;
 
-  const paraRevisar = points.filter(p => p.y < piso * p.x * 0.5); // menos de la mitad de lo esperado por la mediana
+  const maxX = Math.max(...points.map(p => p.x), pisoGananciasAnualAprox ?? 0);
+  const maxY = Math.max(...points.map(p => p.y));
+  // MT deja aire arriba para que el rótulo del eje Y no se pise con el tick más alto.
+  const W = 720, H = 310, ML = 62, MR = 14, MT = 28, MB = 40;
+  const pw = W - ML - MR, ph = H - MT - MB;
+  const sx = v => ML + (v / maxX) * pw;
+  const sy = v => MT + ph - (v / maxY) * ph;
+
+  const ticks = (max, n = 4) => Array.from({ length: n + 1 }, (_, i) => (max / n) * i);
+  const fmtM = v => v === 0 ? '0' : `${(v / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`;
+
+  const COLORS = { t: 'var(--color-primary)', n: 'var(--color-text-muted)', f: 'var(--color-warning)' };
 
   const wrap = document.createElement('div');
   wrap.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);overflow-x:auto;';
   wrap.innerHTML = `
-    <div class="rb-section-h">Total anual gravado vs. impuesto retenido</div>
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;" role="img"
+    <div class="rb-section-h">¿Quién tributa? — total anual gravado vs. impuesto retenido</div>
+    <p class="text-muted" style="font-size:var(--text-sm);margin:0 0 var(--sp-2);">
+      Cada punto es un legajo. <strong>${grupos.t} de ${points.length}</strong>
+      (${Math.round(grupos.t / points.length * 100)}%) tienen impuesto retenido. La línea marca el total anual
+      más bajo que sí tributa: <strong>${fmtNum(minTrib)}</strong>. A su derecha, sobre el eje, no debería
+      haber casi nadie${grupos.f > 0 ? ` — y hay ${grupos.f}` : ''}.
+    </p>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;overflow:visible;" role="img"
       aria-label="Dispersión de total anual gravado contra impuesto retenido por legajo">
-      <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="var(--color-border)" />
-      <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H - PAD}" stroke="var(--color-border)" />
-      <line x1="${sx(0)}" y1="${sy(0)}" x2="${sx(maxX)}" y2="${sy(piso * maxX)}"
-        stroke="var(--color-text-muted)" stroke-dasharray="4 3" />
+      ${ticks(maxY).map(v => `
+        <line x1="${ML}" y1="${sy(v).toFixed(1)}" x2="${W - MR}" y2="${sy(v).toFixed(1)}" stroke="var(--color-border)" stroke-width="1"/>
+        <text x="${ML - 9}" y="${(sy(v) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--color-text-muted)">${fmtM(v)}</text>
+      `).join('')}
+      ${ticks(maxX).map(v => `
+        <text x="${sx(v).toFixed(1)}" y="${H - MB + 18}" text-anchor="middle" font-size="10" fill="var(--color-text-muted)">${fmtM(v)}</text>
+      `).join('')}
+      <line x1="${sx(minTrib).toFixed(1)}" y1="${MT}" x2="${sx(minTrib).toFixed(1)}" y2="${MT + ph}"
+        stroke="var(--color-warning)" stroke-width="2"/>
+      <text x="${(sx(minTrib) + 7).toFixed(1)}" y="${MT + 12}" font-size="10.5" fill="var(--color-warning)" font-weight="700">
+        Piso real de tributación · ${fmtM(minTrib)}
+      </text>
+      ${pisoGananciasAnualAprox !== null ? `
+        <line x1="${sx(pisoGananciasAnualAprox).toFixed(1)}" y1="${MT}" x2="${sx(pisoGananciasAnualAprox).toFixed(1)}" y2="${MT + ph}"
+          stroke="var(--color-text-muted)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="${(sx(pisoGananciasAnualAprox) + 7).toFixed(1)}" y="${MT + ph - 6}" font-size="10.5" fill="var(--color-text-muted)" font-weight="700">
+          Piso AFIP aprox. (soltero sin cargas) · ${fmtM(pisoGananciasAnualAprox)}
+        </text>
+      ` : ''}
       ${points.map(p => {
-        const revisar = paraRevisar.includes(p);
-        return `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="${revisar ? 4.5 : 3}"
-          fill="${revisar ? 'var(--color-warning)' : 'var(--color-primary)'}" opacity="${revisar ? '0.9' : '0.55'}">
-          <title>Legajo ${esc(p.legajo)} — ${esc(p.nombre)}: total ${fmtNum(p.x)}, impuesto ${fmtNum(p.y)}</title>
+        const c = clase(p);
+        return `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="${c === 'f' ? 6 : 4}"
+          fill="${COLORS[c]}"${c === 'n' ? ' opacity="0.45"' : ''}${c === 'f' ? ' stroke="var(--color-surface)" stroke-width="2"' : ''}>
+          <title>Legajo ${esc(p.legajo)} — ${esc(p.nombre)}: total anual ${fmtNum(p.x)} · impuesto ${fmtNum(p.y)}</title>
         </circle>`;
       }).join('')}
+      <text x="${ML}" y="${H - 4}" font-size="10" fill="var(--color-text-muted)">Total anual gravado (bruto + no rem. + retribuciones + SAC)</text>
+      <text x="6" y="12" font-size="10" fill="var(--color-text-muted)">Impuesto</text>
     </svg>
+    <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;font-size:var(--text-sm);margin-top:var(--sp-2);">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.t};"></span> Tributa (${grupos.t})</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.n};opacity:.45;"></span> No tributa (${grupos.n})</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.f};"></span> Fuera de patrón (${grupos.f})</span>
+    </div>
     <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
-      Línea punteada: mediana de impuesto/total de esta ventana (${(piso * 100).toFixed(1)}%), no una escala legal.
-      ${paraRevisar.length > 0 ? `${paraRevisar.length} legajo(s) por debajo de la mitad de esa mediana — para revisar, no necesariamente un error (puede deberse a deducciones que este control no ve).` : ''}
+      El piso naranja sale de estos datos (el total más bajo con retención), no de la escala del art. 94 ni del
+      mínimo no imponible legal. Un "fuera de patrón" puede tener deducciones que lo expliquen (SIRADIG, cargas
+      de familia); es un caso para mirar, no un error confirmado.
+      ${pisoGananciasAnualAprox !== null ? `
+        La línea gris es la referencia de AFIP para el caso más simple (soltero, sin cargas) — no aplica a
+        quien tenga cónyuge o hijos, y se actualiza cada semestre (enero y julio).
+        ${Math.abs(minTrib - pisoGananciasAnualAprox) / pisoGananciasAnualAprox > 0.3
+          ? ' Están bastante alejadas entre sí — vale la pena revisar el mapeo de acumuladores o la configuración del régimen.'
+          : ' Están razonablemente cerca.'}
+      ` : ' Cargá el piso de Ganancias en el editor de umbrales para compararlo contra este valor observado.'}
     </p>
   `;
   panel.appendChild(wrap);
@@ -992,16 +1098,21 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
     const box = document.createElement('div');
     box.style.marginTop = 'var(--sp-3)';
     box.innerHTML = `
-        <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-3);">
+        <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-3);align-items:flex-end;">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Tope jubilación (monto mensual, dejar vacío = sin chequear)
-            <input type="number" class="form-input" data-acum-tope="topeJubilacion"
-              value="${current.topeJubilacion ?? ''}" style="padding:4px 8px;max-width:200px;">
+            Base imponible máxima mensual (dejar vacío = sin chequear)
+            <input type="number" class="form-input" data-acum-tope="topeBaseImponible"
+              value="${current.topeBaseImponible ?? ''}" style="padding:4px 8px;max-width:220px;">
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Tope obra social (monto mensual, dejar vacío = sin chequear)
-            <input type="number" class="form-input" data-acum-tope="topeObraSocial"
-              value="${current.topeObraSocial ?? ''}" style="padding:4px 8px;max-width:200px;">
+            Alícuota jubilación (%)
+            <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaJubilacion"
+              value="${current.alicuotaJubilacion ?? 11}" style="padding:4px 8px;max-width:110px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+            Alícuota obra social (%)
+            <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaObraSocial"
+              value="${current.alicuotaObraSocial ?? 3}" style="padding:4px 8px;max-width:110px;">
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
             Multiplicador de "salto grande"
@@ -1009,12 +1120,14 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
               value="${current.saltoGrandeMultiplicador}" style="padding:4px 8px;max-width:120px;">
           </label>
         </div>
+        <p class="text-muted" style="font-size:var(--text-sm);margin:0 0 var(--sp-3);" data-acum-techos></p>
         <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;">
           ${Object.entries({
             reconciliacion: 'Reconciliación aritmética',
             cuil: 'CUIL faltante',
             sinMovimiento: 'Sin movimiento en el mes',
             saltoGrande: 'Salto grande vs. mes anterior',
+            fueraDePatron: 'Fuera de patrón de tributación',
             topes: 'Coherencia de topes',
           }).map(([key, label]) => `
             <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;font-size:var(--text-sm);">
@@ -1024,17 +1137,45 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
           `).join('')}
         </div>
         <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
-          Los topes son datos regulatorios (AFIP) — esta app nunca inventa un valor. Dejalo vacío para
-          apagar ese chequeo hasta tener el valor vigente.
+          El tope previsional es uno solo y aplica sobre la <strong>base</strong>: jubilación y obra social
+          comparten la misma base máxima y se diferencian por la alícuota. La base es un dato regulatorio
+          (AFIP, actualización RIPTE) — esta app nunca inventa un valor. Dejala vacía para apagar el chequeo
+          hasta tener el vigente.
+        </p>
+        <hr style="border:none;border-top:1px solid var(--color-border);margin:var(--sp-3) 0;">
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);max-width:260px;">
+          Piso de Ganancias — bruto mensual, soltero sin cargas (dejar vacío = no comparar)
+          <input type="number" class="form-input" data-acum-piso-ganancias
+            value="${current.pisoGananciasMensual ?? ''}" style="padding:4px 8px;">
+        </label>
+        <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
+          Es sólo una referencia visual en el gráfico "¿Quién tributa?" (Resumen) — el caso más simple posible,
+          no vale para nadie con cónyuge o hijos, y esta app no calcula Ganancias real. Sale de las
+          Deducciones Personales de AFIP, que cambian en enero y julio de cada año — hay que revisarlo con
+          esa frecuencia.
         </p>
       `;
       umbrales.appendChild(box);
+
+      const techosEl = box.querySelector('[data-acum-techos]');
+      const pintarTechos = () => {
+        const base = current.topeBaseImponible;
+        if (base === null || base === undefined || isNaN(base)) {
+          techosEl.textContent = 'Sin base cargada: el chequeo de topes queda apagado.';
+          return;
+        }
+        const jub = round2(base * ((current.alicuotaJubilacion ?? 11) / 100));
+        const os  = round2(base * ((current.alicuotaObraSocial ?? 3) / 100));
+        techosEl.textContent = `Techos derivados — jubilación: ${fmtNum(jub)} · obra social: ${fmtNum(os)}.`;
+      };
+      pintarTechos();
 
       box.querySelectorAll('[data-acum-tope]').forEach(input => {
         input.addEventListener('change', (e) => {
           const key = e.target.dataset.acumTope;
           const v = e.target.value.trim();
           current[key] = v === '' ? null : Number(v);
+          pintarTechos();
           onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
         });
       });
@@ -1052,6 +1193,13 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
           current.checksEnabled = { ...current.checksEnabled, [key]: e.target.checked };
           onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
         });
+      });
+
+      const pisoGananciasInput = box.querySelector('[data-acum-piso-ganancias]');
+      pisoGananciasInput.addEventListener('change', (e) => {
+        const v = e.target.value.trim();
+        current.pisoGananciasMensual = v === '' ? null : Number(v);
+        onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
       });
   }
 
