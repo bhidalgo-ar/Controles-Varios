@@ -14,6 +14,8 @@
 // Reglas de cálculo completas en specs/control-acumuladores-ganancias.md.
 
 import { initTabs } from '../ui/tabs.js';
+import { renderVerdict, renderTiles, renderIssues, renderChecks, enhanceGrid } from '../ui/resultBlocks.js';
+import { renderPinGatedSection } from '../ui/pinGate.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -38,6 +40,21 @@ export const ACUMULADORES = {
 export const DEFAULT_ACUMULADORES_CONFIG = {
   regimen: 'RG4030',            // 'RG4003' (año calendario) | 'RG4030' (semestral)
   codigos: { ...ACUMULADORES },  // override por cliente, si otra cuenta Axton numera distinto
+  // Umbrales de los chequeos de pantalla (Fase 1) — nunca se usan para tocar el
+  // .xlsx exportado, sólo para "casos para revisar" en la pantalla de resultados.
+  // Los topes son datos regulatorios (AFIP) que esta app NO puede inventar:
+  // quedan en null (chequeo apagado, con aviso) hasta que Guillermo cargue el
+  // valor vigente vía el editor con PIN.
+  topeJubilacion:            null,  // monto tope mensual de la retención de jubilación (1120)
+  topeObraSocial:            null,  // monto tope mensual de la retención de obra social (1122)
+  saltoGrandeMultiplicador:  2,     // "salto grande" = el mes actual es > Nx o < 1/Nx el mes anterior
+  checksEnabled: {
+    reconciliacion: true,
+    cuil:           true,
+    sinMovimiento:  true,
+    saltoGrande:    true,
+    topes:          true,
+  },
 };
 
 const ACCUM_FIELDS = [
@@ -143,6 +160,7 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     const row = {
       legajo,
       nombre:          entry.nombre,
+      cuil:            entry.cuil,
       brutoGanancias:  val('brutoGanancias'),
       retribNoHabit:   val('retribNoHabituales'),
       noRemGravado:    val('noRemGravado'),
@@ -187,6 +205,7 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     return {
       legajo,
       nombre:         entry.nombre,
+      cuil:           entry.cuil,
       brutoGanancias,
       excluyeSac:     val('excluyeSac'),
       noRemGravado,
@@ -202,6 +221,10 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     };
   });
 
+  const prevPeriod = periods.length >= 2 ? periods[periods.length - 2] : null;
+  const prevData   = prevPeriod ? perFile.get(prevPeriod) : null;
+  const checks = computeChecks({ mesRows, datosRows, prevData, cfg, CODES });
+
   return {
     mes:       { rows: mesRows },
     datos:     { rows: datosRows },
@@ -210,16 +233,131 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     periods,
     regimen:   cfg.regimen,
     alerts,
+    checks,
   };
 }
 
-/** Consolida las filas de un crudo por legajo: { suma: {nro: total}, mes: {nro: total}, nombre }. */
+/**
+ * Chequeos de pantalla de la Fase 1 (nunca tocan el .xlsx exportado):
+ * - reconciliación: TOTAL de DATOS recalculado independientemente vs. el ya
+ *   almacenado — si algo raro pasó en el parseo/consolidación, esto lo marca.
+ * - CUIL faltante.
+ * - salto grande: requiere ≥2 archivos; compara el bruto propio del mes contra
+ *   el del período anterior.
+ * - coherencia de topes: sólo si Guillermo cargó el tope (nunca inventado).
+ */
+function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
+  const enabled = { ...DEFAULT_ACUMULADORES_CONFIG.checksEnabled, ...(cfg.checksEnabled || {}) };
+  const issues = [];
+
+  // ── Reconciliación aritmética (DATOS.total independiente del guardado) ─────
+  let reconciliation = { total: 0, ok: 0 };
+  if (enabled.reconciliacion) {
+    reconciliation.total = datosRows.length;
+    for (const row of datosRows) {
+      const expected = round2(sumOrNull([row.brutoGanancias, row.noRemGravado, row.retribNoHabit, row.sacPrimera, row.sacSegunda]));
+      const stored   = row.total;
+      const bothNull = expected === null && stored === null;
+      if (bothNull || (expected !== null && stored !== null && Math.abs(expected - stored) <= 0.01)) {
+        reconciliation.ok++;
+      } else {
+        issues.push({
+          type: 'reconciliacion', sev: 'hi', legajo: row.legajo, nombre: row.nombre,
+          what: 'El TOTAL de DATOS no coincide con la suma de sus componentes.',
+          why:  `Calculado: ${fmtNum(expected)} · Guardado: ${fmtNum(stored)}.`,
+        });
+      }
+    }
+  }
+
+  // ── CUIL faltante ───────────────────────────────────────────────────────────
+  if (enabled.cuil) {
+    for (const row of datosRows) {
+      if (!row.cuil) {
+        issues.push({
+          type: 'cuil', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          what: 'No trae CUIL en el crudo de Axton.',
+          why:  'Puede ser un dato faltante en el origen — no bloquea el reporte.',
+        });
+      }
+    }
+  }
+
+  // ── Sin movimiento en el mes de proceso (alerta SIEMPRE genérica) ──────────
+  if (enabled.sinMovimiento) {
+    for (const row of mesRows) {
+      if (!hasMovement(row)) {
+        issues.push({
+          type: 'sinMovimiento', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          what: 'Sin movimiento en el mes de proceso.',
+          why:  'Puede deberse a una licencia, un egreso o una liquidación aún no cargada — revisar con el Tabulado, que este control no usa.',
+        });
+      }
+    }
+  }
+
+  // ── Salto grande vs. mes anterior (requiere ≥2 archivos) ───────────────────
+  if (enabled.saltoGrande && prevData) {
+    const mult = cfg.saltoGrandeMultiplicador || DEFAULT_ACUMULADORES_CONFIG.saltoGrandeMultiplicador;
+    for (const row of mesRows) {
+      const prevEntry = prevData.porLegajo.get(row.legajo);
+      const prevBruto = prevEntry?.mes?.[CODES.brutoGanancias];
+      const currBruto = row.brutoGanancias;
+      if (prevBruto === undefined || prevBruto === null || Math.abs(prevBruto) <= 0.01) continue;
+      if (currBruto === null) continue;
+      const ratio = currBruto / prevBruto;
+      if (ratio > mult || ratio < 1 / mult) {
+        issues.push({
+          type: 'saltoGrande', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          what: `Bruto para ganancias cambió ${ratio >= 1 ? `x${ratio.toFixed(1)}` : `a ${(ratio * 100).toFixed(0)}%`} vs. el mes anterior.`,
+          why:  `Mes anterior: ${fmtNum(prevBruto)} · Este mes: ${fmtNum(currBruto)}.`,
+        });
+      }
+    }
+  }
+
+  // ── Coherencia de topes (sólo si están configurados) ───────────────────────
+  const coherenceChecks = [];
+  if (enabled.topes) {
+    const topeChecks = [
+      { key: 'retJubilacion', tope: cfg.topeJubilacion, label: 'Retención de jubilación bajo el tope' },
+      { key: 'retObraSocial', tope: cfg.topeObraSocial, label: 'Retención de obra social bajo el tope' },
+    ];
+    for (const tc of topeChecks) {
+      if (tc.tope === null || tc.tope === undefined) {
+        coherenceChecks.push({ label: tc.label, detail: 'sin tope configurado (editor con PIN)', ok: true });
+        continue;
+      }
+      const excedidos = mesRows.filter(r => r[tc.key] !== null && r[tc.key] > tc.tope);
+      for (const row of excedidos) {
+        issues.push({
+          type: 'tope', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          what: `${tc.label.replace(' bajo el tope', '')} supera el tope configurado.`,
+          why:  `Retenido: ${fmtNum(row[tc.key])} · Tope: ${fmtNum(tc.tope)}.`,
+        });
+      }
+      coherenceChecks.push({ label: tc.label, detail: `${mesRows.length - excedidos.length}/${mesRows.length}`, ok: excedidos.length === 0 });
+    }
+  }
+  if (enabled.reconciliacion) {
+    coherenceChecks.unshift({
+      label: 'Reconciliación aritmética',
+      detail: `${reconciliation.ok}/${reconciliation.total}`,
+      ok: reconciliation.ok === reconciliation.total,
+    });
+  }
+
+  return { reconciliation, issues, coherenceChecks };
+}
+
+/** Consolida las filas de un crudo por legajo: { suma: {nro: total}, mes: {nro: total}, nombre, cuil }. */
 function consolidateFile(rows) {
   const porLegajo = new Map();
   for (const r of rows) {
-    if (!porLegajo.has(r.legajo)) porLegajo.set(r.legajo, { suma: {}, mes: {}, nombre: '' });
+    if (!porLegajo.has(r.legajo)) porLegajo.set(r.legajo, { suma: {}, mes: {}, nombre: '', cuil: '' });
     const entry = porLegajo.get(r.legajo);
     if (!entry.nombre && r.apellido_nombre) entry.nombre = r.apellido_nombre;
+    if (!entry.cuil && r.cuil) entry.cuil = r.cuil;
 
     if (r.valor === null) continue;  // sin valor: no aporta ni marca el concepto como presente
     const bucket = r.operacion === 'SUMA' ? entry.suma : entry.mes;
@@ -310,12 +448,14 @@ export function summarizeAcumuladoresGanancias(results) {
   const conMovimiento = results.mes.rows.filter(hasMovement).length;
   const regimenLabel  = results.regimen === 'RG4003' ? 'RG 4003' : 'RG 4030';
 
+  const insights = [];
+  if (results.alerts.length) insights.push({ type: 'warning', label: 'alertas de ventana de meses', value: results.alerts.length });
+  if (results.checks?.issues.length) insights.push({ type: 'warning', label: 'casos para revisar', value: results.checks.issues.length });
+
   return {
     status:   'info',
     headline: `${totalLegajos} legajos · ${conMovimiento} con movimiento en ${periodToLabel(results.mesProceso)} · ${regimenLabel}`,
-    insights: results.alerts.length
-      ? [{ type: 'warning', label: 'alertas de ventana de meses', value: results.alerts.length }]
-      : [],
+    insights,
     unit: null, unitsTotal: null, unitsWithDiff: null,
     diffTotalAmount: null, worstCase: null, contextNote: null,
   };
@@ -327,13 +467,18 @@ const fmtNum = v => v === null
   ? '—'
   : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// NOTA de diseño (D-027): esta pantalla usa 3 solapas (Resumen · Fichas ·
+// Planilla) en vez de las 2 (Resumen/Detalle) de `renderResumenDetalle()` que
+// usan los otros 9 controles — Guillermo pidió explícitamente las tres
+// direcciones como vistas separadas. Se arma con `initTabs` directamente.
+// El veredicto queda SIEMPRE visible arriba, afuera de las solapas.
 export function renderAcumuladoresResults(results, container) {
   if (results.error) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(results.error)}</p>`;
     return;
   }
 
-  const { mes, datos, alerts, mesProceso, periods, regimen } = results;
+  const { mes, datos, alerts, mesProceso, periods, regimen, checks } = results;
 
   if (datos.rows.length === 0) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin datos.</p>`;
@@ -344,32 +489,22 @@ export function renderAcumuladoresResults(results, container) {
   const sinMovCount = mes.rows.length - mesConMov.length;
   const sacTeoricoTotal = mes.rows.reduce((acc, r) => acc + (r.sacTeorico ?? 0), 0);
   const regimenLabel = regimen === 'RG4003' ? 'RG 4003' : 'RG 4030';
+  const { reconciliation, issues, coherenceChecks } = checks;
 
   container.innerHTML = '';
 
-  // ── Tira de KPIs ───────────────────────────────────────────────────────────
-  const kpis = document.createElement('div');
-  kpis.className = 'hero-kpis';
-  kpis.style.cssText = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:var(--sp-3) var(--sp-3) 0;';
-  kpis.innerHTML = `
-    <div class="hero-kpi">
-      <span class="hero-kpi__value">${datos.rows.length}</span>
-      <span class="hero-kpi__label">Legajos</span>
-    </div>
-    <div class="hero-kpi">
-      <span class="hero-kpi__value">${sinMovCount}</span>
-      <span class="hero-kpi__label">Sin movimiento en el mes</span>
-    </div>
-    <div class="hero-kpi">
-      <span class="hero-kpi__value" style="font-size:18px;">${fmtNum(sacTeoricoTotal)}</span>
-      <span class="hero-kpi__label">SAC teórico total</span>
-    </div>
-    <div class="hero-kpi">
-      <span class="hero-kpi__value">${periods.length}</span>
-      <span class="hero-kpi__label">Meses en ventana · ${esc(regimenLabel)}</span>
-    </div>
-  `;
-  container.appendChild(kpis);
+  // ── Veredicto ──────────────────────────────────────────────────────────────
+  const reconciliaOk = reconciliation.total === 0 || reconciliation.ok === reconciliation.total;
+  const tone = !reconciliaOk ? 'error' : issues.length > 0 ? 'warn' : 'ok';
+  const title = !reconciliaOk
+    ? `${reconciliation.total - reconciliation.ok} reconciliación(es) no cierran — revisar antes de usar este reporte`
+    : issues.length > 0
+      ? `${datos.rows.length} legajos generados, con ${issues.length} caso(s) para revisar`
+      : `${datos.rows.length} legajos generados, sin casos para revisar`;
+  renderVerdict(container, {
+    tone, title,
+    body: `${periodToLabel(mesProceso)} · ${regimenLabel} · ${periods.length} mes(es) en la ventana.`,
+  });
 
   // ── Alertas de la validación de ventana ────────────────────────────────────
   if (alerts.length > 0) {
@@ -379,22 +514,18 @@ export function renderAcumuladoresResults(results, container) {
     container.appendChild(box);
   }
 
-  // ── Solapas MM-AAAA / DATOS ────────────────────────────────────────────────
+  // ── Solapas Resumen · Fichas · Planilla ────────────────────────────────────
   const tabsHost = document.createElement('div');
   container.appendChild(tabsHost);
 
   initTabs(tabsHost, {
     tabs: [
-      { id: 'mes',   label: periodToLabel(mesProceso), render: (panel) => renderConceptTable(panel, {
-          rows: mesConMov, concepts: MES_CONCEPTS,
-          emptyMessage: 'Ningún legajo tiene movimiento en este período.',
-          footnote: `Mostrando ${mesConMov.length} legajo${mesConMov.length === 1 ? '' : 's'} con movimiento en el mes.`
-            + (sinMovCount > 0 ? ` El .xlsx incluye además los ${sinMovCount} legajo${sinMovCount === 1 ? '' : 's'} sin movimiento, en cero.` : ''),
+      { id: 'resumen',  label: 'Resumen',  render: (panel) => renderResumenTab(panel, {
+          datos, mesRows: mes.rows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks,
         }) },
-      { id: 'datos', label: 'DATOS (acumulado)', render: (panel) => renderConceptTable(panel, {
-          rows: datos.rows, concepts: DATOS_CONCEPTS,
-          emptyMessage: 'Sin datos acumulados.',
-          footnote: `Mostrando ${datos.rows.length} legajo${datos.rows.length === 1 ? '' : 's'}. Acumulado del año, del crudo más nuevo.`,
+      { id: 'fichas',   label: 'Fichas',   render: (panel) => renderFichasTab(panel, { mes, datos, issues }) },
+      { id: 'planilla', label: 'Planilla', render: (panel) => renderPlanillaTab(panel, {
+          mesConMov, datos, sinMovCount, mesProceso,
         }) },
     ],
   });
@@ -415,7 +546,223 @@ export function renderAcumuladoresResults(results, container) {
   });
 }
 
-/** Tabla genérica (compartida por las dos solapas): oculta columnas sin valor real, pagina, busca, totaliza. */
+// ── Dirección A — Resumen (tiles + casos para revisar + chequeos + scatter) ──
+
+function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks }) {
+  renderTiles(panel, [
+    { label: 'Legajos', value: datos.rows.length },
+    { label: 'Sin movimiento en el mes', value: sinMovCount, tone: sinMovCount > 0 ? 'warn' : undefined },
+    { label: 'SAC teórico total', value: fmtNum(sacTeoricoTotal) },
+    { label: 'Meses en ventana', value: periods.length, sub: regimenLabel },
+  ]);
+
+  if (issues.length > 0) {
+    renderIssues(panel, {
+      heading: 'Casos para revisar',
+      items: issues.map(i => ({
+        sev: i.sev, who: `Legajo ${i.legajo} — ${i.nombre}`, what: i.what, why: i.why,
+      })),
+    });
+  } else {
+    const p = document.createElement('p');
+    p.className = 'text-muted';
+    p.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-3);';
+    p.textContent = 'Sin casos para revisar.';
+    panel.appendChild(p);
+  }
+
+  renderChecks(panel, { heading: 'Chequeos de coherencia', items: coherenceChecks });
+
+  renderScatter(panel, datos.rows);
+}
+
+/**
+ * Dispersión total anual gravado (DATOS.total) vs. impuesto retenido
+ * (DATOS.impuesto). La "línea de piso" es la mediana de impuesto/total entre
+ * los legajos con ambos valores > 0 — calculada de los propios datos, nunca de
+ * una escala legal externa. Los puntos muy por debajo de esa mediana quedan
+ * marcados como "para revisar", nunca como "error" (ver spec §3, caso 1561).
+ */
+function renderScatter(panel, datosRows) {
+  const points = datosRows
+    .filter(r => isVal(r.total) && r.total > 0 && r.impuesto !== null)
+    .map(r => ({ legajo: r.legajo, nombre: r.nombre, x: r.total, y: Math.max(0, r.impuesto) }));
+
+  if (points.length < 3) return; // muy pocos puntos para que un gráfico aporte algo
+
+  const ratios = points.filter(p => p.y > 0.01).map(p => p.y / p.x).sort((a, b) => a - b);
+  if (ratios.length === 0) return;
+  const piso = ratios[Math.floor(ratios.length / 2)]; // mediana
+
+  const maxX = Math.max(...points.map(p => p.x));
+  const maxY = Math.max(...points.map(p => p.y), piso * maxX);
+  const W = 640, H = 260, PAD = 40;
+  const sx = v => PAD + (v / maxX) * (W - 2 * PAD);
+  const sy = v => H - PAD - (v / maxY) * (H - 2 * PAD);
+
+  const paraRevisar = points.filter(p => p.y < piso * p.x * 0.5); // menos de la mitad de lo esperado por la mediana
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);overflow-x:auto;';
+  wrap.innerHTML = `
+    <div class="rb-section-h">Total anual gravado vs. impuesto retenido</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;" role="img"
+      aria-label="Dispersión de total anual gravado contra impuesto retenido por legajo">
+      <line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="var(--color-border)" />
+      <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H - PAD}" stroke="var(--color-border)" />
+      <line x1="${sx(0)}" y1="${sy(0)}" x2="${sx(maxX)}" y2="${sy(piso * maxX)}"
+        stroke="var(--color-text-muted)" stroke-dasharray="4 3" />
+      ${points.map(p => {
+        const revisar = paraRevisar.includes(p);
+        return `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="${revisar ? 4.5 : 3}"
+          fill="${revisar ? 'var(--color-warning)' : 'var(--color-primary)'}" opacity="${revisar ? '0.9' : '0.55'}">
+          <title>Legajo ${esc(p.legajo)} — ${esc(p.nombre)}: total ${fmtNum(p.x)}, impuesto ${fmtNum(p.y)}</title>
+        </circle>`;
+      }).join('')}
+    </svg>
+    <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
+      Línea punteada: mediana de impuesto/total de esta ventana (${(piso * 100).toFixed(1)}%), no una escala legal.
+      ${paraRevisar.length > 0 ? `${paraRevisar.length} legajo(s) por debajo de la mitad de esa mediana — para revisar, no necesariamente un error (puede deberse a deducciones que este control no ve).` : ''}
+    </p>
+  `;
+  panel.appendChild(wrap);
+}
+
+// ── Dirección B — Fichas por legajo ──────────────────────────────────────────
+
+function renderFichasTab(panel, { mes, datos, issues }) {
+  const issuesByLegajo = new Map();
+  for (const i of issues) {
+    if (!issuesByLegajo.has(i.legajo)) issuesByLegajo.set(i.legajo, []);
+    issuesByLegajo.get(i.legajo).push(i);
+  }
+  const mesByLegajo = new Map(mes.rows.map(r => [r.legajo, r]));
+
+  const fichas = datos.rows.map(d => ({
+    legajo: d.legajo, nombre: d.nombre, cuil: d.cuil,
+    datos: d, mes: mesByLegajo.get(d.legajo) || null,
+    tieneMovimiento: mesByLegajo.has(d.legajo) ? hasMovement(mesByLegajo.get(d.legajo)) : false,
+    issues: issuesByLegajo.get(d.legajo) || [],
+  }));
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'results-toolbar';
+  toolbar.innerHTML = `
+    <input type="text" class="form-input" data-fichas-search placeholder="Buscar legajo o nombre…" style="max-width:220px;padding:6px 10px;">
+    <select class="form-input" data-fichas-filter style="max-width:200px;">
+      <option value="todos">Todos</option>
+      <option value="revisar">Con algo para revisar</option>
+      <option value="sinMov">Sin movimiento</option>
+    </select>
+    <select class="form-input" data-fichas-sort style="max-width:200px;">
+      <option value="bruto">Mayor bruto (DATOS)</option>
+      <option value="sacTeorico">Mayor SAC teórico</option>
+      <option value="legajo">Legajo</option>
+      <option value="nombre">Nombre</option>
+    </select>
+  `;
+  panel.appendChild(toolbar);
+
+  const listHost = document.createElement('div');
+  listHost.className = 'fichas-list';
+  panel.appendChild(listHost);
+
+  const searchEl = toolbar.querySelector('[data-fichas-search]');
+  const filterEl = toolbar.querySelector('[data-fichas-filter]');
+  const sortEl   = toolbar.querySelector('[data-fichas-sort]');
+
+  function apply() {
+    const q = searchEl.value.trim().toLowerCase();
+    const filter = filterEl.value;
+    const sort = sortEl.value;
+
+    let shown = fichas.filter(f => {
+      if (q && !`${f.legajo} ${f.nombre}`.toLowerCase().includes(q)) return false;
+      if (filter === 'revisar' && f.issues.length === 0) return false;
+      if (filter === 'sinMov' && f.tieneMovimiento) return false;
+      return true;
+    });
+
+    shown = shown.slice().sort((a, b) => {
+      if (sort === 'bruto') return (b.datos.total ?? 0) - (a.datos.total ?? 0);
+      if (sort === 'sacTeorico') return (b.mes?.sacTeorico ?? 0) - (a.mes?.sacTeorico ?? 0);
+      if (sort === 'nombre') return a.nombre.localeCompare(b.nombre);
+      return String(a.legajo).localeCompare(String(b.legajo), undefined, { numeric: true });
+    });
+
+    renderFichasList(listHost, shown);
+  }
+
+  searchEl.addEventListener('input', apply);
+  filterEl.addEventListener('change', apply);
+  sortEl.addEventListener('change', apply);
+  apply();
+}
+
+function renderFichasList(host, fichas) {
+  if (fichas.length === 0) {
+    host.innerHTML = `<p class="text-muted" style="padding:var(--sp-3);">Ningún legajo coincide con el filtro.</p>`;
+    return;
+  }
+
+  host.innerHTML = fichas.map(f => `
+    <details class="ficha-card" style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:var(--sp-2);background:var(--color-surface);">
+      <summary style="cursor:pointer;padding:var(--sp-2) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;list-style:none;">
+        <strong>${esc(f.legajo)}</strong>
+        <span>${esc(f.nombre)}</span>
+        ${f.issues.length > 0 ? `<span class="text-muted" style="font-size:var(--text-sm);">⚠ ${f.issues.length} para revisar</span>` : ''}
+        ${!f.tieneMovimiento ? `<span class="text-muted" style="font-size:var(--text-sm);">sin movimiento en el mes</span>` : ''}
+        <span style="margin-left:auto;font-size:var(--text-sm);" class="text-muted">TOTAL: ${fmtNum(f.datos.total)}</span>
+      </summary>
+      <div style="padding:0 var(--sp-3) var(--sp-3);display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
+        <div>
+          <div class="rb-section-h">Mes de proceso</div>
+          ${f.mes ? MES_CONCEPTS.filter(c => isVal(f.mes[c.key])).map(c => `
+            <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);padding:2px 0;">
+              <span class="text-muted">${esc(c.label)}</span><span>${fmtNum(f.mes[c.key])}</span>
+            </div>`).join('') || '<p class="text-muted" style="font-size:var(--text-sm);">Sin movimiento.</p>'
+            : '<p class="text-muted" style="font-size:var(--text-sm);">Sin movimiento.</p>'}
+        </div>
+        <div>
+          <div class="rb-section-h">Acumulado del año (DATOS)</div>
+          ${DATOS_CONCEPTS.filter(c => isVal(f.datos[c.key])).map(c => `
+            <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);padding:2px 0;">
+              <span class="text-muted">${esc(c.label)}</span><span>${fmtNum(f.datos[c.key])}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+      ${f.issues.length > 0 ? `
+        <div style="padding:0 var(--sp-3) var(--sp-3);">
+          ${f.issues.map(i => `<div style="font-size:var(--text-sm);color:var(--color-text-muted);">⚠ ${esc(i.what)}</div>`).join('')}
+        </div>` : ''}
+    </details>
+  `).join('');
+}
+
+// ── Dirección C — Planilla (la tabla completa, con sticky) ───────────────────
+
+function renderPlanillaTab(panel, { mesConMov, datos, sinMovCount, mesProceso }) {
+  const tabsHost = document.createElement('div');
+  panel.appendChild(tabsHost);
+
+  initTabs(tabsHost, {
+    tabs: [
+      { id: 'mes',   label: periodToLabel(mesProceso), render: (p) => renderConceptTable(p, {
+          rows: mesConMov, concepts: MES_CONCEPTS,
+          emptyMessage: 'Ningún legajo tiene movimiento en este período.',
+          footnote: `Mostrando ${mesConMov.length} legajo${mesConMov.length === 1 ? '' : 's'} con movimiento en el mes.`
+            + (sinMovCount > 0 ? ` El .xlsx incluye además los ${sinMovCount} legajo${sinMovCount === 1 ? '' : 's'} sin movimiento, en cero.` : ''),
+        }) },
+      { id: 'datos', label: 'DATOS (acumulado)', render: (p) => renderConceptTable(p, {
+          rows: datos.rows, concepts: DATOS_CONCEPTS,
+          emptyMessage: 'Sin datos acumulados.',
+          footnote: `Mostrando ${datos.rows.length} legajo${datos.rows.length === 1 ? '' : 's'}. Acumulado del año, del crudo más nuevo.`,
+        }) },
+    ],
+  });
+}
+
+/** Tabla genérica (compartida por Planilla): oculta columnas sin valor real, pagina, busca, totaliza, sticky. */
 function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
   if (rows.length === 0) {
     panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(emptyMessage)}</p>`;
@@ -456,12 +803,12 @@ function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
           </tr>
         `).join('')}
       </tbody>
-      <tbody>
+      <tfoot>
         <tr style="font-weight:700;border-top:2px solid var(--color-border);">
           <td colspan="2">TOTAL</td>
           ${shownConcepts.map(c => `<td style="text-align:right;">${fmtNum(totals[c.key])}</td>`).join('')}
         </tr>
-      </tbody>
+      </tfoot>
     </table>
     <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
       ${esc(footnote)}
@@ -469,8 +816,11 @@ function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
     </p>
   `;
 
-  // Sólo el primer <tbody> (filas de datos) — el segundo es la fila de TOTAL,
-  // que queda fuera de paginación y búsqueda (mismo patrón que rendXEe.js).
+  enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
+
+  // Sólo el <tbody> (filas de datos) — el <tfoot> es la fila de TOTAL, que
+  // queda fuera de paginación y búsqueda (mismo patrón que rendXEe.js) y
+  // permite que enhanceGrid() la fije abajo con sticky.
   const tbodyEl = tableHost.querySelector('tbody');
   const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
   initSearchCombobox(searchEl, {
@@ -626,6 +976,78 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
   });
 
   container.appendChild(editor);
+
+  // ── Umbrales de los chequeos de pantalla (Fase 1), detrás de un PIN ────────
+  // Freno operativo, no seguridad real (ver js/ui/pinGate.js) — evita tocar
+  // topes/umbrales "de paso" sin querer.
+  renderPinGatedSection(container, {
+    label: 'Umbrales de chequeos (Acumuladores Ganancias)',
+    render: (host) => {
+      const box = document.createElement('div');
+      box.innerHTML = `
+        <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-3);">
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+            Tope jubilación (monto mensual, dejar vacío = sin chequear)
+            <input type="number" class="form-input" data-acum-tope="topeJubilacion"
+              value="${current.topeJubilacion ?? ''}" style="padding:4px 8px;max-width:200px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+            Tope obra social (monto mensual, dejar vacío = sin chequear)
+            <input type="number" class="form-input" data-acum-tope="topeObraSocial"
+              value="${current.topeObraSocial ?? ''}" style="padding:4px 8px;max-width:200px;">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+            Multiplicador de "salto grande"
+            <input type="number" step="0.1" min="1" class="form-input" data-acum-salto
+              value="${current.saltoGrandeMultiplicador}" style="padding:4px 8px;max-width:120px;">
+          </label>
+        </div>
+        <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;">
+          ${Object.entries({
+            reconciliacion: 'Reconciliación aritmética',
+            cuil: 'CUIL faltante',
+            sinMovimiento: 'Sin movimiento en el mes',
+            saltoGrande: 'Salto grande vs. mes anterior',
+            topes: 'Coherencia de topes',
+          }).map(([key, label]) => `
+            <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;font-size:var(--text-sm);">
+              <input type="checkbox" data-acum-check="${key}" ${current.checksEnabled[key] ? 'checked' : ''}>
+              ${esc(label)}
+            </label>
+          `).join('')}
+        </div>
+        <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
+          Los topes son datos regulatorios (AFIP) — esta app nunca inventa un valor. Dejalo vacío para
+          apagar ese chequeo hasta tener el valor vigente.
+        </p>
+      `;
+      host.appendChild(box);
+
+      box.querySelectorAll('[data-acum-tope]').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const key = e.target.dataset.acumTope;
+          const v = e.target.value.trim();
+          current[key] = v === '' ? null : Number(v);
+          onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
+        });
+      });
+
+      const saltoInput = box.querySelector('[data-acum-salto]');
+      saltoInput.addEventListener('change', (e) => {
+        const n = Number(e.target.value);
+        if (!isNaN(n) && n >= 1) current.saltoGrandeMultiplicador = n;
+        onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
+      });
+
+      box.querySelectorAll('[data-acum-check]').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const key = e.target.dataset.acumCheck;
+          current.checksEnabled = { ...current.checksEnabled, [key]: e.target.checked };
+          onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
+        });
+      });
+    },
+  });
 }
 
 function esc(str) {

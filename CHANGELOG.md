@@ -7,6 +7,15 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Acumuladores Ganancias — Fase 1: panel de verificación, fichas por legajo y gate de PIN — 2026-08-07
+
+- `js/controls/acumuladoresGanancias.js` — chequeos de pantalla (nunca tocan el `.xlsx` exportado): reconciliación aritmética de `DATOS.total`, CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica — cierra el caso del legajo 137 sin adivinar causa), "salto grande" de bruto vs. el mes anterior (requiere ≥2 archivos, umbral configurable), y coherencia de topes de jubilación/obra social (apagados hasta que se configure el valor vigente — nunca inventado).
+- Pantalla de resultados con 3 solapas (Resumen · Fichas · Planilla), reusando `js/ui/resultBlocks.js` (D-027): veredicto + tiles + casos para revisar + chequeos de coherencia + scatter de total anual gravado vs. impuesto retenido (Resumen), fichas expandibles por legajo con buscador/filtro/orden (Fichas), tabla existente con sticky vía `enhanceGrid()` (Planilla).
+- `js/ui/pinGate.js` nuevo — freno operativo por PIN (client-side, `localStorage`, documentado como no-seguridad-real) que protege el editor de topes/umbrales de los chequeos.
+- `tests/acumuladoresGananciasControl.test.js` — 13 asserts nuevos (47 en total) cubriendo cada chequeo nuevo.
+- Verificado en navegador con Playwright sobre un dataset sintético (nunca datos de POP): las 3 solapas, el filtro/búsqueda/orden de fichas, el sticky de la planilla y el gate de PIN (bloqueo, primera configuración, PIN incorrecto, PIN correcto).
+- Ver D-029 en `DECISIONS.md`. Fase 2 (padrón de convenio) y Fase 3 (súper control de Ganancias) quedan explícitamente afuera.
+
 ### feat: Variación entre períodos — escalón, causas de ausencia y matriz de transición — 2026-08-07
 
 - `js/controls/variaciones.js` — rediseño de la pantalla de resultados sobre los hallazgos reales de los tabulados de OPmobility: el premio de progreso (`2517`) se paga en escalones fijos (0/50%/70%/100%), no en importe libre, y 14 de 23 empleados que bajaron de escalón no tienen ninguna licencia/ausencia/franco/permiso cargado que lo explique.
