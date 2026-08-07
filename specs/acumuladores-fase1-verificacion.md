@@ -112,10 +112,17 @@
   cualquier "fuera de patrón" de tributación — se muestra como dato a
   revisar, nunca como afirmación de error, porque sin las deducciones no se
   puede saber.
-- El caso puntual del legajo 137 (SENIA JORGE OMAR): **no se resuelve en
-  esta spec** — Guillermo lo va a confirmar aparte. La alerta genérica "no
-  liquidó en el mes, sí tiene acumulado" se muestra iguial para cualquier
-  legajo en esa situación, sin lógica especial para el 137 puntual.
+- El caso puntual del legajo 137 (SENIA JORGE OMAR): **cerrado como "no
+  resoluble sin el Tabulado".** Guillermo confirmó (2026-08-07): probablemente
+  es una licencia sin goce, pero Acumuladores Ganancias no tiene ese dato —
+  sólo lo tendría cruzando contra el Tabulado, y este control es
+  deliberadamente `tabRequired: false` (no lo pide, ver spec original y
+  D-026). La alerta se muestra siempre **genérica** ("sin movimiento en el
+  mes, con acumulado del año") para cualquier legajo en esa situación, sin
+  intentar adivinar la causa (licencia / egreso mal cargado / liquidación
+  faltante) — eso queda para quien mire la ficha y tenga el Tabulado a mano.
+- Cruzar contra el Tabulado en ningún chequeo de esta fase — es justamente lo
+  que distingue a Acumuladores del resto de los controles (D-026).
 - Tocar el `.xlsx` de salida.
 
 ---
@@ -154,8 +161,9 @@
 - Cualquier caso donde el dato real (cuando Guillermo suba un archivo de
   prueba) contradiga un supuesto de esta spec — parar y avisar, no
   reinterpretar en silencio.
-- El caso del legajo 137: no tratarlo como resuelto en el código ni en los
-  tests hasta que Guillermo confirme.
+- El caso del legajo 137 ya está resuelto (ver §3): la alerta es genérica,
+  no hay más que consultar acá — no diseñar ninguna heurística que intente
+  adivinar "licencia" vs. "egreso mal cargado" sin el Tabulado.
 
 ---
 
@@ -180,8 +188,9 @@
 - Tocar otros controles o el contrato del registry.
 - Convertir el gate de PIN en un sistema de autenticación real (usuarios,
   roles, backend) — es un freno simple, nada más.
-- Afirmar que el legajo 1561 o el 137 tienen un error — quedan como "casos
-  para revisar", nunca como veredicto.
+- Afirmar que el legajo 1561 tiene un error, ni asumir la causa del 137
+  (licencia / egreso mal cargado / liquidación faltante) — quedan como
+  "casos para revisar" con dato neutral, nunca como veredicto.
 
 Si durante la implementación aparece la necesidad de tocar algo fuera de
 este scope, el agente para y avisa — no amplía el alcance por su cuenta.
@@ -190,5 +199,6 @@ este scope, el agente para y avisa — no amplía el alcance por su cuenta.
 
 **Fecha de creación:** 2026-08-07
 **Confirmada por el usuario:** con supuestos pendientes — ver arriba (topes
-regulatorios, columnas del padrón, y el caso 137 quedan explícitamente
-abiertos hasta que Guillermo los resuelva).
+regulatorios y columnas del padrón quedan explícitamente abiertos hasta que
+Guillermo los resuelva). El caso del legajo 137 quedó cerrado el 2026-08-07:
+no resoluble sin el Tabulado, se muestra genérico.
