@@ -17,6 +17,7 @@ import { renderControlsWizard } from './ui/controlsWizard.js';
 import { renderControlsResults } from './ui/controlsResults.js';
 import { renderChecklist }       from './ui/checklistView.js';
 import { renderAdminView }       from './ui/adminView.js';
+import { setCompactHeader }      from './ui/resultsHeader.js';
 
 const APP_VERSION = '1.0.0-alpha';
 const root = document.getElementById('js-app-root');
@@ -59,6 +60,11 @@ async function handleRoute() {
   const parts = hash.replace('#/', '').split('/').filter(Boolean);
 
   updateHeaderNav(hash);
+
+  // Reset defensivo: sólo la pantalla de resultados (controlsResults.js) y el
+  // paso 3 del wizard con resultados (controlsWizard.js) piden la cabecera
+  // comprimida — cualquier otra ruta la deja como estaba.
+  setCompactHeader(false);
 
   try {
     if (parts.length === 0) {

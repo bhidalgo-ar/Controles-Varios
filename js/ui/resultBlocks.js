@@ -97,22 +97,90 @@ function sectionHeading(container, heading) {
 }
 
 // ── Casos para revisar ──────────────────────────────────────────────────────
-// items: [{ sev?: 'hi'|'lo', who, sub?, what, why?, right? }] — `right` admite HTML (p.ej. un mv-arrow).
+// items: [{ sev?: 'hi'|'lo'|'minor', who, sub?, what, why?, right? }] — `right`
+// admite HTML (p.ej. un mv-arrow). Los `sev:'minor'` no van acá — se filtran
+// antes con renderMinorObservations() (calidad de dato, no una diferencia).
+//
+// groupBy (default 'who'): items que comparten el valor de ese campo se
+// funden en un solo bloque — una barra de severidad, el `who` con la cantidad
+// de observaciones, y los `what`/`why` de cada una apilados adentro. Con un
+// item por `who` (el caso de casi todos los controles) esto no cambia nada
+// visualmente respecto de antes.
 
-export function renderIssues(container, { heading, items } = {}) {
+export function renderIssues(container, { heading, items, groupBy = 'who' } = {}) {
   sectionHeading(container, heading);
   const el = document.createElement('div');
   el.className = 'rb-issues';
-  el.innerHTML = items.map(i => `
-    <div class="rb-issue">
-      <div class="rb-issue__sev${i.sev === 'hi' ? ' rb-issue__sev--hi' : ''}"></div>
-      <div class="rb-issue__who">${esc(i.who)}${i.sub ? `<small>${esc(i.sub)}</small>` : ''}</div>
-      <div class="rb-issue__body">
-        <div class="rb-issue__what">${esc(i.what)}</div>
-        ${i.why ? `<div class="rb-issue__why">${esc(i.why)}</div>` : ''}
+
+  const groups = [];
+  const byKey = new Map();
+  for (const i of items) {
+    const key = i[groupBy];
+    if (!byKey.has(key)) {
+      const g = { key, sub: i.sub, rows: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    byKey.get(key).rows.push(i);
+  }
+
+  el.innerHTML = groups.map(g => {
+    const hi = g.rows.some(i => i.sev === 'hi');
+    const single = g.rows.length === 1;
+    return `
+      <div class="rb-issue">
+        <div class="rb-issue__sev${hi ? ' rb-issue__sev--hi' : ''}"></div>
+        <div class="rb-issue__who">${esc(g.key)}${single
+          ? (g.sub ? `<small>${esc(g.sub)}</small>` : '')
+          : `<small>${g.rows.length} observaciones</small>`}</div>
+        <div class="rb-issue__body">
+          ${g.rows.map(i => `
+            <div class="rb-issue__what">${esc(i.what)}</div>
+            ${i.why ? `<div class="rb-issue__why">${esc(i.why)}</div>` : ''}
+          `).join('')}
+        </div>
+        ${single && g.rows[0].right !== undefined ? `<div class="rb-issue__right">${g.rows[0].right}</div>` : ''}
       </div>
-      ${i.right !== undefined ? `<div class="rb-issue__right">${i.right}</div>` : ''}
-    </div>
+    `;
+  }).join('');
+  container.appendChild(el);
+  return el;
+}
+
+// ── Observaciones menores ───────────────────────────────────────────────────
+// Los issues con sev:'minor' (calidad del dato de origen, no una diferencia a
+// revisar — ej. "no trae CUIL") van en un <details> colapsado, agrupados por
+// texto de `what`: un renglón por texto distinto, con la cantidad de unidades
+// afectadas y — al abrir — la lista de quiénes.
+// items: [{ who, sub?, what, why? }] (mismo shape que renderIssues, sin sev)
+
+export function renderMinorObservations(container, items) {
+  if (!items?.length) return null;
+  sectionHeading(container, 'Observaciones menores');
+
+  const groups = new Map(); // what → { why, whos: [{who, sub}] }
+  for (const i of items) {
+    if (!groups.has(i.what)) groups.set(i.what, { why: i.why, whos: [] });
+    groups.get(i.what).whos.push({ who: i.who, sub: i.sub });
+  }
+
+  const el = document.createElement('div');
+  el.className = 'rb-minor';
+  el.innerHTML = [...groups.entries()].map(([what, g]) => `
+    <details class="rb-minor-group">
+      <summary>
+        <span class="rb-minor-group__icon" aria-hidden="true">i</span>
+        <span class="rb-minor-group__title">${esc(what)}</span>
+        <span class="rb-minor-group__count">${g.whos.length} ${g.whos.length === 1 ? 'legajo' : 'legajos'}</span>
+        ${g.why ? `<span class="rb-minor-group__why">${esc(g.why)}</span>` : ''}
+        <span class="rb-minor-group__link">Ver detalle</span>
+      </summary>
+      <div class="rb-minor-group__list">
+        ${g.whos.map(w => `
+          <div class="rb-minor-group__item">${esc(w.who)}${w.sub ? ` <span class="rb-minor-group__item-sub">${esc(w.sub)}</span>` : ''}</div>
+        `).join('')}
+      </div>
+    </details>
   `).join('');
   container.appendChild(el);
   return el;
@@ -164,11 +232,19 @@ export function renderResumenDetalle(container, { resumen, detalle, detalleLabel
 // falta) — así un `<p>` al pie, fuera de la tabla, nunca queda atrapado
 // adentro del recuadro que hace scroll.
 //
+// El ancho de la 1ª columna fija es un valor DECLARADO (`col1Width`), no
+// medido en runtime — antes se medía en un rAF después del primer layout, y
+// si el <tbody> se reconstruía (búsqueda, orden, resize) el valor quedaba
+// viejo y se abría una franja entre las dos columnas fijas. Con un ancho fijo
+// vía CSS var (`--rb-stick1-width`) el 2º sticky siempre calza, sin medir.
+//
 // @param {HTMLTableElement} tableEl
-// @param {{ stickyCols?: 0|1|2 }} [opts] - 0 = sólo sticky de header/footer, sin columnas fijas
-//   (usar cuando la 1ª/2ª columna real de la tabla no es la que conviene anclar, ej. fechas primero)
+// @param {{ stickyCols?: 0|1|2, col1Width?: number }} [opts]
+//   stickyCols: 0 = sólo sticky de header/footer, sin columnas fijas
+//     (usar cuando la 1ª/2ª columna real de la tabla no es la que conviene anclar, ej. fechas primero)
+//   col1Width: ancho en px de la 1ª columna cuando stickyCols=2 (default 74 — legajo)
 // @returns {HTMLElement} el wrapper con el scroll acotado
-export function enhanceGrid(tableEl, { stickyCols = 1 } = {}) {
+export function enhanceGrid(tableEl, { stickyCols = 1, col1Width = 74 } = {}) {
   let wrap = tableEl.parentElement;
   if (!wrap || !wrap.classList.contains('rb-grid-wrap')) {
     wrap = document.createElement('div');
@@ -181,11 +257,7 @@ export function enhanceGrid(tableEl, { stickyCols = 1 } = {}) {
   tableEl.classList.toggle('rb-grid--stick1', stickyCols === 1);
 
   if (stickyCols >= 2) {
-    // Se mide después del layout — si no, "left" del 2º sticky quedaría en 0.
-    requestAnimationFrame(() => {
-      const firstCell = tableEl.querySelector('thead tr:first-child > :first-child');
-      if (firstCell) tableEl.style.setProperty('--rb-stick2-left', `${firstCell.getBoundingClientRect().width}px`);
-    });
+    tableEl.style.setProperty('--rb-stick1-width', `${col1Width}px`);
   }
   return wrap;
 }

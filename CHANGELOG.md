@@ -7,6 +7,16 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: cabecera de resultados 1C — dos barras sticky, casos agrupados por legajo, planilla sin franja — 2026-08-07
+
+- **Cabecera nueva en toda la pantalla de resultados** (run guardado y run rápido del wizard): reemplaza el stack de `app-header` (68px) + `page-actions` + `wizard-steps` + header de card + banner de estado por dos barras sticky de 88px en total — `js/ui/resultsHeader.js` (nuevo). El hero-gauge (arco + KPIs + controles) no se toca, sigue debajo tal cual estaba.
+- Los banners viejos "Ejecución rápida / Borrador / Definitivo" (duplicados en `controlsResults.js` y `controlsWizard.js`) se unifican en un solo popover ("Detalles del run").
+- `js/ui/resultBlocks.js` — `renderIssues()` agrupa por legajo (`groupBy`, default `'who'`; sin cambio visible en los controles que ya traían un row por legajo). Nuevo `renderMinorObservations()` para issues `sev:'minor'` (calidad de dato, no diferencia a revisar) en un `<details>` colapsado aparte.
+- `acumuladoresGanancias.js` — el issue de CUIL faltante pasa de `sev:'lo'` a `sev:'minor'`; el filtro de Fichas deriva sus opciones de los issues presentes (ya no hardcodeadas).
+- `enhanceGrid()` — el ancho de la 1ª columna fija de la planilla pasa a ser declarado (`col1Width`), no medido con `requestAnimationFrame`: evita la franja que se abría entre columnas fijas al reconstruirse el `<tbody>` (búsqueda, orden, resize).
+- `specs/resultblocks-migracion-controles.md` — hoja de ruta control por control para la próxima tanda (`acreditaciones.js`/`agrupadores.js` son los candidatos con impacto real).
+- Ver D-034 en `DECISIONS.md`.
+
 ### refactor: Acumuladores Ganancias vuelve al foco del SAC teórico — 2026-08-07
 
 - Los chequeos pasan a ser sobre el SAC teórico, que es lo que este reporte existe para calcular: **no se pudo calcular** (no liquidó en ningún mes de la ventana), **parcial** (armado con menos meses de los subidos), **negativo** (las deducciones superaron al gravado) y **doceava atípica** (un mes que se sale de la línea de los otros del mismo legajo). El veredicto, un tile nuevo y el primer chequeo de coherencia hablan de esto.

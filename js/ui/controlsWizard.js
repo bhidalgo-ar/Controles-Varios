@@ -8,7 +8,6 @@
 import {
   getClient,
   createControlRun,
-  updateControlRun,
   saveControlRunFile,
   saveControlRunResults,
   getControlConfig,
@@ -43,6 +42,7 @@ import { renderAcreditacionesConfigEditor, DEFAULT_ACREDITACIONES_CONFIG } from 
 import { renderAcumuladoresConfigEditor, DEFAULT_ACUMULADORES_CONFIG } from '../controls/acumuladoresGanancias.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
+import { renderResultsContextBar, setCompactHeader } from './resultsHeader.js';
 
 // ── Caché de sesión del Tabulado ─────────────────────────────────────────────
 // Evita re-subir el Tabulado entre runs mientras la página esté activa.
@@ -167,6 +167,14 @@ export async function renderControlsWizard(root, clientId) {
     quickRun:                  false,      // si está marcado, no se guarda nada (modo prueba)
   };
 
+  mountWizardShell(root, client);
+  render(root, state);
+}
+
+// Shell del wizard (page-actions + wizard-steps + card + nav) — se remonta
+// cada vez que se vuelve de la pantalla de resultados (1C, sólo 2 barras
+// sticky, sin este shell) a un paso normal. Ver render().
+function mountWizardShell(root, client) {
   root.innerHTML = `
     <div class="page-content" style="padding-bottom:80px;">
       <div class="page-actions">
@@ -190,17 +198,42 @@ export async function renderControlsWizard(root, clientId) {
       "></div>
     </div>
   `;
+  root.dataset.wizardView = 'steps';
 
   // Ayuda "cómo ejecutar un control" — vive en el header, así queda visible en
   // los 3 pasos (el header no se re-renderiza al cambiar de paso).
   renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
-
-  render(root, state);
 }
 
 // ── Render central ────────────────────────────────────────────────────────────
 
 function render(root, state) {
+  const showResultsPage = state.step === 2 && !!state.lastRunResults;
+
+  // Cabecera comprimida (1C): sólo en el paso 3 con resultados ya mostrados
+  // (siempre un run rápido — ver executeControls, que navega a #/control-results
+  // apenas hay runId). Cualquier otro paso usa el app-header normal.
+  setCompactHeader(showResultsPage);
+
+  // Pantalla de resultados (1C): dos barras sticky, sin el shell del wizard
+  // (page-actions/wizard-steps/card/nav) — mismo criterio que controlsResults.js.
+  if (showResultsPage) {
+    if (root.dataset.wizardView !== 'results') {
+      root.innerHTML = `
+        <div id="js-results-ctx-bar"></div>
+        <div class="page-content"><div id="js-inline-results-page"></div></div>
+      `;
+      root.dataset.wizardView = 'results';
+    }
+    renderInlineResults(root.querySelector('#js-inline-results-page'), state, root);
+    return;
+  }
+
+  // Volviendo de la pantalla de resultados a un paso normal: remontar el shell.
+  if (root.dataset.wizardView === 'results') {
+    mountWizardShell(root, state.client);
+  }
+
   // Indicadores de paso
   root.querySelector('#js-wizard-steps').innerHTML = buildStepDots(state.step);
 
@@ -260,8 +293,9 @@ function renderWizardNav(root, state) {
   const isLast  = state.step === 2;
   const canNext = canGoNext(state);
 
-  // En step 2 con resultados ya mostrados, el prev dice "Reconfigurar"
-  const prevLabel = (state.step === 2 && state.lastRunResults) ? '← Reconfigurar' : '← Anterior';
+  // Con resultados ya mostrados, render() muestra la cabecera 1C en vez de
+  // este nav — este bloque sólo corre en modo pre-ejecución (ver showResultsPage).
+  const prevLabel = '← Anterior';
   const hint = !canNext && !isLast ? nextStepHint(state) : '';
 
   nav.innerHTML = `
@@ -1122,13 +1156,8 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
 // ── Paso 2: Configurar período y ejecutar ────────────────────────────────────
 
 function renderStepExecute(container, state, root) {
-  // Modo resultados: ya se ejecutó, mostrar inline
-  if (state.lastRunResults) {
-    renderInlineResults(container, state, root);
-    return;
-  }
-
-  // Modo pre-ejecución
+  // render() intercepta el caso "ya se ejecutó" antes de llegar acá (ver
+  // showResultsPage) — este paso sólo se renderiza en modo pre-ejecución.
   const periods  = periodOptions(13);
   const ctrlList = state.selectedControls
     .map(id => CONTROL_REGISTRY[id]?.label || id)
@@ -1199,20 +1228,42 @@ function renderStepExecute(container, state, root) {
 }
 
 function renderInlineResults(container, state, root) {
-  container.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-3);">
-      <div>
-        <h3 style="margin:0 0 var(--sp-1);">${esc(state.client.name)} — Controles ${esc(state.period)}</h3>
-        <p class="text-muted" style="margin:0;font-size:var(--text-sm);">Ejecutado el ${new Date().toLocaleDateString('es-AR', { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
-      </div>
-      <button class="btn btn--ghost btn--sm" id="js-rerun-btn">↺ Ejecutar de nuevo</button>
-    </div>
+  container.innerHTML = `<div id="js-inline-results"></div>`;
 
-    <div id="js-status-banner" style="margin-bottom:var(--sp-4);"></div>
-    <div id="js-inline-results"></div>
-  `;
+  const tiers = Object.values(state.lastRunTierByControlId || {});
+  const overallTier = tiers.length === 0 ? 'info'
+    : tiers.includes('error') ? 'error'
+    : tiers.includes('warn')  ? 'warn'
+    : tiers.every(t => t === 'info') ? 'info'
+    : 'ok';
+  const checked = tiers.filter(t => t !== 'info');
+  const verdictLine = checked.length === 0
+    ? 'Esta corrida sólo incluye controles de generación de reporte.'
+    : checked.every(t => t === 'ok')
+      ? `${checked.length} de ${checked.length} control${checked.length === 1 ? '' : 'es'} en verde — sin diferencias.`
+      : ['error', 'warn', 'ok'].map(t => {
+          const n = checked.filter(x => x === t).length;
+          return n > 0 ? `${n} en ${t === 'error' ? 'rojo' : t === 'warn' ? 'amarillo' : 'verde'}` : null;
+        }).filter(Boolean).join(' · ') + '.';
 
-  renderStatusBanner(container.querySelector('#js-status-banner'), state);
+  const ctxBarEl = root.querySelector('#js-results-ctx-bar');
+  renderResultsContextBar(ctxBarEl, {
+    tier: overallTier,
+    clientePeriodo: `${state.client.name} · ${periodToLabel(state.period)}`,
+    verdictLine,
+    back: { label: '← Volver a los controles', onClick: () => { state.step = 0; render(root, state); } },
+    run: {
+      createdAtLabel: new Date().toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      isQuickRun: true,
+      onReconfigure: () => { state.step = 1; render(root, state); },
+      onRerun: () => {
+        state.lastRunResults = null;
+        state.lastRunId = null;
+        state.lastRunIsDefinitive = false;
+        render(root, state);
+      },
+    },
+  });
 
   const resultsContainer = container.querySelector('#js-inline-results');
 
@@ -1233,69 +1284,6 @@ function renderInlineResults(container, state, root) {
     }
     resultsContainer.appendChild(wrapper);
     ctrl.renderResults(state.lastRunResults[controlId], wrapper);
-  });
-
-  container.querySelector('#js-rerun-btn').addEventListener('click', () => {
-    state.lastRunResults = null;
-    state.lastRunId = null;
-    state.lastRunIsDefinitive = false;
-    renderStepExecute(container, state, root);
-    renderWizardNav(root, state);
-  });
-}
-
-/**
- * Banner de estado del run (Quick / Borrador / Definitivo) con toggle.
- */
-function renderStatusBanner(bannerEl, state) {
-  if (!bannerEl) return;
-
-  // Modo Quick: no se guardó nada
-  if (state.lastRunId == null) {
-    bannerEl.innerHTML = `
-      <div style="padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);display:flex;align-items:center;gap:var(--sp-3);">
-        <span style="font-size:1.4em;">⚡</span>
-        <div style="flex:1;">
-          <strong>Ejecución rápida</strong> — este run no se guardó.
-          <p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">Los resultados están sólo en pantalla. Si cerrás la página se pierden.</p>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  // Modo guardado: Borrador o Definitivo
-  const isDef = state.lastRunIsDefinitive === true;
-  const icon  = isDef ? '✅' : '📝';
-  const title = isDef ? 'Definitivo' : 'Borrador';
-  const desc  = isDef
-    ? 'Este run aparece en el checklist mensual.'
-    : 'Este run no aparece en el checklist hasta que lo marques como definitivo.';
-  const btnLabel = isDef ? '↩ Volver a borrador' : '📌 Marcar como definitivo';
-  const borderCol = isDef ? 'var(--color-match-exact, #00a651)' : 'var(--color-border)';
-  const bgCol = isDef ? 'rgba(0,166,81,0.06)' : 'var(--color-surface)';
-
-  bannerEl.innerHTML = `
-    <div style="padding:var(--sp-3) var(--sp-4);border:1px solid ${borderCol};border-radius:var(--radius-md);background:${bgCol};display:flex;align-items:center;gap:var(--sp-3);">
-      <span style="font-size:1.4em;">${icon}</span>
-      <div style="flex:1;">
-        <strong>${title}</strong>
-        <p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">${desc}</p>
-      </div>
-      <button class="btn ${isDef ? 'btn--ghost' : 'btn--primary'} btn--sm" id="js-toggle-definitive">${btnLabel}</button>
-    </div>
-  `;
-
-  bannerEl.querySelector('#js-toggle-definitive').addEventListener('click', async () => {
-    const newValue = !state.lastRunIsDefinitive;
-    try {
-      await updateControlRun(state.lastRunId, { isDefinitive: newValue });
-      state.lastRunIsDefinitive = newValue;
-      renderStatusBanner(bannerEl, state);
-      showToast(newValue ? '✅ Marcado como definitivo' : '↩ Vuelto a borrador', 'success');
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'danger');
-    }
   });
 }
 
@@ -1494,7 +1482,7 @@ async function executeControls(state, statusEl, container, root) {
     // ── Paso 3 · Aplicando umbrales y semáforos ──────────────────────────────
     // Calcula el tier (error/warn/ok) de cada control para ordenar la cascada
     // de tarjetas errores-primero (ver renderInlineResults) y persiste resultados.
-    const tierOrder = state.selectedControls
+    const tierByControlId = state.selectedControls
       .map(controlId => {
         const ctrl = CONTROL_REGISTRY[controlId];
         const summary = ctrl?.summarize ? ctrl.summarize(runResults[controlId]) : null;
@@ -1503,7 +1491,9 @@ async function executeControls(state, statusEl, container, root) {
           : summary.unitsTotal == null ? 'info'
           : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
         return { controlId, tier };
-      })
+      });
+    const tierOrder = tierByControlId
+      .slice()
       .sort((a, b) => EXEC_TIER_RANK[a.tier] - EXEC_TIER_RANK[b.tier])
       .map(t => t.controlId);
 
@@ -1527,13 +1517,14 @@ async function executeControls(state, statusEl, container, root) {
     }
 
     // Ejecución rápida: no hay run persistido para navegar, así que mostramos los
-    // resultados inline (cascada errores-primero) y el banner avisa que no se guardó.
+    // resultados inline (cascada errores-primero) bajo la cabecera 1C — el
+    // popover "Detalles del run" avisa que no se guardó.
     state.lastRunId            = runId;
     state.lastRunResults       = runResults;
     state.lastRunIsDefinitive  = false;
     state.lastRunTierOrder     = tierOrder;
-    renderInlineResults(container, state, root);
-    renderWizardNav(root, state);
+    state.lastRunTierByControlId = Object.fromEntries(tierByControlId.map(t => [t.controlId, t.tier]));
+    render(root, state);
 
   } catch (err) {
     console.error('[controlsWizard] Error al ejecutar:', err);

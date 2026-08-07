@@ -473,7 +473,7 @@ function renderRendVsTabuDetalle(container, { rows, results }) {
     label: 'Buscar centro de costo',
     placeholder: 'Código o nombre de CC…',
   });
-  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2 });
+  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2, col1Width: 100 });
 
   const csvHeaders = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [`${c.label} (Rend)`, `${c.label} (Tab)`, `${c.label} (CTRL)`])];
   const csvRows = () => rows.map(r => [r.ccCode, r.ccName, ...COLS.flatMap(c => [fmt(r[c.rKey]), fmt(r[c.tKey]), fmt(r[c.dKey])])]);

@@ -1092,7 +1092,7 @@ function renderRendVsAsientoDetalle(container, results) {
   // Sticky CC + Centro de Costo — sobrevive a los sorts porque enhanceGrid
   // sólo agrega clases CSS (posicionales), y el sort de abajo reemplaza el
   // <tbody> pero nunca el <thead> ni la estructura de columnas.
-  enhanceGrid(tableWrap.querySelector('#js-rva-table'), { stickyCols: 2 });
+  enhanceGrid(tableWrap.querySelector('#js-rva-table'), { stickyCols: 2, col1Width: 100 });
 
   // Eventos de la tabla principal por DELEGACIÓN (un solo listener en el wrapper):
   // - click en celda CONTA → modal de zoom (conceptos + empleados)
