@@ -36,6 +36,20 @@ export const ACUMULADORES = {
   retenciones:        1150,  // Retenciones efectuadas (= Impuesto a las Ganancias)
 };
 
+// ── Extras de Ganancias/topes: APAGADOS a propósito (ver D-033) ──────────────
+// El objetivo de este reporte es armar el SAC teórico desde los acumuladores.
+// Los chequeos de tope previsional y el gráfico de tributación de Ganancias se
+// construyeron (D-031, D-032) y se replegaron: se iban del tema y arrastraban
+// consideraciones que este control no puede sostener bien — la más clara, que
+// el tope previsional del SAC no es el mensual (la cuota del SAC tiene su
+// propio tope, del 50% del mensual), con lo cual el chequeo de topes estaba
+// mal justo para lo único que este reporte calcula.
+//
+// El código queda entero y en su lugar. Para reactivarlo: poner esto en `true`
+// — vuelven el chequeo de topes, el de "fuera de patrón", el gráfico y sus dos
+// bloques del editor. Antes de hacerlo, resolver el tope propio del SAC.
+const EXTRAS_GANANCIAS_HABILITADOS = false;
+
 export const DEFAULT_ACUMULADORES_CONFIG = {
   regimen: 'RG4030',            // 'RG4003' (año calendario) | 'RG4030' (semestral)
   codigos: { ...ACUMULADORES },  // override por cliente, si otra cuenta Axton numera distinto
@@ -62,7 +76,8 @@ export const DEFAULT_ACUMULADORES_CONFIG = {
     reconciliacion: true,
     cuil:           true,
     sinMovimiento:  true,
-    saltoGrande:    true,
+    sacTeorico:     true,   // el chequeo central: ¿salió bien el SAC teórico?
+    // Sólo si EXTRAS_GANANCIAS_HABILITADOS (ver arriba).
     fueraDePatron:  true,
     topes:          true,
   },
@@ -186,15 +201,21 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
   });
 
   // SAC teórico = suma de las doceavas de TODOS los meses subidos, por legajo.
-  const sacTeoricoPorLegajo = new Map();
-  for (const [, data] of perFile) {
+  // Se guarda además el desglose por período: los chequeos del SAC teórico
+  // (parcial, doceava atípica) lo necesitan, y sin él no se puede explicar de
+  // dónde sale el número que el analista está por mandar.
+  const sacPorLegajo = new Map();  // legajo -> { total, porPeriodo: Map<period, doceava> }
+  for (const [period, data] of perFile) {
     for (const [legajo, entry] of data.porLegajo) {
       const doceava = calcDoceava(entry.mes, CODES);
       if (doceava === null) continue;
-      sacTeoricoPorLegajo.set(legajo, round2((sacTeoricoPorLegajo.get(legajo) ?? 0) + doceava));
+      if (!sacPorLegajo.has(legajo)) sacPorLegajo.set(legajo, { total: 0, porPeriodo: new Map() });
+      const sac = sacPorLegajo.get(legajo);
+      sac.total = round2(sac.total + doceava);
+      sac.porPeriodo.set(period, doceava);
     }
   }
-  for (const row of mesRows) row.sacTeorico = sacTeoricoPorLegajo.get(row.legajo) ?? null;
+  for (const row of mesRows) row.sacTeorico = sacPorLegajo.get(row.legajo)?.total ?? null;
 
   // ── Tabla DATOS: acumulado del año, SOLO del crudo más nuevo (SUMA + sus
   // propias filas de mes) — no se suman los crudos entre sí. ─────────────────
@@ -232,9 +253,7 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
     };
   });
 
-  const prevPeriod = periods.length >= 2 ? periods[periods.length - 2] : null;
-  const prevData   = prevPeriod ? perFile.get(prevPeriod) : null;
-  const checks = computeChecks({ mesRows, datosRows, prevData, cfg, CODES });
+  const checks = computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, cfg });
 
   // Referencia aproximada para el scatter: bruto mensual (soltero sin cargas) x
   // 12. Es un caso base, no un cálculo real de Ganancias — se documenta en
@@ -257,15 +276,17 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
 }
 
 /**
- * Chequeos de pantalla de la Fase 1 (nunca tocan el .xlsx exportado):
+ * Chequeos de pantalla (nunca tocan el .xlsx exportado). El foco es el SAC
+ * teórico, que es lo que este reporte existe para calcular:
+ * - SAC teórico: no se pudo calcular / quedó parcial / dio negativo / una de
+ *   las doceavas se sale de la línea de las otras del mismo legajo.
  * - reconciliación: TOTAL de DATOS recalculado independientemente vs. el ya
  *   almacenado — si algo raro pasó en el parseo/consolidación, esto lo marca.
- * - CUIL faltante.
- * - salto grande: requiere ≥2 archivos; compara el bruto propio del mes contra
- *   el del período anterior.
- * - coherencia de topes: sólo si Guillermo cargó el tope (nunca inventado).
+ * - CUIL faltante y "sin movimiento en el mes": calidad del crudo de origen.
+ * Los de tope previsional y tributación de Ganancias quedan detrás de
+ * EXTRAS_GANANCIAS_HABILITADOS (ver D-033).
  */
-function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
+function computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, cfg }) {
   const enabled = { ...DEFAULT_ACUMULADORES_CONFIG.checksEnabled, ...(cfg.checksEnabled || {}) };
   const issues = [];
 
@@ -315,22 +336,66 @@ function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
     }
   }
 
-  // ── Salto grande vs. mes anterior (requiere ≥2 archivos) ───────────────────
-  if (enabled.saltoGrande && prevData) {
+  // ── SAC teórico: el chequeo central de este reporte ────────────────────────
+  // Un solo caso por legajo, del más grave al menos: si no se pudo calcular no
+  // tiene sentido además decir que quedó parcial.
+  let sacStats = { total: mesRows.length, calculados: 0 };
+  if (enabled.sacTeorico) {
     const mult = cfg.saltoGrandeMultiplicador || DEFAULT_ACUMULADORES_CONFIG.saltoGrandeMultiplicador;
+
     for (const row of mesRows) {
-      const prevEntry = prevData.porLegajo.get(row.legajo);
-      const prevBruto = prevEntry?.mes?.[CODES.brutoGanancias];
-      const currBruto = row.brutoGanancias;
-      if (prevBruto === undefined || prevBruto === null || Math.abs(prevBruto) <= 0.01) continue;
-      if (currBruto === null) continue;
-      const ratio = currBruto / prevBruto;
-      if (ratio > mult || ratio < 1 / mult) {
+      const sac = sacPorLegajo.get(row.legajo);
+
+      // No liquidó en ningún mes de la ventana: no hay doceava de dónde sacarlo.
+      if (!sac || sac.porPeriodo.size === 0) {
         issues.push({
-          type: 'saltoGrande', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
-          what: `Bruto para ganancias cambió ${ratio >= 1 ? `x${ratio.toFixed(1)}` : `a ${(ratio * 100).toFixed(0)}%`} vs. el mes anterior.`,
-          why:  `Mes anterior: ${fmtNum(prevBruto)} · Este mes: ${fmtNum(currBruto)}.`,
+          type: 'sacNoCalculado', sev: 'hi', legajo: row.legajo, nombre: row.nombre,
+          what: 'No se pudo calcular el SAC teórico.',
+          why:  'No tiene valores propios del mes en ninguno de los crudos subidos, así que no hay doceava que acumular. Sale en cero en el .xlsx.',
         });
+        continue;
+      }
+      sacStats.calculados++;
+
+      // Negativo: las deducciones del mes superaron al gravado.
+      if (sac.total < -0.01) {
+        issues.push({
+          type: 'sacNegativo', sev: 'hi', legajo: row.legajo, nombre: row.nombre,
+          what: `SAC teórico negativo: ${fmtNum(sac.total)}.`,
+          why:  'En algún mes las deducciones (jubilación, obra social, sindicato, excluidos) superaron al gravado. Revisar ese mes antes de mandar el archivo.',
+        });
+        continue;
+      }
+
+      // Parcial: le faltan meses de la ventana. El mes de proceso no cuenta acá
+      // — ese caso ya lo reporta "sin movimiento en el mes", no se duplica.
+      const faltan = periods.filter(p => p !== mesProceso && !sac.porPeriodo.has(p));
+      if (faltan.length > 0) {
+        issues.push({
+          type: 'sacParcial', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+          what: `SAC teórico armado con ${sac.porPeriodo.size} de ${periods.length} meses de la ventana.`,
+          why:  `Sin doceava en: ${faltan.map(periodToLabel).join(', ')}. Puede ser un alta posterior o una licencia — el SAC teórico queda proporcional a lo que sí liquidó.`,
+        });
+        continue;
+      }
+
+      // Una doceava que se sale de la línea de las otras del mismo legajo.
+      if (sac.porPeriodo.size >= 2) {
+        const vals    = [...sac.porPeriodo.values()].sort((a, b) => a - b);
+        const mediana = vals[Math.floor(vals.length / 2)];
+        if (mediana > 0.01) {  // con mediana ~0 o negativa la razón no dice nada
+          for (const [period, v] of sac.porPeriodo) {
+            const ratio = v / mediana;
+            if (ratio > mult || ratio < 1 / mult) {
+              issues.push({
+                type: 'doceavaAtipica', sev: 'lo', legajo: row.legajo, nombre: row.nombre,
+                what: `La doceava de ${periodToLabel(period)} se sale de la línea de los otros meses.`,
+                why:  `${periodToLabel(period)}: ${fmtNum(v)} · mediana de sus meses: ${fmtNum(mediana)}. Puede ser un retroactivo o una liquidación extra — mirar que el SAC teórico no quede inflado.`,
+              });
+              break;  // un solo aviso por legajo, aunque se salgan varios meses
+            }
+          }
+        }
       }
     }
   }
@@ -339,7 +404,7 @@ function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
   // No se le retuvo nada en el año, pero su total anual está por encima del
   // total más bajo al que SÍ se le retuvo. Es lo único afirmable sin la escala
   // legal — y se dice en neutral: puede haber deducciones que lo expliquen.
-  if (enabled.fueraDePatron) {
+  if (EXTRAS_GANANCIAS_HABILITADOS && enabled.fueraDePatron) {
     const conImpuesto = datosRows.filter(r => isVal(r.total) && r.impuesto !== null && r.impuesto > 0.01);
     if (conImpuesto.length > 0) {
       const minTrib = Math.min(...conImpuesto.map(r => r.total));
@@ -358,7 +423,7 @@ function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
 
   // ── Coherencia de topes (sólo si están configurados) ───────────────────────
   const coherenceChecks = [];
-  if (enabled.topes) {
+  if (EXTRAS_GANANCIAS_HABILITADOS && enabled.topes) {
     // Un solo tope de base imponible; cada concepto deriva su techo por alícuota.
     const base = cfg.topeBaseImponible;
     const techo = alic => (base === null || base === undefined) ? null : round2(base * (alic / 100));
@@ -389,8 +454,16 @@ function computeChecks({ mesRows, datosRows, prevData, cfg, CODES }) {
       ok: reconciliation.ok === reconciliation.total,
     });
   }
+  // El del SAC teórico va primero: es lo que este reporte viene a hacer.
+  if (enabled.sacTeorico) {
+    coherenceChecks.unshift({
+      label: 'SAC teórico calculado',
+      detail: `${sacStats.calculados}/${sacStats.total}`,
+      ok: sacStats.calculados === sacStats.total,
+    });
+  }
 
-  return { reconciliation, issues, coherenceChecks };
+  return { reconciliation, sacStats, issues, coherenceChecks };
 }
 
 /** Consolida las filas de un crudo por legajo: { suma: {nro: total}, mes: {nro: total}, nombre, cuil }. */
@@ -532,18 +605,22 @@ export function renderAcumuladoresResults(results, container) {
   const sinMovCount = mes.rows.length - mesConMov.length;
   const sacTeoricoTotal = mes.rows.reduce((acc, r) => acc + (r.sacTeorico ?? 0), 0);
   const regimenLabel = regimen === 'RG4003' ? 'RG 4003' : 'RG 4030';
-  const { reconciliation, issues, coherenceChecks } = checks;
+  const { reconciliation, sacStats, issues, coherenceChecks } = checks;
 
   container.innerHTML = '';
 
   // ── Veredicto ──────────────────────────────────────────────────────────────
+  // El titular es siempre sobre el SAC teórico: es lo que este reporte calcula.
   const reconciliaOk = reconciliation.total === 0 || reconciliation.ok === reconciliation.total;
-  const tone = !reconciliaOk ? 'error' : issues.length > 0 ? 'warn' : 'ok';
+  const sinCalcular  = (sacStats?.total ?? 0) - (sacStats?.calculados ?? 0);
+  const tone = !reconciliaOk || sinCalcular > 0 ? 'warn' : issues.length > 0 ? 'warn' : 'ok';
   const title = !reconciliaOk
     ? `${reconciliation.total - reconciliation.ok} reconciliación(es) no cierran — revisar antes de usar este reporte`
-    : issues.length > 0
-      ? `${datos.rows.length} legajos generados, con ${issues.length} caso(s) para revisar`
-      : `${datos.rows.length} legajos generados, sin casos para revisar`;
+    : sinCalcular > 0
+      ? `SAC teórico calculado para ${sacStats.calculados} de ${sacStats.total} legajos — ${sinCalcular} sin calcular`
+      : issues.length > 0
+        ? `SAC teórico calculado para los ${sacStats.total} legajos, con ${issues.length} caso(s) para revisar`
+        : `SAC teórico calculado para los ${sacStats.total} legajos, sin casos para revisar`;
   renderVerdict(container, {
     tone, title,
     body: `${periodToLabel(mesProceso)} · ${regimenLabel} · ${periods.length} mes(es) en la ventana.`,
@@ -565,7 +642,7 @@ export function renderAcumuladoresResults(results, container) {
     tabs: [
       { id: 'resumen',  label: 'Resumen',  render: (panel) => renderResumenTab(panel, {
           datos, mesRows: mes.rows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks,
-          pisoGananciasAnualAprox: results.pisoGananciasAnualAprox,
+          sinCalcular, pisoGananciasAnualAprox: results.pisoGananciasAnualAprox,
         }) },
       { id: 'fichas',   label: 'Fichas',   render: (panel) => renderFichasTab(panel, { mes, datos, issues }) },
       { id: 'planilla', label: 'Planilla', render: (panel) => renderPlanillaTab(panel, {
@@ -592,11 +669,13 @@ export function renderAcumuladoresResults(results, container) {
 
 // ── Dirección A — Resumen (tiles + casos para revisar + chequeos + scatter) ──
 
-function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks, pisoGananciasAnualAprox }) {
+function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks, sinCalcular, pisoGananciasAnualAprox }) {
   renderTiles(panel, [
     { label: 'Legajos', value: datos.rows.length },
-    { label: 'Sin movimiento en el mes', value: sinMovCount, tone: sinMovCount > 0 ? 'warn' : undefined },
     { label: 'SAC teórico total', value: fmtNum(sacTeoricoTotal) },
+    { label: 'Sin SAC teórico', value: sinCalcular ?? 0, tone: (sinCalcular ?? 0) > 0 ? 'warn' : undefined,
+      sub: 'no liquidaron en ningún mes' },
+    { label: 'Sin movimiento en el mes', value: sinMovCount, tone: sinMovCount > 0 ? 'warn' : undefined },
     { label: 'Meses en ventana', value: periods.length, sub: regimenLabel },
   ]);
 
@@ -617,7 +696,7 @@ function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal,
 
   renderChecks(panel, { heading: 'Chequeos de coherencia', items: coherenceChecks });
 
-  renderScatter(panel, datos.rows, pisoGananciasAnualAprox);
+  if (EXTRAS_GANANCIAS_HABILITADOS) renderScatter(panel, datos.rows, pisoGananciasAnualAprox);
 }
 
 /**
@@ -1097,38 +1176,45 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
   {
     const box = document.createElement('div');
     box.style.marginTop = 'var(--sp-3)';
+    // Los bloques de tope previsional y piso de Ganancias existen pero no se
+    // muestran: ver EXTRAS_GANANCIAS_HABILITADOS arriba y D-033.
     box.innerHTML = `
         <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-3);align-items:flex-end;">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Base imponible máxima mensual (dejar vacío = sin chequear)
-            <input type="number" class="form-input" data-acum-tope="topeBaseImponible"
-              value="${current.topeBaseImponible ?? ''}" style="padding:4px 8px;max-width:220px;">
-          </label>
-          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Alícuota jubilación (%)
-            <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaJubilacion"
-              value="${current.alicuotaJubilacion ?? 11}" style="padding:4px 8px;max-width:110px;">
-          </label>
-          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Alícuota obra social (%)
-            <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaObraSocial"
-              value="${current.alicuotaObraSocial ?? 3}" style="padding:4px 8px;max-width:110px;">
-          </label>
-          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
-            Multiplicador de "salto grande"
+            Multiplicador para "doceava atípica"
             <input type="number" step="0.1" min="1" class="form-input" data-acum-salto
               value="${current.saltoGrandeMultiplicador}" style="padding:4px 8px;max-width:120px;">
           </label>
+          ${EXTRAS_GANANCIAS_HABILITADOS ? `
+            <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+              Base imponible máxima mensual (dejar vacío = sin chequear)
+              <input type="number" class="form-input" data-acum-tope="topeBaseImponible"
+                value="${current.topeBaseImponible ?? ''}" style="padding:4px 8px;max-width:220px;">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+              Alícuota jubilación (%)
+              <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaJubilacion"
+                value="${current.alicuotaJubilacion ?? 11}" style="padding:4px 8px;max-width:110px;">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
+              Alícuota obra social (%)
+              <input type="number" step="0.1" min="0" class="form-input" data-acum-tope="alicuotaObraSocial"
+                value="${current.alicuotaObraSocial ?? 3}" style="padding:4px 8px;max-width:110px;">
+            </label>
+          ` : ''}
         </div>
-        <p class="text-muted" style="font-size:var(--text-sm);margin:0 0 var(--sp-3);" data-acum-techos></p>
+        <p class="text-muted" style="font-size:var(--text-sm);margin:0 0 var(--sp-3);" data-acum-techos
+          ${EXTRAS_GANANCIAS_HABILITADOS ? '' : 'hidden'}></p>
         <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;">
           ${Object.entries({
+            sacTeorico: 'SAC teórico (no calculado, parcial, atípico)',
             reconciliacion: 'Reconciliación aritmética',
             cuil: 'CUIL faltante',
             sinMovimiento: 'Sin movimiento en el mes',
-            saltoGrande: 'Salto grande vs. mes anterior',
-            fueraDePatron: 'Fuera de patrón de tributación',
-            topes: 'Coherencia de topes',
+            ...(EXTRAS_GANANCIAS_HABILITADOS ? {
+              fueraDePatron: 'Fuera de patrón de tributación',
+              topes: 'Coherencia de topes',
+            } : {}),
           }).map(([key, label]) => `
             <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;font-size:var(--text-sm);">
               <input type="checkbox" data-acum-check="${key}" ${current.checksEnabled[key] ? 'checked' : ''}>
@@ -1137,28 +1223,33 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
           `).join('')}
         </div>
         <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
-          El tope previsional es uno solo y aplica sobre la <strong>base</strong>: jubilación y obra social
-          comparten la misma base máxima y se diferencian por la alícuota. La base es un dato regulatorio
-          (AFIP, actualización RIPTE) — esta app nunca inventa un valor. Dejala vacía para apagar el chequeo
-          hasta tener el vigente.
+          Este reporte existe para armar el SAC teórico desde los acumuladores: los avisos son sobre eso —
+          si no se pudo calcular, si quedó armado con menos meses de los que subiste, o si alguna doceava se
+          sale de la línea de las otras del mismo legajo.
         </p>
-        <hr style="border:none;border-top:1px solid var(--color-border);margin:var(--sp-3) 0;">
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);max-width:260px;">
-          Piso de Ganancias — bruto mensual, soltero sin cargas (dejar vacío = no comparar)
-          <input type="number" class="form-input" data-acum-piso-ganancias
-            value="${current.pisoGananciasMensual ?? ''}" style="padding:4px 8px;">
-        </label>
-        <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
-          Es sólo una referencia visual en el gráfico "¿Quién tributa?" (Resumen) — el caso más simple posible,
-          no vale para nadie con cónyuge o hijos, y esta app no calcula Ganancias real. Sale de las
-          Deducciones Personales de AFIP, que cambian en enero y julio de cada año — hay que revisarlo con
-          esa frecuencia.
-        </p>
+        ${EXTRAS_GANANCIAS_HABILITADOS ? `
+          <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
+            El tope previsional es uno solo y aplica sobre la <strong>base</strong>: jubilación y obra social
+            comparten la misma base máxima y se diferencian por la alícuota. Ojo: la cuota del SAC tiene su
+            propio tope y este chequeo todavía no lo contempla.
+          </p>
+          <hr style="border:none;border-top:1px solid var(--color-border);margin:var(--sp-3) 0;">
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);max-width:260px;">
+            Piso de Ganancias — bruto mensual, soltero sin cargas (dejar vacío = no comparar)
+            <input type="number" class="form-input" data-acum-piso-ganancias
+              value="${current.pisoGananciasMensual ?? ''}" style="padding:4px 8px;">
+          </label>
+          <p class="text-muted" style="font-size:var(--text-sm);margin-top:var(--sp-2);">
+            Referencia visual del gráfico "¿Quién tributa?" — el caso más simple posible, no vale para nadie
+            con cónyuge o hijos. Cambia en enero y julio de cada año.
+          </p>
+        ` : ''}
       `;
       umbrales.appendChild(box);
 
       const techosEl = box.querySelector('[data-acum-techos]');
       const pintarTechos = () => {
+        if (!techosEl) return;
         const base = current.topeBaseImponible;
         if (base === null || base === undefined || isNaN(base)) {
           techosEl.textContent = 'Sin base cargada: el chequeo de topes queda apagado.';
@@ -1196,7 +1287,7 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
       });
 
       const pisoGananciasInput = box.querySelector('[data-acum-piso-ganancias]');
-      pisoGananciasInput.addEventListener('change', (e) => {
+      pisoGananciasInput?.addEventListener('change', (e) => {
         const v = e.target.value.trim();
         current.pisoGananciasMensual = v === '' ? null : Number(v);
         onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
