@@ -15,7 +15,6 @@
 
 import { initTabs } from '../ui/tabs.js';
 import { renderVerdict, renderTiles, renderIssues, renderChecks, enhanceGrid } from '../ui/resultBlocks.js';
-import { renderPinGatedSection } from '../ui/pinGate.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -977,14 +976,22 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
 
   container.appendChild(editor);
 
-  // ── Umbrales de los chequeos de pantalla (Fase 1), detrás de un PIN ────────
-  // Freno operativo, no seguridad real (ver js/ui/pinGate.js) — evita tocar
-  // topes/umbrales "de paso" sin querer.
-  renderPinGatedSection(container, {
-    label: 'Umbrales de chequeos (Acumuladores Ganancias)',
-    render: (host) => {
-      const box = document.createElement('div');
-      box.innerHTML = `
+  // ── Umbrales de los chequeos de pantalla (Fase 1) ──────────────────────────
+  // Visibles y editables directamente por el analista que ejecuta el control
+  // (sin gate de PIN — Guillermo prefiere confiar en el equipo de Payroll acá,
+  // igual que con "Régimen y códigos" arriba).
+  const umbrales = document.createElement('details');
+  umbrales.style.cssText = 'margin-top:var(--sp-3);padding:var(--sp-3) var(--sp-4);'
+    + 'border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);';
+  umbrales.innerHTML = `
+    <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-primary);list-style:none;">
+      ▸ Umbrales de chequeos (Acumuladores Ganancias)
+    </summary>
+  `;
+  {
+    const box = document.createElement('div');
+    box.style.marginTop = 'var(--sp-3)';
+    box.innerHTML = `
         <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-3);">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:var(--text-sm);">
             Tope jubilación (monto mensual, dejar vacío = sin chequear)
@@ -1021,7 +1028,7 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
           apagar ese chequeo hasta tener el valor vigente.
         </p>
       `;
-      host.appendChild(box);
+      umbrales.appendChild(box);
 
       box.querySelectorAll('[data-acum-tope]').forEach(input => {
         input.addEventListener('change', (e) => {
@@ -1046,8 +1053,9 @@ export function renderAcumuladoresConfigEditor(container, opts = {}) {
           onChange({ ...current, codigos: { ...current.codigos }, checksEnabled: { ...current.checksEnabled } });
         });
       });
-    },
-  });
+  }
+
+  container.appendChild(umbrales);
 }
 
 function esc(str) {
