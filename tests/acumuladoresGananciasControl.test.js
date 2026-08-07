@@ -315,5 +315,16 @@ const resultsSinChecks = ctrl.run(rows, [], {
 assert('con todos los chequeos apagados, no hay issues ni coherenceChecks',
   resultsSinChecks.checks.issues.length === 0 && resultsSinChecks.checks.coherenceChecks.length === 0);
 
+// ── Piso de Ganancias (referencia para el scatter, sin cálculo de impuesto) ──
+assert('sin pisoGananciasMensual configurado, results.pisoGananciasAnualAprox es null',
+  results.pisoGananciasAnualAprox === null);
+
+const resultsConPiso = ctrl.run(rows, [], {
+  period: '2026-08',
+  acumuladoresConfig: { pisoGananciasMensual: 3502511 },
+});
+assert('con pisoGananciasMensual = 3.502.511, el anual aproximado es x12 (42.030.132)',
+  Math.abs(resultsConPiso.pisoGananciasAnualAprox - 42030132) < 0.01);
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

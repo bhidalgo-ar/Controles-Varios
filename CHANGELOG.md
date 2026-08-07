@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Acumuladores Ganancias — piso de Ganancias como referencia en el scatter — 2026-08-07
+
+- Nuevo campo de config `pisoGananciasMensual` (bruto mensual, soltero sin cargas — el caso más simple, AFIP, dejar vacío por default) que agrega una segunda línea de referencia al scatter "¿Quién tributa?": el "Piso AFIP aprox." (`pisoGananciasMensual × 12`) al lado del "Piso real de tributación" (observado en los datos). Permite comparar de un vistazo si están cerca o muy alejados.
+- El piso de Ganancias **no es un valor único como el previsional** — depende de cargas de familia (soltero/casado/hijos), que Acumuladores no tiene. Se documenta explícitamente como aproximación del caso base, no como cálculo real, y se recuerda que las Deducciones Personales de AFIP se actualizan cada semestre (enero y julio).
+- `tests/acumuladoresGananciasControl.test.js` — 56 asserts (2 nuevos): pass-through de `pisoGananciasAnualAprox` (null por default, ×12 cuando se configura).
+- Ver D-032 en `DECISIONS.md`.
+
 ### feat: Acumuladores Ganancias — tope previsional único y scatter "¿quién tributa?" — 2026-08-07
 
 - **Tope previsional: uno solo, sobre la base.** `topeJubilacion`/`topeObraSocial` (dos montos independientes) se reemplazan por `topeBaseImponible` + `alicuotaJubilacion` (11%) / `alicuotaObraSocial` (3%), editables. Jubilación y obra social comparten la misma base imponible máxima y se diferencian por alícuota: el techo de cada retención sale de `base × alícuota`. El editor muestra en vivo los techos derivados. La base sigue vacía por default — nunca se inventa el valor regulatorio.
