@@ -7,6 +7,12 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: Acumuladores Ganancias — se saca el gate de PIN del editor de umbrales — 2026-08-07
+
+- `js/controls/acumuladoresGanancias.js` — la sección de umbrales de chequeos (topes de jubilación/obra social, multiplicador de "salto grande", on/off por chequeo) ya no está detrás de un PIN: queda como un `<details>` visible y editable directo, igual que "Régimen y códigos de acumulador". Pedido explícito de Guillermo tras revisar la pantalla mergeada — el equipo de Payroll es de confianza para tocar estos valores sin fricción.
+- `js/ui/pinGate.js` queda en el repo sin uso (no se borra) por si otro control lo necesita a futuro.
+- Ver D-030 en `DECISIONS.md`.
+
 ### feat: Acumuladores Ganancias — Fase 1: panel de verificación, fichas por legajo y gate de PIN — 2026-08-07
 
 - `js/controls/acumuladoresGanancias.js` — chequeos de pantalla (nunca tocan el `.xlsx` exportado): reconciliación aritmética de `DATOS.total`, CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica — cierra el caso del legajo 137 sin adivinar causa), "salto grande" de bruto vs. el mes anterior (requiere ≥2 archivos, umbral configurable), y coherencia de topes de jubilación/obra social (apagados hasta que se configure el valor vigente — nunca inventado).
