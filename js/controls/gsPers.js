@@ -3,6 +3,10 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 //
 // Modo 1 — "Controlar": cruza GTOS_PERSONALES y DTO_COCHERA del Reporte de GS Pers
 //   contra las columnas configuradas en el Tabulado (tabGtosPersonalesColumn / tabDtoCocheraColumn).
@@ -103,6 +107,28 @@ export function runGsPers(gsRows, tabRows, mapping) {
   };
 }
 
+const CYAN_BG   = 'rgba(0,172,212,0.10)';
+const CYAN_HDR  = 'rgba(0,172,212,0.22)';
+const LILAC_BG  = 'rgba(130,80,200,0.09)';
+const LILAC_HDR = 'rgba(130,80,200,0.20)';
+
+const fmt = v => v === null
+  ? '—'
+  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
+// DTO_COCHERA en cualquiera de las dos fuentes — la mayoría de los legajos no
+// tienen ninguno de los dos (CLAUDE.md §11.1).
+function gsPersHasAnyValue(r) {
+  return [r.gtos, r.dto, r.tabValGtos, r.tabValDto].some(v => v !== null && Math.abs(v) > 0.01);
+}
+function gsPersRowHasDiff(r) {
+  return (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) || (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01);
+}
+function gsPersDiffAmount(r) {
+  return Math.abs(r.ctrlGtos ?? 0) + Math.abs(r.ctrlDto ?? 0);
+}
+
 export function renderGsPersResults(results, container) {
   const { rows } = results;
 
@@ -111,89 +137,172 @@ export function renderGsPersResults(results, container) {
     return;
   }
 
-  const CYAN_BG   = 'rgba(0,172,212,0.10)';
-  const CYAN_HDR  = 'rgba(0,172,212,0.22)';
-  const LILAC_BG  = 'rgba(130,80,200,0.09)';
-  const LILAC_HDR = 'rgba(130,80,200,0.20)';
+  const relevantRows = rows.filter(gsPersHasAnyValue);
+  const diffRows     = relevantRows.filter(gsPersRowHasDiff);
+  const okCount      = relevantRows.length - diffRows.length;
+  const noValueCount = rows.length - relevantRows.length;
 
-  const fmt = v => v === null
-    ? '—'
-    : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const diffStyle = v =>
-    (v !== null && Math.abs(v) > 0.01)
-      ? 'color:var(--color-danger);font-weight:600;'
-      : '';
-
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
-
-  // Tabla
-  const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th rowspan="2">Legajo</th>
-          <th colspan="2" style="text-align:center;background:${CYAN_HDR};">GTOS_PERSONALES</th>
-          <th colspan="2" style="text-align:center;background:${LILAC_HDR};">DTO_COCHERA</th>
-          <th colspan="3" style="text-align:center;">Valores Tabulado</th>
-        </tr>
-        <tr>
-          <th style="background:${CYAN_HDR};">GTOS_PERSONALES</th>
-          <th style="background:${CYAN_HDR};"><strong>CTRL GTOS_PERSONALES</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
-          <th style="background:${LILAC_HDR};">DTO_COCHERA</th>
-          <th style="background:${LILAC_HDR};"><strong>CTRL DTO_COCHERA</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
-          <th>Legajo</th>
-          <th>GTOS_PERSONALES (Tab)</th>
-          <th>DTO_COCHERA (Tab)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td>${esc(r.legajo)}</td>
-            <td style="text-align:right;background:${CYAN_BG};">${fmt(r.gtos)}</td>
-            <td style="text-align:right;background:${CYAN_BG};${diffStyle(r.ctrlGtos)}">${fmt(r.ctrlGtos)}</td>
-            <td style="text-align:right;background:${LILAC_BG};">${fmt(r.dto)}</td>
-            <td style="text-align:right;background:${LILAC_BG};${diffStyle(r.ctrlDto)}">${fmt(r.ctrlDto)}</td>
-            <td>${esc(r.legajo)}</td>
-            <td style="text-align:right;">${fmt(r.tabValGtos)}</td>
-            <td style="text-align:right;">${fmt(r.tabValDto)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
+  const sumGtos    = relevantRows.reduce((s, r) => s + (r.gtos       ?? 0), 0);
+  const sumGtosTab = relevantRows.reduce((s, r) => s + (r.tabValGtos ?? 0), 0);
+  const diffGtos   = sumGtosTab - sumGtos;
+  const sumDto     = relevantRows.reduce((s, r) => s + (r.dto        ?? 0), 0);
+  const sumDtoTab  = relevantRows.reduce((s, r) => s + (r.tabValDto  ?? 0), 0);
+  const diffDto    = sumDtoTab - sumDto;
 
   container.innerHTML = '';
-  container.appendChild(toolbar);
-  container.appendChild(tableWrap);
 
-  // Paginación (tablas de cientos de legajos) + buscador por legajo
-  const tbodyEl = tableWrap.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
-    rows,
-    trEls: pagination.dataRows,
-    getLabel: r => `${r.legajo}`,
-    pagination,
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: diffRows.length === 0
+          ? 'GTOS_PERSONALES y DTO_COCHERA coinciden con el Tabulado en todos los legajos.'
+          : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en GTOS_PERSONALES o DTO_COCHERA.`,
+        body: diffRows.length === 0
+          ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} con algún valor real, verificados contra el Tabulado sin diferencias.`
+          : `Diferencia total de <strong>${fmt(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmt(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Detalle».`,
+      });
+
+      renderTiles(panel, [
+        { label: 'Legajos evaluados', value: relevantRows.length,
+          sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de GS Pers' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
+        { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
+      ]);
+
+      if (diffRows.length > 0) {
+        const top = [...diffRows].sort((a, b) => gsPersDiffAmount(b) - gsPersDiffAmount(a)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
+          items: top.map(r => {
+            const bits = [];
+            if (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) bits.push(`GTOS_PERSONALES ${fmt(r.ctrlGtos)}`);
+            if (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01) bits.push(`DTO_COCHERA ${fmt(r.ctrlDto)}`);
+            const worst = Math.abs(r.ctrlGtos ?? 0) >= Math.abs(r.ctrlDto ?? 0) ? r.ctrlGtos : r.ctrlDto;
+            return {
+              sev: bits.length > 1 ? 'hi' : 'lo',
+              who: `Legajo ${r.legajo}`,
+              what: bits.join(' · '),
+              why: 'Diferencia Tab − GS Pers.',
+              right: `<span class="${mvClass(worst)}">${mvArrow(worst)} ${fmtSigned(worst)}</span>`,
+            };
+          }),
+        });
+      }
+    },
+    detalle(panel) { renderGsPersDetalle(panel, { relevantRows, diffRows, results }); },
   });
+}
 
-  const csvHeaders = ['Legajo', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'Legajo (Tab)', 'GTOS_PERSONALES (Tab)', 'DTO_COCHERA (Tab)'];
-  const csvRows = () => rows.map(r => [r.legajo, fmt(r.gtos), fmt(r.ctrlGtos), fmt(r.dto), fmt(r.ctrlDto), r.legajo, fmt(r.tabValGtos), fmt(r.tabValDto)]);
+function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
+  if (relevantRows.length === 0) {
+    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún legajo tiene valor real en GTOS_PERSONALES o DTO_COCHERA.</p>`;
+    return;
+  }
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'results-toolbar';
+
+  const leftGroup = document.createElement('div');
+  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
+
+  const filterSel = document.createElement('select');
+  filterSel.className = 'form-select form-select--sm';
+  filterSel.innerHTML = `
+    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
+    <option value="all">Todos los evaluados (${relevantRows.length})</option>
+  `;
+  if (diffRows.length === 0) filterSel.value = 'all';
+
+  const searchEl = document.createElement('div');
+  leftGroup.appendChild(filterSel);
+  leftGroup.appendChild(searchEl);
+
+  const exportEl = document.createElement('div');
+  toolbar.appendChild(leftGroup);
+  toolbar.appendChild(exportEl);
+  container.appendChild(toolbar);
+
+  const csvHeaders = ['Legajo', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'GTOS_PERSONALES (Tab)', 'DTO_COCHERA (Tab)'];
+  const csvRows = () => relevantRows.map(r => [r.legajo, fmt(r.gtos), fmt(r.ctrlGtos), fmt(r.dto), fmt(r.ctrlDto), fmt(r.tabValGtos), fmt(r.tabValDto)]);
 
   renderExportMenu(exportEl, {
-    onExcel: () => exportGsPersToXlsx(results),
+    onExcel: () => exportGsPersToXlsx({ ...results, rows: relevantRows }),
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), `GsPers_Control_${periodSuffix(results.period)}.csv`),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
+
+  const tableHost = document.createElement('div');
+  container.appendChild(tableHost);
+
+  function renderTable() {
+    const shownRows = filterSel.value === 'dif' ? diffRows : relevantRows;
+    const maxAbs = Math.max(1, ...shownRows.flatMap(r => [Math.abs(r.ctrlGtos ?? 0), Math.abs(r.ctrlDto ?? 0)]));
+    const totGtos = shownRows.reduce((s, r) => s + (r.gtos ?? 0), 0);
+    const totGtosTab = shownRows.reduce((s, r) => s + (r.tabValGtos ?? 0), 0);
+    const totDto = shownRows.reduce((s, r) => s + (r.dto ?? 0), 0);
+    const totDtoTab = shownRows.reduce((s, r) => s + (r.tabValDto ?? 0), 0);
+
+    tableHost.innerHTML = `
+      <table class="data-table data-table--compact">
+        <thead>
+          <tr>
+            <th rowspan="2">Legajo</th>
+            <th colspan="3" style="text-align:center;background:${CYAN_HDR};">GTOS_PERSONALES</th>
+            <th colspan="3" style="text-align:center;background:${LILAC_HDR};">DTO_COCHERA</th>
+          </tr>
+          <tr>
+            <th style="background:${CYAN_HDR};">GS Pers</th>
+            <th style="background:${CYAN_HDR};">Tab</th>
+            <th style="background:${CYAN_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
+            <th style="background:${LILAC_HDR};">GS Pers</th>
+            <th style="background:${LILAC_HDR};">Tab</th>
+            <th style="background:${LILAC_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${shownRows.map(r => `
+            <tr>
+              <td>${esc(r.legajo)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.gtos)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValGtos)}</td>
+              ${diffCellHtml(r.ctrlGtos, { max: maxAbs, background: CYAN_BG })}
+              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.dto)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValDto)}</td>
+              ${diffCellHtml(r.ctrlDto, { max: maxAbs, background: LILAC_BG })}
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>TOTAL</strong> — ${shownRows.length}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtos)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtosTab)}</td>
+            ${diffCellHtml(totGtosTab - totGtos, { background: CYAN_HDR })}
+            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDto)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDtoTab)}</td>
+            ${diffCellHtml(totDtoTab - totDto, { background: LILAC_HDR })}
+          </tr>
+        </tfoot>
+      </table>
+    `;
+
+    const tbodyEl = tableHost.querySelector('tbody');
+    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
+    initSearchCombobox(searchEl, {
+      rows: shownRows,
+      trEls: pagination.dataRows,
+      getLabel: r => `${r.legajo}`,
+      pagination,
+    });
+    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
+  }
+
+  filterSel.addEventListener('change', renderTable);
+  renderTable();
 }
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
@@ -266,9 +375,6 @@ export function renderGsPersReporteResults(results, container) {
     return;
   }
 
-  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
-
   const colDefs = [
     { label: 'FECHA_INI',         key: 'fecIni',    type: 'txt' },
     { label: 'FECHA_FIN',         key: 'fecFin',    type: 'txt' },
@@ -283,6 +389,41 @@ export function renderGsPersReporteResults(results, container) {
     cols.hasNCC       && { label: 'N_CENTRO_COSTO',  key: 'nCC',      type: 'txt' },
   ].filter(Boolean);
 
+  const sinColumnas = colDefs.length <= 3;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      renderVerdict(panel, {
+        tone: sinColumnas ? 'warn' : 'info',
+        title: sinColumnas
+          ? 'No hay columnas configuradas en el Tabulado para el Reporte de GS Pers.'
+          : `Reporte de GS Pers generado — ${rows.length} registro${rows.length === 1 ? '' : 's'}.`,
+        body: sinColumnas
+          ? 'Volvé al paso de Controles y completá los campos de la sección "GS Pers".'
+          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
+      });
+      if (!sinColumnas) {
+        renderTiles(panel, [
+          { label: 'Registros', value: rows.length },
+          { label: 'Columnas mapeadas', value: `${colDefs.length} / 11` },
+        ]);
+      }
+    },
+    detalle(panel) { renderGsPersReporteDetalle(panel, { rows, cols, colDefs, sinColumnas, results }); },
+  });
+}
+
+function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumnas, results }) {
+  if (sinColumnas) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtTxt = v => v === null ? '—' : esc(String(v));
+
   // Barra: buscador (izquierda) + menú de exportar (derecha)
   const toolbar = document.createElement('div');
   toolbar.className = 'results-toolbar';
@@ -292,7 +433,6 @@ export function renderGsPersReporteResults(results, container) {
   toolbar.appendChild(exportEl);
 
   const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
   tableWrap.innerHTML = `
     <table class="data-table data-table--compact">
       <thead>
@@ -314,20 +454,8 @@ export function renderGsPersReporteResults(results, container) {
     </table>
   `;
 
-  if (colDefs.length <= 3) {
-    tableWrap.innerHTML = `
-      <div class="alert alert--warning" style="margin:var(--sp-4);">
-        ⚠ No hay columnas configuradas en el Tabulado para el Reporte de GS Pers.<br>
-        Volvé al paso de Controles y completá los campos de la sección "GS Pers".
-      </div>
-    `;
-  }
-
-  container.innerHTML = '';
   container.appendChild(toolbar);
   container.appendChild(tableWrap);
-
-  if (colDefs.length <= 3) return; // sin tabla real, no hay nada que paginar/exportar
 
   const tbodyEl = tableWrap.querySelector('tbody');
   const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
@@ -339,6 +467,8 @@ export function renderGsPersReporteResults(results, container) {
     getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
     pagination,
   });
+  // stickyCols:0 — la 1ª/2ª columna real son FECHA_INI/FECHA_FIN, no Legajo/Nombre.
+  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 0 });
 
   const csvHeaders = colDefs.map(c => c.label);
   const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));

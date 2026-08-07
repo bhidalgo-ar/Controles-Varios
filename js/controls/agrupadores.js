@@ -16,6 +16,9 @@
 import { runMatching } from '../matching.js';
 import { computeInsights } from '../insights.js';
 import { formatAmount, formatDiff, formatPct } from '../utils/currency.js';
+import {
+  renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, enhanceGrid,
+} from '../ui/resultBlocks.js';
 
 export const DEFAULT_AGRUPADORES_CONFIG = {
   selectedGrouperIds: null, // null = "todos los agrupadores del cliente"
@@ -88,43 +91,62 @@ export function renderAgrupadoresResults(results, container) {
     return;
   }
 
-  const { byGrouper, missingInResumen, missingInNomina, topDifferences, resultsPorGrupo, grouperDefs } = results;
+  const { byGrouper, missingInResumen, missingInNomina, topDifferences } = results;
+  const unitsTotal    = byGrouper.reduce((s, g) => s + g.rowsTotal, 0);
+  const unitsWithDiff = byGrouper.reduce((s, g) => s + g.rowsWithDiff, 0);
+  const missingCount  = missingInResumen.length + missingInNomina.length;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = (unitsWithDiff === 0 && missingCount === 0) ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: tone === 'ok'
+          ? 'Nómina Maestra y Resumen coinciden en todos los agrupadores.'
+          : `${unitsWithDiff} legajo(s) con diferencia en algún agrupador${missingCount > 0 ? `, ${missingCount} faltante(s)` : ''}.`,
+        body: `${byGrouper.length} agrupador${byGrouper.length === 1 ? '' : 'es'} · ${unitsTotal} legajo(s) evaluados.`,
+      });
+
+      renderTiles(panel, [
+        { label: 'Agrupadores', value: byGrouper.length },
+        { label: 'Legajos evaluados', value: unitsTotal },
+        { label: 'Con diferencia', value: unitsWithDiff, tone: unitsWithDiff > 0 ? 'error' : 'ok' },
+        { label: 'Legajos faltantes', value: missingCount, tone: missingCount > 0 ? 'error' : 'ok' },
+      ]);
+
+      renderChecks(panel, {
+        heading: 'Totales por agrupador — Nómina vs Resumen',
+        items: byGrouper.map(g => ({
+          label: g.grouperName,
+          ok: g.rowsWithDiff === 0,
+          detail: `$ ${formatAmount(g.totalNomina)} vs $ ${formatAmount(g.totalResumen)}`
+            + (g.rowsWithDiff > 0 ? ` · ${formatDiff(g.diffAbsolute)} (${g.rowsWithDiff}/${g.rowsTotal} legajos)` : ' · sin diferencia'),
+        })),
+      });
+
+      if (topDifferences.length > 0) {
+        const top = topDifferences.slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${topDifferences.length}`,
+          items: top.map(r => ({
+            who: [r.apellido, r.nombre].filter(Boolean).join(', ') || `Legajo ${r.legajo}`,
+            sub: `Legajo ${r.legajo}`,
+            what: `${r.grouperName}: Nómina $ ${formatAmount(r.sumNom)} vs Resumen $ ${formatAmount(r.sumRes)}`,
+            right: formatDiff(r.diffAbs),
+          })),
+        });
+      }
+    },
+    detalle(panel) { renderAgrupadoresDetalle(panel, results); },
+  });
+}
+
+function renderAgrupadoresDetalle(container, results) {
+  const { missingInResumen, missingInNomina, topDifferences, resultsPorGrupo, grouperDefs } = results;
 
   container.innerHTML = `
-    <div class="card" style="margin-bottom:var(--sp-5);">
-      <div class="card__header"><h3 style="margin:0;">Totales por agrupador</h3></div>
-      <div class="card__body" style="padding:0;overflow-x:auto;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Agrupador</th>
-              <th style="text-align:right;">Total Nómina</th>
-              <th style="text-align:right;">Total Resumen</th>
-              <th style="text-align:right;">Diferencia $</th>
-              <th style="text-align:right;">Diferencia %</th>
-              <th style="text-align:center;">Filas c/diff</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${byGrouper.map(g => `
-              <tr class="${g.rowsWithDiff > 0 ? 'row--diff' : ''}">
-                <td><strong>${esc(g.grouperName)}</strong></td>
-                <td style="text-align:right;font-family:monospace;">$ ${formatAmount(g.totalNomina)}</td>
-                <td style="text-align:right;font-family:monospace;">$ ${formatAmount(g.totalResumen)}</td>
-                <td style="text-align:right;font-family:monospace;">${formatDiff(g.diffAbsolute)}</td>
-                <td style="text-align:right;">${formatPct(g.diffPercentage)}</td>
-                <td style="text-align:center;">
-                  ${g.rowsWithDiff > 0
-                    ? `<span class="badge badge--warning">${g.rowsWithDiff} / ${g.rowsTotal}</span>`
-                    : `<span class="badge badge--success">0 / ${g.rowsTotal}</span>`}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
     ${(missingInResumen.length || missingInNomina.length) ? `
       <div class="card" style="margin-bottom:var(--sp-5);">
         <div class="card__header"><h3 style="margin:0;">Legajos faltantes</h3></div>
@@ -182,6 +204,9 @@ export function renderAgrupadoresResults(results, container) {
     <h3 style="margin-bottom:var(--sp-4);">Detalle completo por agrupador</h3>
     ${(grouperDefs || []).map(g => renderGrouperDetail(g, resultsPorGrupo?.[g.id] || [])).join('')}
   `;
+
+  // Sticky Legajo en cada tabla de detalle por agrupador.
+  container.querySelectorAll('.card table.data-table').forEach(t => enhanceGrid(t, { stickyCols: 1 }));
 }
 
 function renderGrouperDetail(grouper, rows) {

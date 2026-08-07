@@ -3,6 +3,10 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 //
 // Modo 1 — "Controlar": cruza SAL_BASE y A_CTA_FUT_AUMEN del Reporte de Brutos
 //   contra las columnas configuradas en el Tabulado (tabSalBaseColumn / tabACuFutAumenColumn).
@@ -114,6 +118,28 @@ export function runBrutos(brutosRows, tabRows, mapping) {
   };
 }
 
+const CYAN_BG   = 'rgba(0,172,212,0.10)';
+const CYAN_HDR  = 'rgba(0,172,212,0.22)';
+const LILAC_BG  = 'rgba(130,80,200,0.09)';
+const LILAC_HDR = 'rgba(130,80,200,0.20)';
+
+const fmt = v => v === null
+  ? '—'
+  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Un legajo es "evaluable" si hay algún valor real de alguno de los dos
+// conceptos, en cualquiera de las dos fuentes (Brutos o Tabulado).
+function brutosHasAnyValue(r) {
+  return [r.salBase, r.aCuFutAumen, r.tabValSal, r.tabValAcu].some(v => v !== null && Math.abs(v) > 0.01);
+}
+function brutosRowHasDiff(r) {
+  return (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01)
+    || (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01);
+}
+function brutosDiffAmount(r) {
+  return Math.abs(r.ctrlSalBase ?? 0) + Math.abs(r.ctrlACuFutAumen ?? 0);
+}
+
 export function renderBrutosResults(results, container) {
   const { rows } = results;
 
@@ -122,120 +148,177 @@ export function renderBrutosResults(results, container) {
     return;
   }
 
-  const CYAN_BG   = 'rgba(0,172,212,0.10)';
-  const CYAN_HDR  = 'rgba(0,172,212,0.22)';
-  const LILAC_BG  = 'rgba(130,80,200,0.09)';
-  const LILAC_HDR = 'rgba(130,80,200,0.20)';
+  const relevantRows = rows.filter(brutosHasAnyValue);
+  const diffRows      = relevantRows.filter(brutosRowHasDiff);
+  const okCount        = relevantRows.length - diffRows.length;
+  const noValueCount    = rows.length - relevantRows.length;
 
-  const fmt = v => v === null
-    ? '—'
-    : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const diffStyle = v =>
-    (v !== null && Math.abs(v) > 0.01)
-      ? 'color:var(--color-danger);font-weight:600;'
-      : '';
-
-  // Totales para el chip de resumen
-  const sumSalBrutos = rows.reduce((s, r) => s + (r.salBase   ?? 0), 0);
-  const sumSalTab    = rows.reduce((s, r) => s + (r.tabValSal ?? 0), 0);
+  const sumSalBrutos = relevantRows.reduce((s, r) => s + (r.salBase   ?? 0), 0);
+  const sumSalTab    = relevantRows.reduce((s, r) => s + (r.tabValSal ?? 0), 0);
   const diffSal      = sumSalTab - sumSalBrutos;
-  const sumAcuBrutos = rows.reduce((s, r) => s + (r.aCuFutAumen ?? 0), 0);
-  const sumAcuTab    = rows.reduce((s, r) => s + (r.tabValAcu  ?? 0), 0);
+  const sumAcuBrutos = relevantRows.reduce((s, r) => s + (r.aCuFutAumen ?? 0), 0);
+  const sumAcuTab    = relevantRows.reduce((s, r) => s + (r.tabValAcu  ?? 0), 0);
   const diffAcu      = sumAcuTab - sumAcuBrutos;
-  const countDiff    = rows.filter(r =>
-    (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01) ||
-    (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01)
-  ).length;
-
-  const chipEl = document.createElement('div');
-  chipEl.style.cssText = 'padding:var(--sp-3);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);margin:var(--sp-3) var(--sp-3) 0;display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:center;';
-  chipEl.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <span style="font-size:0.7em;color:var(--color-text-muted);font-weight:600;">SAL_BASE</span>
-      <span style="font-size:var(--text-sm);">Brutos: <strong>${fmt(sumSalBrutos)}</strong> &middot; Tab: <strong>${fmt(sumSalTab)}</strong> &middot; Diff: <strong style="${Math.abs(diffSal) > 0.01 ? 'color:var(--color-danger);' : ''}">${fmt(diffSal)}</strong></span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <span style="font-size:0.7em;color:var(--color-text-muted);font-weight:600;">A_CTA_FUT_AUMEN</span>
-      <span style="font-size:var(--text-sm);">Brutos: <strong>${fmt(sumAcuBrutos)}</strong> &middot; Tab: <strong>${fmt(sumAcuTab)}</strong> &middot; Diff: <strong style="${Math.abs(diffAcu) > 0.01 ? 'color:var(--color-danger);' : ''}">${fmt(diffAcu)}</strong></span>
-    </div>
-    <div style="margin-left:auto;font-size:var(--text-sm);">
-      ${rows.length} registros &middot; ${countDiff > 0 ? `<span style="color:var(--color-danger);font-weight:600;">${countDiff} con diferencias</span>` : '<span style="color:var(--color-success);">&#10003; Sin diferencias</span>'}
-    </div>
-  `;
-
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
-
-  // Tabla
-  const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th rowspan="2">Legajo</th>
-          <th rowspan="2">Nombre</th>
-          <th colspan="2" style="text-align:center;background:${CYAN_HDR};">Salario Base</th>
-          <th colspan="2" style="text-align:center;background:${LILAC_HDR};">A Cta Fut Aumen</th>
-          <th colspan="3" style="text-align:center;">Valores Tabulado</th>
-        </tr>
-        <tr>
-          <th style="background:${CYAN_HDR};">SAL_BASE</th>
-          <th style="background:${CYAN_HDR};"><strong>CTRL SALARIO BASE</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
-          <th style="background:${LILAC_HDR};">A_CTA_FUT_AUMEN</th>
-          <th style="background:${LILAC_HDR};"><strong>CTRL A_CTA_FUT_AUMEN</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
-          <th>Legajo</th>
-          <th>SAL_BASE (Tab)</th>
-          <th>A_CTA_FUT (Tab)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td>${esc(r.legajo)}</td>
-            <td style="font-size:var(--text-sm);">${esc(r.nombre)}</td>
-            <td style="text-align:right;background:${CYAN_BG};">${fmt(r.salBase)}</td>
-            <td style="text-align:right;background:${CYAN_BG};${diffStyle(r.ctrlSalBase)}">${fmt(r.ctrlSalBase)}</td>
-            <td style="text-align:right;background:${LILAC_BG};">${fmt(r.aCuFutAumen)}</td>
-            <td style="text-align:right;background:${LILAC_BG};${diffStyle(r.ctrlACuFutAumen)}">${fmt(r.ctrlACuFutAumen)}</td>
-            <td>${esc(r.legajo)}</td>
-            <td style="text-align:right;">${fmt(r.tabValSal)}</td>
-            <td style="text-align:right;">${fmt(r.tabValAcu)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
 
   container.innerHTML = '';
-  container.appendChild(chipEl);
-  container.appendChild(toolbar);
-  container.appendChild(tableWrap);
 
-  // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre
-  const tbodyEl = tableWrap.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
-    rows,
-    trEls: pagination.dataRows,
-    getLabel: r => `${r.legajo} — ${r.nombre}`,
-    pagination,
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: diffRows.length === 0
+          ? 'SAL_BASE y A_CTA_FUT_AUMEN coinciden con el Tabulado en todos los legajos.'
+          : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en SAL_BASE o A_CTA_FUT_AUMEN.`,
+        body: diffRows.length === 0
+          ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} verificados contra el Tabulado, sin diferencias.`
+          : `Diferencia total de <strong>${fmt(diffSal)}</strong> en SAL_BASE y <strong>${fmt(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Detalle».`,
+      });
+
+      renderTiles(panel, [
+        { label: 'Legajos evaluados', value: relevantRows.length,
+          sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de Brutos' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
+        { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
+      ]);
+
+      if (diffRows.length > 0) {
+        const top = [...diffRows].sort((a, b) => brutosDiffAmount(b) - brutosDiffAmount(a)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
+          items: top.map(r => {
+            const bits = [];
+            if (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01) bits.push(`SAL_BASE ${fmt(r.ctrlSalBase)}`);
+            if (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01) bits.push(`A_CTA_FUT_AUMEN ${fmt(r.ctrlACuFutAumen)}`);
+            const worst = Math.abs(r.ctrlSalBase ?? 0) >= Math.abs(r.ctrlACuFutAumen ?? 0) ? r.ctrlSalBase : r.ctrlACuFutAumen;
+            return {
+              sev: bits.length > 1 ? 'hi' : 'lo',
+              who: r.nombre ? esc(r.nombre) : `Legajo ${r.legajo}`,
+              sub: `Legajo ${r.legajo}`,
+              what: bits.join(' · '),
+              why: 'Diferencia Tab − Brutos.',
+              right: `<span class="${mvClass(worst)}">${mvArrow(worst)} ${fmtSigned(worst)}</span>`,
+            };
+          }),
+        });
+      }
+    },
+    detalle(panel) { renderBrutosDetalle(panel, { relevantRows, diffRows, results }); },
   });
+}
 
-  const csvHeaders = ['Legajo', 'Nombre', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'Legajo (Tab)', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)'];
-  const csvRows = () => rows.map(r => [r.legajo, r.nombre, fmt(r.salBase), fmt(r.ctrlSalBase), fmt(r.aCuFutAumen), fmt(r.ctrlACuFutAumen), r.legajo, fmt(r.tabValSal), fmt(r.tabValAcu)]);
+function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
+  if (relevantRows.length === 0) {
+    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún legajo tiene valor real en SAL_BASE o A_CTA_FUT_AUMEN.</p>`;
+    return;
+  }
+
+  // Barra: filtro Sólo con diferencia/Todos (izquierda) + buscador + exportar (derecha)
+  const toolbar = document.createElement('div');
+  toolbar.className = 'results-toolbar';
+
+  const leftGroup = document.createElement('div');
+  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
+
+  const filterSel = document.createElement('select');
+  filterSel.className = 'form-select form-select--sm';
+  filterSel.innerHTML = `
+    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
+    <option value="all">Todos los evaluados (${relevantRows.length})</option>
+  `;
+  if (diffRows.length === 0) filterSel.value = 'all';
+
+  const searchEl = document.createElement('div');
+  leftGroup.appendChild(filterSel);
+  leftGroup.appendChild(searchEl);
+
+  const exportEl = document.createElement('div');
+  toolbar.appendChild(leftGroup);
+  toolbar.appendChild(exportEl);
+  container.appendChild(toolbar);
+
+  // Exportar siempre incluye todos los legajos evaluados, sin importar el filtro de pantalla.
+  const csvHeaders = ['Legajo', 'Nombre', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)'];
+  const csvRows = () => relevantRows.map(r => [r.legajo, r.nombre, fmt(r.salBase), fmt(r.ctrlSalBase), fmt(r.aCuFutAumen), fmt(r.ctrlACuFutAumen), fmt(r.tabValSal), fmt(r.tabValAcu)]);
 
   renderExportMenu(exportEl, {
-    onExcel: () => exportBrutosToXlsx(results),
+    onExcel: () => exportBrutosToXlsx({ ...results, rows: relevantRows }),
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Brutos_Control_${periodSuffix(results.period)}.csv`),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
+
+  const tableHost = document.createElement('div');
+  container.appendChild(tableHost);
+
+  function renderTable() {
+    const shownRows = filterSel.value === 'dif' ? diffRows : relevantRows;
+    const maxAbs = Math.max(1, ...shownRows.flatMap(r => [Math.abs(r.ctrlSalBase ?? 0), Math.abs(r.ctrlACuFutAumen ?? 0)]));
+    const totSal = shownRows.reduce((s, r) => s + (r.salBase ?? 0), 0);
+    const totSalTab = shownRows.reduce((s, r) => s + (r.tabValSal ?? 0), 0);
+    const totAcu = shownRows.reduce((s, r) => s + (r.aCuFutAumen ?? 0), 0);
+    const totAcuTab = shownRows.reduce((s, r) => s + (r.tabValAcu ?? 0), 0);
+
+    tableHost.innerHTML = `
+      <table class="data-table data-table--compact">
+        <thead>
+          <tr>
+            <th rowspan="2">Legajo</th>
+            <th rowspan="2">Nombre</th>
+            <th colspan="3" style="text-align:center;background:${CYAN_HDR};">Salario Base</th>
+            <th colspan="3" style="text-align:center;background:${LILAC_HDR};">A Cta Fut Aumen</th>
+          </tr>
+          <tr>
+            <th style="background:${CYAN_HDR};">Brutos</th>
+            <th style="background:${CYAN_HDR};">Tab</th>
+            <th style="background:${CYAN_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
+            <th style="background:${LILAC_HDR};">Brutos</th>
+            <th style="background:${LILAC_HDR};">Tab</th>
+            <th style="background:${LILAC_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${shownRows.map(r => `
+            <tr>
+              <td>${esc(r.legajo)}</td>
+              <td style="font-size:var(--text-sm);">${esc(r.nombre)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.salBase)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValSal)}</td>
+              ${diffCellHtml(r.ctrlSalBase, { max: maxAbs, background: CYAN_BG })}
+              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.aCuFutAumen)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValAcu)}</td>
+              ${diffCellHtml(r.ctrlACuFutAumen, { max: maxAbs, background: LILAC_BG })}
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2"><strong>TOTAL</strong> — ${shownRows.length} legajo${shownRows.length === 1 ? '' : 's'}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSal)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSalTab)}</td>
+            ${diffCellHtml(totSalTab - totSal, { background: CYAN_HDR })}
+            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcu)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcuTab)}</td>
+            ${diffCellHtml(totAcuTab - totAcu, { background: LILAC_HDR })}
+          </tr>
+        </tfoot>
+      </table>
+    `;
+
+    const tbodyEl = tableHost.querySelector('tbody');
+    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
+    initSearchCombobox(searchEl, {
+      rows: shownRows,
+      trEls: pagination.dataRows,
+      getLabel: r => `${r.legajo} — ${r.nombre}`,
+      pagination,
+    });
+    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
+  }
+
+  filterSel.addEventListener('change', renderTable);
+  renderTable();
 }
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
@@ -317,9 +400,6 @@ export function renderBrutosReporteResults(results, container) {
     return;
   }
 
-  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
-
   // Definición de columnas activas (orden idéntico al archivo de Brutos)
   const colDefs = [
     { label: 'FECHA_INI',                            key: 'fecIni',      type: 'txt' },
@@ -335,6 +415,41 @@ export function renderBrutosReporteResults(results, container) {
     cols.hasPuesto    && { label: 'N_PUESTO',         key: 'puesto',      type: 'txt' },
   ].filter(Boolean);
 
+  const sinColumnas = colDefs.length <= 1;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      renderVerdict(panel, {
+        tone: sinColumnas ? 'warn' : 'info',
+        title: sinColumnas
+          ? 'No hay columnas configuradas en el Tabulado para el Reporte de Brutos.'
+          : `Reporte de Brutos generado — ${rows.length} registro${rows.length === 1 ? '' : 's'}.`,
+        body: sinColumnas
+          ? 'Volvé a cargar el Tabulado y completá los campos de la sección "Brutos".'
+          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
+      });
+      if (!sinColumnas) {
+        renderTiles(panel, [
+          { label: 'Registros', value: rows.length },
+          { label: 'Columnas mapeadas', value: `${colDefs.length} / 11` },
+        ]);
+      }
+    },
+    detalle(panel) { renderBrutosReporteDetalle(panel, { rows, cols, colDefs, sinColumnas, results }); },
+  });
+}
+
+function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumnas, results }) {
+  if (sinColumnas) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtTxt = v => v === null ? '—' : esc(String(v));
+
   // Barra: buscador (izquierda) + menú de exportar (derecha)
   const toolbar = document.createElement('div');
   toolbar.className = 'results-toolbar';
@@ -345,7 +460,6 @@ export function renderBrutosReporteResults(results, container) {
 
   // Tabla
   const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
   tableWrap.innerHTML = `
     <table class="data-table data-table--compact">
       <thead>
@@ -367,20 +481,8 @@ export function renderBrutosReporteResults(results, container) {
     </table>
   `;
 
-  if (colDefs.length <= 1) {
-    tableWrap.innerHTML = `
-      <div class="alert alert--warning" style="margin:var(--sp-4);">
-        ⚠ No hay columnas configuradas en el Tabulado para el Reporte de Brutos.<br>
-        Volvé a cargar el Tabulado y completá los campos de la sección "Brutos".
-      </div>
-    `;
-  }
-
-  container.innerHTML = '';
   container.appendChild(toolbar);
   container.appendChild(tableWrap);
-
-  if (colDefs.length <= 1) return; // sin tabla real, no hay nada que paginar/exportar
 
   const tbodyEl = tableWrap.querySelector('tbody');
   const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
@@ -392,6 +494,9 @@ export function renderBrutosReporteResults(results, container) {
     getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
     pagination,
   });
+  // stickyCols:0 — la 1ª/2ª columna real son FECHA_INI/FECHA_FIN (mismo orden
+  // que el archivo de Brutos), no Legajo/Nombre, así que no conviene anclarlas.
+  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 0 });
 
   const csvHeaders = colDefs.map(c => c.label);
   const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));

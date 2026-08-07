@@ -12,6 +12,10 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  mvClass, mvArrow, fmtSigned,
+} from '../ui/resultBlocks.js';
 
 // ── Definición de columnas calculadas desde el Tabulado ──────────────────────
 // Mismos colores que las categorías de Rend vs Tabulado.
@@ -57,7 +61,6 @@ const fmt = v => v === null
 
 const THRESHOLD = 0.01;
 const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
-const diffStyle = d => hasDiff(d) ? 'color:var(--color-danger);font-weight:600;' : '';
 
 // Construye mapa código numérico → clave de columna a partir de los headers del Tabulado.
 // Soporta formato "1003-SUELDO" (extrae "1003") o nombre numérico exacto "1003".
@@ -239,35 +242,60 @@ export function renderRendXEeResults(results, container) {
     return;
   }
 
-  // Totales para el chip y la fila TOTAL GENERAL
+  // Totales para las tiles y la fila TOTAL GENERAL
   const totals = { repTotal: 0, precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
   for (const r of rows) {
     for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0;
   }
   const totDif = totals.repTotal - totals.calcTotal;
+  const matchedRows = rows.filter(r => !r.sinTabData && !r.soloEnTab);
+  const diffRows = matchedRows.filter(r => hasDiff(r.dif));
+  const okCount = matchedRows.length - diffRows.length;
 
-  // ── Chip de resumen ────────────────────────────────────────────────────────
-  const chipEl = document.createElement('div');
-  chipEl.style.cssText = 'padding:var(--sp-3);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:center;';
-  chipEl.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:2px;">
-      <span style="font-size:0.7em;color:var(--color-text-muted);font-weight:600;">COSTO TOTAL</span>
-      <span style="font-size:var(--text-sm);">
-        Reporte: <strong>${fmt(totals.repTotal)}</strong> &middot;
-        Calculado: <strong>${fmt(totals.calcTotal)}</strong> &middot;
-        Dif: <strong style="${hasDiff(totDif) ? 'color:var(--color-danger);' : 'color:var(--color-success);'}">${fmt(totDif)}</strong>
-      </span>
-    </div>
-    <div style="margin-left:auto;font-size:var(--text-sm);text-align:right;">
-      ${summary.total} legajos &middot;
-      ${summary.conDif > 0
-        ? `<span style="color:var(--color-danger);font-weight:600;">${summary.conDif} con diferencias</span>`
-        : '<span style="color:var(--color-success);">&#10003; Sin diferencias</span>'}
-      ${summary.sinTabData > 0 ? `<br><span style="color:var(--color-warning);">${summary.sinTabData} sin datos en Tabulado</span>` : ''}
-      ${summary.soloEnTab > 0 ? `<br><span style="color:var(--color-warning);">${summary.soloEnTab} solo en Tabulado</span>` : ''}
-    </div>
-  `;
+  container.innerHTML = '';
 
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: diffRows.length === 0
+          ? 'El Costo Total del reporte coincide con el calculado desde el Tabulado.'
+          : `${diffRows.length} de ${matchedRows.length} legajos tienen diferencia en Costo Total.`,
+        body: diffRows.length === 0
+          ? `${matchedRows.length} legajo${matchedRows.length === 1 ? '' : 's'} verificados, sin diferencias.`
+          : `Diferencia total de <strong>${fmt(totDif)}</strong> (Reporte − Calculado). El detalle completo está en la solapa «Detalle».`,
+      });
+
+      renderTiles(panel, [
+        { label: 'Legajos evaluados', value: matchedRows.length,
+          sub: (summary.sinTabData + summary.soloEnTab) > 0
+            ? `${summary.sinTabData} sin Tabulado · ${summary.soloEnTab} sólo en Tabulado`
+            : 'del cruce Reporte × Tabulado' },
+        { label: 'Sin diferencia', value: okCount, tone: 'ok' },
+        { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
+        { label: 'Dif. COSTO TOTAL', value: fmt(totDif), tone: hasDiff(totDif) ? 'error' : 'ok' },
+      ]);
+
+      if (diffRows.length > 0) {
+        const top = [...diffRows].sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif)).slice(0, 5);
+        renderIssues(panel, {
+          heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
+          items: top.map(r => ({
+            who: r.nombre || `Legajo ${r.legajo}`,
+            sub: r.nombre ? `Legajo ${r.legajo}` : null,
+            what: `Costo Total: Reporte ${fmt(r.repTotal)} vs Calculado ${fmt(r.calcTotal)}`,
+            why: 'Reporte − Calculado.',
+            right: `<span class="${mvClass(r.dif)}">${mvArrow(r.dif)} ${fmtSigned(r.dif)}</span>`,
+          })),
+        });
+      }
+    },
+    detalle(panel) { renderRendXEeDetalle(panel, { rows, totals, totDif, results }); },
+  });
+}
+
+function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
   // ── Encabezados con detalle de conceptos por categoría ────────────────────
   const { conceptConfig: cc, colByCode: cbc } = results.meta || {};
   const catHdrs = CATS.map(c => {
@@ -293,6 +321,8 @@ export function renderRendXEeResults(results, container) {
     return `<th style="text-align:center;background:${c.hdr};">${esc(c.label)}${conceptDetail}</th>`;
   }).join('');
 
+  const maxAbsDif = Math.max(1, ...rows.map(r => Math.abs(r.dif ?? 0)));
+
   // ── Filas de datos ─────────────────────────────────────────────────────────
   const dataRows = rows.map(r => {
     const rowStyle = (r.sinTabData || r.soloEnTab) ? ' style="opacity:0.55;"' : '';
@@ -306,7 +336,7 @@ export function renderRendXEeResults(results, container) {
         <td style="text-align:right;">${fmt(r.repTotal)}</td>
         ${catCells}
         <td style="text-align:right;background:rgba(64,64,64,0.07);">${fmt(r.calcTotal)}</td>
-        <td style="text-align:right;background:${DIF_BG};${diffStyle(r.dif)}">${fmt(r.dif)}</td>
+        ${diffCellHtml(r.dif, { max: maxAbsDif, background: DIF_BG })}
       </tr>
     `;
   }).join('');
@@ -322,11 +352,9 @@ export function renderRendXEeResults(results, container) {
   const exportEl = document.createElement('div');
   toolbar.appendChild(searchEl);
   toolbar.appendChild(exportEl);
+  container.appendChild(toolbar);
 
-  // Tabla — TOTAL GENERAL en su propio <tbody> para que quede afuera de la
-  // paginación/búsqueda (siempre visible, no cuenta como fila de datos).
   const tableWrap = document.createElement('div');
-  tableWrap.style.overflowX = 'auto';
   tableWrap.innerHTML = `
     <table class="data-table data-table--compact">
       <thead>
@@ -342,21 +370,17 @@ export function renderRendXEeResults(results, container) {
       <tbody>
         ${dataRows}
       </tbody>
-      <tbody>
-        <tr style="background:var(--color-surface);">
+      <tfoot>
+        <tr>
           <td colspan="2" style="font-weight:600;white-space:nowrap;">TOTAL GENERAL</td>
           <td style="text-align:right;font-weight:600;">${fmt(totals.repTotal)}</td>
           ${totCatCells}
           <td style="text-align:right;background:rgba(64,64,64,0.18);font-weight:600;">${fmt(totals.calcTotal)}</td>
-          <td style="text-align:right;background:${DIF_HDR};font-weight:600;${diffStyle(totDif)}">${fmt(totDif)}</td>
+          ${diffCellHtml(totDif, { background: DIF_HDR })}
         </tr>
-      </tbody>
+      </tfoot>
     </table>
   `;
-
-  container.innerHTML = '';
-  container.appendChild(chipEl);
-  container.appendChild(toolbar);
   container.appendChild(tableWrap);
 
   // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre
@@ -368,6 +392,7 @@ export function renderRendXEeResults(results, container) {
     getLabel: r => `${r.legajo} — ${r.nombre}`,
     pagination,
   });
+  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2 });
 
   const csvHeaders = ['Legajo', 'Nombre', 'COSTO TOTAL (Reporte)', ...CATS.map(c => c.label), 'COSTO TOTAL (Calculado)', 'Dif (Reporte - Calculado)'];
   const csvRows = () => rows.map(r => [r.legajo, r.nombre, fmt(r.repTotal), ...CATS.map(c => fmt(r[c.key])), fmt(r.calcTotal), fmt(r.dif)]);

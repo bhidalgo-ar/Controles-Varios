@@ -15,6 +15,7 @@
 import { showToast } from '../ui/toast.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import { renderVerdict, renderTiles, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 
 /**
  * Resumen del control para la tarjeta colapsada en la pantalla de resultados.
@@ -191,7 +192,37 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 export function renderCatXEmpleadosResults(results, container) {
-  const { summary, missingInTab, missingInCat, fieldDiscrepancies, byPuesto, byCC } = results;
+  const { summary } = results;
+  const totalDiffs = summary.missingInTabCount + summary.missingInCatCount + summary.fieldDiscrepancyCount;
+
+  container.innerHTML = '';
+
+  renderResumenDetalle(container, {
+    resumen(panel) {
+      const tone = totalDiffs === 0 ? 'ok' : 'warn';
+      renderVerdict(panel, {
+        tone,
+        title: totalDiffs === 0
+          ? 'El Rep. Categ. y el Tabulado coinciden en empleados y campos.'
+          : `${totalDiffs} diferencia${totalDiffs === 1 ? '' : 's'} entre Rep. Categ. y Tabulado.`,
+        body: `${summary.catActivos} activos en Rep. Categ. · ${summary.tabTotal} en Tabulado`
+          + (summary.catBajas > 0 ? ` · ${summary.catBajas} bajas excluidas` : '') + '.',
+      });
+      const diffSign = summary.diff > 0 ? '+' : '';
+      renderTiles(panel, [
+        { label: 'Activos en Rep. Categ.', value: summary.catActivos },
+        { label: 'En Tabulado', value: summary.tabTotal, sub: summary.diff !== 0 ? `${diffSign}${summary.diff} vs Rep. Categ.` : 'diferencia neta 0' },
+        { label: 'Sin Tabulado', value: summary.missingInTabCount, tone: summary.missingInTabCount > 0 ? 'error' : 'ok' },
+        { label: 'Sin Rep. Categ.', value: summary.missingInCatCount, tone: summary.missingInCatCount > 0 ? 'error' : 'ok' },
+        { label: 'Discrepancias de campo', value: summary.fieldDiscrepancyCount, tone: summary.fieldDiscrepancyCount > 0 ? 'error' : 'ok' },
+      ]);
+    },
+    detalle(panel) { renderCatXEmpleadosDetalle(panel, results); },
+  });
+}
+
+function renderCatXEmpleadosDetalle(container, results) {
+  const { missingInTab, missingInCat, fieldDiscrepancies, byPuesto, byCC } = results;
   const showFAlta = missingInTab.some(r => r.fAlta);
 
   const SUM_STYLE = [
@@ -351,15 +382,29 @@ export function renderCatXEmpleadosResults(results, container) {
     </div>
   `;
 
-  const puestoHtml = section(
-    `Distribución por Puesto (${byPuesto.length} puestos)`,
-    distTable(byPuesto, 'Puesto')
-  );
+  // Distribución por Puesto/CC: por default sólo se muestran las filas con
+  // diferencia — el resto coincide 1:1 y listarlas no aporta nada (CLAUDE.md
+  // §11.1). Un toggle deja ver el universo completo cuando hace falta.
+  const distSection = (allRows, labelCol, title, key) => {
+    if (allRows.length === 0) return '';
+    const diffRows = allRows.filter(r => r.diff !== 0);
+    const okCount  = allRows.length - diffRows.length;
+    const initialRows = diffRows.length > 0 ? diffRows : allRows;
+    const toggleHtml = diffRows.length > 0 && okCount > 0 ? `
+      <div style="margin-bottom:var(--sp-2);">
+        <select class="form-select form-select--sm" data-dist-toggle="${key}">
+          <option value="dif">Sólo con diferencia (${diffRows.length})</option>
+          <option value="all">Todos (${allRows.length})</option>
+        </select>
+      </div>` : '';
+    return section(
+      `${title} (${allRows.length}${okCount > 0 ? ` · ${okCount} sin diferencia` : ''})`,
+      `${toggleHtml}<div data-dist-body="${key}">${distTable(initialRows, labelCol)}</div>`
+    );
+  };
 
-  const ccHtml = section(
-    `Distribución por Centro de Costo (${byCC.length} centros)`,
-    distTable(byCC, 'Centro de Costo')
-  );
+  const puestoHtml = distSection(byPuesto, 'Puesto', 'Distribución por Puesto', 'puesto');
+  const ccHtml      = distSection(byCC, 'Centro de Costo', 'Distribución por Centro de Costo', 'cc');
 
   // ── Botón de exportación a Excel ───────────────────────────────────────────
 
@@ -385,7 +430,6 @@ export function renderCatXEmpleadosResults(results, container) {
   // ── Render final ───────────────────────────────────────────────────────────
 
   const sectionsHtml = `
-    ${buildDiffChip(summary)}
     ${missingInTabHtml}
     ${missingInCatHtml}
     ${discrepanciesHtml}
@@ -398,6 +442,18 @@ export function renderCatXEmpleadosResults(results, container) {
   const sectionsWrap = document.createElement('div');
   sectionsWrap.innerHTML = sectionsHtml;
   container.appendChild(sectionsWrap);
+
+  // Toggle "sólo con diferencia / todos" de las distribuciones por Puesto/CC.
+  const wireDistToggle = (key, allRows, diffRows, labelCol) => {
+    const sel  = sectionsWrap.querySelector(`[data-dist-toggle="${key}"]`);
+    const body = sectionsWrap.querySelector(`[data-dist-body="${key}"]`);
+    if (!sel || !body) return;
+    sel.addEventListener('change', () => {
+      body.innerHTML = distTable(sel.value === 'dif' ? diffRows : allRows, labelCol);
+    });
+  };
+  wireDistToggle('puesto', byPuesto, byPuesto.filter(r => r.diff !== 0), 'Puesto');
+  wireDistToggle('cc', byCC, byCC.filter(r => r.diff !== 0), 'Centro de Costo');
 
   // Paginación (50 filas) + buscador en cada una de las 3 tablas de
   // diferencias (missingInTab/missingInCat/discrepancies). Las tablas de
@@ -418,95 +474,9 @@ function wireDiffTableTools(root, diffKey, rows, getLabel) {
     rows, trEls: pagination.dataRows, getLabel, pagination,
     label: 'Buscar', placeholder: 'ID o nombre…',
   });
+  enhanceGrid(table, { stickyCols: 1 });
 }
 
-// ── Chip de resumen de diferencias ───────────────────────────────────────────
-
-function buildDiffChip(summary) {
-  const { missingInTabCount, missingInCatCount, fieldDiscrepancyCount,
-          catActivos, catBajas, tabTotal, diff } = summary;
-  const totalDiffs = missingInTabCount + missingInCatCount + fieldDiscrepancyCount;
-  const sign       = diff > 0 ? '+' : '';
-
-  const CHIP = [
-    'margin-bottom:var(--sp-5)',
-    'border:1px solid var(--color-border)',
-    'border-radius:var(--radius-md)',
-    'overflow:hidden',
-    'box-shadow:var(--shadow-sm)',
-    'background:var(--color-surface)',
-  ].join(';');
-
-  if (totalDiffs === 0) {
-    return `
-      <div style="${CHIP};display:flex;align-items:center;gap:var(--sp-3);
-        padding:var(--sp-4) var(--sp-5);
-        border-left:4px solid var(--color-success);">
-        <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-        <div>
-          <div style="font-weight:600;color:var(--color-success);font-size:var(--text-base);">
-            Sin diferencias
-          </div>
-          <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:2px;">
-            ${catActivos} activos en Rep. Categ. · ${tabTotal} en Tabulado
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  const tile = (count, label, isWarning) => {
-    const numColor  = isWarning ? 'var(--color-warning)' : 'var(--color-success)';
-    const topBorder = isWarning ? 'var(--color-warning)' : 'var(--color-success)';
-    return `
-      <div style="
-        flex:1; padding:var(--sp-4) var(--sp-5); text-align:center;
-        border-right:1px solid var(--color-border);
-        border-top:3px solid ${topBorder};
-        background:var(--color-surface);
-      ">
-        <div style="
-          font-size:var(--text-3xl); font-weight:700;
-          font-family:monospace; line-height:1.1;
-          color:${numColor}; letter-spacing:-1px;
-        ">${count}</div>
-        <div style="
-          font-size:var(--text-sm); color:var(--color-text-muted);
-          margin-top:var(--sp-1); line-height:1.3;
-        ">${esc(label)}</div>
-      </div>
-    `;
-  };
-
-  const diffLabel = diff === 0 ? 'sin diferencia neta'
-    : diff > 0  ? `${sign}${diff} más en Rep. Categ.`
-    :             `${diff} menos en Rep. Categ.`;
-
-  return `
-    <div style="${CHIP}">
-      <div style="
-        padding:var(--sp-2) var(--sp-5);
-        background:var(--color-bg-subtle);
-        border-bottom:1px solid var(--color-border);
-        display:flex; align-items:center; justify-content:space-between;
-      ">
-        <span style="font-size:var(--text-sm);font-weight:600;color:var(--color-text-muted);
-                     letter-spacing:.04em; text-transform:uppercase;">
-          Resumen de diferencias
-        </span>
-        <span style="font-size:var(--text-sm);color:var(--color-text-muted);">
-          ${catActivos} activos · ${tabTotal} en Tab · ${esc(diffLabel)}
-          ${catBajas > 0 ? ` · <em>${catBajas} bajas excluidas</em>` : ''}
-        </span>
-      </div>
-      <div style="display:flex;">
-        ${tile(missingInTabCount, 'activos sin Tabulado',    missingInTabCount     > 0)}
-        ${tile(missingInCatCount, 'en Tab sin Rep. Categ.',  missingInCatCount     > 0)}
-        ${tile(fieldDiscrepancyCount, 'discrepancias de campo', fieldDiscrepancyCount > 0)}
-      </div>
-    </div>
-  `;
-}
 
 // ── Export a Excel ────────────────────────────────────────────────────────────
 
