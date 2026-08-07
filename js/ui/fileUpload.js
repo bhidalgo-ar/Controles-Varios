@@ -2,10 +2,10 @@
 
 import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js';
 import { showToast } from './toast.js';
-import { detectHeaders, parseNominaMaestra } from '../parsers/nominaMaestra.js';
+import { detectHeaders as detectHeadersXlsx, parseNominaMaestra } from '../parsers/nominaMaestra.js';
 import { parseResumenLargo } from '../parsers/resumenLargoExcel.js';
 import { parseResumenTabulado } from '../parsers/resumenTabuladoHorizontalExcel.js';
-import { parseTabuladoControl } from '../parsers/tabuladoControl.js';
+import { parseTabuladoControl, detectHeaders as detectHeadersTabulado } from '../parsers/tabuladoControl.js';
 import { parseCatEmpleados } from '../parsers/catEmpleados.js';
 import { parseBrutos } from '../parsers/brutosParser.js';
 import { parseGsPers } from '../parsers/gsPersParser.js';
@@ -181,7 +181,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
 
     let headers, preview;
     try {
-      ({ headers, preview } = detectHeaders(arrayBuffer));
+      ({ headers, preview } = detectHeadersFor(fileType, arrayBuffer));
     } catch (err) {
       renderError(container, `No se pudo leer el Excel: ${err.message}`,
         () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }));
@@ -942,6 +942,17 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// El Tabulado de algunos clientes (OPmobility / Plastic Omnium Florida) llega
+// con extensión .xls pero es HTML — necesita el detector HTML-aware de
+// tabuladoControl.js. El resto de los tipos de archivo usan el detector plano
+// de nominaMaestra.js (ver tabuladoHtml.js para el detalle del formato).
+function detectHeadersFor(fileType, arrayBuffer) {
+  if (fileType === 'tab_control' || fileType === 'tab_prev_file') {
+    return detectHeadersTabulado(arrayBuffer);
+  }
+  return detectHeadersXlsx(arrayBuffer);
+}
 
 function parseFile(arrayBuffer, fileType, mapping) {
   switch (fileType) {
