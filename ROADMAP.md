@@ -85,6 +85,7 @@ Prioridad 1 (más alta) a 10 (más baja). Esfuerzo: S (<1 día) · M (1-3 días)
 - Modo oscuro, atajos de teclado, PWA installable.
 - Migración de hosting de GitHub Pages a la web de hidalgoyasociados (habilita `fetch('./config/')` para el seed en vez de import manual — ver `ARCHITECTURE.md` sección 6).
 - Rutinas guardadas por cliente en el Paso 1 del wizard (ej. "Cierre mensual" preselecciona de un click la batería completa en vez de tildar control por control). Mockup "D" evaluado el 2026-08-05 junto con el rediseño del Paso 1 (D-018 en `DECISIONS.md`) — no resuelve el apilamiento por sí solo, se combinaría con la lista filtrable ya implementada. Requiere una entidad nueva en IndexedDB (rutina = cliente + lista de controlIds) y ABM desde `#/admin`.
+- **Variación entre períodos — "Dirección B" (ficha por legajo).** Al rediseñar la pantalla de resultados (D-025) se evaluaron tres direcciones: "Qué cambió y por qué" (implementada, es la pantalla actual) y "Detalle" (implementada, es la solapa de tabla) resuelven "¿por qué bajó?" y "quiero ver los 71 juntos"; queda pendiente la tercera — una ficha expandible por legajo (patrón `.emp-card`, como el modo detalle de SIRADIG) que junta premios + bruto + horas del mismo empleado en una vista vertical sin scroll horizontal, para cuando el analista ya sabe qué legajo mirar y quiere el contexto completo de ese empleado. Explorada visualmente en `https://claude.ai/code/artifact/a69789a0-65e7-4b43-84af-b06a9c448491` (Dirección B). No es urgente: la solapa «Detalle» ya permite buscar un legajo puntual.
 
 ---
 
