@@ -3,6 +3,17 @@
 > Fase 1 de 3 del plan más amplio (ver hilo de diseño 2026-08-06/07). Fase 2
 > (padrón de convenio) y Fase 3 ("super control" de Impuesto a las Ganancias
 > con escalas/SIRADIG/licencias) quedan explícitamente afuera de esta spec.
+>
+> **Actualización 2026-08-07:** PR #83 (mergeado a `main`, sin tocar
+> Acumuladores Ganancias a propósito — "Willy los está encarando por otro
+> lado") generalizó a los otros 9 controles el mismo patrón de pantalla que
+> esta spec preveía construir a mano, y lo sacó a un módulo compartido:
+> **`js/ui/resultBlocks.js`** (`renderVerdict`, `renderTiles`, `renderIssues`,
+> `renderChecks`, `renderResumenDetalle`, `enhanceGrid`, `diffCellHtml` /
+> `mvArrow` / `fmtSigned`). Construido *sobre* `js/ui/tabs.js` de esta misma
+> feature. `CLAUDE.md` §11.2 ya dice explícitamente: "para un control nuevo,
+> usar `resultBlocks.js` desde el principio en vez de armar el hero a mano".
+> Esta spec se actualiza para reusarlo — ver §1 y §3.
 
 ---
 
@@ -26,8 +37,24 @@
 
 **Puede modificar:**
 - `js/controls/acumuladoresGanancias.js` — extensión del módulo existente:
-  nuevas funciones de chequeo, nuevo `renderAcumuladoresResults` con 3 tabs.
-- `js/ui/tabs.js` — reuso tal cual (ya soporta 3 tabs sin cambios).
+  nuevas funciones de chequeo, nuevo `renderAcumuladoresResults` que **reusa**
+  `js/ui/resultBlocks.js` (ver nota de actualización arriba) en vez de
+  reconstruir CSS/markup propio:
+  - Veredicto (siempre visible, afuera de las tabs) → `renderVerdict`.
+  - Tiles de reconciliación/tributación → `renderTiles`.
+  - Casos para revisar (CUIL faltante, salto grande, etc.) → `renderIssues`.
+  - Chequeos de coherencia (jubilación/obra social) → `renderChecks`.
+  - Dirección C (planilla) → `enhanceGrid()` para el sticky de
+    header/footer/columnas, en vez de CSS `rb-grid` propio.
+  - **Desviación deliberada del patrón de 2 tabs (Resumen/Detalle) que usan
+    los otros 9 controles:** acá van 3 tabs (Resumen · Fichas · Planilla),
+    porque Guillermo pidió explícitamente las tres direcciones como vistas
+    separadas, no una tabla de detalle única. Se arma con `initTabs`
+    directamente (no con `renderResumenDetalle`, que asume exactamente 2).
+    Documentar esta desviación en el comentario de cabecera del render.
+  - `diffCellHtml`/`mvArrow`/`fmtSigned` **no aplican**: son para variación
+    entre dos valores (comparación), y Acumuladores es un control de
+    generación sin "diferencia" que mostrar con signo.
 - `js/ui/fileUpload.js` / `js/ui/controlsWizard.js` — sólo para: (a) capturar
   CUIL en `run()` (ya lo trae el parser, hoy se descarta), (b) el slot
   opcional del padrón de convenio (Fase 2, sin lógica de cruce todavía),
@@ -36,6 +63,14 @@
   client-side) — puede quedar disponible para otros controles a futuro.
 - `tests/acumuladoresGananciasControl.test.js` — nuevos asserts.
 - `specs/`, `DECISIONS.md`, `CHANGELOG.md`.
+
+**Puede leer/importar, no modificar sin consultar primero:**
+- `js/ui/resultBlocks.js` y `js/ui/tabs.js` — son compartidos por los 9
+  controles de PR #83 (más este). Si Fase 1 necesita algo que
+  `resultBlocks.js` no ofrece (ej. una variante de tile o de check), **parar
+  y consultar** antes de modificarlo — un cambio ahí impacta a los otros 9
+  controles ya en producción. Preferir siempre extender con props/opciones
+  nuevas y opcionales antes que cambiar el comportamiento default existente.
 
 **No puede modificar (bajo ninguna circunstancia, ni "de paso"):**
 - Ningún otro control (`acreditaciones.js`, `nr.js`, `brutos.js`, etc.) ni su
@@ -89,9 +124,10 @@
    (mayor bruto / mayor SAC teórico / legajo / nombre), tarjeta expandible
    con detalle unificado mes + acumulado del año.
 3. **Dirección C — Planilla**, tercera tab: la tabla ya construida
-   (`renderConceptTable` actual) con columnas Legajo/Nombre congeladas al
-   scrollear, encabezado sticky, fila de totales sticky abajo, orden por
-   columna (ya existe), buscador (ya existe).
+   (`renderConceptTable` actual), pasada por `enhanceGrid()` de
+   `resultBlocks.js` para el sticky de columnas Legajo/Nombre + encabezado +
+   fila de totales (en vez de CSS propio) — orden por columna (ya existe),
+   buscador (ya existe).
 4. **Editor de config con gate de PIN**: un PIN único de la app (no por
    cliente), guardado en `localStorage` del navegador. Detrás del gate:
    topes de jubilación/obra social, multiplicador de "salto grande", on/off
