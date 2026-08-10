@@ -29,7 +29,12 @@
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
-import { initTabs } from '../ui/tabs.js';
+import {
+  renderVerdict,
+  renderTiles,
+  renderIssues,
+  renderResumenDetalle,
+} from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodToLabel } from '../utils/dates.js';
 import { clavesUnicas } from '../parsers/tabuladoHtml.js';
@@ -754,25 +759,35 @@ function renderVariacionesResults(results, container) {
   const casos = casosDeEscalon(relevantes, grupos);
   const sinCausa = casos.filter(c => !c.explicado);
 
-  // ── Hero: sin variación vs con variación ──────────────────────────────────
-  const hero = document.createElement('div');
-  hero.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);';
-  hero.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:var(--color-success);">${okCount}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">sin variación</span>
-    </div>
-    <div style="display:flex;align-items:baseline;gap:8px;">
-      <span style="font-size:1.8em;font-weight:700;color:${conDif.length > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${conDif.length}</span>
-      <span style="font-size:var(--text-sm);color:var(--color-text-muted);">con variación</span>
-    </div>
-    <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
-      ${esc(labelAnterior)} → ${esc(labelActual)}
-      ${tipoLiquidacionLinea(results) ? `<br>${esc(tipoLiquidacionLinea(results))}` : ''}
-      ${sinValor > 0 ? `<br>${sinValor} sin valores en ningún período (no se muestran)` : ''}
-    </div>
-  `;
-  container.appendChild(hero);
+  // ── Veredicto ─────────────────────────────────────────────────────────────
+  // Va SIEMPRE afuera de las solapas, con `renderVerdict` del módulo compartido
+  // (patrón de js/ui/resultBlocks.js, el mismo que usan los otros 10 controles).
+  // Antes acá había un hero propio con los contadores, que repetía lo que ya
+  // dicen la card de la pantalla de resultados y su fila de insights.
+  const gruposConEscala = grupos.filter(g => g.escala);
+  const verdictWarn = sinCausa.length > 0 || (gruposConEscala.length === 0 && conDif.length > 0);
+  let tituloVeredicto;
+  if (casos.length > 0) {
+    tituloVeredicto = sinCausa.length > 0
+      ? `${sinCausa.length} de ${casos.length} legajo${casos.length === 1 ? '' : 's'} que bajaron de escalón no tienen nada cargado que lo explique.`
+      : `${casos.length} legajo${casos.length === 1 ? '' : 's'} bajaron de escalón, y todos se explican con una licencia, ausencia, franco o permiso.`;
+  } else if (conDif.length > 0) {
+    tituloVeredicto = `${conDif.length} de ${relevantes.length} empleados tuvieron variación en ${results.reporte.titulo}.`;
+  } else {
+    tituloVeredicto = `Los ${relevantes.length} empleados no tuvieron variación en ${results.reporte.titulo} entre los dos períodos.`;
+  }
+
+  const contexto = [
+    `${esc(labelAnterior)} → ${esc(labelActual)}`,
+    tipoLiquidacionLinea(results) ? esc(tipoLiquidacionLinea(results)) : null,
+    sinValor > 0 ? `${sinValor} sin valores en ningún período (no se muestran)` : null,
+  ].filter(Boolean).join(' · ');
+
+  renderVerdict(container, {
+    tone: verdictWarn ? 'warn' : 'ok',
+    title: tituloVeredicto,
+    body: contexto,
+  });
 
   // ── Avisos ────────────────────────────────────────────────────────────────
   const avisos = (results.avisos || []).map(a => esc(a));
@@ -829,28 +844,19 @@ function renderVariacionesResults(results, container) {
   btnPdf.addEventListener('click', () => imprimirVariaciones(results, relevantes));
   right.insertBefore(btnPdf, right.firstChild);
 
-  // ── Solapas: "Qué cambió y por qué" (por defecto) y "Detalle" ─────────────
+  // ── Solapas Resumen / Detalle ─────────────────────────────────────────────
+  // Mismas dos solapas que los otros controles (js/ui/resultBlocks.js). Antes
+  // eran "Qué cambió y por qué" / "Detalle" con `initTabs` directo.
   const tabsHost = document.createElement('div');
   container.appendChild(tabsHost);
 
-  initTabs(tabsHost, {
-    activeId: 'panel',
-    tabs: [
-      {
-        id: 'panel',
-        label: 'Qué cambió y por qué',
-        render: panelEl => renderPanel(panelEl, {
-          results, relevantes, conDif, grupos, casos, sinCausa, labelAnterior, labelActual,
-        }),
-      },
-      {
-        id: 'detalle',
-        label: 'Detalle',
-        render: panelEl => renderDetalle(panelEl, {
-          results, relevantes, conDif, grupos, labelAnterior, labelActual,
-        }),
-      },
-    ],
+  renderResumenDetalle(tabsHost, {
+    resumen: panelEl => renderPanel(panelEl, {
+      results, relevantes, conDif, grupos, casos, sinCausa, labelAnterior, labelActual,
+    }),
+    detalle: panelEl => renderDetalle(panelEl, {
+      results, relevantes, conDif, grupos, labelAnterior, labelActual,
+    }),
   });
 }
 
@@ -862,94 +868,70 @@ function renderPanel(container, ctx) {
   const dotacionIgual = results.summary.empleadosAnterior === results.summary.empleadosActual;
   const gruposConEscala = grupos.filter(g => g.escala);
 
-  // ── Veredicto ───────────────────────────────────────────────────────────
-  // El titular es siempre sobre lo que encontró ESTE reporte (sus propios
-  // conceptos), nunca sobre el Bruto total del Tabulado — el Bruto puede caer
-  // por conceptos que este reporte ni mira, y usarlo de titular en, por
-  // ejemplo, Variación Sueldos, sería atribuirle un hallazgo que no es suyo.
-  const verdictWarn = sinCausa.length > 0 || (gruposConEscala.length === 0 && conDif.length > 0);
-  let tituloVeredicto;
-  if (casos.length > 0) {
-    tituloVeredicto = sinCausa.length > 0
-      ? `${sinCausa.length} de ${casos.length} legajo${casos.length === 1 ? '' : 's'} que bajaron de escalón no tienen nada cargado que lo explique.`
-      : `${casos.length} legajo${casos.length === 1 ? '' : 's'} bajaron de escalón, y todos se explican con una licencia, ausencia, franco o permiso.`;
-  } else if (conDif.length > 0) {
-    tituloVeredicto = `${conDif.length} de ${relevantes.length} empleados tuvieron variación en ${results.reporte.titulo}.`;
-  } else {
-    tituloVeredicto = `Los ${relevantes.length} empleados no tuvieron variación en ${results.reporte.titulo} entre los dos períodos.`;
-  }
-  const verdict = document.createElement('div');
-  verdict.style.cssText = `display:flex;align-items:flex-start;gap:var(--sp-4);padding:var(--sp-4);margin:var(--sp-3) var(--sp-3) 0;border-radius:var(--radius-md);background:${verdictWarn ? 'var(--color-warning-bg)' : 'var(--color-success-bg)'};`;
-  verdict.innerHTML = `
-    <span style="font-size:1.4em;flex-shrink:0;">${verdictWarn ? '⚠' : '✓'}</span>
-    <div>
-      <div style="font-weight:700;font-size:var(--text-md);">${esc(tituloVeredicto)}</div>
-      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:2px;">
-        ${esc(labelAnterior)} → ${esc(labelActual)}
-        ${results.bruto ? ` · Bruto del Tabulado: ${fmtPct(results.bruto.pct)} (${fmtNum(results.bruto.anterior)} → ${fmtNum(results.bruto.actual)})` : ''}
-        ${!dotacionIgual ? ` · la dotación cambió entre períodos` : ''}
-      </div>
-    </div>`;
-  container.appendChild(verdict);
+  // El veredicto ya se dibujó afuera de las solapas (ver renderVariacionesResults).
+  // Acá va lo que agrega contexto: los tiles, los casos a explicar y la matriz.
 
   // ── Tiles ───────────────────────────────────────────────────────────────
-  const tiles = document.createElement('div');
-  tiles.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin:var(--sp-3) var(--sp-3) 0;border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;background:var(--color-surface);';
-  const tile = (label, valueHtml, sub) => `
-    <div style="padding:var(--sp-3) var(--sp-4);border-right:1px solid var(--color-border);">
-      <div style="font-size:var(--text-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--color-text-muted);margin-bottom:4px;">${esc(label)}</div>
-      <div style="font-size:1.6em;font-weight:600;font-variant-numeric:tabular-nums;">${valueHtml}</div>
-      ${sub ? `<div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px;">${esc(sub)}</div>` : ''}
-    </div>`;
-  let tilesHtml = tile('Dotación',
-    `${results.summary.empleadosActual}${!dotacionIgual ? ` <small style="font-size:.55em;color:var(--color-text-muted);">vs ${results.summary.empleadosAnterior}</small>` : ''}`,
-    dotacionIgual ? 'sin altas ni bajas entre los dos períodos' : 'cambió entre los dos períodos');
+  // Los contadores de "empleados con / sin variación" NO van acá: ya están en
+  // la fila de insights de la card (summarizeVariaciones → insights[]) justo
+  // arriba. Estos tiles son sólo para lo que esa fila no dice.
+  const tiles = [
+    {
+      label: 'Dotación',
+      value: `${results.summary.empleadosActual}${!dotacionIgual ? ` <small style="font-size:.55em;color:var(--color-text-muted);">vs ${results.summary.empleadosAnterior}</small>` : ''}`,
+      sub: dotacionIgual ? 'sin altas ni bajas entre los dos períodos' : 'cambió entre los dos períodos',
+    },
+  ];
   if (results.bruto) {
-    tilesHtml += tile('Bruto de la liquidación',
-      `<span style="color:${claseVar(results.bruto.diff)};">${flechaVar(results.bruto.diff)} ${fmtNum(Math.abs(results.bruto.diff))}</span>`,
-      `${fmtPct(results.bruto.pct)} · ${fmtNum(results.bruto.anterior)} → ${fmtNum(results.bruto.actual)}`);
+    tiles.push({
+      label: 'Bruto de la liquidación',
+      value: `<span style="color:${claseVar(results.bruto.diff)};">${flechaVar(results.bruto.diff)} ${fmtNum(Math.abs(results.bruto.diff))}</span>`,
+      sub: `${fmtPct(results.bruto.pct)} · ${fmtNum(results.bruto.anterior)} → ${fmtNum(results.bruto.actual)}`,
+    });
   }
   if (gruposConEscala.length > 0) {
-    tilesHtml += tile('Bajaron de escalón',
-      `<span style="color:${casos.length > 0 ? 'var(--color-warning)' : 'var(--color-text-muted)'};">${casos.length}</span> <small style="font-size:.55em;color:var(--color-text-muted);">de ${relevantes.length}</small>`,
-      `${casos.length - sinCausa.length} con causa · ${sinCausa.length} sin causa`);
-    tilesHtml += tile('Sin causa en el tabulado',
-      `<span style="color:${sinCausa.length > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};">${sinCausa.length}</span> <small style="font-size:.55em;color:var(--color-text-muted);">de ${casos.length || 0}</small>`,
-      'sin licencia, ausencia, franco ni permiso cargado');
+    tiles.push({
+      label: 'Bajaron de escalón',
+      value: `${casos.length} <small style="font-size:.55em;color:var(--color-text-muted);">de ${relevantes.length}</small>`,
+      tone: casos.length > 0 ? 'warn' : undefined,
+      sub: `${casos.length - sinCausa.length} con causa · ${sinCausa.length} sin causa`,
+    });
+    tiles.push({
+      label: 'Sin causa en el tabulado',
+      value: `${sinCausa.length} <small style="font-size:.55em;color:var(--color-text-muted);">de ${casos.length || 0}</small>`,
+      tone: sinCausa.length > 0 ? 'error' : undefined,
+      sub: 'sin licencia, ausencia, franco ni permiso cargado',
+    });
   }
-  tiles.innerHTML = tilesHtml;
-  container.appendChild(tiles);
+  renderTiles(container, tiles);
 
   // ── Legajos para poder explicar ────────────────────────────────────────
+  // `renderIssues` agrupa por legajo (`groupBy: 'who'`), así que un empleado que
+  // bajó de escalón en dos conceptos sale en un solo bloque con las dos caídas.
   if (casos.length > 0) {
     const maxCasos = 10;
-    const visibles = casos.slice(0, maxCasos);
-    const sec = document.createElement('div');
-    sec.style.cssText = 'margin:var(--sp-4) var(--sp-3) 0;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);overflow:hidden;';
-    sec.innerHTML = `
-      <div style="padding:var(--sp-2) var(--sp-4);font-size:var(--text-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--color-text-muted);background:var(--color-bg-subtle);border-bottom:1px solid var(--color-border);">
-        Legajos para poder explicar · ${casos.length} de ${relevantes.length}
-      </div>
-      ${visibles.map(c => {
-        const stripe = c.explicado ? 'var(--color-warning)' : 'var(--color-danger)';
-        const causaTxt = c.explicado
-          ? `Se explica: tiene ${fmtNum(c.row.ausenciaActual)} de licencia, ausencia, franco o permiso cargado en ${esc(labelActual)}.`
-          : `Sin nada cargado en ${esc(labelActual)} que lo explique.`;
-        return `
-        <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-bottom:1px solid var(--color-border);border-left:3px solid ${stripe};font-size:var(--text-sm);">
-          <div style="min-width:200px;">
-            <strong>${esc(c.row.nombre)}</strong>
-            <div style="font-size:var(--text-xs);color:var(--color-text-muted);">Legajo ${esc(c.row.legajo)}${grupos.length > 1 ? ` · ${esc(c.grupo.nombreReal || c.grupo.label)}` : ''}</div>
-          </div>
-          <div style="flex:1;color:var(--color-text-muted);">${esc(causaTxt)}</div>
-          <div style="font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--color-danger);">
-            ▼ ${c.v.escalonAnterior}% → ${c.v.escalonActual}%
-          </div>
-        </div>`;
-      }).join('')}
-      ${casos.length > maxCasos ? `<div style="padding:var(--sp-2) var(--sp-4);font-size:var(--text-sm);color:var(--color-text-muted);">+${casos.length - maxCasos} más — ver solapa «Detalle».</div>` : ''}
-    `;
-    container.appendChild(sec);
+    renderIssues(container, {
+      heading: `Legajos para poder explicar · ${casos.length} de ${relevantes.length}`,
+      items: casos.slice(0, maxCasos).map(c => ({
+        sev:  c.explicado ? 'lo' : 'hi',
+        who:  c.row.nombre,
+        sub:  `Legajo ${c.row.legajo}${grupos.length > 1 ? ` · ${c.grupo.nombreReal || c.grupo.label}` : ''}`,
+        // `what` lleva los importes y `right` el escalón: el escalón es el
+        // titular del caso ("pasó de 100% a 70%"), los pesos el respaldo.
+        what: `${fmtNum(c.v.anterior)} → ${fmtNum(c.v.actual)} (${fmtNum(c.v.diff)})`,
+        why:  c.explicado
+          ? `Se explica: tiene ${fmtNum(c.row.ausenciaActual)} de licencia, ausencia, franco o permiso cargado en ${labelActual}.`
+          : `Sin nada cargado en ${labelActual} que lo explique.`,
+        right: `<span class="mv-dn">▼ ${c.v.escalonAnterior}% → ${c.v.escalonActual}%</span>`,
+      })),
+    });
+    if (casos.length > maxCasos) {
+      const mas = document.createElement('p');
+      mas.className = 'text-muted';
+      mas.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-2) 0 0;';
+      mas.textContent = `+${casos.length - maxCasos} más — ver la solapa «Detalle».`;
+      container.appendChild(mas);
+    }
   }
 
   // ── Matriz de transición por concepto con escala ───────────────────────
@@ -971,7 +953,7 @@ function renderPanel(container, ctx) {
     sec.style.cssText = 'margin:var(--sp-4) var(--sp-3) 0;padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);overflow-x:auto;';
     const titulo = grupos.length > 1 ? `Concepto ${esc(g.nombreReal || g.label)} — ` : '';
     let tabla = `<div style="font-size:var(--text-sm);font-weight:700;margin-bottom:var(--sp-2);">${titulo}Cómo se movieron los escalones</div>
-      <table style="border-collapse:separate;border-spacing:3px;font-size:var(--text-sm);">
+      <table style="border-collapse:separate;border-spacing:3px;font-size:var(--text-sm);width:auto;">
         <thead><tr><th></th>${escalaDesc.map(p => `<th style="padding:2px 8px;font-size:var(--text-xs);color:var(--color-text-muted);">${p}%</th>`).join('')}</tr></thead>
         <tbody>`;
     for (const de of escalaDesc) {

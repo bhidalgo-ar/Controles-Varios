@@ -129,9 +129,9 @@ export async function renderControlsResults(root, runId) {
   // el pulso de "esto se arregló". Sin corrida previa, no hay pulso.
   const prevTierByControlId = await getPrevTierByControlId(run, thresholdPct);
 
-  const { html: heroHtml, pctOk, overallTier } = buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId);
+  const { html: heroHtml, pctOk, overallTier, hasGauge } = buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId);
   heroEl.innerHTML = heroHtml;
-  animateHeroGauge(heroEl, pctOk, overallTier);
+  if (hasGauge) animateHeroGauge(heroEl, pctOk, overallTier);
 
   mountCtxBar(overallTier === 'info' ? 'info' : overallTier, buildContextLine(controlSummaries));
 
@@ -334,6 +334,35 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
       + (totalDiffAmount > 0 ? ` · dif. total <strong>$ ${formatAmount(totalDiffAmount)}</strong>` : '');
   }
 
+  // ── Corrida de un solo control: banda compacta, sin gauge ──────────────────
+  // El gauge resume VARIOS controles en un número; con uno solo, ese número es
+  // el del propio control y ya lo dicen la barra de contexto ("1 de 1 control
+  // en verde") y la card de abajo. La columna de la derecha tampoco aporta:
+  // sería una fila que repite lo que dice la card que está justo debajo.
+  // Se conservan las piezas que sí agregan algo y que ya venían decididas: el
+  // badge de veredicto (con la acción "listo para marcar definitivo"), su
+  // subtítulo en prosa, y el KPI de legajos cruzados.
+  if (controlSummaries.length === 1) {
+    return {
+      html: `
+        <div class="hero-verdict hero-verdict--compact">
+          <span class="hero-verdict__badge hero-verdict__badge--${overallTier === 'info' ? 'ok' : overallTier}">
+            <span class="status-dot status-dot--${TIER_DOT[overallTier]}"></span>
+            ${esc(badgeCopy)}
+          </span>
+          <p class="hero-verdict__subline">${subline}</p>
+          <div class="hero-verdict__compact-kpi">
+            <span class="hero-kpi__value">${fmtInt(totalLegajosCruzados)}</span>
+            <span class="hero-kpi__label">Legajos cruzados</span>
+          </div>
+        </div>
+      `,
+      pctOk,
+      overallTier,
+      hasGauge: false,
+    };
+  }
+
   // ── Filas por control (errores primero — ya vienen ordenadas) ──────────────
   // A1/A4 — cascada de entrada (stagger errores-primero, capado a 6) + pulso
   // de mejora respecto de la corrida anterior (ver getPrevTierByControlId).
@@ -381,7 +410,7 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
     </div>
   `;
 
-  return { html, pctOk, overallTier };
+  return { html, pctOk, overallTier, hasGauge: true };
 }
 
 function buildCtrlRowHtml(item, index, prevTierByControlId, reduceMotion) {
