@@ -252,6 +252,20 @@ referencia del patrón, no como pendiente.
    Willy dejó para definir después. Cuando se defina, entra como segunda entrada del mismo `group`
    (`{ id: 'acreditaciones', mode: 'Controlar' }`) reusando el parser y la normalización de tipos.
 
+4. **Nada del cliente cableado en el código del control — hecho en Variaciones, patrón a seguir.**
+   Los códigos de concepto de un cliente no van como constantes del módulo: van a `controlConfigs`
+   (`[clientCode+controlId]`, ver `js/db.js`), que además viaja en el export/import del seed. En el módulo
+   quedan como **semilla** para el cliente que todavía no configuró nada. Y qué columna del archivo
+   representa a cada concepto lo **confirma el analista** en el Paso 2, con el código como precarga — así
+   una renumeración del cliente se arregla desde la pantalla y no con un commit. Ver D-035 y
+   `js/ui/variacionesConceptMap.js`.
+
+5. **Un default silencioso es un bug.** Si un control no puede resolver algo (una columna que no aparece,
+   un concepto que no matchea), no lo completa solo con 0,00: lo pide explícitamente y no deja avanzar, o
+   lo saca como aviso en la pantalla de resultados. Lo mismo vale para los parsers — validar que lo que se
+   leyó tenga la forma esperada (ancho de la fila de encabezados, totales contra la fila `TOTAL GENERAL`)
+   y cortar con un error que diga qué se esperaba y qué se encontró.
+
 ---
 
-**Última actualización:** 7 de agosto de 2026 — §11.1/§11.2 generalizados a los 9 controles restantes vía `js/ui/resultBlocks.js` (pendiente §11.3, modo "Controlar" de Acreditaciones).
+**Última actualización:** 10 de agosto de 2026 — §11.4/§11.5 anotados a partir del rediseño de Variaciones (D-035). Pendiente §11.3, modo "Controlar" de Acreditaciones.

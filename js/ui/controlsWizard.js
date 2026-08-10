@@ -18,7 +18,6 @@ import {
   getGroupers,
   getGrouperConcepts,
   getControlConfigsForClient,
-  getRunFileFromPeriod,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
@@ -40,6 +39,16 @@ import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls
 import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
 import { renderAcreditacionesConfigEditor, DEFAULT_ACREDITACIONES_CONFIG } from '../controls/acreditaciones.js';
 import { renderAcumuladoresConfigEditor, DEFAULT_ACUMULADORES_CONFIG } from '../controls/acumuladoresGanancias.js';
+import {
+  VARIACIONES_IDS,
+  hayVariaciones,
+  conceptosDeControles,
+  estadoInicial as estadoInicialConceptos,
+  pendientes as conceptosPendientes,
+  aColumnasDelControl,
+  renderConceptMap,
+} from './variacionesConceptMap.js';
+import { nombreCoincideConMetadata } from '../parsers/tabuladoHtml.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
 import { renderResultsContextBar, setCompactHeader } from './resultsHeader.js';
@@ -87,7 +96,26 @@ const GS_PERS_IDS = ['gs_pers', 'gs_pers_reporte'];
 const NR_IDS      = ['nr', 'nr_reporte'];
 const ACREDITACIONES_IDS = ['acreditaciones_reporte'];
 const ACUMULADORES_IDS   = ['acumuladores_ganancias'];
-const VARIACIONES_IDS    = ['variaciones_sueldos', 'variaciones_conceptos'];
+// VARIACIONES_IDS se importa de ./variacionesConceptMap.js — lo comparten el
+// wizard y el panel de mapeo de conceptos.
+
+/**
+ * Metadata que el propio Tabulado declara en su encabezado (período, quincena,
+ * tipo de liquidación, empresa) más lo que hace falta para validar los totales.
+ * Es lo que el control de Variaciones usa para ordenar los dos archivos.
+ */
+function metadataDeTabulado(fileData) {
+  const m = fileData?.parseMetadata || {};
+  return {
+    period:          m.period ?? null,
+    quincena:        m.quincena ?? null,
+    tipoLiquidacion: m.tipoLiquidacion ?? null,
+    empresa:         m.empresa ?? null,
+    headers:         m.headers ?? null,
+    totalRow:        m.totalRow ?? null,
+    totalRowOffset:  m.totalRowOffset ?? 0,
+  };
+}
 
 // Controles que usan la agrupación de conceptos de Rend vs Tabulado
 const REND_GROUPING_IDS = ['rend_vs_tabu', 'rend_x_ee'];
@@ -105,7 +133,7 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig, groupers, allControlConfigs] = await Promise.all([
+  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig, savedVariacionesConfig, groupers, allControlConfigs] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(client.code),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
@@ -113,6 +141,7 @@ export async function renderControlsWizard(root, clientId) {
     getControlConfig(client.code, 'agrupadores_config'),
     getControlConfig(client.code, 'acreditaciones_config'),
     getControlConfig(client.code, 'acumuladores_config'),
+    getControlConfig(client.code, 'variaciones_config'),
     getGroupers(client.code),
     getControlConfigsForClient(client.code),
   ]);
@@ -157,6 +186,14 @@ export async function renderControlsWizard(root, clientId) {
     acreditacionesConfig:      savedAcreditacionesConfig?.params || { ...DEFAULT_ACREDITACIONES_CONFIG },
     // Config del reporte de Acumuladores Ganancias (Axton): régimen RG4003/RG4030 + códigos de acumulador.
     acumuladoresConfig:        savedAcumuladoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_ACUMULADORES_CONFIG)),
+    // Config del control de Variaciones (POF): qué conceptos compara cada reporte
+    // y qué códigos cuentan como causa de ausencia. Sin config guardada, el
+    // control cae a la semilla de variaciones.js. La UI para editar la lista
+    // todavía no existe — ver ROADMAP.md.
+    variacionesConfig:         savedVariacionesConfig?.params || null,
+    // Mapeo confirmado de concepto → columna, por archivo. Lo llena el panel
+    // "Conceptos a comparar" del Paso 2 (ver variacionesConceptMap.js).
+    variacionesMap:            null,
     controlConfigsByControlId,
 
     originFilter:              null,       // label del chip de origen activo en Paso 1 (null = "Todos")
@@ -370,6 +407,16 @@ function canGoNext(state) {
       const hasGsPers = state.selectedControls.some(id => GS_PERS_IDS.includes(id));
       if (hasGsPers) {
         if (!cfg.tabGtosPersonalesColumn || !cfg.tabDtoCocheraColumn) return false;
+      }
+
+      // Variaciones: cada concepto tiene que tener una decisión explícita en los
+      // DOS archivos — una columna, o "no se liquidó en este período". Sin
+      // default silencioso: un concepto sin resolver devolvía 0,00 y nadie se
+      // enteraba de que en realidad no se había mapeado.
+      if (hayVariaciones(state.selectedControls)) {
+        if (!state.variacionesMap) return false;
+        const grupos = conceptosDeControles(state.selectedControls, state.variacionesConfig);
+        if (conceptosPendientes(grupos, state.variacionesMap).length > 0) return false;
       }
 
       // Agrupadores: el Resumen puede venir en 2 formatos, ambos declarados como
@@ -712,15 +759,24 @@ function renderStepFiles(container, state, root) {
     ? `✅ <strong>${esc(state.catalog.fileName)}</strong> — ${catMeta?.totalRows ?? 0} conceptos cargados`
     : `📂 Sin catálogo cargado — se usará el catálogo estándar (${CATALOGO_SEED.length} conceptos).`;
 
+  // Variaciones compara dos Tabulados: los dos slots van lado a lado, siempre
+  // anterior → actual, y el Catálogo de Conceptos no aplica (sirve para
+  // matchear conceptos por nombre contra un catálogo; acá el mapeo es directo,
+  // archivo por archivo, en el panel "Conceptos a comparar").
+  const esVariaciones = hayVariaciones(state.selectedControls);
+  const mostrarCatalogo = anyTabRequired && !esVariaciones;
+
   container.innerHTML = `
     <h3 style="margin:0 0 var(--sp-1);">Paso 2 — Archivos</h3>
     <p class="text-muted" style="margin:0 0 var(--sp-4);font-size:var(--text-sm);">
-      Cargá los archivos necesarios para los controles seleccionados.
+      ${esVariaciones
+        ? 'Cargá los dos Tabulados. El período y la quincena de cada uno salen del propio archivo.'
+        : 'Cargá los archivos necesarios para los controles seleccionados.'}
     </p>
 
     <div class="wizard-onepane">
       <div class="wizard-onepane__files">
-        ${anyTabRequired ? `
+        ${mostrarCatalogo ? `
           <details style="margin-bottom:var(--sp-3);" ${state.catalog ? '' : 'open'}>
             <summary style="
               cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);
@@ -742,10 +798,27 @@ function renderStepFiles(container, state, root) {
               ${state.catalog ? `<button class="btn btn--ghost btn--sm" id="js-catalog-replace">↺ Reemplazar catálogo</button>` : ''}
             </div>
           </details>
+        ` : ''}
 
+        ${esVariaciones ? `
+          <div class="varfiles">
+            <div class="varfiles__slot">
+              <h4>Tabulado del período anterior</h4>
+              <div id="js-var-prev-upload"></div>
+              <div id="js-var-prev-meta"></div>
+            </div>
+            <div class="varfiles__slot">
+              <h4>Tabulado del período actual</h4>
+              <div id="js-tab-upload"></div>
+              <div id="js-var-act-meta"></div>
+            </div>
+          </div>
+          <div id="js-tab-analysis"></div>
+          <div id="js-var-conceptmap" style="margin-bottom:var(--sp-3);"></div>
+        ` : (anyTabRequired ? `
           <div id="js-tab-upload"></div>
           <div id="js-tab-analysis"></div>
-        ` : ''}
+        ` : '')}
 
         <div id="js-control-files"></div>
       </div>
@@ -825,21 +898,44 @@ function renderStepFiles(container, state, root) {
   // ── Archivos adicionales por control ────────────────────────────────────────
   const filesArea = container.querySelector('#js-control-files');
 
+  // Un `fileSpec` con `shared: true` se pide UNA sola vez aunque lo declaren
+  // varios controles seleccionados: es literalmente el mismo archivo (el
+  // Tabulado del período anterior que comparten los dos controles de
+  // Variaciones). El resultado se espeja en cada control, así el resto del
+  // wizard —`canGoNext`, el armado del mapping, la persistencia— no cambia.
+  const compartidosMontados = new Set();
+
   for (const controlId of state.selectedControls) {
     const ctrl = CONTROL_REGISTRY[controlId];
     if (!ctrl) continue;
 
     for (const fileSpec of ctrl.additionalFiles) {
-      const wrapper = document.createElement('div');
-      wrapper.style.marginBottom = 'var(--sp-3)';
-      wrapper.innerHTML = `
-        <h4 style="margin:0 0 var(--sp-2);font-size:var(--text-base);">
-          ${esc(ctrl.label)} — ${esc(fileSpec.label)}
-        </h4>
-      `;
-      const uploadDiv = document.createElement('div');
-      wrapper.appendChild(uploadDiv);
-      filesArea.appendChild(wrapper);
+      if (fileSpec.shared) {
+        if (compartidosMontados.has(fileSpec.fileType)) continue;
+        compartidosMontados.add(fileSpec.fileType);
+      }
+
+      // El Tabulado del período anterior tiene su propio hueco en la grilla de
+      // 2 columnas, arriba; el resto de los archivos va en la lista de abajo.
+      const slotVariaciones = esVariaciones && fileSpec.fileType === 'tab_prev_file'
+        ? container.querySelector('#js-var-prev-upload')
+        : null;
+
+      let uploadDiv;
+      if (slotVariaciones) {
+        uploadDiv = slotVariaciones;
+      } else {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = 'var(--sp-3)';
+        wrapper.innerHTML = `
+          <h4 style="margin:0 0 var(--sp-2);font-size:var(--text-base);">
+            ${esc(ctrl.label)} — ${esc(fileSpec.label)}
+          </h4>
+        `;
+        uploadDiv = document.createElement('div');
+        wrapper.appendChild(uploadDiv);
+        filesArea.appendChild(wrapper);
+      }
 
       const baseDetect = AUTO_DETECT[fileSpec.fileType];
       const catalogRows = state.catalog?.rows || CATALOGO_SEED;
@@ -847,15 +943,23 @@ function renderStepFiles(container, state, root) {
         ? (headers) => baseDetect(headers, catalogRows)
         : null;
 
+      // Controles que comparten este archivo — se les espeja el resultado.
+      const destinos = fileSpec.shared
+        ? state.selectedControls.filter(id =>
+            (CONTROL_REGISTRY[id]?.additionalFiles || []).some(f => f.fileType === fileSpec.fileType && f.shared))
+        : [controlId];
+
       initFileUploadStep(uploadDiv, {
         clientCode:  state.client.code,
         fileType:    fileSpec.fileType,
         existingData: state.controlFiles[controlId]?.[fileSpec.key] || null,
         autoDetect,
         onComplete:  (data) => {
-          if (!state.controlFiles[controlId]) state.controlFiles[controlId] = {};
-          const prev = state.controlFiles[controlId][fileSpec.key];
-          state.controlFiles[controlId][fileSpec.key] = data;
+          const prev = state.controlFiles[controlId]?.[fileSpec.key];
+          for (const destino of destinos) {
+            if (!state.controlFiles[destino]) state.controlFiles[destino] = {};
+            state.controlFiles[destino][fileSpec.key] = data;
+          }
           renderWizardNav(root, state);
           // CONTA recién cargado → re-renderizar el step para que el editor de
           // rend_vs_asiento muestre los nombres de cuentas/conceptos al lado de cada código.
@@ -866,9 +970,17 @@ function renderStepFiles(container, state, root) {
           if (controlId === 'rend_vs_asiento' && fileSpec.key === 'conta' && prev !== data) {
             renderStepFiles(container, state, root);
           }
+          // El Tabulado anterior recién cargado cambia los encabezados que ofrece
+          // el panel de conceptos — hay que rearmarlo con los del archivo nuevo.
+          if (esVariaciones && fileSpec.fileType === 'tab_prev_file' && prev !== data) {
+            renderStepFiles(container, state, root);
+          }
         },
       });
     }
+
+    // El panel de conceptos de Variaciones se monta una sola vez, fuera del loop
+    // (lo comparten los dos controles). Ver más abajo.
 
     // Editor de configuración de Rendimiento vs Asiento (visible junto a sus archivos)
     if (controlId === 'rend_vs_asiento') {
@@ -940,6 +1052,48 @@ function renderStepFiles(container, state, root) {
     }
   }
 
+  // ── Variaciones: metadata de cada archivo + panel de conceptos ──────────────
+  if (esVariaciones) {
+    const prevData = state.controlFiles[state.selectedControls.find(id => VARIACIONES_IDS.includes(id))]?.tab_prev;
+    renderMetadataTabulado(container.querySelector('#js-var-prev-meta'), prevData);
+    renderMetadataTabulado(container.querySelector('#js-var-act-meta'), state.tab);
+
+    const mapHost = container.querySelector('#js-var-conceptmap');
+    const headersAnterior = prevData?.headers || [];
+    const headersActual   = state.tab?.headers || [];
+
+    if (mapHost && headersAnterior.length > 0 && headersActual.length > 0) {
+      const grupos = conceptosDeControles(state.selectedControls, state.variacionesConfig);
+      // El estado se rearma cuando cambian los archivos (otros encabezados), pero
+      // se conserva lo ya confirmado como precarga — así cambiar un archivo no
+      // obliga a volver a mapear todo.
+      state.variacionesMap = estadoInicialConceptos({
+        grupos,
+        headersAnterior,
+        headersActual,
+        guardado: state.variacionesMapGuardado || null,
+      });
+      renderConceptMap(mapHost, {
+        grupos,
+        anterior: { headers: headersAnterior, label: 'Período anterior' },
+        actual:   { headers: headersActual,   label: 'Período actual' },
+        estado:   state.variacionesMap,
+        onChange: () => {
+          // Lo confirmado se recuerda para la próxima corrida del cliente.
+          state.variacionesMapGuardado = {
+            ...state.variacionesMap.anterior,
+            ...state.variacionesMap.actual,
+          };
+          renderWizardNav(root, state);
+        },
+      });
+    } else if (mapHost) {
+      mapHost.innerHTML = `<p class="text-muted" style="font-size:var(--text-sm);">
+        Cargá los dos Tabulados para confirmar qué columna es cada concepto.
+      </p>`;
+    }
+  }
+
   // ── Panel de configuración de columnas del Tabulado ─────────────────────────
   const hasBrutos    = state.selectedControls.some(id => BRUTOS_IDS.includes(id));
   const hasGsPers    = state.selectedControls.some(id => GS_PERS_IDS.includes(id));
@@ -960,6 +1114,42 @@ function renderStepFiles(container, state, root) {
       (newGrouping) => { state.rendVsTabuGrouping = newGrouping; }
     );
   }
+}
+
+/**
+ * Ficha de lo que declara un Tabulado en su propio encabezado — período,
+ * quincena y tipo de liquidación — más el aviso si el nombre del archivo no
+ * coincide con eso. El analista elige qué subir mirando el nombre, y el nombre
+ * puede mentir: es la única forma de que se note antes de correr el control.
+ */
+function renderMetadataTabulado(host, fileData) {
+  if (!host) return;
+  if (!fileData) { host.innerHTML = ''; return; }
+
+  const meta = fileData.parseMetadata || {};
+  if (!meta.period && !meta.tipoLiquidacion) { host.innerHTML = ''; return; }
+
+  const etiqueta = meta.period
+    ? (meta.quincena
+        ? `${meta.quincena}ª quincena de ${periodToLabel(meta.period).toLowerCase()}`
+        : periodToLabel(meta.period))
+    : 'Período sin identificar';
+
+  const desfasaje = nombreCoincideConMetadata(fileData.fileName, meta);
+
+  host.innerHTML = `
+    <div style="margin-top:var(--sp-2);font-size:var(--text-sm);">
+      <div style="font-weight:var(--fw-semibold);">${esc(etiqueta)}</div>
+      ${meta.tipoLiquidacion
+        ? `<div class="text-muted">${esc(meta.tipoLiquidacion)}</div>`
+        : ''}
+    </div>
+    ${desfasaje ? `
+      <div class="varfiles__mismatch">
+        <strong>El nombre del archivo no coincide con lo que declara adentro</strong> — ${esc(desfasaje)}.
+        Verificá que sea el archivo correcto.
+      </div>` : ''}
+  `;
 }
 
 // ── Configuración de columnas del Tabulado para Brutos / GS Pers ────────────
@@ -1452,22 +1642,24 @@ async function executeControls(state, statusEl, container, root) {
         }
       }
 
-      // Variaciones compara el Tabulado del período actual contra el del período
-      // anterior. Si ese Tabulado ya quedó cargado en la corrida del mes anterior
-      // del mismo cliente, se reusa y el analista no tiene que volver a subirlo;
-      // si no está, el control pide el archivo (additionalFiles) y avisa.
+      // Variaciones compara dos Tabulados que se suben los dos, siempre: el
+      // período y la quincena salen del encabezado de cada archivo, nunca del
+      // selector de período de la app. Antes se reusaba el Tabulado de la
+      // corrida del mes anterior, pero sin una regla cerrada de qué quincena
+      // compara contra cuál eso armaba comparaciones mal sin avisar (ver D-026).
       if (VARIACIONES_IDS.includes(controlId)) {
-        const subido = state.controlFiles[controlId]?.tab_prev;
-        if (subido?.parsedRows?.length) {
-          // El propio archivo dice a qué período corresponde (encabezado del Tabulado).
-          mapping.variacionesPrevFilePeriod = subido.parseMetadata?.period || null;
-        } else {
-          const prevPeriod = previousPeriod(state.period);
-          const prevFile   = await getRunFileFromPeriod(state.client?.code, prevPeriod, 'tab_control');
-          if (prevFile) {
-            mapping.variacionesPrev = { period: prevPeriod, rows: prevFile.parsedRows };
-          }
-        }
+        const prev = state.controlFiles[controlId]?.tab_prev;
+        mapping.variaciones = {
+          config:   state.variacionesConfig || null,
+          anterior: {
+            meta:     metadataDeTabulado(prev),
+            columnas: aColumnasDelControl(state.variacionesMap?.anterior),
+          },
+          actual: {
+            meta:     metadataDeTabulado(tab),
+            columnas: aColumnasDelControl(state.variacionesMap?.actual),
+          },
+        };
       }
 
       const tabRows     = tab?.parsedRows || [];

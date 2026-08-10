@@ -1,19 +1,30 @@
 // variaciones.js — Variación de conceptos liquidados entre dos períodos
 //
 // Único control del proyecto que cruza el Tabulado contra el Tabulado de OTRO
-// período (mes anterior vs mes actual) en lugar de contra un reporte del mismo
-// período. El período anterior lo resuelve el wizard: reusa el Tabulado ya
-// cargado en una corrida anterior del cliente (IndexedDB) y, si no está, pide el
-// archivo como archivo adicional.
+// período en lugar de contra un reporte del mismo período. **Se suben siempre
+// los dos archivos**: no se reusa el Tabulado de una corrida anterior, porque
+// no hay una regla cerrada de qué quincena compara contra cuál y adivinarla
+// daba comparaciones mal armadas sin que nadie se enterara.
+//
+// El período y la quincena de cada archivo salen del propio archivo (`Periodo:`
+// y `Tipo:` de su encabezado), nunca del selector de período de la app. El
+// control ordena los dos por fecha: el más viejo queda siempre a la izquierda
+// del reporte, sin importar en qué slot lo haya subido el analista.
 //
 // Dos reportes, con los mismos campos de salida y distinta agrupación de conceptos:
 //   - Variación Sueldos:   899999 (jornales) + 1000 (mensuales) sumados en una columna.
 //   - Variación Conceptos: 2517 y 2519, cada uno en su propia sección.
 //
+// Qué columna del Tabulado es cada concepto lo **confirma el analista** en el
+// paso de archivos (ver js/ui/variacionesConceptMap.js). El código de concepto
+// pasó a ser precarga, no identificador: si el cliente renumera o renombra un
+// concepto se corrige desde la pantalla, sin tocar este archivo. Las constantes
+// de abajo son la semilla de esa configuración, no la forma de leer la columna.
+//
 // Los códigos 1028 / 1029 que aparecen en documentos de referencia del cliente son
 // de otro sistema de liquidación y no se usan como identificador (2517=1028, 2519=1029).
 //
-// Ver specs/reporte-variaciones-opmobility.md y D-022 / D-023 en DECISIONS.md.
+// Ver specs/reporte-variaciones-opmobility.md y D-022 / D-023 / D-026 en DECISIONS.md.
 
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
@@ -21,9 +32,13 @@ import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js'
 import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodToLabel } from '../utils/dates.js';
+import { clavesUnicas } from '../parsers/tabuladoHtml.js';
 
 /** Tolerancia de comparación de importes: medio centavo. */
 const TOL = 0.01;
+
+/** Tolerancia al validar un total contra la fila TOTAL GENERAL del archivo. */
+const TOL_TOTAL = 0.05;
 
 export const VARIACIONES_SUELDOS_CONCEPTS = [
   { codigo: '899999', label: 'Jornales' },
@@ -38,9 +53,10 @@ export const VARIACIONES_CONCEPTOS_CONCEPTS = [
 // Códigos de licencia / ausencia / franco / permiso que puede traer el Tabulado.
 // Se usan sólo para explicar una caída de escalón — si el empleado tiene algo
 // cargado en alguno de estos conceptos en el período actual, la baja se explica
-// sola y no entra en "legajos para poder explicar". No es exhaustivo: son los
-// códigos que aparecieron en los dos tabulados de muestra de OPmobility.
-const CODIGOS_AUSENCIA = ['1500', '1510', '1530', '1625', '1915', '1698', '1047', '1049'];
+// sola y no entra en "legajos para poder explicar".
+export const CODIGOS_AUSENCIA = [
+  '1500', '1510', '1530', '1600', '1625', '1695', '1698', '1915', '1047', '1049',
+];
 
 /** Cantidad máxima de "escalones" para tratar una columna como discreta. */
 const MAX_VALORES_ESCALA = 6;
@@ -71,18 +87,82 @@ function codigoDeHeader(header) {
 }
 
 /**
- * Mapea código de concepto → nombre de columna, a partir de las claves de las
+ * Mapea código de concepto → nombres de columna, a partir de las claves de las
  * filas. Se resuelve por lado (anterior y actual) porque el nombre del concepto
  * puede cambiar entre períodos, y porque la cantidad de columnas del Tabulado
  * varía según qué conceptos se liquidaron ese mes.
+ *
+ * Devuelve **todas** las columnas de cada código, no la primera: un Tabulado
+ * puede traer el mismo concepto en dos columnas (desambiguadas con sufijo
+ * `__2` por `clavesUnicas`) y quedarse con una descartaba la otra en silencio.
+ * Esto es sólo precarga — la columna que se usa la confirma el analista.
+ *
+ * @returns {Record<string, string[]>}
  */
-function columnasPorCodigo(rows) {
+export function columnasPorCodigo(rows) {
   const out = {};
   for (const key of clavesDeFilas(rows)) {
     const cod = codigoDeHeader(key);
-    if (cod !== null && out[cod] === undefined) out[cod] = key;
+    if (cod === null) continue;
+    (out[cod] ||= []).push(key);
   }
   return out;
+}
+
+/**
+ * Identidad de una entrada de concepto. Las entradas se identifican por código
+ * cuando lo tienen (`'2517'`) y por nombre de columna cuando no (`'Bruto'`),
+ * para poder comparar también columnas que el Tabulado no numera.
+ */
+const entryId = e => e.codigo || e.nombre || e.label;
+
+/**
+ * Columna efectiva de cada entrada en un archivo.
+ *
+ * Precedencia: lo que confirmó el analista (incluido el `null` explícito de "no
+ * se liquidó en este período") y, si no confirmó nada, la precarga por código o
+ * por nombre exacto. El fallback importa: mantiene andando a quien llame al
+ * control sin pasar por el paso de confirmación (tests, corridas guardadas).
+ *
+ * @param {Array}  entradas    conceptos declarados por la config
+ * @param {object[]} rows      filas del archivo
+ * @param {object|null} confirmadas  { [entryId]: nombreColumna | null }
+ * @returns {Record<string, string|null>}
+ */
+function resolverColumnasDeEntradas(entradas, rows, confirmadas) {
+  const porCodigo = columnasPorCodigo(rows);
+  const claves = clavesDeFilas(rows);
+  const out = {};
+  for (const e of entradas) {
+    const id = entryId(e);
+    if (confirmadas && Object.prototype.hasOwnProperty.call(confirmadas, id)) {
+      out[id] = confirmadas[id] || null;
+      continue;
+    }
+    if (e.codigo && porCodigo[e.codigo]?.length) out[id] = porCodigo[e.codigo][0];
+    else if (e.nombre && claves.has(e.nombre)) out[id] = e.nombre;
+    else out[id] = null;
+  }
+  return out;
+}
+
+/** Columnas de las causas de ausencia (por código) presentes en un archivo. */
+function resolverColumnasAusencia(codigos, rows) {
+  const porCodigo = columnasPorCodigo(rows);
+  return codigos.flatMap(cod => porCodigo[cod] || []);
+}
+
+/**
+ * Etiqueta de un período con su quincena: "2ª quincena de marzo 2025".
+ * Sin quincena declarada cae a "Marzo 2025".
+ *
+ * No se toca `periodToLabel` (js/utils/dates.js), que la usa el resto de la app
+ * y devuelve sólo el mes.
+ */
+function periodQuincenaLabel(period, quincena) {
+  if (!period) return 'Período sin identificar';
+  const base = periodToLabel(period);
+  return quincena ? `${quincena}ª quincena de ${base.toLowerCase()}` : base;
 }
 
 /**
@@ -147,11 +227,14 @@ function sumColumn(group, col) {
   return total;
 }
 
-/** Suma varios conceptos de un mismo legajo (para el reporte de Sueldos). */
-function sumConceptos(group, columnas, codigos) {
+/**
+ * Suma las entradas de un grupo para un legajo (Sueldos combina jornales +
+ * mensuales en una sola columna del reporte; Conceptos tiene una entrada por grupo).
+ */
+function sumEntradas(group, columnas, entradas) {
   let total = null;
-  for (const cod of codigos) {
-    const v = sumColumn(group, columnas[cod]);
+  for (const e of entradas) {
+    const v = sumColumn(group, columnas[entryId(e)]);
     if (v !== null) total = (total ?? 0) + v;
   }
   return total;
@@ -197,14 +280,57 @@ function escalonDe(valor, escala) {
   return Math.round((v / max) * 100);
 }
 
-/** Suma los conceptos de licencia/ausencia conocidos para un legajo y período. */
-function sumaAusencias(group, columnas) {
+/** Suma los conceptos de licencia/ausencia configurados para un legajo y período. */
+function sumaAusencias(group, columnasAusencia) {
   let total = 0;
-  for (const cod of CODIGOS_AUSENCIA) {
-    const v = sumColumn(group, columnas[cod]);
+  for (const col of columnasAusencia) {
+    const v = sumColumn(group, col);
     if (v !== null) total += v;
   }
   return total;
+}
+
+/**
+ * Ordena los dos archivos cronológicamente: el más viejo primero.
+ *
+ * El analista puede equivocarse de slot, así que el orden del reporte lo decide
+ * la fecha que declara cada archivo, no dónde se subió. Si no alcanza para
+ * decidir (mismo período y alguna quincena sin declarar) se respeta el slot y
+ * el llamador avisa.
+ *
+ * @returns {[object, object]} [anterior, actual]
+ */
+function ordenarCronologico(slotAnterior, slotActual) {
+  const pa = slotAnterior.meta?.period || null;
+  const pb = slotActual.meta?.period || null;
+  if (pa && pb && pa !== pb) return pa < pb ? [slotAnterior, slotActual] : [slotActual, slotAnterior];
+
+  const qa = slotAnterior.meta?.quincena ?? null;
+  const qb = slotActual.meta?.quincena ?? null;
+  if (qa && qb && qa !== qb) return qa < qb ? [slotAnterior, slotActual] : [slotActual, slotAnterior];
+
+  return [slotAnterior, slotActual];
+}
+
+/**
+ * Compara el total calculado de una columna contra el que trae la fila
+ * TOTAL GENERAL del propio archivo.
+ *
+ * Existe para detectar un desalineamiento de columnas: si los encabezados se
+ * corrieron, los números salen mal pero coherentes entre sí, y esta es la única
+ * señal de que algo no cierra. Es un aviso — no bloquea la corrida ni va al PDF.
+ *
+ * @returns {{ archivo: number, calculado: number }|null} null si cierra o no se puede verificar
+ */
+function chequearTotalDelArchivo(meta, columna, calculado) {
+  if (!meta?.totalRow || !meta?.headers || !columna) return null;
+  const i = clavesUnicas(meta.headers).indexOf(columna);
+  if (i < 0) return null;
+  const j = i - (meta.totalRowOffset ?? 0);
+  if (j < 0 || j >= meta.totalRow.length) return null;
+  const archivo = toNum(meta.totalRow[j]);
+  if (archivo === null) return null;
+  return Math.abs(archivo - calculado) > TOL_TOTAL ? { archivo, calculado } : null;
 }
 
 const isDif = v => v !== null && Math.abs(v) > TOL;
@@ -238,54 +364,80 @@ function esc(s) {
 /**
  * Núcleo compartido por los dos reportes.
  *
- * @param {object[]} prevRowsFile filas del Tabulado anterior subido como archivo adicional
- * @param {object[]} tabRows      filas del Tabulado del período actual
- * @param {object}   mapping      { tab, period, variacionesPrev? }
- * @param {object}   reporte      { id, titulo, conceptos, combinar }
+ * @param {object[]} prevRowsFile filas del Tabulado subido en el slot "período anterior"
+ * @param {object[]} tabRows      filas del Tabulado subido en el slot "período actual"
+ * @param {object}   mapping      { tab, variaciones: { config?, anterior, actual } }
+ * @param {object}   reporte      { id, titulo, conceptos, combinar, listaConfig }
  */
 function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
   if (!tabRows || tabRows.length === 0) {
     return { error: 'Falta el Tabulado del período actual. Cargalo en el Paso 2.' };
   }
-
-  // El período anterior sale del archivo subido o de una corrida anterior del cliente.
-  const prevGuardado = mapping.variacionesPrev || null;
-  const prevRows = (prevRowsFile && prevRowsFile.length > 0)
-    ? prevRowsFile
-    : (prevGuardado?.rows || []);
-
-  if (prevRows.length === 0) {
+  if (!prevRowsFile || prevRowsFile.length === 0) {
     return {
-      error: 'No hay Tabulado del período anterior para comparar. Corré primero el control en el período '
-        + 'anterior, o cargá ese Tabulado en el Paso 2 ("Tabulado del período anterior").',
+      error: 'Falta el Tabulado del período anterior. Este control compara dos períodos, '
+        + 'así que necesita los dos archivos. Subilo en el Paso 2 para continuar.',
     };
   }
 
-  const periodoActual   = mapping.period || null;
-  const periodoAnterior = (prevRowsFile && prevRowsFile.length > 0)
-    ? (mapping.variacionesPrevFilePeriod || null)
-    : (prevGuardado?.period || null);
+  const cfg = mapping.variaciones || {};
 
-  if (periodoActual && periodoAnterior && periodoActual === periodoAnterior) {
+  // Cada lado es el archivo tal como se subió, con la metadata que declara el
+  // propio archivo. El orden del reporte lo decide la fecha, no el slot.
+  const slotAnterior = { rows: prevRowsFile, meta: cfg.anterior?.meta || {}, columnas: cfg.anterior?.columnas || null };
+  const slotActual   = { rows: tabRows,      meta: cfg.actual?.meta   || {}, columnas: cfg.actual?.columnas   || null };
+
+  const mismoPeriodo = slotAnterior.meta.period && slotActual.meta.period
+    && slotAnterior.meta.period === slotActual.meta.period;
+  const quincenaAnterior = slotAnterior.meta.quincena ?? null;
+  const quincenaActual   = slotActual.meta.quincena ?? null;
+
+  if (mismoPeriodo && quincenaAnterior && quincenaActual && quincenaAnterior === quincenaActual) {
     return {
-      error: `El Tabulado del período anterior corresponde al mismo período que el actual `
-        + `(${periodToLabel(periodoActual)}). Verificá los archivos.`,
+      error: `No se puede comparar: los dos tabulados son de la `
+        + `${periodQuincenaLabel(slotActual.meta.period, quincenaActual)}. `
+        + `Para ver la variación hacen falta dos períodos distintos. Revisá qué archivo subiste en cada slot.`,
     };
   }
+
+  const avisos = [];
+  if (mismoPeriodo && (!quincenaAnterior || !quincenaActual)) {
+    avisos.push('Los dos tabulados son del mismo período y al menos uno no declara la quincena, '
+      + 'así que no se pudo verificar que sean liquidaciones distintas. Se comparó en el orden en que se subieron.');
+  }
+
+  const [anterior, actual] = ordenarCronologico(slotAnterior, slotActual);
+  const seSubieronAlReves = anterior === slotActual;
+  if (seSubieronAlReves) {
+    avisos.push('Los archivos se subieron en el orden inverso: el del slot "período actual" es el más viejo. '
+      + 'El reporte igual los ordena por fecha — el más viejo queda a la izquierda.');
+  }
+
+  const prevRows = anterior.rows;
+  const actRows  = actual.rows;
+
+  const periodoAnterior = anterior.meta.period || null;
+  const periodoActual   = actual.meta.period || null;
 
   const legPrev = resolverColumnaLegajo(prevRows, mapping.tab?.empleadoColumn);
-  const legAct  = resolverColumnaLegajo(tabRows, mapping.tab?.empleadoColumn);
+  const legAct  = resolverColumnaLegajo(actRows, mapping.tab?.empleadoColumn);
   if (!legPrev || !legAct) {
     return { error: 'No se pudo identificar la columna de Legajo en el Tabulado. Revisá el mapeo de columnas.' };
   }
-  const nomAct  = resolverColumnaNombre(tabRows, mapping.tab?.apellidoNombreColumn);
+  const nomAct  = resolverColumnaNombre(actRows, mapping.tab?.apellidoNombreColumn);
   const nomPrev = resolverColumnaNombre(prevRows, mapping.tab?.apellidoNombreColumn);
 
-  const colsPrev = columnasPorCodigo(prevRows);
-  const colsAct  = columnasPorCodigo(tabRows);
+  // Qué columna es cada concepto en cada archivo: lo confirmado por el analista,
+  // con precarga por código como respaldo.
+  const colsPrev = resolverColumnasDeEntradas(reporte.conceptos, prevRows, anterior.columnas);
+  const colsAct  = resolverColumnasDeEntradas(reporte.conceptos, actRows, actual.columnas);
+
+  const codigosAusencia = cfg.config?.ausencias || CODIGOS_AUSENCIA;
+  const ausenciaPrevCols = resolverColumnasAusencia(codigosAusencia, prevRows);
+  const ausenciaActCols  = resolverColumnasAusencia(codigosAusencia, actRows);
 
   const gPrev = groupRowsByLegajo(prevRows, legPrev);
-  const gAct  = groupRowsByLegajo(tabRows, legAct);
+  const gAct  = groupRowsByLegajo(actRows, legAct);
 
   const legajos = Array.from(new Set([...gPrev.keys(), ...gAct.keys()]))
     .sort((a, b) => {
@@ -298,20 +450,20 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
   const grupos = reporte.combinar
     ? [{
         key: 'total',
-        codigos: reporte.conceptos.map(c => c.codigo),
+        entradas: reporte.conceptos,
         label: reporte.titulo,
         nombreReal: null,
       }]
     : reporte.conceptos.map(c => ({
-        key: c.codigo,
-        codigos: [c.codigo],
-        label: `${c.codigo} - ${c.label}`,
+        key: entryId(c),
+        entradas: [c],
+        label: c.codigo ? `${c.codigo} - ${c.label}` : c.label,
         // Nombre tal como figura en el Tabulado, que es el que va al reporte.
-        nombreReal: colsAct[c.codigo] || colsPrev[c.codigo] || null,
+        nombreReal: colsAct[entryId(c)] || colsPrev[entryId(c)] || null,
       }));
 
   const brutoPrevCol = resolverColumnaBruto(prevRows);
-  const brutoActCol  = resolverColumnaBruto(tabRows);
+  const brutoActCol  = resolverColumnaBruto(actRows);
 
   const rows = legajos.map(legajo => {
     const grupoPrev = gPrev.get(legajo) || [];
@@ -322,8 +474,8 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
 
     const valores = {};
     for (const g of grupos) {
-      const anterior = sumConceptos(grupoPrev, colsPrev, g.codigos);
-      const actual   = sumConceptos(grupoAct, colsAct, g.codigos);
+      const anterior = sumEntradas(grupoPrev, colsPrev, g.entradas);
+      const actual   = sumEntradas(grupoAct, colsAct, g.entradas);
       const diff = (anterior === null && actual === null)
         ? null
         : (actual ?? 0) - (anterior ?? 0);
@@ -342,8 +494,8 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
       },
       // Cualquier licencia/ausencia/franco/permiso cargado ese período — sirve
       // para distinguir una baja que se explica sola de una que hay que preguntar.
-      ausenciaAnterior: sumaAusencias(grupoPrev, colsPrev),
-      ausenciaActual:   sumaAusencias(grupoAct, colsAct),
+      ausenciaAnterior: sumaAusencias(grupoPrev, ausenciaPrevCols),
+      ausenciaActual:   sumaAusencias(grupoAct, ausenciaActCols),
     };
   });
 
@@ -356,7 +508,7 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
     // Sólo cuentan los valores de períodos en los que el legajo estaba en el
     // Tabulado (presente): un null por alta/baja no es "liquidó 0", es "no
     // corresponde", y no tiene que contaminar la detección de la escala.
-    g.escala = (g.codigos.length === 1)
+    g.escala = (g.entradas.length === 1)
       ? detectarEscala(rows.flatMap(r => [
           r.presenteAnterior ? r.valores[g.key].anterior : undefined,
           r.presenteActual   ? r.valores[g.key].actual   : undefined,
@@ -370,28 +522,66 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
     }
   }
 
-  // Conceptos configurados que no se liquidaron en un período: se computan en 0,
+  // Conceptos que no se liquidaron en un período — porque no están en el archivo
+  // o porque el analista marcó "no se liquidó en este período". Se computan en 0,
   // no es un error. Se informa como aviso en la pantalla de resultados.
   const faltantes = [];
   for (const c of reporte.conceptos) {
-    const enPrev = colsPrev[c.codigo] !== undefined;
-    const enAct  = colsAct[c.codigo] !== undefined;
+    const id = entryId(c);
+    const enPrev = colsPrev[id] !== null && colsPrev[id] !== undefined;
+    const enAct  = colsAct[id] !== null && colsAct[id] !== undefined;
     if (!enPrev || !enAct) {
-      faltantes.push({ codigo: c.codigo, label: c.label, enPrev, enAct });
+      faltantes.push({ codigo: c.codigo || null, label: c.label, enPrev, enAct });
+    }
+  }
+
+  // Los totales calculados contra la fila TOTAL GENERAL de cada archivo.
+  const totalesQueNoCierran = [];
+  for (const g of grupos) {
+    for (const e of g.entradas) {
+      const id = entryId(e);
+      for (const [lado, cols, meta, period, quincena] of [
+        ['anterior', colsPrev, anterior.meta, periodoAnterior, anterior.meta.quincena],
+        ['actual',   colsAct,  actual.meta,   periodoActual,   actual.meta.quincena],
+      ]) {
+        const col = cols[id];
+        if (!col) continue;
+        const calculado = rows.reduce((s, r) => {
+          const grupoFilas = (lado === 'anterior' ? gPrev : gAct).get(r.legajo) || [];
+          return s + (sumColumn(grupoFilas, col) ?? 0);
+        }, 0);
+        const desvio = chequearTotalDelArchivo(meta, col, calculado);
+        if (desvio) {
+          totalesQueNoCierran.push({ label: e.label, columna: col, lado, period, quincena, ...desvio });
+        }
+      }
     }
   }
 
   const brutoAnterior = brutoPrevCol ? rows.reduce((s, r) => s + (r.bruto.anterior ?? 0), 0) : null;
   const brutoActual   = brutoActCol  ? rows.reduce((s, r) => s + (r.bruto.actual ?? 0), 0) : null;
 
+  const tipoAnterior = anterior.meta.tipoLiquidacion || null;
+  const tipoActual   = actual.meta.tipoLiquidacion || null;
+  if (tipoAnterior && tipoActual && tipoAnterior !== tipoActual) {
+    avisos.push(`Los dos tabulados son de tipos de liquidación distintos — "${tipoAnterior}" contra `
+      + `"${tipoActual}". Comparar tipos distintos casi siempre es un error de carga: revisá qué archivos subiste.`);
+  }
+
   return {
     period: periodoActual,
     periodAnterior: periodoAnterior,
-    prevOrigen: (prevRowsFile && prevRowsFile.length > 0) ? 'archivo' : 'corrida-anterior',
+    quincena: actual.meta.quincena ?? null,
+    quincenaAnterior: anterior.meta.quincena ?? null,
+    tipoLiquidacion: tipoActual,
+    tipoLiquidacionAnterior: tipoAnterior,
+    empresa: actual.meta.empresa || anterior.meta.empresa || null,
     reporte: { id: reporte.id, titulo: reporte.titulo, combinar: reporte.combinar },
     grupos,
     rows,
     faltantes,
+    totalesQueNoCierran,
+    avisos,
     bruto: (brutoAnterior !== null && brutoActual !== null)
       ? { anterior: brutoAnterior, actual: brutoActual, diff: brutoActual - brutoAnterior, pct: calcularPct(brutoAnterior, brutoActual) }
       : null,
@@ -403,11 +593,22 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
   };
 }
 
+/**
+ * Conceptos declarados por un reporte: los de la configuración del cliente si
+ * los hay, o la semilla de este módulo. Las entradas sin etiqueta se completan
+ * con el código para que la salida nunca muestre una columna sin nombre.
+ */
+function conceptosDe(mapping, clave, semilla) {
+  const desdeConfig = mapping.variaciones?.config?.[clave];
+  const lista = Array.isArray(desdeConfig) && desdeConfig.length > 0 ? desdeConfig : semilla;
+  return lista.map(c => ({ ...c, label: c.label || c.codigo || c.nombre || '(sin nombre)' }));
+}
+
 export function runVariacionesSueldos(primaryRows, tabRows, mapping) {
   return runVariaciones(primaryRows, tabRows, mapping, {
     id: 'variaciones_sueldos',
     titulo: 'Variación Sueldos',
-    conceptos: VARIACIONES_SUELDOS_CONCEPTS,
+    conceptos: conceptosDe(mapping, 'sueldos', VARIACIONES_SUELDOS_CONCEPTS),
     combinar: true,
   });
 }
@@ -416,7 +617,7 @@ export function runVariacionesConceptos(primaryRows, tabRows, mapping) {
   return runVariaciones(primaryRows, tabRows, mapping, {
     id: 'variaciones_conceptos',
     titulo: 'Variación Conceptos',
-    conceptos: VARIACIONES_CONCEPTOS_CONCEPTS,
+    conceptos: conceptosDe(mapping, 'conceptos', VARIACIONES_CONCEPTOS_CONCEPTS),
     combinar: false,
   });
 }
@@ -484,7 +685,7 @@ function summarizeVariaciones(results) {
   );
 
   const etiquetaPeriodos = results.periodAnterior && results.period
-    ? `${periodToLabel(results.periodAnterior)} vs ${periodToLabel(results.period)}`
+    ? `${etiquetaAnterior(results)} vs ${etiquetaActual(results)}`
     : 'período anterior vs actual';
 
   return {
@@ -500,10 +701,27 @@ function summarizeVariaciones(results) {
     unitsWithDiff,
     diffTotalAmount,
     worstCase,
-    contextNote: results.prevOrigen === 'corrida-anterior'
-      ? `período anterior tomado de la corrida de ${periodToLabel(results.periodAnterior)}`
-      : 'período anterior tomado del archivo cargado',
+    contextNote: results.tipoLiquidacion
+      ? `liquidación: ${results.tipoLiquidacion}`
+      : 'los dos períodos salen de los tabulados cargados',
   };
+}
+
+/** Etiquetas de los dos períodos comparados, con la quincena que declara cada archivo. */
+const etiquetaAnterior = r => periodQuincenaLabel(r.periodAnterior, r.quincenaAnterior);
+const etiquetaActual   = r => periodQuincenaLabel(r.period, r.quincena);
+
+/**
+ * Tipo de liquidación de los dos archivos, para mostrar en segundo plano debajo
+ * del período. Si los dos coinciden va uno solo; si difieren van los dos (y
+ * además sale el aviso, que eso casi siempre es un error de carga).
+ */
+function tipoLiquidacionLinea(results) {
+  const a = results.tipoLiquidacionAnterior;
+  const b = results.tipoLiquidacion;
+  if (!a && !b) return '';
+  if (a && b && a !== b) return `${a} · ${b}`;
+  return b || a;
 }
 
 export const summarizeVariacionesSueldos   = summarizeVariaciones;
@@ -531,8 +749,8 @@ function renderVariacionesResults(results, container) {
   const okCount    = relevantes.length - conDif.length;
   const sinValor   = rows.length - relevantes.length;
 
-  const labelAnterior = results.periodAnterior ? periodToLabel(results.periodAnterior) : 'Período anterior';
-  const labelActual   = results.period ? periodToLabel(results.period) : 'Período actual';
+  const labelAnterior = etiquetaAnterior(results);
+  const labelActual   = etiquetaActual(results);
   const casos = casosDeEscalon(relevantes, grupos);
   const sinCausa = casos.filter(c => !c.explicado);
 
@@ -550,21 +768,26 @@ function renderVariacionesResults(results, container) {
     </div>
     <div style="margin-left:auto;font-size:var(--text-sm);color:var(--color-text-muted);text-align:right;">
       ${esc(labelAnterior)} → ${esc(labelActual)}
+      ${tipoLiquidacionLinea(results) ? `<br>${esc(tipoLiquidacionLinea(results))}` : ''}
       ${sinValor > 0 ? `<br>${sinValor} sin valores en ningún período (no se muestran)` : ''}
     </div>
   `;
   container.appendChild(hero);
 
   // ── Avisos ────────────────────────────────────────────────────────────────
-  const avisos = [];
-  if (results.prevOrigen === 'corrida-anterior') {
-    avisos.push(`El período anterior se tomó del Tabulado ya cargado en la corrida de ${esc(labelAnterior)}.`);
-  }
+  const avisos = (results.avisos || []).map(a => esc(a));
   for (const f of results.faltantes) {
     const donde = !f.enPrev && !f.enAct
       ? 'en ninguno de los dos períodos'
       : (!f.enPrev ? `en ${esc(labelAnterior)}` : `en ${esc(labelActual)}`);
-    avisos.push(`El concepto <strong>${esc(f.codigo)}</strong> (${esc(f.label)}) no se liquidó ${donde} — se computa en 0,00.`);
+    const nombre = f.codigo ? `<strong>${esc(f.codigo)}</strong> (${esc(f.label)})` : `<strong>${esc(f.label)}</strong>`;
+    avisos.push(`El concepto ${nombre} no se liquidó ${donde} — se computa en 0,00.`);
+  }
+  for (const t of results.totalesQueNoCierran || []) {
+    avisos.push(`El total de <strong>${esc(t.label)}</strong> en ${esc(periodQuincenaLabel(t.period, t.quincena))} `
+      + `no cierra contra la fila TOTAL GENERAL del archivo: el archivo dice `
+      + `<strong>${fmtNum(t.archivo)}</strong> y la suma de los empleados da <strong>${fmtNum(t.calculado)}</strong>. `
+      + `No bloquea la corrida y no va al PDF.`);
   }
   if (results.summary.empleadosAnterior !== results.summary.empleadosActual) {
     avisos.push(`La dotación cambió entre períodos: ${results.summary.empleadosAnterior} empleados en `
@@ -587,11 +810,11 @@ function renderVariacionesResults(results, container) {
   toolbar.appendChild(right);
   container.appendChild(toolbar);
 
-  const csvHeaders = ['Concepto', 'Legajo', 'Apellido y Nombre', labelAnterior, labelActual, 'Variación $', 'Variación %'];
+  const csvHeaders = ['Concepto', 'Legajo', 'Apellido y Nombre', labelAnterior, labelActual, 'Modificación', 'Variación $', 'Variación %'];
   const csvRows = () => grupos.flatMap(g =>
     relevantes.filter(r => isDif(r.valores[g.key].diff)).map(r => {
       const v = r.valores[g.key];
-      return [g.nombreReal || g.label, r.legajo, r.nombre, v.anterior, v.actual, v.diff, v.pct];
+      return [g.nombreReal || g.label, r.legajo, r.nombre, v.anterior, v.actual, isDif(v.diff) ? 'S' : 'N', v.diff, v.pct];
     })
   );
   renderExportMenu(right, {
@@ -771,11 +994,44 @@ function renderPanel(container, ctx) {
 
 // ── Solapa "Detalle" (Dirección C) ──────────────────────────────────────────
 
+// Columnas ordenables de la tabla de detalle. `get` devuelve el valor con el que
+// se compara; los nulls van siempre al final, en los dos sentidos, para que
+// ordenar no esconda a los empleados sin dato arriba de todo.
+const ORDEN_COLUMNAS = {
+  legajo:      { label: 'Legajo',    tipo: 'texto', get: (r) => r.legajo },
+  nombre:      { label: 'Nombre',    tipo: 'texto', get: (r) => r.nombre },
+  anterior:    { label: 'Anterior',  tipo: 'num',   get: (r, k) => r.valores[k].anterior },
+  actual:      { label: 'Actual',    tipo: 'num',   get: (r, k) => r.valores[k].actual },
+  diff:        { label: 'Variación', tipo: 'num',   get: (r, k) => r.valores[k].diff },
+  pct:         { label: 'Variación %', tipo: 'num', get: (r, k) => r.valores[k].pct },
+  modificacion:{ label: 'Modificación', tipo: 'texto', get: (r, k) => (isDif(r.valores[k].diff) ? 'S' : 'N') },
+};
+
+function compararPor(col, key, dir) {
+  const def = ORDEN_COLUMNAS[col];
+  const signo = dir === 'asc' ? 1 : -1;
+  return (a, b) => {
+    const va = def.get(a, key);
+    const vb = def.get(b, key);
+    const na = va === null || va === undefined;
+    const nb = vb === null || vb === undefined;
+    if (na && nb) return 0;
+    if (na) return 1;          // sin dato, siempre al final
+    if (nb) return -1;
+    if (def.tipo === 'num') return (va - vb) * signo;
+    const ia = parseInt(va, 10), ib = parseInt(vb, 10);
+    if (isFinite(ia) && isFinite(ib) && ia !== ib) return (ia - ib) * signo;
+    return String(va).localeCompare(String(vb), 'es') * signo;
+  };
+}
+
 function renderDetalle(container, ctx) {
   const { results, relevantes, conDif, grupos, labelAnterior, labelActual } = ctx;
 
   const toolbar = document.createElement('div');
   toolbar.className = 'results-toolbar';
+  toolbar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);';
+
   const sel = document.createElement('select');
   sel.className = 'form-select form-select--sm';
   sel.innerHTML = `
@@ -784,6 +1040,24 @@ function renderDetalle(container, ctx) {
   `;
   if (conDif.length === 0) sel.value = 'all';
   toolbar.appendChild(sel);
+
+  // Filtro por sentido de la variación: revisar "qué subió" y "qué bajó" por
+  // separado es la lectura más frecuente de este reporte.
+  const selDir = document.createElement('select');
+  selDir.className = 'form-select form-select--sm';
+  selDir.innerHTML = `
+    <option value="todos">Suba y baja</option>
+    <option value="up">Solo aumentos</option>
+    <option value="dn">Solo bajas</option>
+  `;
+  toolbar.appendChild(selDir);
+
+  const hint = document.createElement('span');
+  hint.className = 'text-muted';
+  hint.style.cssText = 'font-size:var(--text-sm);';
+  hint.textContent = 'Clickeá un encabezado para ordenar.';
+  toolbar.appendChild(hint);
+
   container.appendChild(toolbar);
 
   const tableHost = document.createElement('div');
@@ -794,8 +1068,16 @@ function renderDetalle(container, ctx) {
   const gruposVisibles = gruposConDif.length > 0 ? gruposConDif : grupos;
   const ocultos = grupos.length - gruposVisibles.length;
 
+  // Orden por grupo: cada sección se ordena sola (Variación Conceptos son dos tablas).
+  const orden = new Map();   // key de grupo → { col, dir }
+
   function filas() {
-    return sel.value === 'dif' ? conDif : relevantes;
+    const base = sel.value === 'dif' ? conDif : relevantes;
+    if (selDir.value === 'todos') return base;
+    return base.filter(r => grupos.some(g => {
+      const d = r.valores[g.key].diff;
+      return isDif(d) && (selDir.value === 'up' ? d > 0 : d < 0);
+    }));
   }
 
   function renderTabla() {
@@ -808,6 +1090,8 @@ function renderDetalle(container, ctx) {
       const filasGrupo = visibles.filter(r =>
         sel.value === 'all' || isDif(r.valores[g.key].diff)
       );
+      const ord = orden.get(g.key);
+      if (ord) filasGrupo.sort(compararPor(ord.col, g.key, ord.dir));
       filasPorGrupo.set(g.key, filasGrupo);
       const totAnt = filasGrupo.reduce((s, r) => s + (r.valores[g.key].anterior ?? 0), 0);
       const totAct = filasGrupo.reduce((s, r) => s + (r.valores[g.key].actual ?? 0), 0);
@@ -827,16 +1111,29 @@ function renderDetalle(container, ctx) {
         const escalonCol = g.escala
           ? `<td style="text-align:center;white-space:nowrap;">${v.escalonAnterior === null ? '—' : `${v.escalonAnterior}% → ${v.escalonActual}%`}</td>`
           : '';
+        const modif = isDif(v.diff) ? 'S' : 'N';
         return `<tr>
           <td>${esc(r.legajo)}</td>
           <td>${esc(r.nombre)}</td>
           ${escalonCol}
           <td style="text-align:right;">${fmtNum(v.anterior)}</td>
           <td style="text-align:right;">${fmtNum(v.actual)}</td>
+          <td style="text-align:center;color:${color};font-weight:600;">${modif}</td>
           <td style="text-align:right;color:${color};">${fmtNum(v.diff)}</td>
           <td style="text-align:right;color:${color};">${fmtPct(v.pct)}</td>
         </tr>`;
       }).join('');
+
+      // Encabezados clickeables. La flecha indica la columna y el sentido activos.
+      const th = (col, texto, align = 'left') => {
+        const act = ord && ord.col === col;
+        const flecha = act ? (ord.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th style="text-align:${align};cursor:pointer;user-select:none;white-space:nowrap;"
+                    data-sort="${esc(col)}" data-grupo-sort="${esc(g.key)}"
+                    title="Ordenar por ${esc(ORDEN_COLUMNAS[col].label)}"
+                    aria-sort="${act ? (ord.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"
+                >${esc(texto)}${flecha}</th>`;
+      };
 
       return `
         ${titulo}
@@ -844,13 +1141,14 @@ function renderDetalle(container, ctx) {
         <table class="data-table data-table--compact" data-grupo="${esc(g.key)}">
           <thead>
             <tr>
-              <th>Legajo</th>
-              <th>Apellido y Nombre</th>
+              ${th('legajo', 'Legajo')}
+              ${th('nombre', 'Apellido y Nombre')}
               ${g.escala ? '<th style="text-align:center;">Escalón</th>' : ''}
-              <th style="text-align:right;">${esc(labelAnterior)}</th>
-              <th style="text-align:right;">${esc(labelActual)}</th>
-              <th style="text-align:right;">Variación $</th>
-              <th style="text-align:right;">Variación %</th>
+              ${th('anterior', labelAnterior, 'right')}
+              ${th('actual', labelActual, 'right')}
+              ${th('modificacion', 'Modificación', 'center')}
+              ${th('diff', 'Variación $', 'right')}
+              ${th('pct', 'Variación %', 'right')}
             </tr>
           </thead>
           <tbody>${cuerpo}</tbody>
@@ -859,9 +1157,10 @@ function renderDetalle(container, ctx) {
               <!-- Con el filtro en "solo con variación" el pie suma las filas mostradas,
                    no toda la dotación: se dice explícitamente para no confundirlo con el
                    TOTAL GENERAL del reporte (que sí es sobre todos los empleados). -->
-              <td colspan="${g.escala ? 3 : 2}"><strong>${sel.value === 'dif' ? 'TOTAL de las filas mostradas' : 'TOTAL GENERAL'}</strong> — ${filasGrupo.length} empleado${filasGrupo.length === 1 ? '' : 's'}</td>
+              <td colspan="${g.escala ? 3 : 2}"><strong>${sel.value === 'dif' || selDir.value !== 'todos' ? 'TOTAL de las filas mostradas' : 'TOTAL GENERAL'}</strong> — ${filasGrupo.length} empleado${filasGrupo.length === 1 ? '' : 's'}</td>
               <td style="text-align:right;"><strong>${fmtNum(totAnt)}</strong></td>
               <td style="text-align:right;"><strong>${fmtNum(totAct)}</strong></td>
+              <td></td>
               <td style="text-align:right;"><strong>${fmtNum(totDif)}</strong></td>
               <td style="text-align:right;"><strong>${fmtPct(calcularPct(totAnt, totAct))}</strong></td>
             </tr>
@@ -891,7 +1190,22 @@ function renderDetalle(container, ctx) {
     }
   }
 
+  // Ordenar: primer click ascendente, segundo invierte. Se delega en el host
+  // porque el <thead> se reconstruye en cada render.
+  tableHost.addEventListener('click', (ev) => {
+    const th = ev.target.closest('[data-sort]');
+    if (!th) return;
+    const col = th.dataset.sort;
+    const key = th.dataset.grupoSort;
+    const actual = orden.get(key);
+    orden.set(key, (actual && actual.col === col)
+      ? { col, dir: actual.dir === 'asc' ? 'desc' : 'asc' }
+      : { col, dir: ORDEN_COLUMNAS[col].tipo === 'num' ? 'desc' : 'asc' });
+    renderTabla();
+  });
+
   sel.addEventListener('change', renderTabla);
+  selDir.addEventListener('change', renderTabla);
   renderTabla();
 }
 
@@ -908,8 +1222,9 @@ function nombreArchivo(results) {
 async function exportVariacionesXlsx(results, relevantes) {
   const ExcelJS = await loadExcelJS();
   const wb = new ExcelJS.Workbook();
-  const labelAnterior = results.periodAnterior ? periodToLabel(results.periodAnterior) : 'Período anterior';
-  const labelActual   = results.period ? periodToLabel(results.period) : 'Período actual';
+  const labelAnterior = etiquetaAnterior(results);
+  const labelActual   = etiquetaActual(results);
+  const tipo = tipoLiquidacionLinea(results);
 
   for (const g of results.grupos) {
     const nombreHoja = (results.reporte.combinar ? 'Variación' : g.key).slice(0, 31);
@@ -917,19 +1232,24 @@ async function exportVariacionesXlsx(results, relevantes) {
 
     ws.addRow([results.reporte.titulo]).font = { bold: true, size: 13 };
     ws.addRow([g.nombreReal || g.label]).font = { bold: true };
-    ws.addRow([`${labelAnterior} vs ${labelActual}`]);
+    ws.addRow([`${labelAnterior} vs ${labelActual}${tipo ? ` — ${tipo}` : ''}`]);
     ws.addRow([]);
 
-    const head = ws.addRow(['Legajo', 'Apellido y Nombre', labelAnterior, labelActual, 'Variación $', 'Variación %']);
+    const head = ws.addRow(['Legajo', 'Apellido y Nombre', labelAnterior, labelActual, 'Modificación', 'Variación $', 'Variación %']);
     head.font = { bold: true };
 
     for (const r of relevantes) {
       const v = r.valores[g.key];
-      const fila = ws.addRow([r.legajo, r.nombre, v.anterior, v.actual, v.diff, v.pct === null ? 's/base' : v.pct / 100]);
+      const fila = ws.addRow([
+        r.legajo, r.nombre, v.anterior, v.actual,
+        isDif(v.diff) ? 'S' : 'N',
+        v.diff, v.pct === null ? 's/base' : v.pct / 100,
+      ]);
       fila.getCell(3).numFmt = '#,##0.00';
       fila.getCell(4).numFmt = '#,##0.00';
-      fila.getCell(5).numFmt = '#,##0.00';
-      if (v.pct !== null) fila.getCell(6).numFmt = '0.00%';
+      fila.getCell(5).alignment = { horizontal: 'center' };
+      fila.getCell(6).numFmt = '#,##0.00';
+      if (v.pct !== null) fila.getCell(7).numFmt = '0.00%';
     }
 
     const primeraFilaDatos = 6;
@@ -938,13 +1258,14 @@ async function exportVariacionesXlsx(results, relevantes) {
       'TOTAL GENERAL', '',
       { formula: `SUM(C${primeraFilaDatos}:C${ultimaFilaDatos})` },
       { formula: `SUM(D${primeraFilaDatos}:D${ultimaFilaDatos})` },
-      { formula: `SUM(E${primeraFilaDatos}:E${ultimaFilaDatos})` },
+      null,
+      { formula: `SUM(F${primeraFilaDatos}:F${ultimaFilaDatos})` },
       null,
     ]);
     total.font = { bold: true };
-    [3, 4, 5].forEach(c => { total.getCell(c).numFmt = '#,##0.00'; });
+    [3, 4, 6].forEach(c => { total.getCell(c).numFmt = '#,##0.00'; });
 
-    ws.columns = [{ width: 10 }, { width: 34 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 12 }];
+    ws.columns = [{ width: 10 }, { width: 34 }, { width: 18 }, { width: 18 }, { width: 13 }, { width: 16 }, { width: 12 }];
   }
 
   await downloadWorkbook(wb, `${nombreArchivo(results)}.xlsx`);
@@ -959,8 +1280,9 @@ async function exportVariacionesXlsx(results, relevantes) {
  * por concepto arrancando en página nueva.
  */
 function imprimirVariaciones(results, relevantes) {
-  const labelAnterior = results.periodAnterior ? periodToLabel(results.periodAnterior) : 'Período anterior';
-  const labelActual   = results.period ? periodToLabel(results.period) : 'Período actual';
+  const labelAnterior = etiquetaAnterior(results);
+  const labelActual   = etiquetaActual(results);
+  const tipo = tipoLiquidacionLinea(results);
   const empresa = results.empresa || 'OPmobility C-Power Argentina S.A.';
 
   const secciones = results.grupos.map((g, i) => {
@@ -975,6 +1297,7 @@ function imprimirVariaciones(results, relevantes) {
         <td>${esc(r.nombre)}</td>
         <td class="r">${fmtNum0(v.anterior)}</td>
         <td class="r">${fmtNum0(v.actual)}</td>
+        <td class="c ${cls}">${isDif(v.diff) ? 'S' : 'N'}</td>
         <td class="r ${cls}">${fmtNum0(v.diff)}</td>
         <td class="r ${cls}">${fmtPct(v.pct)}</td>
       </tr>`;
@@ -988,6 +1311,7 @@ function imprimirVariaciones(results, relevantes) {
             <tr>
               <th class="c">Legajo</th><th>Apellido y Nombre</th>
               <th class="r">${esc(labelAnterior)}</th><th class="r">${esc(labelActual)}</th>
+              <th class="c">Modificación</th>
               <th class="r">Variación $</th><th class="r">Variación %</th>
             </tr>
           </thead>
@@ -997,6 +1321,7 @@ function imprimirVariaciones(results, relevantes) {
               <td colspan="2">TOTAL GENERAL — ${relevantes.length} empleados</td>
               <td class="r">${fmtNum0(totAnt)}</td>
               <td class="r">${fmtNum0(totAct)}</td>
+              <td class="c">—</td>
               <td class="r">${fmtNum0(totDif)}</td>
               <td class="r">${fmtPct(calcularPct(totAnt, totAct))}</td>
             </tr>
@@ -1016,6 +1341,7 @@ function imprimirVariaciones(results, relevantes) {
   .head h1 { font-size: 1.15rem; margin: 2px 0 0; }
   .type { font-size: 0.66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #007896; }
   .meta { font-size: 0.78rem; color: #4A6080; margin-top: 4px; }
+  .meta.sub { font-size: 0.7rem; color: #8C837B; margin-top: 2px; }
   .badge { background: #00ACD4; color: #fff; font-size: 0.7rem; font-weight: 700;
            padding: 4px 12px; border-radius: 999px; white-space: nowrap; }
   .sec h2 { font-size: 0.98rem; margin: 16px 0 6px; }
@@ -1039,6 +1365,7 @@ function imprimirVariaciones(results, relevantes) {
       <div class="type">${esc(results.reporte.titulo)}</div>
       <h1>${esc(empresa)}</h1>
       <div class="meta">Período comparado: <strong>${esc(labelAnterior)} vs ${esc(labelActual)}</strong></div>
+      ${tipo ? `<div class="meta sub">Liquidación: ${esc(tipo)}</div>` : ''}
     </div>
     <div class="badge">${relevantes.length} empleados</div>
   </div>
