@@ -451,28 +451,23 @@ function buildHelpSection(state) {
       ).join('');
       return `
         <div style="
-          padding: var(--sp-4);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          background: var(--color-bg);
-          min-width: 200px;
-          flex: 1 1 220px;
+          padding: var(--sp-2) var(--sp-3);
+          border-left: 3px solid var(--color-primary);
+          background: var(--color-surface);
+          border-radius: var(--radius-sm);
         ">
-          <p style="margin:0 0 var(--sp-2);font-weight:var(--fw-semibold);font-size:var(--text-sm);">
+          <p style="margin:0 0 var(--sp-1);font-weight:var(--fw-semibold);font-size:var(--text-xs);">
             ${esc(c.label)}
           </p>
-          <p style="margin:0 0 var(--sp-3);font-size:var(--text-sm);color:var(--color-wordmark);">
+          <p style="margin:0;font-size:var(--text-xs);color:var(--color-wordmark);line-height:1.4;">
             ${esc(c.help.what)}
           </p>
-          <ol style="margin:0;padding-left:var(--sp-5);font-size:var(--text-sm);">
-            ${stepsHtml}
-          </ol>
         </div>
       `;
     }).join('');
 
   return `
-    <details style="margin-bottom:var(--sp-5);">
+    <details style="margin-bottom:0;">
       <summary style="
         cursor:pointer;
         font-size:var(--text-sm);
@@ -483,19 +478,15 @@ function buildHelpSection(state) {
         align-items:center;
         gap:var(--sp-2);
         user-select:none;
-        margin-bottom:var(--sp-1);
+        margin-bottom:var(--sp-2);
       ">
         <span class="js-help-arrow">▸</span> ¿Qué hace cada control?
       </summary>
       <div style="
         display:flex;
-        flex-wrap:wrap;
+        flex-direction:column;
         gap:var(--sp-3);
-        margin-top:var(--sp-4);
-        padding:var(--sp-4);
-        background:var(--color-surface);
-        border:1px solid var(--color-border);
-        border-radius:var(--radius-md);
+        margin-top:var(--sp-2);
       ">
         ${cards}
       </div>
@@ -597,22 +588,6 @@ function renderStepControls(container, state, root) {
     <p class="text-muted" style="margin:0 0 var(--sp-2);font-size:var(--text-sm);">
       Seleccioná los controles que querés ejecutar. En el siguiente paso se pedirán los archivos necesarios.
     </p>
-    ${infoBubble('¿Qué es un control?', `
-      <p style="margin:0 0 var(--sp-3);font-weight:var(--fw-semibold);">¿Qué es un control?</p>
-      <p style="margin:0 0 var(--sp-3);">
-        Cada control es un cruce automático entre el Tabulado y otro archivo del cliente
-        (o entre filas del propio Tabulado). El sistema marca las diferencias por empleado
-        y devuelve un Excel con el detalle.
-      </p>
-      <p style="margin:0 0 var(--sp-2);font-weight:var(--fw-semibold);">Ejemplos</p>
-      <ul style="margin:0;padding-left:var(--sp-5);line-height:1.6;">
-        <li><strong>Brutos:</strong> compara el sueldo del Tabulado con el del reporte de Brutos.</li>
-        <li><strong>Rendimiento vs Tabulado:</strong> compara los conceptos del Tabulado con el reporte de Rendimiento por centro de costo.</li>
-        <li><strong>Rendimiento vs Asiento:</strong> cruza el Rendimiento contra la Contabilidad Desglosada (no usa Tabulado).</li>
-      </ul>
-    `)}
-
-    ${buildHelpSection(state)}
 
     ${units.length ? `
       <div class="ctrl-toolbar">
@@ -640,6 +615,9 @@ function renderStepControls(container, state, root) {
             <span class="wizard-section-label">Archivos que te van a pedir</span>
             <div class="control-recap-pills">${asideFilesHtml}</div>
             <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Se cargan en el paso siguiente.</p>
+          </div>
+          <div style="margin-top:var(--sp-5);border-top:1px solid var(--color-border);padding-top:var(--sp-4);">
+            ${buildHelpSection(state)}
           </div>
         </div>
       </div>
