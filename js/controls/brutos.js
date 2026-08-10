@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { norm, toNum, esc, fmtNum } from '../utils/textFormatters.js';
+import { groupRowsByLegajo, sumColumn, sumTabColumn } from '../utils/dataAggregation.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -74,7 +76,7 @@ export function runBrutos(brutosRows, tabRows, mapping) {
   // de haber cobrado el mensual). Meta4 suma todas las liquidaciones del
   // legajo en el Reporte de Brutos real, así que consolidamos igual acá para
   // comparar contra el mismo total (en vez de quedarnos solo con la última).
-  const tabGroups = groupTabRowsByLegajo(tabRows, tm.empleadoColumn);
+  const tabGroups = groupRowsByLegajo(tabRows, tm.empleadoColumn);
   const tabByLegajo = new Map();
   for (const [id, group] of tabGroups) {
     const last   = group[group.length - 1];
@@ -123,9 +125,6 @@ const CYAN_HDR  = 'rgba(0,172,212,0.22)';
 const LILAC_BG  = 'rgba(130,80,200,0.09)';
 const LILAC_HDR = 'rgba(130,80,200,0.20)';
 
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Un legajo es "evaluable" si hay algún valor real de alguno de los dos
 // conceptos, en cualquiera de las dos fuentes (Brutos o Tabulado).
@@ -172,7 +171,7 @@ export function renderBrutosResults(results, container) {
           : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en SAL_BASE o A_CTA_FUT_AUMEN.`,
         body: diffRows.length === 0
           ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} verificados contra el Tabulado, sin diferencias.`
-          : `Diferencia total de <strong>${fmt(diffSal)}</strong> en SAL_BASE y <strong>${fmt(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmtNum(diffSal)}</strong> en SAL_BASE y <strong>${fmtNum(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Detalle».`,
       });
 
       renderTiles(panel, [
@@ -180,8 +179,8 @@ export function renderBrutosResults(results, container) {
           sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de Brutos' },
         { label: 'Sin diferencia', value: okCount, tone: 'ok' },
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
-        { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
-        { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. SAL_BASE', value: fmtNum(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. A_CTA_FUT_AUMEN', value: fmtNum(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -190,8 +189,8 @@ export function renderBrutosResults(results, container) {
           heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
           items: top.map(r => {
             const bits = [];
-            if (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01) bits.push(`SAL_BASE ${fmt(r.ctrlSalBase)}`);
-            if (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01) bits.push(`A_CTA_FUT_AUMEN ${fmt(r.ctrlACuFutAumen)}`);
+            if (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01) bits.push(`SAL_BASE ${fmtNum(r.ctrlSalBase)}`);
+            if (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01) bits.push(`A_CTA_FUT_AUMEN ${fmtNum(r.ctrlACuFutAumen)}`);
             const worst = Math.abs(r.ctrlSalBase ?? 0) >= Math.abs(r.ctrlACuFutAumen ?? 0) ? r.ctrlSalBase : r.ctrlACuFutAumen;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',
@@ -241,7 +240,7 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
 
   // Exportar siempre incluye todos los legajos evaluados, sin importar el filtro de pantalla.
   const csvHeaders = ['Legajo', 'Nombre', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)'];
-  const csvRows = () => relevantRows.map(r => [r.legajo, r.nombre, fmt(r.salBase), fmt(r.ctrlSalBase), fmt(r.aCuFutAumen), fmt(r.ctrlACuFutAumen), fmt(r.tabValSal), fmt(r.tabValAcu)]);
+  const csvRows = () => relevantRows.map(r => [r.legajo, r.nombre, fmtNum(r.salBase), fmtNum(r.ctrlSalBase), fmtNum(r.aCuFutAumen), fmtNum(r.ctrlACuFutAumen), fmtNum(r.tabValSal), fmtNum(r.tabValAcu)]);
 
   renderExportMenu(exportEl, {
     onExcel: () => exportBrutosToXlsx({ ...results, rows: relevantRows }),
@@ -283,11 +282,11 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
             <tr>
               <td>${esc(r.legajo)}</td>
               <td style="font-size:var(--text-sm);">${esc(r.nombre)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.salBase)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValSal)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmtNum(r.salBase)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmtNum(r.tabValSal)}</td>
               ${diffCellHtml(r.ctrlSalBase, { max: maxAbs, background: CYAN_BG })}
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.aCuFutAumen)}</td>
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValAcu)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmtNum(r.aCuFutAumen)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmtNum(r.tabValAcu)}</td>
               ${diffCellHtml(r.ctrlACuFutAumen, { max: maxAbs, background: LILAC_BG })}
             </tr>
           `).join('')}
@@ -295,11 +294,11 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
         <tfoot>
           <tr>
             <td colspan="2"><strong>TOTAL</strong> — ${shownRows.length} legajo${shownRows.length === 1 ? '' : 's'}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSal)}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSalTab)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmtNum(totSal)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmtNum(totSalTab)}</td>
             ${diffCellHtml(totSalTab - totSal, { background: CYAN_HDR })}
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcu)}</td>
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcuTab)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmtNum(totAcu)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmtNum(totAcuTab)}</td>
             ${diffCellHtml(totAcuTab - totAcu, { background: LILAC_HDR })}
           </tr>
         </tfoot>
@@ -472,7 +471,7 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
           <tr>
             ${colDefs.map(c =>
               c.type === 'num'
-                ? `<td style="text-align:right;">${fmt(r[c.key])}</td>`
+                ? `<td style="text-align:right;">${fmtNum(r[c.key])}</td>`
                 : `<td>${fmtTxt(r[c.key])}</td>`
             ).join('')}
           </tr>
@@ -499,7 +498,7 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
   enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 0 });
 
   const csvHeaders = colDefs.map(c => c.label);
-  const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));
+  const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmtNum(r[c.key]) : (r[c.key] ?? '')));
 
   renderExportMenu(exportEl, {
     onExcel: () => exportBrutosReporteToXlsx(results),
@@ -667,34 +666,6 @@ function toNum(v) {
   return isNaN(n) ? null : n;
 }
 
-// Agrupa las filas del Tabulado por legajo, preservando el orden de aparición
-// (tanto de los legajos como de las liquidaciones dentro de cada uno).
-function groupTabRowsByLegajo(tabRows, empleadoColumn) {
-  const groups = new Map();
-  for (const row of tabRows) {
-    const id = norm(row[empleadoColumn]);
-    if (!id) continue;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(row);
-  }
-  return groups;
-}
-
-// Suma un mismo concepto a través de varias liquidaciones del mismo legajo.
-// `col` es la columna configurada por el usuario; si no está configurada y se
-// pasa `fallbackCode`, intenta leer esa columna por código (ej: '1003').
-// Devuelve null si ninguna liquidación tiene datos (para distinguir de 0).
-function sumTabColumn(rows, col, fallbackCode) {
-  if (!col && !fallbackCode) return null;
-  let total = null;
-  for (const row of rows) {
-    const v = col
-      ? toNum(row[col])
-      : (toNum(row[fallbackCode]) ?? toNum(row[Number(fallbackCode)]));
-    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
-  }
-  return total;
-}
 
 function fmtRaw(v) {
   if (v === null || v === undefined) return null;

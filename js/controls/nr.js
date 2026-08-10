@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { norm, toNum, esc, fmtNum } from '../utils/textFormatters.js';
+import { groupRowsByLegajo, sumColumn } from '../utils/dataAggregation.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -128,31 +130,6 @@ export function runNr(nrRows, tabRows, mapping) {
   };
 }
 
-// Agrupa filas por legajo, preservando el orden de aparición (de los legajos y
-// de las liquidaciones dentro de cada uno). Espeja groupTabRowsByLegajo de brutos.js.
-function groupRowsByLegajo(rows, legajoColumn) {
-  const groups = new Map();
-  for (const row of rows) {
-    const id = norm(row[legajoColumn]);
-    if (!id) continue;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(row);
-  }
-  return groups;
-}
-
-// Suma un concepto a través de las liquidaciones de un legajo. Devuelve null si
-// la columna no está mapeada o ninguna liquidación tiene dato (distinto de 0).
-function sumColumn(group, col) {
-  if (!col) return null;
-  let total = null;
-  for (const row of group) {
-    const v = toNum(row[col]);
-    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
-  }
-  return total;
-}
-
 // Un empleado es "relevante" si tiene algún valor NR (Tab o reporte) distinto de cero.
 // Filtra el ruido de legajos que no cobran ningún concepto no remunerativo.
 function hasAnyNrValue(r) {
@@ -160,10 +137,6 @@ function hasAnyNrValue(r) {
     (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01)
   );
 }
-
-const fmtNum = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const isDif = v => v !== null && Math.abs(v) > 0.01;
 

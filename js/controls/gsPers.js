@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { norm, toNum, esc, fmtNum } from '../utils/textFormatters.js';
+import { groupRowsByLegajo, sumColumn } from '../utils/dataAggregation.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -112,9 +114,6 @@ const CYAN_HDR  = 'rgba(0,172,212,0.22)';
 const LILAC_BG  = 'rgba(130,80,200,0.09)';
 const LILAC_HDR = 'rgba(130,80,200,0.20)';
 
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
 // DTO_COCHERA en cualquiera de las dos fuentes — la mayoría de los legajos no
@@ -161,7 +160,7 @@ export function renderGsPersResults(results, container) {
           : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en GTOS_PERSONALES o DTO_COCHERA.`,
         body: diffRows.length === 0
           ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} con algún valor real, verificados contra el Tabulado sin diferencias.`
-          : `Diferencia total de <strong>${fmt(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmt(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmtNum(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmtNum(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Detalle».`,
       });
 
       renderTiles(panel, [
@@ -169,8 +168,8 @@ export function renderGsPersResults(results, container) {
           sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de GS Pers' },
         { label: 'Sin diferencia', value: okCount, tone: 'ok' },
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
-        { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
-        { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. GTOS_PERSONALES', value: fmtNum(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
+        { label: 'Dif. DTO_COCHERA', value: fmtNum(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -179,8 +178,8 @@ export function renderGsPersResults(results, container) {
           heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
           items: top.map(r => {
             const bits = [];
-            if (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) bits.push(`GTOS_PERSONALES ${fmt(r.ctrlGtos)}`);
-            if (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01) bits.push(`DTO_COCHERA ${fmt(r.ctrlDto)}`);
+            if (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) bits.push(`GTOS_PERSONALES ${fmtNum(r.ctrlGtos)}`);
+            if (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01) bits.push(`DTO_COCHERA ${fmtNum(r.ctrlDto)}`);
             const worst = Math.abs(r.ctrlGtos ?? 0) >= Math.abs(r.ctrlDto ?? 0) ? r.ctrlGtos : r.ctrlDto;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',
@@ -227,7 +226,7 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
   container.appendChild(toolbar);
 
   const csvHeaders = ['Legajo', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'GTOS_PERSONALES (Tab)', 'DTO_COCHERA (Tab)'];
-  const csvRows = () => relevantRows.map(r => [r.legajo, fmt(r.gtos), fmt(r.ctrlGtos), fmt(r.dto), fmt(r.ctrlDto), fmt(r.tabValGtos), fmt(r.tabValDto)]);
+  const csvRows = () => relevantRows.map(r => [r.legajo, fmtNum(r.gtos), fmtNum(r.ctrlGtos), fmtNum(r.dto), fmtNum(r.ctrlDto), fmtNum(r.tabValGtos), fmtNum(r.tabValDto)]);
 
   renderExportMenu(exportEl, {
     onExcel: () => exportGsPersToXlsx({ ...results, rows: relevantRows }),
@@ -267,11 +266,11 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
           ${shownRows.map(r => `
             <tr>
               <td>${esc(r.legajo)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.gtos)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValGtos)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmtNum(r.gtos)}</td>
+              <td style="text-align:right;background:${CYAN_BG};">${fmtNum(r.tabValGtos)}</td>
               ${diffCellHtml(r.ctrlGtos, { max: maxAbs, background: CYAN_BG })}
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.dto)}</td>
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValDto)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmtNum(r.dto)}</td>
+              <td style="text-align:right;background:${LILAC_BG};">${fmtNum(r.tabValDto)}</td>
               ${diffCellHtml(r.ctrlDto, { max: maxAbs, background: LILAC_BG })}
             </tr>
           `).join('')}
@@ -279,11 +278,11 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
         <tfoot>
           <tr>
             <td><strong>TOTAL</strong> — ${shownRows.length}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtos)}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtosTab)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmtNum(totGtos)}</td>
+            <td style="text-align:right;background:${CYAN_HDR};">${fmtNum(totGtosTab)}</td>
             ${diffCellHtml(totGtosTab - totGtos, { background: CYAN_HDR })}
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDto)}</td>
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDtoTab)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmtNum(totDto)}</td>
+            <td style="text-align:right;background:${LILAC_HDR};">${fmtNum(totDtoTab)}</td>
             ${diffCellHtml(totDtoTab - totDto, { background: LILAC_HDR })}
           </tr>
         </tfoot>
@@ -445,7 +444,7 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
           <tr>
             ${colDefs.map(c =>
               c.type === 'num'
-                ? `<td style="text-align:right;">${fmt(r[c.key])}</td>`
+                ? `<td style="text-align:right;">${fmtNum(r[c.key])}</td>`
                 : `<td>${fmtTxt(r[c.key])}</td>`
             ).join('')}
           </tr>
@@ -471,7 +470,7 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
   enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 0 });
 
   const csvHeaders = colDefs.map(c => c.label);
-  const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));
+  const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmtNum(r[c.key]) : (r[c.key] ?? '')));
 
   renderExportMenu(exportEl, {
     onExcel: () => exportGsPersReporteToXlsx(results),
@@ -625,14 +624,6 @@ async function exportGsPersReporteToXlsx(results) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function norm(v) { return v != null ? String(v).trim() : ''; }
-
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
-
 // Convierte un serial de fecha Excel a "D/M/YYYY".
 function fmtDate(v) {
   if (v === null || v === undefined) return null;
@@ -643,11 +634,6 @@ function fmtDate(v) {
   }
   const s = String(v).trim();
   return s === '' ? null : s;
-}
-
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function dateSuffix() {
