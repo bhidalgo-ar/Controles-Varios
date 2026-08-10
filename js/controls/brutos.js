@@ -658,15 +658,6 @@ async function exportBrutosReporteToXlsx(results) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function norm(v) { return v != null ? String(v).trim() : ''; }
-
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
-
-
 function fmtRaw(v) {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
@@ -688,10 +679,6 @@ function fmtDate(v) {
   return s === '' ? null : s;
 }
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 function dateSuffix() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, '');
