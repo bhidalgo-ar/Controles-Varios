@@ -6,6 +6,12 @@
 //
 // Correr desde la raíz del proyecto (bash o cmd, PowerShell no soporta <):
 //   node --input-type=module < tests/rendVsAsientoDrill.test.js
+//
+// NO está en `npm run test:unit` a propósito: necesita los archivos reales del
+// cliente en "archivos test/", que son datos de nómina y no se versionan (ver
+// §6 de CLAUDE.md). Es un test manual — se corre a mano cuando se toca el
+// drill-down, con los archivos en el disco. Para que entre a CI habría que
+// rehacerlo con fixtures anonimizados, como el resto de los tests.
 
 import * as XLSX from './node_modules/xlsx/xlsx.mjs';
 import { readFileSync } from 'node:fs';

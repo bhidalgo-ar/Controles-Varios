@@ -511,13 +511,13 @@ export const CONTROL_REGISTRY = {
       + 'por empleado, la variación del sueldo (concepto 899999 de jornales + 1000 de mensuales '
       + 'sumados en una sola columna).',
     help: {
-      what: 'Único control que cruza el Tabulado contra el Tabulado de otro período: mes anterior vs '
-        + 'mes actual. Suma los conceptos 899999 (jornales) y 1000 (mensuales) por empleado — cada uno '
-        + 'liquida por uno de los dos — y muestra la variación en pesos y en porcentaje, con total general. '
-        + 'Si el Tabulado del mes anterior ya se cargó en la corrida de ese mes, se reusa solo.',
+      what: 'Único control que cruza el Tabulado contra el Tabulado de otro período. Se suben siempre los '
+        + 'dos archivos y el período y la quincena salen de cada archivo, no del selector de la app. Suma '
+        + 'los conceptos 899999 (jornales) y 1000 (mensuales) por empleado — cada uno liquida por uno de los '
+        + 'dos — y muestra la variación en pesos y en porcentaje, con total general.',
       how: [
-        'Elegí el período actual arriba y cargá su Tabulado en el Paso 2.',
-        'Si el mes anterior no se corrió en la app, cargá también "Tabulado del período anterior".',
+        'Cargá los dos Tabulados en el Paso 2: el del período anterior y el del actual.',
+        'Confirmá en "Conceptos a comparar" qué columna es cada concepto en cada archivo.',
         'Ejecutá y revisá los empleados con variación en la pantalla de resultados.',
         'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
       ],
@@ -525,7 +525,9 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Sueldos' },
     tabRequired: true,
     additionalFiles: [
-      { key: 'tab_prev', label: 'Tabulado del período anterior (opcional si ya se corrió ese mes)', fileType: 'tab_prev_file', optional: true },
+      // `shared: true` → si los dos controles de Variaciones están seleccionados,
+      // el wizard pide este archivo UNA sola vez y lo comparte (ver controlsWizard.js).
+      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true },
     ],
     run:           runVariacionesSueldos,
     summarize:     summarizeVariacionesSueldos,
@@ -541,13 +543,13 @@ export const CONTROL_REGISTRY = {
       + 'conceptos 2517 (Premio de progreso) y 2519 (Premio productividad), cada uno en su propia '
       + 'sección con su total.',
     help: {
-      what: 'Misma comparación que Variación Sueldos (Tabulado del mes anterior vs mes actual), pero '
-        + 'sobre los premios: 2517 (Premio de progreso) y 2519 (Premio productividad). Cada concepto va '
-        + 'en su propia sección, con el código y el nombre tal como figuran en el Tabulado, y arranca en '
-        + 'página nueva del PDF.',
+      what: 'Misma comparación que Variación Sueldos (dos Tabulados, uno por período), pero sobre los '
+        + 'premios: 2517 (Premio de progreso) y 2519 (Premio productividad). Cada concepto va en su propia '
+        + 'sección, con el código y el nombre tal como figuran en el Tabulado, y arranca en página nueva '
+        + 'del PDF.',
       how: [
-        'Elegí el período actual arriba y cargá su Tabulado en el Paso 2.',
-        'Si el mes anterior no se corrió en la app, cargá también "Tabulado del período anterior".',
+        'Cargá los dos Tabulados en el Paso 2: el del período anterior y el del actual.',
+        'Confirmá en "Conceptos a comparar" qué columna es cada concepto en cada archivo.',
         'Ejecutá y revisá cada concepto en su sección.',
         'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
       ],
@@ -555,7 +557,7 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Conceptos' },
     tabRequired: true,
     additionalFiles: [
-      { key: 'tab_prev', label: 'Tabulado del período anterior (opcional si ya se corrió ese mes)', fileType: 'tab_prev_file', optional: true },
+      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true },
     ],
     run:           runVariacionesConceptos,
     summarize:     summarizeVariacionesConceptos,

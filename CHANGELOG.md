@@ -7,6 +7,21 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: Variaciones (POF) — dos tabulados obligatorios, conceptos confirmados por el analista y columna Modificación — 2026-08-10
+
+- **Se suben siempre los dos Tabulados.** El archivo del período anterior pasa a obligatorio y se elimina el reuso del Tabulado de la corrida del mes anterior (`previousPeriod` + `getRunFileFromPeriod` en `js/ui/controlsWizard.js`). El período y la quincena de cada archivo salen del propio archivo, no del selector de período de la app. Con los dos controles seleccionados el archivo se pide **una sola vez** (`additionalFiles[].shared`).
+- **Orden por fecha, no por slot** — el más viejo queda siempre a la izquierda del reporte, con aviso si se subieron invertidos. Mismo período y misma quincena → error; mismo período con distinta quincena → se ejecuta y las etiquetas distinguen 1ª de 2ª.
+- **Panel "Conceptos a comparar"** (`js/ui/variacionesConceptMap.js`, nuevo): el código de concepto pasa a ser precarga y el analista confirma qué columna es cada concepto en cada archivo. Lo detectado viene resuelto y plegado, sólo se abre lo que necesita decisión, y el wizard no deja avanzar hasta que esté. "No se liquidó en este período" es una opción explícita. Selector con búsqueda sobre los encabezados del archivo (`<input list>` + `<datalist>`, sin dependencias nuevas).
+- **La quincena y el tipo de liquidación se ven** — "2ª quincena de marzo 2025 vs 2ª quincena de abril 2025", con el tipo (`2da Quincena c/ sobregiro`) en segundo plano. Comparar tipos distintos entre archivos sale como aviso. `periodToLabel` no se toca.
+- **Validación contra la fila `TOTAL GENERAL`** de cada archivo, por concepto: diferencia > 0,05 sale como aviso con el valor del archivo y el calculado. No bloquea la corrida y no va al PDF.
+- **Columna "Modificación" (S/N)** en pantalla, Excel, CSV y PDF, entre las columnas de período y "Variación $" (sale del PDF de referencia del cliente).
+- **Filtros y orden en la pantalla de revisión:** filtro por sentido de la variación (suba/baja) y orden por cualquier columna clickeando el encabezado.
+- **Soporte de Tabulado en Excel real con preámbulo** (`js/parsers/tabuladoControl.js`): si el archivo se abre y se guarda desde Excel, los encabezados quedan en la fila 3 — antes entraba mapeando el texto del preámbulo como encabezados, sin ningún error. La rama de Excel de los otros controles no cambia.
+- **Tres fallos silenciosos del parser, cerrados** (`js/parsers/tabuladoHtml.js`): se valida que la fila de encabezados tenga el ancho de los datos (antes los conceptos se corrían y el reporte salía mal sin avisar); el "cascarón" de un Excel guardado como *página web* corta con un error que lo explica; el tipo de liquidación se conserva entero. `totalRowOffset` reemplaza el desfasaje del `colspan=3` como número mágico.
+- `CODIGOS_AUSENCIA` suma `1600` (Lic. Examen) y `1695` (Suspensión), que faltaban. La config por cliente (`controlConfigs` / `variaciones_config`) queda cableada como dato; el editor para agregar/sacar conceptos va en una próxima fase (ver `ROADMAP.md`).
+- `tests/variacionesControl.test.js` pasa de 69 a 107 asserts. `tests/rendVsAsientoDrill.test.js` queda documentado como test manual: necesita archivos reales de cliente que no se versionan.
+- Ver D-035 en `DECISIONS.md`.
+
 ### feat: cabecera de resultados 1C — dos barras sticky, casos agrupados por legajo, planilla sin franja — 2026-08-07
 
 - **Cabecera nueva en toda la pantalla de resultados** (run guardado y run rápido del wizard): reemplaza el stack de `app-header` (68px) + `page-actions` + `wizard-steps` + header de card + banner de estado por dos barras sticky de 88px en total — `js/ui/resultsHeader.js` (nuevo). El hero-gauge (arco + KPIs + controles) no se toca, sigue debajo tal cual estaba.

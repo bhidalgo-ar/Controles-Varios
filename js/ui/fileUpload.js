@@ -118,13 +118,13 @@ const FIELD_DEFS = {
   // todas las cuentas de Axton. Se sube uno por mes de la ventana del SAC
   // teórico (additionalFiles[].multi: true) — ver control acumuladores_ganancias.
   acumuladores_file: [],
-  // Tabulado del período anterior (control de Variaciones): mismas columnas que
-  // el Tabulado del período actual, así que comparte los FIELD_DEFS de tab_control.
-  tab_prev_file: [
-    { key: 'empleadoColumn',        label: 'Columna de Empleado (ID)',           required: true  },
-    { key: 'apellidoNombreColumn',  label: 'Columna de Apellido y Nombre',       required: false },
-  ],
 };
+
+// Tabulado del período anterior (control de Variaciones): es el MISMO archivo
+// que el Tabulado del período actual, sólo que de otro mes. Comparte los campos
+// de verdad en vez de declarar una copia recortada — así el perfil de columnas
+// que el cliente ya tiene guardado sirve para los dos slots.
+FIELD_DEFS.tab_prev_file = FIELD_DEFS.tab_control;
 
 // Tipos que soportan mapeo de nombre (horizontal: una fila por empleado)
 const TIPOS_CON_NOMBRE = ['nomina_maestra', 'resumen_tabulado_horizontal'];
