@@ -438,6 +438,7 @@ function canGoNext(state) {
 // Construye la sección colapsable "¿Qué hace cada control?" del paso 1.
 // Sólo describe los controles que este cliente puede ejecutar — no tiene
 // sentido explicarle a un cliente Axton cómo bajar un reporte de M4.
+// Implementa Opción C: descripción truncada a 2 líneas + botón "Ver más".
 function buildHelpSection(state) {
   const allControls = filterControlsForClient(
     Object.values(CONTROL_REGISTRY), state.client, state.controlConfigsByControlId
@@ -445,10 +446,9 @@ function buildHelpSection(state) {
 
   const cards = allControls
     .filter(c => c.help)
-    .map(c => {
-      const stepsHtml = c.help.how.map((step) =>
-        `<li style="margin-bottom:var(--sp-1);">${esc(step)}</li>`
-      ).join('');
+    .map((c, idx) => {
+      const descId = `help-desc-${idx}`;
+      const toggleId = `help-toggle-${idx}`;
       return `
         <div style="
           padding: var(--sp-2) var(--sp-3);
@@ -459,9 +459,31 @@ function buildHelpSection(state) {
           <p style="margin:0 0 var(--sp-1);font-weight:var(--fw-semibold);font-size:var(--text-xs);">
             ${esc(c.label)}
           </p>
-          <p style="margin:0;font-size:var(--text-xs);color:var(--color-wordmark);line-height:1.4;">
+          <p id="${descId}" style="
+            margin:0;
+            font-size:var(--text-xs);
+            color:var(--color-wordmark);
+            line-height:1.4;
+            overflow:hidden;
+            display:-webkit-box;
+            -webkit-line-clamp:2;
+            -webkit-box-orient:vertical;
+            word-break:break-word;
+          ">
             ${esc(c.help.what)}
           </p>
+          <button id="${toggleId}" type="button" style="
+            background:none;
+            border:none;
+            color:var(--color-primary);
+            cursor:pointer;
+            font-size:var(--text-xs);
+            font-weight:var(--fw-semibold);
+            padding:var(--sp-1) 0 0;
+            display:none;
+          " onclick="toggleHelpDesc('${descId}', '${toggleId}')">
+            Ver más ▼
+          </button>
         </div>
       `;
     }).join('');
@@ -492,6 +514,22 @@ function buildHelpSection(state) {
       </div>
     </details>
   `;
+}
+
+// Toggle para expandir/contraer descripción truncada en la sección de ayuda
+function toggleHelpDesc(descId, toggleId) {
+  const desc = document.getElementById(descId);
+  const btn = document.getElementById(toggleId);
+  if (!desc || !btn) return;
+
+  const isExpanded = desc.style.webkitLineClamp === 'unset';
+  if (isExpanded) {
+    desc.style.webkitLineClamp = '2';
+    btn.textContent = 'Ver más ▼';
+  } else {
+    desc.style.webkitLineClamp = 'unset';
+    btn.textContent = 'Ver menos ▲';
+  }
 }
 
 // Lista plana de controles seleccionables para este cliente. Un control con
@@ -684,6 +722,18 @@ function renderStepControls(container, state, root) {
       renderStepControls(container, state, root);
       renderWizardNav(root, state);
     });
+  });
+
+  // Detectar si las descripciones de ayuda están siendo truncadas y mostrar botón
+  // "Ver más" solo en esos casos
+  container.querySelectorAll('[id^="help-desc-"]').forEach(desc => {
+    setTimeout(() => {
+      const isTruncated = desc.scrollHeight > desc.clientHeight;
+      const toggleBtn = document.getElementById(desc.id.replace('help-desc-', 'help-toggle-'));
+      if (toggleBtn) {
+        toggleBtn.style.display = isTruncated ? 'block' : 'none';
+      }
+    }, 0);
   });
 }
 
