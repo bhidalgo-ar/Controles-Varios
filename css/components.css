@@ -1046,6 +1046,35 @@
   align-items: center;
   gap: var(--sp-4);
 }
+
+/* Corrida de un solo control: el gauge resume varios controles en un número, y
+   con uno solo ese número ya está en la barra de contexto y en la card de
+   abajo. Queda una banda de una línea con el veredicto y el KPI de contexto
+   (ver buildHeroHtml en js/ui/controlsResults.js). */
+.hero-verdict--compact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+}
+.hero-verdict--compact .hero-verdict__subline {
+  text-align: left;
+  flex: 1;
+  min-width: 220px;
+}
+.hero-verdict__compact-kpi {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-left: var(--sp-4);
+  border-left: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.hero-verdict__compact-kpi .hero-kpi__value { font-size: 22px; }
+@media (max-width: 700px) {
+  .hero-verdict__compact-kpi { border-left: none; padding-left: 0; }
+}
 .hero-gauge { position: relative; width: 190px; height: 190px; flex-shrink: 0; }
 .hero-gauge__ring-bg { fill: none; stroke: var(--line-soft); stroke-width: 14; }
 .hero-gauge__ring-fill {
