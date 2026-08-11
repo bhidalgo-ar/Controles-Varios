@@ -54,12 +54,17 @@ export function showToast(message, type = 'info', duration = 4500) {
 /**
  * Reemplaza confirm() nativo. Devuelve Promise<boolean>.
  * @param {string} message
- * @param {{ confirmLabel?: string, cancelLabel?: string, type?: 'warning'|'danger'|'info' }} opts
+ * @param {{ confirmLabel?: string, cancelLabel?: string, type?: 'warning'|'danger'|'info',
+ *           requireText?: string }} opts  `requireText`: si se pasa, el botón de
+ *           confirmar queda deshabilitado hasta que el usuario tipee ese texto
+ *           exacto — fricción a propósito para acciones irreversibles (ver
+ *           "Borrar definitivamente" en clientsList.js).
  */
 export function showConfirm(message, {
   confirmLabel = 'Aceptar',
   cancelLabel  = 'Cancelar',
   type         = 'warning',
+  requireText  = null,
 } = {}) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
@@ -73,17 +78,23 @@ export function showConfirm(message, {
         <div class="modal__body" style="text-align:center;padding:var(--sp-8) var(--sp-6) var(--sp-5);">
           <div style="font-size:2em;margin-bottom:var(--sp-3);">${icons[type] || '⚠'}</div>
           <p style="margin:0;font-size:var(--text-base);color:var(--color-text);line-height:1.5;">${escHtml(message)}</p>
+          ${requireText ? `
+            <input type="text" class="form-input" id="js-confirm-typed" autocomplete="off"
+                   placeholder="${escHtml(requireText)}"
+                   style="margin-top:var(--sp-4);text-align:center;">
+          ` : ''}
         </div>
         <div class="modal__footer" style="justify-content:center;gap:var(--sp-3);">
           <button class="btn btn--ghost" id="js-confirm-cancel">${escHtml(cancelLabel)}</button>
-          <button class="btn ${btnClass}" id="js-confirm-ok">${escHtml(confirmLabel)}</button>
+          <button class="btn ${btnClass}" id="js-confirm-ok" ${requireText ? 'disabled' : ''}>${escHtml(confirmLabel)}</button>
         </div>
       </div>
     `;
 
     const cleanup = (result) => { overlay.remove(); resolve(result); };
 
-    overlay.querySelector('#js-confirm-ok').addEventListener('click',     () => cleanup(true));
+    const okBtn = overlay.querySelector('#js-confirm-ok');
+    okBtn.addEventListener('click',                                     () => cleanup(true));
     overlay.querySelector('#js-confirm-cancel').addEventListener('click', () => cleanup(false));
     overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(false); });
     // Esc cancela
@@ -91,6 +102,13 @@ export function showConfirm(message, {
     document.addEventListener('keydown', onKey);
 
     document.body.appendChild(overlay);
-    overlay.querySelector('#js-confirm-ok').focus();
+
+    if (requireText) {
+      const input = overlay.querySelector('#js-confirm-typed');
+      input.addEventListener('input', () => { okBtn.disabled = input.value.trim() !== requireText; });
+      input.focus();
+    } else {
+      okBtn.focus();
+    }
   });
 }
