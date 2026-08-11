@@ -44,7 +44,6 @@ import {
   hayVariaciones,
   conceptosDeControles,
   estadoInicial as estadoInicialConceptos,
-  pendientes as conceptosPendientes,
   aColumnasDelControl,
   renderConceptMap,
 } from './variacionesConceptMap.js';
@@ -409,15 +408,15 @@ function canGoNext(state) {
         if (!cfg.tabGtosPersonalesColumn || !cfg.tabDtoCocheraColumn) return false;
       }
 
-      // Variaciones: cada concepto tiene que tener una decisión explícita en los
-      // DOS archivos — una columna, o "no se liquidó en este período". Sin
-      // default silencioso: un concepto sin resolver devolvía 0,00 y nadie se
-      // enteraba de que en realidad no se había mapeado.
-      if (hayVariaciones(state.selectedControls)) {
-        if (!state.variacionesMap) return false;
-        const grupos = conceptosDeControles(state.selectedControls, state.variacionesConfig);
-        if (conceptosPendientes(grupos, state.variacionesMap).length > 0) return false;
-      }
+      // Variaciones: alcanza con que los dos Tabulados estén cargados. Un
+      // concepto puede no existir en uno de los dos archivos por diseño (p. ej.
+      // "Jornales" nunca va a aparecer en un Tabulado de mensualizados, y
+      // viceversa) — eso no es una decisión pendiente del analista, así que no
+      // bloquea el wizard. El control ya lo resuelve solo: computa 0,00 y lo
+      // informa como aviso en la pantalla de resultados (ver `faltantes` en
+      // runVariaciones), listando siempre los legajos que encuentra en los
+      // tabulados, encuentre o no el concepto.
+      if (hayVariaciones(state.selectedControls) && !state.variacionesMap) return false;
 
       // Agrupadores: el Resumen puede venir en 2 formatos, ambos declarados como
       // additionalFiles opcionales (ver registry.js) — se exige que llegue al menos uno.

@@ -210,7 +210,7 @@ export function renderConceptMap(container, { grupos, anterior, actual, estado, 
     const nNoLiq = [vAnt, vAct].filter(v => v === NO_LIQUIDADO).length;
     let estadoTxt;
     if (hayError) estadoTxt = 'Esa columna no está en el archivo';
-    else if (!resuelto) estadoTxt = 'Falta elegir la columna';
+    else if (!resuelto) estadoTxt = 'No se encontró en el archivo — se va a computar en 0,00 (no bloquea)';
     else if (nNoLiq === 2) estadoTxt = 'No se liquidó en ninguno de los dos';
     else if (nNoLiq === 1) estadoTxt = 'No se liquidó en uno de los dos';
     else estadoTxt = 'Detectado en los dos archivos';
