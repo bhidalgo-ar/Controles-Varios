@@ -18,6 +18,7 @@ const {
   runVariacionesSueldos,
   runVariacionesConceptos,
   summarizeVariacionesSueldos,
+  gruposParaImprimir,
 } = await import('./js/controls/variaciones.js');
 const {
   isHtmlTabulado,
@@ -604,6 +605,57 @@ assert('la config del cliente manda sobre la semilla',
   rConfig.grupos.length === 1 && rConfig.grupos[0].label === 'Una columna sin código');
 assert('se puede comparar una columna que no tiene código de concepto',
   Math.abs(rConfig.rows[0].valores['Otra columna'].diff - 2000) < 0.01);
+
+// ── Columna confirmada que ya no está en el archivo (headers renombrados) ────
+//
+// El fast path de "lo confirmado por el analista" no puede confiar en el
+// nombre de columna sin chequearlo contra el archivo actual: si dejó de
+// existir (renombre, o el Tabulado se re-exportó distinto), usarla igual
+// sería un 0,00 silencioso indistinguible de "no se liquidó" (CLAUDE.md §11.5).
+
+const prevHuerfana = [fila('1', 'PEREZ JUAN', { [C2517]: '1.000,00' })];
+const actHuerfana  = [fila('1', 'PEREZ JUAN', { [C2517]: '3.000,00' })];
+const rHuerfana = runConceptos(actHuerfana, prevHuerfana, {
+  columnas: { anterior: { '2517': 'Columna Vieja Que Ya No Existe' } },
+});
+assert('una columna confirmada que no está en el archivo no se usa como si existiera',
+  !rHuerfana.error && rHuerfana.rows[0].valores['2517'].anterior === null);
+assert('se informa aparte como huérfana (no como "no se liquidó" sin explicación)',
+  rHuerfana.huerfanas.some(h => h.id === '2517' && h.lado === 'anterior' && h.col === 'Columna Vieja Que Ya No Existe'));
+assert('la huérfana también cuenta como faltante (se computa 0,00 y sale aviso)',
+  rHuerfana.faltantes.some(f => f.codigo === '2517' && f.enPrev === false));
+assert('una columna confirmada que SÍ existe en el archivo no genera huérfanas',
+  runConceptos(actMapeo, prevMapeo, {
+    columnas: { anterior: { '2517': 'Otra columna' }, actual: { '2517': 'Otra columna' } },
+  }).huerfanas.length === 0);
+
+// ── Filtro de secciones fantasma en el PDF (gruposParaImprimir) ──────────────
+
+const rConceptoAusenteEnLosDos = runConceptos([
+  fila('1', 'PEREZ JUAN', { [C2517]: '5.000,00' }),   // 2519 no existe en ningún archivo
+], [
+  fila('1', 'PEREZ JUAN', { [C2517]: '4.000,00' }),
+]);
+assert('un concepto ausente en los dos archivos se marca faltante en los dos lados',
+  rConceptoAusenteEnLosDos.faltantes.some(f => f.codigo === '2519' && f.enPrev === false && f.enAct === false));
+const impresos = gruposParaImprimir(rConceptoAusenteEnLosDos.grupos, rConceptoAusenteEnLosDos.faltantes);
+assert('el grupo sin ningún dato real no entra al PDF (saldría todo en 0,00)',
+  !impresos.some(g => g.key === '2519'));
+assert('el grupo con dato real sí entra al PDF', impresos.some(g => g.key === '2517'));
+
+// Sueldos combina 2 entradas en 1 solo grupo: si SÓLO una de las dos no existe
+// en ningún archivo (el caso de diseño real: "899999 - Jornales" nunca aparece
+// en un Tabulado de mensualizados), el grupo sigue teniendo dato real por la
+// otra entrada y no se omite del PDF.
+const rSueldosParcial = runSueldos([
+  fila('1', 'PEREZ JUAN', { [C1000]: '8.000,00' }),   // sólo mensualizados
+], [
+  fila('1', 'PEREZ JUAN', { [C1000]: '7.500,00' }),
+]);
+assert('899999 queda faltante en los dos lados (no existe en ningún Tabulado)',
+  rSueldosParcial.faltantes.some(f => f.codigo === '899999' && !f.enPrev && !f.enAct));
+assert('el grupo combinado de Sueldos SÍ entra al PDF porque 1000 tiene dato real',
+  gruposParaImprimir(rSueldosParcial.grupos, rSueldosParcial.faltantes).length === 1);
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);
