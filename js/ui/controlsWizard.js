@@ -44,6 +44,7 @@ import {
   hayVariaciones,
   conceptosDeControles,
   estadoInicial as estadoInicialConceptos,
+  sinResolverEnNinguno,
   aColumnasDelControl,
   renderConceptMap,
 } from './variacionesConceptMap.js';
@@ -408,15 +409,18 @@ function canGoNext(state) {
         if (!cfg.tabGtosPersonalesColumn || !cfg.tabDtoCocheraColumn) return false;
       }
 
-      // Variaciones: alcanza con que los dos Tabulados estén cargados. Un
-      // concepto puede no existir en uno de los dos archivos por diseño (p. ej.
-      // "Jornales" nunca va a aparecer en un Tabulado de mensualizados, y
-      // viceversa) — eso no es una decisión pendiente del analista, así que no
-      // bloquea el wizard. El control ya lo resuelve solo: computa 0,00 y lo
-      // informa como aviso en la pantalla de resultados (ver `faltantes` en
-      // runVariaciones), listando siempre los legajos que encuentra en los
-      // tabulados, encuentre o no el concepto.
-      if (hayVariaciones(state.selectedControls) && !state.variacionesMap) return false;
+      // Variaciones: bloquea sólo si un concepto no se resolvió en NINGUNO de
+      // los dos Tabulados. Que falte de un solo lado es legítimo por diseño
+      // (p. ej. "Jornales" nunca va a aparecer en un Tabulado de
+      // mensualizados) y no es una decisión pendiente — se computa 0,00 y sale
+      // como aviso en resultados. Pero si no se resolvió en los dos lados a la
+      // vez, sí es una decisión pendiente (o un mapeo roto) y no puede pasar
+      // en silencio: ver `sinResolverEnNinguno`.
+      if (hayVariaciones(state.selectedControls)) {
+        if (!state.variacionesMap) return false;
+        const grupos = conceptosDeControles(state.selectedControls, state.variacionesConfig);
+        if (sinResolverEnNinguno(grupos, state.variacionesMap).length > 0) return false;
+      }
 
       // Agrupadores: el Resumen puede venir en 2 formatos, ambos declarados como
       // additionalFiles opcionales (ver registry.js) — se exige que llegue al menos uno.
@@ -1106,10 +1110,13 @@ function renderStepFiles(container, state, root) {
         actual:   { headers: headersActual,   label: 'Período actual' },
         estado:   state.variacionesMap,
         onChange: () => {
-          // Lo confirmado se recuerda para la próxima corrida del cliente.
+          // Lo confirmado se recuerda para la próxima corrida del cliente, por
+          // lado — no aplanar: la columna de un concepto puede ser distinta
+          // entre archivo anterior y actual (cliente que renumera), y
+          // aplanarlos en un solo dict hace que "actual" pise a "anterior".
           state.variacionesMapGuardado = {
-            ...state.variacionesMap.anterior,
-            ...state.variacionesMap.actual,
+            anterior: { ...state.variacionesMap.anterior },
+            actual:   { ...state.variacionesMap.actual },
           };
           renderWizardNav(root, state);
         },
@@ -1141,6 +1148,14 @@ function renderStepFiles(container, state, root) {
       (newGrouping) => { state.rendVsTabuGrouping = newGrouping; }
     );
   }
+
+  // Este render recalculó estado que `canGoNext` mira (variacionesMap del
+  // panel de conceptos, tabExtraConfig auto-detectado): redibujar la nav para
+  // que "Siguiente" no quede pintado con el valor que tenía antes de este
+  // render. Los `renderWizardNav` de más arriba (al completar cada archivo)
+  // quedan igual — redibujar de más es inofensivo, no hay riesgo de
+  // recursión (renderWizardNav sólo lee `state` y escribe `#js-wizard-nav`).
+  renderWizardNav(root, state);
 }
 
 /**

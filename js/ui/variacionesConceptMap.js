@@ -8,8 +8,12 @@
 // Reglas de la pantalla (ver specs/reporte-variaciones-opmobility.md):
 //   - Lo que se detectó en los dos archivos viene RESUELTO Y PLEGADO. Ocho
 //     selectores con 84 opciones cada uno es exactamente lo que hay que evitar.
-//   - Sólo se abre solo lo que necesita una decisión, y el wizard no deja
-//     avanzar hasta que esté: no hay default silencioso.
+//   - El wizard sólo bloquea si un concepto no se resolvió en NINGUNO de los
+//     dos archivos (`sinResolverEnNinguno`). Que falte de un solo lado es
+//     legítimo por diseño — p. ej. "Jornales" nunca va a aparecer en un
+//     Tabulado de mensualizados, y viceversa — y no es una decisión pendiente
+//     del analista, así que no bloquea: se computa 0,00 y sale como aviso en
+//     la pantalla de resultados.
 //   - "No se liquidó en este período" es una opción explícita — se computa 0,00
 //     y sale como aviso, pero como decisión del analista y no como silencio del
 //     parser.
@@ -104,28 +108,35 @@ export function precargar(headers, entrada, guardado) {
  * @param {Array}  opts.grupos    salida de `conceptosDeControles`
  * @param {string[]} opts.headersAnterior
  * @param {string[]} opts.headersActual
- * @param {object|null} opts.guardado  mapeo confirmado en una corrida anterior
+ * @param {{anterior: object, actual: object}|null} opts.guardado  mapeo
+ *   confirmado en una corrida anterior, POR LADO — no aplanar los dos en un
+ *   solo dict: la columna de un concepto puede ser distinta entre el archivo
+ *   anterior y el actual (es el caso normal de un cliente que renumera), y
+ *   aplanarlos hace que un lado pise al otro.
  */
 export function estadoInicial({ grupos, headersAnterior, headersActual, guardado }) {
   const estado = { anterior: {}, actual: {} };
   for (const g of grupos) {
     for (const e of g.entradas) {
       const id = entryId(e);
-      estado.anterior[id] = precargar(headersAnterior, e, guardado);
-      estado.actual[id]   = precargar(headersActual, e, guardado);
+      estado.anterior[id] = precargar(headersAnterior, e, guardado?.anterior);
+      estado.actual[id]   = precargar(headersActual, e, guardado?.actual);
     }
   }
   return estado;
 }
 
-/** Entradas que todavía no tienen una decisión en los dos archivos. */
-export function pendientes(grupos, estado) {
+/**
+ * Entradas sin ninguna columna resuelta en NINGUNO de los dos archivos — el
+ * único caso que bloquea el wizard. Que falte de un solo lado es legítimo por
+ * diseño (ver comentario de arriba) y no cuenta acá.
+ */
+export function sinResolverEnNinguno(grupos, estado) {
   const faltan = [];
   for (const g of grupos) {
     for (const e of g.entradas) {
       const id = entryId(e);
-      if (!estado.anterior?.[id]) faltan.push({ entrada: e, lado: 'anterior' });
-      if (!estado.actual?.[id])   faltan.push({ entrada: e, lado: 'actual' });
+      if (!estado.anterior?.[id] && !estado.actual?.[id]) faltan.push({ entrada: e });
     }
   }
   return faltan;

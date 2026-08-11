@@ -132,16 +132,27 @@ const entryId = e => e.codigo || e.nombre || e.label;
  * @param {Array}  entradas    conceptos declarados por la config
  * @param {object[]} rows      filas del archivo
  * @param {object|null} confirmadas  { [entryId]: nombreColumna | null }
+ * @param {Array}  [huerfanas] si se pasa, se le agrega { id, col } por cada
+ *   columna confirmada que ya no está en este archivo (headers renombrados,
+ *   Tabulado sin el preámbulo que trimea distinto, etc.) — usarla como
+ *   confirmada sería un 0,00 silencioso (CLAUDE.md §11.5): se trata como no
+ *   resuelta y se informa aparte, sin confundirla con "no se liquidó".
  * @returns {Record<string, string|null>}
  */
-function resolverColumnasDeEntradas(entradas, rows, confirmadas) {
+function resolverColumnasDeEntradas(entradas, rows, confirmadas, huerfanas) {
   const porCodigo = columnasPorCodigo(rows);
   const claves = clavesDeFilas(rows);
   const out = {};
   for (const e of entradas) {
     const id = entryId(e);
     if (confirmadas && Object.prototype.hasOwnProperty.call(confirmadas, id)) {
-      out[id] = confirmadas[id] || null;
+      const col = confirmadas[id] || null;
+      if (col && !claves.has(col)) {
+        huerfanas?.push({ id, col });
+        out[id] = null;
+      } else {
+        out[id] = col;
+      }
       continue;
     }
     if (e.codigo && porCodigo[e.codigo]?.length) out[id] = porCodigo[e.codigo][0];
@@ -434,8 +445,10 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
 
   // Qué columna es cada concepto en cada archivo: lo confirmado por el analista,
   // con precarga por código como respaldo.
-  const colsPrev = resolverColumnasDeEntradas(reporte.conceptos, prevRows, anterior.columnas);
-  const colsAct  = resolverColumnasDeEntradas(reporte.conceptos, actRows, actual.columnas);
+  const huerfanasPrev = [];
+  const huerfanasAct  = [];
+  const colsPrev = resolverColumnasDeEntradas(reporte.conceptos, prevRows, anterior.columnas, huerfanasPrev);
+  const colsAct  = resolverColumnasDeEntradas(reporte.conceptos, actRows, actual.columnas, huerfanasAct);
 
   const codigosAusencia = cfg.config?.ausencias || CODIGOS_AUSENCIA;
   const ausenciaPrevCols = resolverColumnasAusencia(codigosAusencia, prevRows);
@@ -536,9 +549,21 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
     const enPrev = colsPrev[id] !== null && colsPrev[id] !== undefined;
     const enAct  = colsAct[id] !== null && colsAct[id] !== undefined;
     if (!enPrev || !enAct) {
-      faltantes.push({ codigo: c.codigo || null, label: c.label, enPrev, enAct });
+      faltantes.push({ id, codigo: c.codigo || null, label: c.label, enPrev, enAct });
     }
   }
+
+  // Columnas confirmadas por el analista en una corrida anterior que ya no
+  // están en este archivo (headers renombrados, etc.) — se resolvieron como
+  // "no encontrada" arriba (resolverColumnasDeEntradas), y acá se identifican
+  // con su label para poder avisarlo por qué, no sólo que falta.
+  const huerfanas = [
+    ...huerfanasPrev.map(h => ({ ...h, lado: 'anterior' })),
+    ...huerfanasAct.map(h => ({ ...h, lado: 'actual' })),
+  ].map(h => {
+    const c = reporte.conceptos.find(e => entryId(e) === h.id);
+    return { ...h, label: c?.label ?? h.id, codigo: c?.codigo ?? null };
+  });
 
   // Los totales calculados contra la fila TOTAL GENERAL de cada archivo.
   const totalesQueNoCierran = [];
@@ -585,6 +610,7 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
     grupos,
     rows,
     faltantes,
+    huerfanas,
     totalesQueNoCierran,
     avisos,
     bruto: (brutoAnterior !== null && brutoActual !== null)
@@ -797,6 +823,13 @@ function renderVariacionesResults(results, container) {
       : (!f.enPrev ? `en ${esc(labelAnterior)}` : `en ${esc(labelActual)}`);
     const nombre = f.codigo ? `<strong>${esc(f.codigo)}</strong> (${esc(f.label)})` : `<strong>${esc(f.label)}</strong>`;
     avisos.push(`El concepto ${nombre} no se liquidó ${donde} — se computa en 0,00.`);
+  }
+  for (const h of results.huerfanas || []) {
+    const donde = h.lado === 'anterior' ? esc(labelAnterior) : esc(labelActual);
+    const nombre = h.codigo ? `<strong>${esc(h.codigo)}</strong> (${esc(h.label)})` : `<strong>${esc(h.label)}</strong>`;
+    avisos.push(`La columna que estaba confirmada para el concepto ${nombre} ya no está en el Tabulado de `
+      + `${donde} ("${esc(h.col)}") — se computa en 0,00 hasta que se vuelva a confirmar en `
+      + `"Conceptos a comparar".`);
   }
   for (const t of results.totalesQueNoCierran || []) {
     avisos.push(`El total de <strong>${esc(t.label)}</strong> en ${esc(periodQuincenaLabel(t.period, t.quincena))} `
@@ -1256,6 +1289,21 @@ async function exportVariacionesXlsx(results, relevantes) {
 // ── Salida a PDF (A4 horizontal) ─────────────────────────────────────────────
 
 /**
+ * Grupos con al menos un dato real en algún período. Un grupo cuyas entradas
+ * están TODAS en `faltantes` con enPrev y enAct en false no tiene nada real
+ * para mostrar — su sección en el PDF saldría entera en 0,00 → 0,00 → "N",
+ * indistinguible de un cero real verificado (el PDF no tiene dónde poner el
+ * aviso por fila que sí se muestra en pantalla). Exportada para poder testear
+ * el filtro sin depender de `window`.
+ */
+export function gruposParaImprimir(grupos, faltantes) {
+  const sinDato = new Set((faltantes || [])
+    .filter(f => !f.enPrev && !f.enAct)
+    .map(f => f.id));
+  return grupos.filter(g => !g.entradas.every(e => sinDato.has(entryId(e))));
+}
+
+/**
  * Abre una ventana con el documento del reporte listo para imprimir a PDF.
  * Es el entregable que se le manda al cliente: encabezado con la empresa, el
  * período comparado y la dotación, thead repetido en cada página y una sección
@@ -1267,7 +1315,12 @@ function imprimirVariaciones(results, relevantes) {
   const tipo = tipoLiquidacionLinea(results);
   const empresa = results.empresa || 'OPmobility C-Power Argentina S.A.';
 
-  const secciones = results.grupos.map((g, i) => {
+  const gruposImprimibles = gruposParaImprimir(results.grupos, results.faltantes);
+  const omitidos = results.grupos.length - gruposImprimibles.length;
+
+  const secciones = gruposImprimibles.length === 0
+    ? `<p style="color:#8C837B;font-size:0.8rem;">Ningún concepto tiene datos en los dos períodos comparados.</p>`
+    : gruposImprimibles.map((g, i) => {
     const totAnt = relevantes.reduce((s, r) => s + (r.valores[g.key].anterior ?? 0), 0);
     const totAct = relevantes.reduce((s, r) => s + (r.valores[g.key].actual ?? 0), 0);
     const totDif = totAct - totAnt;
@@ -1354,6 +1407,8 @@ function imprimirVariaciones(results, relevantes) {
   ${secciones}
   <div class="foot">
     Fuente: Tabulado de conceptos liquidados — ${esc(labelAnterior)} y ${esc(labelActual)}.
+    ${omitidos > 0 ? `<br>${omitidos} concepto${omitidos === 1 ? '' : 's'} sin datos en los dos períodos no `
+      + `se incluye${omitidos === 1 ? '' : 'n'} en este reporte.` : ''}
     <br>Hidalgo &amp; Asociados · info_ar@bhidalgo.com.ar · +54 11 2284 2031 — documento con datos confidenciales de nómina.
   </div>
 </body></html>`;
