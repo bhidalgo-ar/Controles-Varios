@@ -172,7 +172,8 @@ async function reloadList(root, state) {
     return;
   }
 
-  const rows = await Promise.all(clients.map(c => buildClientRowData(c, state.period)));
+  const thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
+  const rows = await Promise.all(clients.map(c => buildClientRowData(c, state.period, thresholdPct)));
 
   const monthName = periodToLabel(state.period).split(' ')[0];
   container.innerHTML = `
@@ -196,7 +197,7 @@ async function reloadList(root, state) {
 // Deriva, para un cliente y un período, el estado del mes + mini-dots por
 // control + fecha de la última corrida (de ese período, o la más reciente
 // de cualquier período si este mes no se corrió nada).
-async function buildClientRowData(client, period) {
+async function buildClientRowData(client, period, thresholdPct) {
   const allRuns = await getControlRuns(client.code); // ya viene ordenado desc por createdAt
   const runsForPeriod = allRuns.filter(r => r.period === period);
   const statusRun = runsForPeriod.find(r => r.isDefinitive) || runsForPeriod[0] || null;
@@ -215,7 +216,7 @@ async function buildClientRowData(client, period) {
         ? 'error'
         : summary.unitsTotal == null
           ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, DEFAULT_SEMAFORO_THRESHOLD_PCT);
+          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
       return { ctrl, tier, unitsWithDiff: summary.unitsWithDiff || 0 };
     }).filter(Boolean);
 

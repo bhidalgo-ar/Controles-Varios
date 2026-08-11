@@ -4,10 +4,11 @@
 // default sólo cuenta los runs marcados como definitivos — los borradores
 // quedan ocultos pero se pueden ver con un toggle.
 
-import { getClient, getControlRuns, getControlRunResults, getControlConfigsForClient } from '../db.js';
+import { getClient, getControlRuns, getControlRunResults, getControlConfigsForClient, getConfig } from '../db.js';
 import { CONTROL_REGISTRY }              from '../controls/registry.js';
 import { filterControlsForClient }       from '../controls/scope.js';
 import { periodToLabel, periodOptions }  from '../utils/dates.js';
+import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 
 // Columnas del checklist: sólo "Controlar" (los de Generar Reporte no son
 // controles propiamente dichos) y sólo los que aplican a este cliente — no
@@ -39,6 +40,7 @@ export async function renderChecklist(root, clientId) {
   const controlConfigsByControlId = new Map(
     (await getControlConfigsForClient(client.code) || []).map(cfg => [cfg.controlId, cfg])
   );
+  const thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
 
   // Pre-cargo los resultados de cada run (para conocer status por control)
   const runDataById = new Map();  // runId → { run, results }
@@ -71,8 +73,19 @@ export async function renderChecklist(root, clientId) {
           headline = r.results.error;
         } else if (ctrl?.summarize) {
           const s = ctrl.summarize(r.results);
-          status = s.status || 'success';
           headline = s.headline || '';
+          // Mismo criterio que la pantalla de resultados, el wizard y la
+          // lista de clientes: el % de legajos con diferencia contra el
+          // umbral configurado — no el status crudo de summarize(), que da
+          // 'warning' con UNA sola diferencia sin mirar el porcentaje (el
+          // mismo control podía salir verde en las otras tres pantallas y
+          // amarillo acá).
+          const tier = s.status === 'error'
+            ? 'error'
+            : s.unitsTotal == null
+              ? 'info'
+              : computeSemaforoStatus(s.unitsWithDiff, s.unitsTotal, thresholdPct);
+          status = tier === 'ok' ? 'success' : tier === 'warn' ? 'warning' : tier;
         }
         m.set(r.controlId, { runId: run.id, status, headline, isDraft: !run.isDefinitive });
       }

@@ -51,6 +51,38 @@ export function runAgrupadores(nominaRows, _tabRows, mapping) {
   return { resultsPorGrupo, grouperDefs, ...insights };
 }
 
+/**
+ * Métricas agregadas por LEGAJO (no por agrupador). runMatching() evalúa el
+ * mismo universo de legajos una vez por agrupador (ver matching.js:35,
+ * `for (const legajo of todosLosLegajos)` dentro del loop de agrupadores) —
+ * sumar rowsTotal/rowsWithDiff de cada agrupador multiplica por la cantidad
+ * de agrupadores, y el semáforo termina midiendo el % equivocado (con 100
+ * legajos y 10 agrupadores, unitsTotal salía 1000 en vez de 100). Recorre
+ * resultsPorGrupo una sola vez y dedupe por legajo — un legajo con
+ * diferencia en dos agrupadores cuenta una vez en unitsWithDiff, pero sus dos
+ * montos se suman en diffTotalAmount (son discrepancias reales distintas).
+ */
+function legajoStats(results) {
+  const legajosEvaluados = new Set();
+  const legajosConDiff = new Set();
+  let diffTotalAmount = 0;
+  let worstCase = null;
+  for (const [grouperId, filas] of Object.entries(results.resultsPorGrupo)) {
+    const grouperName = results.grouperDefs.find(g => g.id === grouperId)?.name || grouperId;
+    for (const f of filas) {
+      legajosEvaluados.add(f.legajo);
+      if (!f.tieneDiff) continue;
+      legajosConDiff.add(f.legajo);
+      const abs = Math.abs(f.diffAbs);
+      diffTotalAmount += abs;
+      if (!worstCase || abs > Math.abs(worstCase.amount)) {
+        worstCase = { label: `${grouperName} — leg. ${f.legajo}`, amount: f.diffAbs };
+      }
+    }
+  }
+  return { unitsTotal: legajosEvaluados.size, unitsWithDiff: legajosConDiff.size, diffTotalAmount, worstCase };
+}
+
 export function summarizeAgrupadores(results) {
   if (results?.error) {
     return {
@@ -59,13 +91,9 @@ export function summarizeAgrupadores(results) {
     };
   }
 
-  const { byGrouper, missingInResumen, missingInNomina, topDifferences } = results;
-  const unitsTotal      = byGrouper.reduce((s, g) => s + g.rowsTotal, 0);
-  const unitsWithDiff   = byGrouper.reduce((s, g) => s + g.rowsWithDiff, 0);
-  const diffTotalAmount = topDifferences.reduce((s, r) => s + Math.abs(r.diffAbs), 0);
-  const worst           = topDifferences[0];
-  const worstCase       = worst ? { label: `${worst.grouperName} — leg. ${worst.legajo}`, amount: worst.diffAbs } : null;
-  const missingCount     = missingInResumen.length + missingInNomina.length;
+  const { byGrouper, missingInResumen, missingInNomina } = results;
+  const { unitsTotal, unitsWithDiff, diffTotalAmount, worstCase } = legajoStats(results);
+  const missingCount = missingInResumen.length + missingInNomina.length;
 
   return {
     status: (unitsWithDiff > 0 || missingCount > 0) ? 'warning' : 'success',
@@ -92,8 +120,7 @@ export function renderAgrupadoresResults(results, container) {
   }
 
   const { byGrouper, missingInResumen, missingInNomina, topDifferences } = results;
-  const unitsTotal    = byGrouper.reduce((s, g) => s + g.rowsTotal, 0);
-  const unitsWithDiff = byGrouper.reduce((s, g) => s + g.rowsWithDiff, 0);
+  const { unitsTotal, unitsWithDiff } = legajoStats(results);
   const missingCount  = missingInResumen.length + missingInNomina.length;
 
   container.innerHTML = '';

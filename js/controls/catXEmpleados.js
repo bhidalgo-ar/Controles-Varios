@@ -174,8 +174,12 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
     summary: {
       catActivos:            catActivos.length,
       catBajas:              catBajaIds.size,
-      tabTotal:              tabRows.length,
-      diff:                  catActivos.length - tabRows.length,
+      // tabByEmp.size, no tabRows.length: el Tabulado trae una fila por
+      // liquidación, no por empleado (un legajo con doble liquidación en el
+      // mes contaba dos veces) — el resto del archivo ya dedupea por empleado
+      // (tabByEmp arriba), acá se había quedado con el conteo crudo.
+      tabTotal:              tabByEmp.size,
+      diff:                  catActivos.length - tabByEmp.size,
       missingInTabCount:     missingInTab.length,
       missingInCatCount:     missingInCat.length,
       fieldDiscrepancyCount: fieldDiscrepancies.length,
@@ -507,7 +511,7 @@ async function exportCatXEmpleadosToXlsx(results) {
   addDistributionSheet(wb, 'Por Puesto',         'Puesto',          byPuesto, styleHeader, base, bold, solidFill, WARN_BG);
   addDistributionSheet(wb, 'Por Centro de Costo', 'Centro de Costo', byCC,     styleHeader, base, bold, solidFill, WARN_BG);
 
-  await downloadXlsx(wb, `EE_x_CATEG_${periodSuffix(results.period)}.xlsx`);
+  await downloadWorkbook(wb, `EE_x_CATEG_${periodSuffix(results.period)}.xlsx`);
 }
 
 function addDistributionSheet(wb, sheetName, labelCol, rows, styleHeader, base, bold, solidFill, warnBg) {

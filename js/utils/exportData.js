@@ -10,14 +10,20 @@ let exceljsPromise = null;
  * Carga ExcelJS (CDN) una sola vez, sin importar cuántos controles la pidan
  * en paralelo. ExcelJS (no SheetJS) porque el export necesita estilos/colores
  * de celda que SheetJS community no soporta.
+ *
+ * @returns {Promise<object>} el objeto ExcelJS global (equivalente a leer
+ *   `window.ExcelJS` después de esperar esta promesa) — devolverlo importa:
+ *   la mayoría de los llamadores lo ignoran y usan `window.ExcelJS` directo,
+ *   pero al menos uno usa el valor de retorno, así que las dos ramas tienen
+ *   que resolver con la librería y no con `undefined` ni con el Event de load.
  */
 export function loadExcelJS() {
-  if (window.ExcelJS) return Promise.resolve();
+  if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
   if (!exceljsPromise) {
     exceljsPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = 'https://cdn.jsdelivr.net/npm/exceljs/dist/exceljs.min.js';
-      s.onload = resolve;
+      s.onload = () => resolve(window.ExcelJS);
       s.onerror = () => {
         exceljsPromise = null; // permitir reintentar si falló por conexión
         reject(new Error('No se pudo cargar ExcelJS. Verificá la conexión a internet.'));

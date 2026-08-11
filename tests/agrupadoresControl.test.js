@@ -77,6 +77,40 @@ assert('summarize(): status = warning (hay diferencias)', summary.status === 'wa
 assert('summarize(): unitsTotal es un número', typeof summary.unitsTotal === 'number' && summary.unitsTotal > 0);
 assert('summarize(): unitsWithDiff > 0', summary.unitsWithDiff > 0);
 
+// ── Regresión: unitsTotal es legajo×agrupador, no legajos distintos ──────────
+//
+// runMatching() evalúa el mismo universo de legajos una vez POR agrupador
+// (matching.js:35): con 3 legajos (unión nómina/resumen) y 2 agrupadores,
+// suma ingenua da 6. unitsTotal tiene que ser 3 — la cantidad de legajos
+// evaluados, no legajos×agrupadores — porque unit: 'legajo' así lo declara y
+// es lo que compara el semáforo contra unitsWithDiff.
+assert('unitsTotal cuenta legajos distintos (3), no legajo×agrupador (6)',
+  summary.unitsTotal === 3);
+// Legajo 2 (diferencia real de $100 en Sueldo) y legajo 3 (soloEnNomina, que
+// flagMissing marca como diferencia en los dos agrupadores) — pero cada uno
+// cuenta UNA sola vez, no una vez por agrupador donde aparece.
+assert('unitsWithDiff cuenta legajos distintos con al menos una diferencia (legajos 2 y 3)',
+  summary.unitsWithDiff === 2);
+
+// ── Regresión: diffTotalAmount no queda topeado por el top-10 de insights ───
+//
+// Con 15 legajos con $100 de diferencia cada uno en un solo agrupador, el
+// total real es $1.500 — no $1.000 (10 × $100), que es lo que daba sumar
+// sobre topDifferences (ya recortado a los 10 más grandes en insights.js).
+const nomina15 = Array.from({ length: 15 }, (_, i) => ({ legajo: String(i + 1), '100': 1000 }));
+const resumen15 = Array.from({ length: 15 }, (_, i) => ({ legajo: String(i + 1), '100': 900 })); // −100 cada uno
+const results15 = ctrl.run(nomina15, [], {
+  resumenLargoRows: resumen15,
+  grouperDefs: [{ id: 1, name: 'Sueldo' }],
+  grouperConceptsMap: { 1: ['100'] },
+  agrupadoresConfig: { thresholds },
+});
+const summary15 = ctrl.summarize(results15);
+assert('con 15 diferencias de $100, diffTotalAmount es $1.500 (no $1.000, topeado en 10)',
+  Math.abs(summary15.diffTotalAmount - 1500) < 0.01);
+assert('con 15 legajos y un solo agrupador, unitsTotal es 15 (no 15×1 por casualidad — ver caso con 2 agrupadores arriba)',
+  summary15.unitsTotal === 15 && summary15.unitsWithDiff === 15);
+
 // ── Resumen Tabulado Horizontal (el otro formato posible) ────────────────────
 
 const resumenTabuladoRows = [
