@@ -24,10 +24,18 @@ test('exportar e importar el respaldo preserva los clientes', async ({ page }) =
   const backupPath = await download.path();
   expect(backupPath).toBeTruthy();
 
-  // Borrar el cliente (simula haber perdido los datos)
+  // Borrar el cliente de verdad (simula haber perdido los datos). "Ocultar"
+  // por sí solo no alcanza: a propósito no borra nada — el borrado real vive
+  // detrás del panel "Clientes ocultos" y pide tipear el nombre para confirmar.
   await page.click('.js-menu-btn');
-  await page.click('.js-delete-btn');
+  await page.click('.js-hide-btn');
   await page.click('#js-confirm-ok');
+
+  await page.click('#js-hidden-clients-btn');
+  await page.click('.js-hard-delete-btn');
+  await page.fill('#js-confirm-typed', 'Cliente E2E');
+  await page.click('#js-confirm-ok');
+  await page.click('#js-close-hidden-modal');
   await expect(page.locator('#js-first-client-btn')).toBeVisible();
 
   // Restaurar el respaldo

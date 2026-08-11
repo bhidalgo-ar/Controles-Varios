@@ -241,8 +241,14 @@ async function uniqueClientCode(candidate) {
 
 // ── CLIENTES ────────────────────────────────────────────────────────────
 
+/** Sólo clientes activos — los ocultos (`active: false`) no aparecen en la lista. */
 export async function getClients() {
-  return db.clients.orderBy('name').toArray();
+  return (await db.clients.orderBy('name').toArray()).filter(c => c.active !== false);
+}
+
+/** Clientes ocultos — para el panel de "Clientes ocultos" (reactivar o borrar definitivamente). */
+export async function getInactiveClients() {
+  return (await db.clients.orderBy('name').toArray()).filter(c => c.active === false);
 }
 
 export async function getClient(id) {
@@ -290,6 +296,27 @@ export async function updateClient(id, changes) {
   return db.clients.update(Number(id), { ...changes, updatedAt: new Date().toISOString() });
 }
 
+/**
+ * "Borrar cliente" de todos los días: no borra nada, sólo lo saca de la
+ * lista y reserva su `code` (uniqueClientCode sigue viéndolo porque la fila
+ * de `clients` no se toca) — así un cliente nuevo con el mismo nombre no
+ * puede terminar heredando las corridas del oculto. Reversible con
+ * unhideClient. Ver DECISIONS.md sobre por qué esto y no un borrado directo.
+ */
+export async function hideClient(id) {
+  return db.clients.update(Number(id), { active: false, updatedAt: new Date().toISOString() });
+}
+
+export async function unhideClient(id) {
+  return db.clients.update(Number(id), { active: true, updatedAt: new Date().toISOString() });
+}
+
+/**
+ * Borrado DEFINITIVO e irreversible — cascada completa por las 12 tablas
+ * que dependen de un cliente. Sólo se llama desde el panel de "Clientes
+ * ocultos" con confirmación de tipeo (ver clientsList.js); el borrado del
+ * día a día es hideClient(), no esto.
+ */
 export async function deleteClient(id) {
   const cid = Number(id);
   const client = await db.clients.get(cid);
@@ -297,7 +324,8 @@ export async function deleteClient(id) {
   // Borramos en cascada: primero los hijos, después el padre
   await db.transaction('rw',
     [db.clients, db.groupers, db.grouperConcepts, db.fileProfiles, db.clientCatalogs,
-     db.sessions, db.sessionFiles, db.sessionResults],
+     db.sessions, db.sessionFiles, db.sessionResults,
+     db.controlRuns, db.controlRunFiles, db.controlRunResults, db.controlConfigs],
     async () => {
       if (code) {
         const grouperIds = (await db.groupers.where('clientCode').equals(code).toArray()).map(g => g.id);
@@ -310,6 +338,18 @@ export async function deleteClient(id) {
           await db.sessionResults.where('sessionId').anyOf(sessionIds).delete();
         }
         await db.sessions.where('clientCode').equals(code).delete();
+
+        // controlRuns/controlRunFiles/controlRunResults/controlConfigs se
+        // habían quedado afuera de esta cascada — los datos de empleados de
+        // un cliente borrado sobrevivían y podían reaparecerle a un cliente
+        // nuevo que reusara el mismo code (ver auditoría de escalabilidad).
+        const controlRunIds = (await db.controlRuns.where('clientCode').equals(code).toArray()).map(r => r.id);
+        if (controlRunIds.length) {
+          await db.controlRunFiles.where('controlRunId').anyOf(controlRunIds).delete();
+          await db.controlRunResults.where('controlRunId').anyOf(controlRunIds).delete();
+        }
+        await db.controlRuns.where('clientCode').equals(code).delete();
+        await db.controlConfigs.where('clientCode').equals(code).delete();
       }
       // clientCatalogs sigue indexado por clientId (su primary key real —
       // Dexie no permite cambiarla, ver el comentario en db.version(6)).

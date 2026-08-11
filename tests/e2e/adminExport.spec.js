@@ -62,7 +62,10 @@ test('editar y exportar desde admin en un navegador llega a otro sin perder sus 
   await page.selectOption('#js-admin-client-select', { label: 'Acme Demo SA (ACME)' });
   await page.selectOption('#js-admin-source-system', 'axton');
   await page.click('#js-admin-save-client-btn');
-  await expect(page.locator('.toast--success')).toBeVisible();
+  // Por texto y no por clase sola: el toast de "Seed importado" dura 4,5s y
+  // puede seguir en pantalla acá, y dos `.toast--success` a la vez rompen el
+  // locator en strict mode (test flaky, sin relación con lo que se prueba).
+  await expect(page.locator('.toast--success', { hasText: 'Cliente actualizado' })).toBeVisible();
 
   const downloadPromise = page.waitForEvent('download');
   await page.click('#js-admin-export-btn');

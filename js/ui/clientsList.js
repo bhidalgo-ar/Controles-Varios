@@ -4,7 +4,7 @@
 // corrió y cuándo. Desde acá el usuario ejecuta controles, ve resultados,
 // o entra al menú "⋯" para agrupadores / checklist / borrar.
 
-import { getClients, createClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup, getConfig } from '../db.js';
+import { getClients, getInactiveClients, createClient, hideClient, unhideClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup, getConfig } from '../db.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
@@ -122,9 +122,34 @@ function updateMonthLabel(root, state) {
 
 async function reloadList(root, state) {
   const container = root.querySelector('#js-clients-container');
-  const clients = await getClients();
+  const [clients, hiddenCount] = await Promise.all([
+    getClients(),
+    getInactiveClients().then(l => l.length),
+  ]);
+
+  const hiddenLinkHtml = hiddenCount > 0
+    ? `<button class="btn btn--ghost btn--sm" id="js-hidden-clients-btn" style="margin-bottom:var(--sp-3);">
+         🙈 ${hiddenCount} cliente${hiddenCount === 1 ? '' : 's'} oculto${hiddenCount === 1 ? '' : 's'}
+       </button>`
+    : '';
 
   if (clients.length === 0) {
+    // Con clientes ocultos pero ninguno activo, la pantalla de bienvenida
+    // ("Bienvenido a Controles Nómina") sería engañosa — no es la primera vez.
+    if (hiddenCount > 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="max-width:480px;margin:0 auto;">
+          <div class="empty-state__icon" style="margin-bottom:var(--sp-3);font-size:2.4em;">🙈</div>
+          <div class="empty-state__title">No hay clientes activos</div>
+          <p class="empty-state__text" style="margin-bottom:var(--sp-5);">
+            Tenés ${hiddenCount} cliente${hiddenCount === 1 ? '' : 's'} oculto${hiddenCount === 1 ? '' : 's'} — nada se borró, sólo están fuera de esta lista.
+          </p>
+          <button class="btn btn--primary" id="js-hidden-clients-btn">Ver clientes ocultos</button>
+        </div>
+      `;
+      container.querySelector('#js-hidden-clients-btn').addEventListener('click', () => showHiddenClientsModal(root, state));
+      return;
+    }
     container.innerHTML = `
       <div class="empty-state" style="max-width:680px;margin:0 auto;">
         <div class="empty-state__icon" style="margin-bottom:var(--sp-3);">
@@ -172,10 +197,12 @@ async function reloadList(root, state) {
     return;
   }
 
-  const rows = await Promise.all(clients.map(c => buildClientRowData(c, state.period)));
+  const thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
+  const rows = await Promise.all(clients.map(c => buildClientRowData(c, state.period, thresholdPct)));
 
   const monthName = periodToLabel(state.period).split(' ')[0];
   container.innerHTML = `
+    ${hiddenLinkHtml}
     <div class="card" style="overflow-x:auto;">
       <div class="home-table" style="min-width:900px;">
         <div class="home-table__head">
@@ -191,12 +218,89 @@ async function reloadList(root, state) {
   `;
 
   rows.forEach(r => attachRowEvents(container, r, root, state));
+  container.querySelector('#js-hidden-clients-btn')?.addEventListener('click', () => showHiddenClientsModal(root, state));
+}
+
+/**
+ * Panel de clientes ocultos: reactivar (vuelve a la lista, sin tocar nada)
+ * o borrar definitivamente (cascada completa, irreversible — pide tipear el
+ * nombre del cliente para confirmar, misma fricción que borrar un repo en
+ * GitHub). Sólo se llega hasta acá desde el link "N clientes ocultos", nunca
+ * directo desde el menú de un cliente activo.
+ */
+async function showHiddenClientsModal(root, state) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  async function renderBody() {
+    const hidden = await getInactiveClients();
+    const body = overlay.querySelector('.modal__body');
+    body.innerHTML = hidden.length === 0
+      ? `<p class="text-muted" style="padding:var(--sp-4) 0;text-align:center;">No hay clientes ocultos.</p>`
+      : hidden.map(c => `
+          <div class="row-menu-list-item" data-client-id="${c.id}" style="display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-3) 0;border-bottom:1px solid var(--color-border);">
+            <div>
+              <strong>${esc(c.name)}</strong>
+              <span class="text-sm text-muted" style="display:block;">${esc(c.code)}</span>
+            </div>
+            <div style="display:flex;gap:var(--sp-2);flex-shrink:0;">
+              <button class="btn btn--ghost btn--sm js-unhide-btn">↩ Reactivar</button>
+              <button class="btn btn--danger btn--sm js-hard-delete-btn">🗑 Borrar definitivamente</button>
+            </div>
+          </div>
+        `).join('');
+
+    body.querySelectorAll('.js-unhide-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.closest('[data-client-id]').dataset.clientId);
+        await unhideClient(id);
+        await renderBody();
+        await reloadList(root, state);
+      });
+    });
+    body.querySelectorAll('.js-hard-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-client-id]');
+        const id = Number(row.dataset.clientId);
+        const client = hidden.find(c => c.id === id);
+        const ok = await showConfirm(
+          `Esto borra TODO lo de "${client.name}" para siempre: corridas, resultados, agrupadores, catálogo — no hay vuelta atrás.\n\n`
+          + `Escribí el nombre del cliente para confirmar.`,
+          { type: 'danger', confirmLabel: 'Borrar definitivamente', requireText: client.name }
+        );
+        if (!ok) return;
+        try {
+          await deleteClient(id);
+          await renderBody();
+          await reloadList(root, state);
+        } catch (err) {
+          showToast(`Error al borrar: ${err.message}`, 'danger');
+        }
+      });
+    });
+  }
+
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:560px;">
+      <div class="modal__header">
+        <h3>Clientes ocultos</h3>
+        <button class="modal__close" id="js-close-hidden-modal">✕</button>
+      </div>
+      <div class="modal__body"></div>
+    </div>
+  `;
+
+  overlay.querySelector('#js-close-hidden-modal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  document.body.appendChild(overlay);
+  await renderBody();
 }
 
 // Deriva, para un cliente y un período, el estado del mes + mini-dots por
 // control + fecha de la última corrida (de ese período, o la más reciente
 // de cualquier período si este mes no se corrió nada).
-async function buildClientRowData(client, period) {
+async function buildClientRowData(client, period, thresholdPct) {
   const allRuns = await getControlRuns(client.code); // ya viene ordenado desc por createdAt
   const runsForPeriod = allRuns.filter(r => r.period === period);
   const statusRun = runsForPeriod.find(r => r.isDefinitive) || runsForPeriod[0] || null;
@@ -215,7 +319,7 @@ async function buildClientRowData(client, period) {
         ? 'error'
         : summary.unitsTotal == null
           ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, DEFAULT_SEMAFORO_THRESHOLD_PCT);
+          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
       return { ctrl, tier, unitsWithDiff: summary.unitsWithDiff || 0 };
     }).filter(Boolean);
 
@@ -283,7 +387,7 @@ function renderClientRow(r) {
           <div class="row-menu__panel" hidden>
             <button class="row-menu__item js-groupers-btn">⚙ Agrupadores</button>
             <button class="row-menu__item js-checklist-btn">📊 Estado mensual</button>
-            <button class="row-menu__item row-menu__item--danger js-delete-btn">🗑 Borrar cliente</button>
+            <button class="row-menu__item js-hide-btn">🙈 Ocultar cliente</button>
           </div>
         </div>
       </div>
@@ -312,14 +416,17 @@ function attachRowEvents(container, r, root, state) {
   row.querySelector('.js-groupers-btn').addEventListener('click', () => {
     window.location.hash = `#/client/${r.client.id}/groupers`;
   });
-  row.querySelector('.js-delete-btn').addEventListener('click', async () => {
+  row.querySelector('.js-hide-btn').addEventListener('click', async () => {
     row.querySelector('.row-menu__panel')?.setAttribute('hidden', '');
-    if (!await showConfirm(`¿Borrar el cliente "${r.client.name}"?\nSe borrarán también todos sus agrupadores y sesiones.`, { type: 'danger', confirmLabel: 'Borrar' })) return;
+    if (!await showConfirm(
+      `¿Ocultar el cliente "${r.client.name}"?\nDesaparece de esta lista pero no se borra nada — lo podés volver a mostrar desde "Clientes ocultos".`,
+      { type: 'warning', confirmLabel: 'Ocultar' }
+    )) return;
     try {
-      await deleteClient(r.client.id);
+      await hideClient(r.client.id);
       await reloadList(root, state);
     } catch (err) {
-      showToast(`Error al borrar: ${err.message}`, 'danger');
+      showToast(`Error al ocultar: ${err.message}`, 'danger');
     }
   });
 

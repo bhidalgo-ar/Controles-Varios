@@ -66,14 +66,15 @@ export function runGsPers(gsRows, tabRows, mapping) {
   const gtosTabCol = tm.tabGtosPersonalesColumn || null;
   const dtoTabCol  = tm.tabDtoCocheraColumn     || null;
 
-  // Índice del Tabulado: legajo → { valGtos, valDto }
+  // Índice del Tabulado: legajo → { valGtos, valDto } sumado entre todas las
+  // liquidaciones del legajo en el mes (ej: mensual + baja) — igual que en
+  // Brutos y NR (ver groupTabRowsByLegajo/sumTabColumn más abajo).
   const tabByLegajo = new Map();
-  for (const row of tabRows) {
-    const id = norm(row[tm.empleadoColumn]);
-    if (!id) continue;
-    const valGtos = gtosTabCol ? toNum(row[gtosTabCol]) : null;
-    const valDto  = dtoTabCol  ? toNum(row[dtoTabCol])  : null;
-    tabByLegajo.set(id, { valGtos, valDto });
+  for (const [id, group] of groupTabRowsByLegajo(tabRows, tm.empleadoColumn)) {
+    tabByLegajo.set(id, {
+      valGtos: sumTabColumn(group, gtosTabCol),
+      valDto:  sumTabColumn(group, dtoTabCol),
+    });
   }
 
   const rows = gsRows.map(row => {
@@ -631,6 +632,31 @@ function toNum(v) {
   if (v === null || v === undefined || String(v).trim() === '') return null;
   const n = Number(v);
   return isNaN(n) ? null : n;
+}
+
+// Agrupa las filas del Tabulado por legajo, preservando el orden de aparición.
+// Espeja groupTabRowsByLegajo de brutos.js.
+function groupTabRowsByLegajo(tabRows, empleadoColumn) {
+  const groups = new Map();
+  for (const row of tabRows) {
+    const id = norm(row[empleadoColumn]);
+    if (!id) continue;
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(row);
+  }
+  return groups;
+}
+
+// Suma un concepto a través de las liquidaciones de un legajo. Devuelve null
+// si la columna no está mapeada o ninguna liquidación tiene dato (distinto de 0).
+function sumTabColumn(rows, col) {
+  if (!col) return null;
+  let total = null;
+  for (const row of rows) {
+    const v = toNum(row[col]);
+    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
+  }
+  return total;
 }
 
 // Convierte un serial de fecha Excel a "D/M/YYYY".

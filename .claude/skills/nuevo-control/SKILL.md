@@ -1,278 +1,177 @@
 ---
 name: nuevo-control
-description: Agregar un control nuevo a Controles Nómina, o agregar una variante ("Generar Reporte") a uno existente. Cablea los 6 puntos de integración (parser, fileUpload, controlsWizard, módulo del control, registry, test) y aplica los patrones de UI obligatorios del proyecto — hero de diferencias, ocultar filas/columnas sin valor real, semáforo, export. Usar cuando el pedido sea "agregar el control X", "quiero controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control/reporte nuevo a la batería existente.
+description: Agregar un control nuevo a Controles Nómina, o una variante ("Generar Reporte") de uno existente. Cablea los 6 puntos de integración (parser, fileUpload, controlsWizard, módulo, registry, test) y las reglas que hacen que el resultado sea correcto — consolidación por legajo, null vs 0, semáforo por unidad declarada. Usar cuando el pedido sea "agregar el control X", "controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control a la batería.
 ---
 
 # Agregar un control nuevo
 
-Un "control" en este proyecto es un cruce entre un reporte de Meta4 y el Tabulado
-(o entre dos reportes), con su propia pantalla de resultados y export. Hoy hay 11
-entradas en `js/controls/registry.js`.
+Un control cruza un reporte de Meta4 (o de Axton) contra el Tabulado, o dos reportes entre sí.
+Agregarlo **no es escribir un archivo**: son 6 puntos de integración, y el que se olvida siempre es
+`fileUpload.js`. Síntoma típico: la pill aparece en el wizard pero el archivo no se puede subir.
 
-Agregar uno **no es escribir un archivo**: son 6 puntos de integración. Si falta
-uno, el control aparece a medias — típicamente se ve la pill en el wizard pero el
-archivo no se puede subir, o se sube pero no se auto-detectan las columnas.
+Referencias, todas código y todas vigentes: `js/controls/nr.js` (control de referencia, los dos
+modos), `js/parsers/nrParser.js` (parser de referencia), el encabezado de `js/controls/registry.js`
+(contrato de la entrada, campo por campo), `tests/gsPersControl.test.js` (la regla de consolidación
+escrita como test).
 
-## 0. Antes de escribir código
+## Antes de escribir código
 
-Preguntale a Willy y no supongas (CLAUDE.md §8: "datos reales, no suposiciones"):
+Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va a decir:
 
-1. **¿Contra qué se cruza?** Tabulado (`tabRequired: true`, el caso normal) u
-   otro reporte (como `rend_vs_asiento`, que cruza Rendimiento contra CONTA).
-2. **¿Cuáles son los encabezados exactos** del reporte de M4? Sin esto el parser
-   y la auto-detección son adivinanza. Pedí el archivo o los headers literales.
-3. **¿Qué conceptos/columnas se comparan** y cuál es el signo de la diferencia?
-   La convención del repo es `Tabulado − Reporte` (ver `nr.js:108`), y en
-   `rend_vs_asiento` es `CONTA − Rend`. Confirmá cuál aplica.
-4. **¿Hace falta la variante "Generar Reporte"?** (armar el archivo desde el
-   Tabulado en vez de controlarlo). Si sí, va como `group` — ver §5.
-5. **¿A qué clientes se le ofrece?** Por defecto `MARVAL_ONLY` — los controles de
-   M4 hoy son de Marval (D-015 en `DECISIONS.md`). Si es genuinamente general,
-   `scope: 'general'`.
+1. Contra qué se cruza: el Tabulado (el caso normal) u otro reporte — `rend_vs_asiento` cruza
+   Rendimiento contra CONTA.
+2. Los encabezados **exactos** del reporte. Sin el archivo real o los headers literales, el parser y
+   la auto-detección son adivinanza. Pedilos.
+3. Qué conceptos se comparan y el signo de la diferencia. La convención es `Tabulado − Reporte`;
+   `rend_vs_asiento` usa `CONTA − Rend`. Confirmá cuál aplica.
+4. Si hace falta la variante "Generar Reporte" (armar el archivo desde el Tabulado en vez de
+   controlarlo). Si sí, van dos entradas de registry bajo el mismo `group.id`.
+5. A qué clientes se ofrece. El default es el cliente que lo pidió (D-015); `scope: 'general'` sólo
+   si Willy lo confirma.
 
-Si el pedido tiene ambigüedad en cualquiera de estos 5 puntos, **pará y preguntá**
-antes de tocar archivos. Para features de tamaño medio, considerá pasar primero
-por el skill `spec-first`.
+## Los 6 puntos
 
-## 1. Parser — `js/parsers/<x>Parser.js`
-
-Modelo: `js/parsers/nrParser.js` (75 líneas, el más limpio).
-
-Dos exports obligatorios:
-
-```js
-/* global XLSX */
-export { detectHeaders } from './nominaMaestra.js';   // re-export, siempre igual
-
-// Devuelve el mapping o null si no reconoce el archivo.
-export function autoDetect<X>Mapping(headers, catalogRows) { … }
-
-// Devuelve { parsedRows, parseMetadata: { totalRows, parsedAt } }.
-// Tira Error con mensaje en español si el archivo está vacío o falta el mapping.
-export function parse<X>(arrayBuffer, mapping) { … }
-```
-
-Reglas:
-
-- **Filtrar filas sin identificador.** Los reportes de M4 traen subtotales y
-  separadores: se descartan las filas sin legajo válido (`nrParser.js:63-66`).
-- **Auto-detección por catálogo, no por string hardcodeado.** Si las columnas son
-  conceptos de nómina, usá `buildParserMapping(headers, catalog, CODIGO_TO_KEY)`
-  de `conceptMatcher.js` — resuelve alias contra el catálogo del cliente.
-  Para columnas de identificación sí van aliases explícitos
-  (`LEGAJO_ALIASES = ['LEGAJO', 'ID_EMPLEADO', 'LEGAJO_SAP']`).
-- `autoDetect` devuelve `null` (no un objeto vacío) si no encuentra la columna
-  identificadora — el wizard lo usa para decidir si pide mapeo manual.
-
-## 2. `js/ui/fileUpload.js` — 4 lugares
-
-Es el punto que más se olvida. Los cuatro:
-
-| Qué | Dónde | Cambio |
+| # | Archivo | Qué |
 |---|---|---|
-| Import del parser | encabezado del archivo | `import { parse<X>, autoDetect<X>Mapping } from '../parsers/<x>Parser.js';` |
-| `FIELD_DEFS` | mapa de ~línea 23 | agregar `<x>_file: [{ key, label, required }, …]` |
-| Línea de metadata | rama `else if (fileType === 'tab_control' \|\| …)` (~línea 355) | sumar `\|\| fileType === '<x>_file'` para que muestre "N registros" |
-| `parseFile()` | `switch` (~línea 650) | `case '<x>_file': return parse<X>(arrayBuffer, mapping);` |
-| `fileTypeLabel()` | mapa (~línea 669) | `<x>_file: 'Reporte de …',` |
+| 1 | `js/parsers/<x>Parser.js` | `parse<X>`, `autoDetect<X>Mapping`, re-export de `detectHeaders` |
+| 2 | `js/ui/fileUpload.js` | **cinco** lugares — ver abajo |
+| 3 | `js/ui/controlsWizard.js` | import + entrada en `AUTO_DETECT` |
+| 4 | `js/controls/<x>.js` | `run` / `summarize` / `renderResults` |
+| 5 | `js/controls/registry.js` | imports + entrada (los campos, en el encabezado del archivo) |
+| 6 | `tests/<x>Control.test.js` | + agregarlo a la cadena `test:unit` |
 
-Sobre `FIELD_DEFS`: la columna de legajo va `required: true`, **los conceptos van
-todos `required: false`**. Es deliberado — un cliente puede no usar un concepto y
-el control tiene que correr igual (ver el comentario de `nr_reporte` en el
-registry: "ningún concepto es obligatorio"). Si el tipo de archivo tiene formato
-fijo sin mapeo (como `conta_file`), la entrada es `[]`.
+### 1 — el parser
 
-## 3. `js/ui/controlsWizard.js`
+Seguí la forma de `nrParser.js`. Dos cosas que no se deducen del archivo:
 
-1. Importar el `autoDetect<X>Mapping` (bloque de imports de parsers, ~línea 30).
-2. Registrarlo en el mapa `AUTO_DETECT` (~línea 70), clave = `fileType`.
-3. **Solo si hay variantes agrupadas:** agregar la constante de IDs junto a
-   `NR_IDS` / `BRUTOS_IDS` / `GS_PERS_IDS` (~línea 80).
-4. **Solo si la validación de archivos no es la estándar:** tocar `canGoNext`.
-   El único caso hoy es `agrupadores`, que exige "al menos uno de dos archivos
-   opcionales". Si tu control tiene un `additionalFiles` normal, **no toques
-   `canGoNext`** — la validación genérica ya alcanza.
+- `autoDetect<X>Mapping` devuelve **`null`**, no un objeto vacío, cuando no encuentra la columna
+  identificadora — el wizard usa ese `null` para decidir si pide mapeo manual.
+- Los reportes de M4 traen subtotales y separadores mezclados con los datos: descartá las filas sin
+  legajo válido antes de devolver nada.
 
-## 4. Módulo del control — `js/controls/<x>.js`
+### 2 — `fileUpload.js`, los cinco lugares
 
-Tres exports. Modelo de referencia: `js/controls/nr.js`.
+El import, `FIELD_DEFS`, `parseFile()`, `fileTypeLabel()` — y la cadena de `||` de la rama que arma
+la línea de metadata (`grep -n "fileType === 'tab_control'" js/ui/fileUpload.js`). Ese quinto es el
+que se olvida: sin él el archivo sube pero no muestra "N registros".
 
-### `run(primaryRows, tabRows, mapping)`
+En `FIELD_DEFS`, el legajo va `required: true` y los conceptos `required: false`: un cliente puede no
+liquidar un concepto y el control tiene que correr igual. Un tipo de archivo de formato fijo
+(`conta_file`) va con `[]`.
 
-- `primaryRows` = filas parseadas de `additionalFiles[0]`. En una variante
-  "Generar Reporte" que no pide archivo, llega vacío → nombralo `_primaryRows`.
-- `tabRows` = filas del Tabulado (vacío si `tabRequired: false`).
-- `mapping` = `{ tab, <key de additionalFiles>, period, …config del control }`.
-- Devuelve `{ summary, rows, period }`. Para errores de negocio (falta un archivo,
-  no hay agrupadores elegidos) devolvé `{ error: 'mensaje en español' }` — no tires
-  excepción (ver `agrupadores.js`).
+### 3 — `controlsWizard.js`
 
-**Consolidar por legajo, siempre.** Un legajo puede tener varias liquidaciones en
-el mismo mes (mensual + baja) y Meta4 informa el total sumado. Copiá
-`groupRowsByLegajo` + `sumColumn` de `nr.js:129-150`. Saltear esto es el bug más
-caro del proyecto: da diferencias falsas en todos los empleados con doble paga.
+Alcanza con importar el `autoDetect` y registrarlo en `AUTO_DETECT` con clave = `fileType`.
+`canGoNext` no se toca salvo que la validación no sea "están todos los archivos requeridos" — el
+único caso hoy es `agrupadores` ("al menos uno de dos opcionales"). Si hay variantes agrupadas, sumá
+la constante de IDs junto a las que ya están.
 
-`sumColumn` devuelve `null` (no `0`) cuando la columna no está mapeada o ninguna
-liquidación tiene dato. `null` significa "no hay dato", `0` significa "hay dato y
-es cero" — no los confundas: la diferencia solo se calcula si ambos lados son
-distintos de `null`.
+### 4 — el módulo del control
 
-### `summarize(results)`
+**Consolidar por legajo.** El Tabulado trae una fila **por liquidación**, no por empleado: un legajo
+con mensual + baja aparece dos veces y Meta4 informa el total sumado. Sin consolidar, la última
+liquidación pisa a las anteriores → diferencias falsas en todo empleado con doble paga. Ya pasó tres
+veces (Brutos, NR, GS Pers).
 
-Alimenta la tarjeta colapsada y el semáforo. Forma exacta:
+No lo escribas de cero ni lo copies. Buscá primero:
 
-```js
-return {
-  status:   s.conDif > 0 ? 'warning' : 'success',   // 'success' | 'warning' | 'info'
-  headline: `${s.total} registros · …`,
-  insights: [{ type: 'warning', label: '…', value: n }],
-  unit: 'legajo',            // 'legajo' | 'CC' — mirá controlsResults.js:403
-  unitsTotal, unitsWithDiff, // los consume computeSemaforoStatus()
-  diffTotalAmount, worstCase,
-  contextNote,               // reemplaza a worstCase en la tarjeta si está
-};
+```
+grep -rn "function sumColumn\|function sumTabColumn" js/
 ```
 
-Las tres métricas del medio **no se calculan a mano**: salen de `diffStats()` de
-`./semaforo.js`, que recibe las filas y una lista de campos con su getter
-(`nr.js:46-50`). La tolerancia default es `0.01`.
+Si hay un módulo compartido, **importalo**. Si todavía sigue duplicado en `nr.js` / `brutos.js` /
+`gsPers.js` / `variaciones.js`, extraelo a un módulo compartido en tu mismo PR y hacé que esos cuatro
+importen de ahí — sale más barato que mantener la quinta copia, y es lo que la Fase 1 del ROADMAP
+tiene planeado igual. La regla está escrita como test ejecutable en `tests/gsPersControl.test.js`:
+copiá **ese escenario** a tu test. Copiar tests está bien; copiar lógica de producción es
+exactamente lo que produjo el bug tres veces.
 
-Para una variante "Generar Reporte" (no compara nada) el status es `'info'` y
-`unit`/`unitsTotal`/`unitsWithDiff`/`diffTotalAmount`/`worstCase`/`contextNote`
-van todos en `null` — ver `summarizeNrReporte` (`nr.js:383-395`).
+Excepción conocida: `acreditaciones.js`, donde la unidad del reporte es la acreditación y no el
+empleado-mes (D-021). Si creés estar en ese caso, confirmalo con Willy.
 
-### `renderResults(results, container)`
+**`null` no es `0`.** `null` = la columna no está mapeada o ninguna liquidación trajo dato; `0` = hay
+dato y vale cero. La diferencia se calcula sólo si los dos lados son distintos de `null`, y se compara
+con `Math.abs(diff) > 0.01` — los floats de Excel no dan igualdad exacta.
 
-Acá viven los patrones obligatorios del proyecto (CLAUDE.md §11). En orden:
+**Nada del cliente cableado, ningún default silencioso.** Los códigos de concepto de un cliente van a
+`controlConfigs` (`[clientCode+controlId]`, ver `js/db.js`), no como constantes del módulo; en el
+código quedan sólo como semilla para el cliente que todavía no configuró nada (D-035). Precedencia
+para resolver qué columna es cada concepto (D-039): (1) lo que el analista confirmó en el Paso 2,
+guardado por cliente — siempre gana; (2) catálogo/código matcheando por prefijo del encabezado
+(`buildParserMapping` de `conceptMatcher.js`); (3) un fallback cableado, sólo si Willy confirma los
+códigos para ese control. Si nada resuelve, **no lo completes con 0,00**: pedilo explícitamente y no
+dejes avanzar, o sacalo como aviso en la pantalla de resultados. Lo mismo en el parser: validá que lo
+leído tenga la forma esperada y cortá con un error que diga qué se esperaba y qué se encontró. Que un
+concepto no exista en un período **sí** es un resultado válido y se informa (D-036); lo que no puede
+pasar en silencio es no tener forma de resolverlo.
 
-1. **Guard de vacío:** `if (rows.length === 0)` → `<p class="text-muted">Sin datos.</p>`.
-2. **Filtrar filas sin valor real.** Antes de contar cualquier cosa, quedate solo
-   con las filas que tienen algún valor distinto de cero en alguno de los campos
-   del control — el patrón `hasAnyNrValue` (`nr.js:154-158`). Nunca listes filas
-   de un catálogo fijo que están todas en cero.
-3. **Hero de "sin diferencia vs con diferencia".** Copiá el bloque de
-   `nr.js:190-207` tal cual y adaptá los labels: dos números grandes (verde /
-   rojo) y, a la derecha, cuántas filas son evaluables y cuántas se ocultaron por
-   no tener valor. Es obligatorio en todo control nuevo.
-4. **Early return si no hay diferencias.** Tarjeta verde con ✓ y salí sin dibujar
-   tabla (`nr.js:210-219`). Una tabla de ceros no aporta nada.
-5. **Toolbar** `class="results-toolbar"`: filtros + buscador a la izquierda,
-   `renderExportMenu` a la derecha.
-6. **Tabla** `class="data-table data-table--compact"`. Ocultá también las
-   **columnas** sin diferencia y decí al pie cuántas se ocultaron
-   (`nr.js:284-288, 321-326`).
-7. **Paginación y buscador** al final de cada render de tabla:
-   `initShowMorePagination(tbody, { pageSize: 50 })` y después
-   `initSearchCombobox(...)` pasándole la paginación. Si re-renderizás el
-   `<tbody>` (filtro que cambia), hay que re-inicializar los dos.
+**`summarize()` y el semáforo.** Tres cosas que no se ven leyendo un `summarize` existente:
 
-### Export
+- `unit` va en **minúscula** (`'legajo'`, `'cc'`, `'lista'`, o `null` si el control no compara nada).
+  `controlsResults.js` compara `summary.unit === 'cc'`; un `'CC'` no rompe nada visible, sólo cuenta
+  centros de costo como si fueran legajos.
+- `unitsTotal`/`unitsWithDiff` se cuentan **en la unidad que declarás en `unit`**, no en filas de
+  cálculo. `diffStats()` de `./semaforo.js` sirve cuando hay una fila por unidad (el caso de `nr.js`).
+  Cuando no la hay — `agrupadores` produce legajo × agrupador — contalas a mano sobre la unidad real
+  (`legajoStats` en `agrupadores.js`). Contar filas ahí daba 1000 "legajos" sobre 100 empleados.
+- El color del semáforo **no** sale de `status`: sale de `computeSemaforoStatus(unitsWithDiff,
+  unitsTotal)`. `status` alimenta la tarjeta colapsada, y `'error'` es la única rama que lo
+  cortocircuita. Si agregás una pantalla que pinte el estado de un control, usá
+  `computeSemaforoStatus` o va a discrepar con las otras cuatro.
 
-`renderExportMenu(el, { onExcel, onCsv, onCopy })`. Las tres salidas exportan
-**todas** las filas con diferencia y **todos** los conceptos, sin importar el
-filtro de pantalla (`nr.js:257-259`). El `.xlsx` se arma con ExcelJS vía
-`loadExcelJS()` de `../utils/exportData.js`; nombre de archivo
-`<Control>_<Modo>_${periodSuffix(results.period)}.xlsx`.
+En una variante "Generar Reporte" no llega archivo primario: nombralo `_primaryRows`, el `status` es
+`'info'` y `unit`/`unitsTotal`/`unitsWithDiff`/`diffTotalAmount`/`worstCase`/`contextNote` van en
+`null` (ver `summarizeNrReporte` en `js/controls/nr.js`). Para errores de negocio devolvé
+`{ error: 'mensaje en español' }` en vez de tirar excepción (ver `agrupadores.js`).
 
-## 5. `js/controls/registry.js`
+Para `renderResults` → leé `ui-resultados.md`, en esta misma carpeta.
 
-Importar los tres exports y agregar la entrada. Campos: están documentados en el
-encabezado del archivo (`registry.js:1-37`) — leelo, no lo repito acá.
+### 5 — el registry
 
-Lo que se olvida:
+Los campos están documentados en el encabezado de `js/controls/registry.js`. Lo que se olvida:
+`help: { what, how[] }` es el popover "?" que ve el analista — `what` en una o dos oraciones, `how`
+como pasos imperativos ("Bajá el Reporte de X de M4."). Y en variantes agrupadas, el `group.id` tiene
+que ser idéntico en las dos entradas o se renderizan como pills sueltas.
 
-- **`help: { what, how[] }`** — no es opcional en la práctica: es el popover "?"
-  que ve el analista. `what` en una o dos oraciones, `how` como pasos imperativos
-  ("Bajá el Reporte de X de M4.").
-- **`...MARVAL_ONLY`** salvo que Willy confirme que es general.
-- **`appliesWhen: () => true`** siempre presente aunque no filtre nada.
-- **Variantes agrupadas:** dos entradas separadas (`x` y `x_reporte`) que comparten
-  `group: { id: 'x', label: 'X', mode: 'Controlar' | 'Generar Reporte' }`. El
-  `group.id` tiene que ser idéntico en las dos o se renderizan como pills sueltas.
+### 6 — el test
 
-## 6. Test — `tests/<x>Control.test.js`
-
-Obligatorio, y hay que **agregarlo a la cadena `test:unit` de `package.json`** o
-CI no lo corre. Modelo: `tests/agrupadoresControl.test.js`.
+Corre en Node, así que necesita el shim **antes** de importar el registry (que importa módulos de UI
+que registran listeners a nivel de módulo):
 
 ```js
-// registry.js importa módulos de UI que registran listeners a nivel de módulo.
 globalThis.document = { addEventListener: () => {} };
-const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 ```
 
-Ese shim de `document` es necesario porque el test corre en Node. Se invoca desde
-la raíz: `node --input-type=module < tests/<x>Control.test.js`.
+`test:unit` en `package.json` es una cadena de `&&` escrita a mano: si no agregás tu archivo, CI no
+lo corre y nadie se entera. Cubrí como mínimo: la entrada existe en el registry con el `tabRequired`
+y el `additionalFiles[0].key` esperados; coincidencia total → `status === 'success'`; una diferencia
+conocida → `unitsWithDiff > 0`; **un legajo con dos liquidaciones** → suma, no pisa; un legajo
+presente de un solo lado; y cada rama de `{ error }`.
 
-Qué cubrir como mínimo:
+## Reglas que no admiten criterio
 
-- la entrada existe en el registry y `tabRequired` / `additionalFiles[0].key` son
-  los esperados;
-- `run()` con datos que **coinciden** → `summarize().status === 'success'`;
-- `run()` con una diferencia conocida → la detecta y `unitsWithDiff > 0`;
-- **un legajo con dos liquidaciones** → suma en vez de duplicar (esto es el
-  regression test de la consolidación, no lo saltees);
-- un legajo presente en un lado y ausente en el otro;
-- cada rama de `{ error }` de `run()`.
+- **Datos de empleados.** Ni un `console.log` con ellos, ni un export de cliente en el repo. En los
+  tests, datos inventados: legajos `'1'`/`'2'`, apellidos `Perez`/`Gomez`.
+- **HR no va a entregables de Finanzas.** Si el archivo que genera el control lo recibe
+  Finanzas/tesorería del cliente y no el equipo de Payroll, lleva sólo lo necesario para pagar
+  (legajo, nombre, CUIT, CBU, banco, importe, fecha). Dotación, conteos, altas/bajas y excepciones van
+  a la pantalla de resultados, que la ve el analista (D-020).
+- **`esc()` en todo valor que entra a un template literal de HTML.** Los nombres de empleados vienen
+  de un Excel de un tercero.
+- **Consolidación por legajo, `null ≠ 0` y tolerancia 0,01.** Producen números incorrectos que el
+  analista se lleva al cliente.
 
-**Datos inventados, nunca reales.** Legajos `'1'`, `'2'`, apellidos `Perez`,
-`Gomez`. Nada de exports de clientes en el repo.
+Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, decilo y seguí.
 
-## Checklist de cierre
-
-```
-[ ] js/parsers/<x>Parser.js        — autoDetect + parse + re-export detectHeaders
-[ ] js/ui/fileUpload.js            — import, FIELD_DEFS, metaLine, parseFile, fileTypeLabel
-[ ] js/ui/controlsWizard.js        — import + AUTO_DETECT (+ IDS si hay variantes)
-[ ] js/controls/<x>.js             — run + summarize + renderResults + export xlsx
-[ ] js/controls/registry.js        — imports + entrada con help y scope
-[ ] tests/<x>Control.test.js       — + agregado a test:unit de package.json
-[ ] npm run test:unit              — pasa
-[ ] CHANGELOG.md                   — entrada del control nuevo
-[ ] ARCHITECTURE.md                — solo si cambió un schema o el contrato del registry
-[ ] DECISIONS.md                   — solo si hubo una decisión no obvia
-```
-
-Y el ciclo de git de CLAUDE.md §7: commit → push → PR → merge a main.
-
-## Errores concretos a no cometer
-
-- **No consolidar por legajo.** Diferencias falsas en todo empleado con más de una
-  liquidación en el mes. El bug más caro del repo. (Única excepción hasta hoy:
-  `acreditaciones.js`, donde la unidad del reporte es la acreditación y no el
-  empleado-mes — ver D-021. Si crees estar en ese caso, confirmalo con Willy.)
-- **Meter información de HR en un entregable que va a Finanzas.** Si el archivo que
-  genera el control lo recibe Finanzas/tesorería del cliente y no el equipo de
-  Payroll, no lleva dotación, conteos de empleados, altas/bajas ni atributos del
-  empleado: sólo lo necesario para pagar. Eso va en la pantalla de resultados, que
-  la ve el analista. Ver `CLAUDE.md` §6.5 y D-020.
-- **Confundir `null` con `0`.** `null` = sin dato, `0` = cero real. La diferencia
-  se calcula solo si los dos lados son distintos de `null`.
-- **Comparar con `!==` en vez de tolerancia.** Siempre
-  `Math.abs(diff) > 0.01`; los floats de Excel no dan igualdad exacta.
-- **Interpolar sin escapar.** Todo valor que entra a un template literal de HTML
-  pasa por `esc()`. Los nombres de empleados vienen de un Excel de tercero.
-- **Colores hardcodeados.** Variables CSS de `css/tokens.css`
-  (`var(--color-danger)`, `var(--color-success)`, `var(--sp-3)`). Las únicas
-  constantes de color aceptadas son los tintes por grupo de concepto, y van
-  declaradas arriba del módulo y compartidas entre tabla y export
-  (`nr.js:167-170`).
-- **`console.log` de datos de empleados.** Prohibido (CLAUDE.md §6.2). Limpiá
-  antes de commitear.
-- **Formatear números a mano.** `toLocaleString('es-AR', { minimumFractionDigits: 2,
-  maximumFractionDigits: 2 })`, y `'—'` para `null` (`nr.js:160-162`).
-- **Listar filas o columnas vacías.** El criterio del proyecto es mostrar solo lo
-  que tiene valor real (CLAUDE.md §11.1).
-
-## Verificar en el navegador
-
-La app usa ES modules: **no funciona con doble click desde `file://`**. Servila:
+## Checklist
 
 ```
-python3 -m http.server 8000
+[ ] parser · fileUpload (5 lugares) · wizard · módulo · registry · test
+[ ] test agregado a la cadena test:unit de package.json, y `npm run test:unit` pasa
+[ ] probado en el navegador con un archivo real (para servir la app, ver README.md)
+[ ] CHANGELOG.md
+[ ] ARCHITECTURE.md / DECISIONS.md sólo si cambió un contrato o hubo una decisión no obvia
 ```
 
-y abrí `http://localhost:8000`. El flujo para probar: cliente → Controles →
-elegir el control nuevo → cargar Tabulado + reporte → Ejecutar. Si no tenés un
-archivo de prueba, pedíselo a Willy antes de dar el control por terminado — un
-control que nunca vio un archivo real no está verificado.
+Un control que nunca vio un archivo real no está verificado — si no lo tenés, pedíselo a Willy.
+Y el ciclo de git de CLAUDE.md: commit → PR contra `main` → merge con CI en verde.
