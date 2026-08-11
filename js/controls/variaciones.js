@@ -1354,7 +1354,6 @@ function imprimirVariaciones(results, relevantes) {
   ${secciones}
   <div class="foot">
     Fuente: Tabulado de conceptos liquidados — ${esc(labelAnterior)} y ${esc(labelActual)}.
-    Comparación por legajo; un empleado sin el concepto liquidado en un período se computa como 0,00.
     <br>Hidalgo &amp; Asociados · info_ar@bhidalgo.com.ar · +54 11 2284 2031 — documento con datos confidenciales de nómina.
   </div>
 </body></html>`;
