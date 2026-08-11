@@ -68,7 +68,10 @@ function legajoStats(results) {
   let diffTotalAmount = 0;
   let worstCase = null;
   for (const [grouperId, filas] of Object.entries(results.resultsPorGrupo)) {
-    const grouperName = results.grouperDefs.find(g => g.id === grouperId)?.name || grouperId;
+    // grouperId sale de Object.entries() y siempre es string, aunque g.id sea
+    // number (el id autoincrement de Dexie en la tabla `groupers`, db.js) —
+    // comparar sin convertir nunca matchea y el label cae siempre al id crudo.
+    const grouperName = results.grouperDefs.find(g => String(g.id) === grouperId)?.name || grouperId;
     for (const f of filas) {
       legajosEvaluados.add(f.legajo);
       if (!f.tieneDiff) continue;

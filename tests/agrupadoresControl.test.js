@@ -77,6 +77,18 @@ assert('summarize(): status = warning (hay diferencias)', summary.status === 'wa
 assert('summarize(): unitsTotal es un número', typeof summary.unitsTotal === 'number' && summary.unitsTotal > 0);
 assert('summarize(): unitsWithDiff > 0', summary.unitsWithDiff > 0);
 
+// ── Regresión: worstCase.label usa el NOMBRE del agrupador, no su id ────────
+//
+// grouperDefs.id es number (id autoincrement de Dexie en producción — ver
+// db.js, tabla `groupers`), pero las claves de resultsPorGrupo (armadas con
+// Object.entries) son siempre string. Comparar sin convertir (g.id ===
+// grouperId) nunca matchea con ids number, así que worstCase.label caía al
+// id crudo ("1 — leg. 2") en vez del nombre real ("Sueldo — leg. 2").
+assert('grouperDefs.id es number (el caso real de producción, no un string)',
+  typeof grouperDefs[0].id === 'number');
+assert('worstCase.label usa el nombre del agrupador ("Sueldo"), no el id crudo ("1")',
+  summary.worstCase?.label?.startsWith('Sueldo —'));
+
 // ── Regresión: unitsTotal es legajo×agrupador, no legajos distintos ──────────
 //
 // runMatching() evalúa el mismo universo de legajos una vez POR agrupador
