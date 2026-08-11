@@ -7,6 +7,28 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: Fase 0 de la auditoría de escalabilidad + "Borrar cliente" pasa a Ocultar — 2026-08-11
+
+- **GS Pers (modo Controlar) no consolidaba por legajo** — pisaba en vez de sumar, así que todo empleado con más de una liquidación en el mes daba una diferencia falsa. Es la tercera vez que se arregla el mismo bug (Brutos en `bba8958`, NR en `b2f8bef`). La regla queda ahora escrita donde sí sobrevive: el assert de regresión de `tests/gsPersControl.test.js` ("NO reproduce el bug viejo: tabValGtos !== 400, ctrlGtos !== -200").
+- **`loadExcelJS()` no devolvía la librería en ninguna de sus dos ramas** — rompía el export a Excel de Variaciones, el único de los call sites que usa el valor de retorno. Los demás no cambian de comportamiento.
+- **EE x CATEG**: el botón "Exportar .xlsx" llamaba a `downloadXlsx`, que ya no existe (un refactor viejo migró a `downloadWorkbook` en todos lados menos ese call site); y el resumen comparaba empleados contra **filas** del Tabulado (una por liquidación, no por empleado), lo que daba un "−1" permanente ante un legajo con doble liquidación aunque los dos archivos coincidieran en dotación real.
+- **Semáforo con un solo criterio.** El checklist mensual usaba `summary.status` crudo (que da `warning` con una sola diferencia, sin mirar el porcentaje) mientras resultados, wizard y lista de clientes ya usaban `computeSemaforoStatus`: el mismo control salía de distinto color según la pantalla. Las 4 pantallas usan ahora el mismo criterio, y `clientsList.js` deja de leer un umbral hardcodeado en vez de la config del cliente.
+- **Agrupadores**: `unitsTotal` sumaba legajo × agrupador (100 legajos × 10 agrupadores = 1000) mientras el control declara `unit: 'legajo'` — las métricas del semáforo se cuentan por la unidad declarada, no por fila de cálculo, y con el denominador inflado el umbral nunca se cruzaba. `diffTotalAmount` se calculaba sobre el top-10 ya recortado por `insights.js`. Y `worstCase.label` comparaba `grouperId` (string) contra `g.id` (number, el autoincrement de Dexie), así que mostraba el id crudo ("1 — leg. 2") en vez del nombre del agrupador.
+- **"Borrar cliente" pasa a Ocultar.** `deleteClient()` no borraba `controlRuns`/`controlRunFiles`/`controlRunResults`/`controlConfigs`, y como el `code` queda libre al borrar la fila de `clients`, un cliente nuevo con el mismo nombre podía heredar corridas del borrado, con datos de empleados adentro. El botón de todos los días pasa a `hideClient()` (reversible, reserva el `code`); el borrado definitivo, con la cascada completa, vive en el panel "Clientes ocultos" y pide tipear el nombre del cliente (`showConfirm` gana `requireText`). `getClients()` devuelve sólo activos, `getInactiveClients()` es nueva.
+- Tests nuevos: `tests/gsPersControl.test.js`, `tests/catXEmpleadosControl.test.js`, `tests/clientDeletion.test.js`. Ampliado `tests/agrupadoresControl.test.js`. `tests/e2e/backup.spec.js` adaptado al flujo nuevo (ocultar → panel → borrar definitivamente). **544 asserts, 0 fallos** en `npm run test:unit`.
+- Ver D-037 en `DECISIONS.md`. Quedan 7 hallazgos de la auditoría sin arreglar — ver `specs/auditoria-escalabilidad-2026-08.md`.
+
+### fix: Variaciones — el gate bloquea sólo lo que no se puede resolver, y cuatro agujeros que dejó abiertos — 2026-08-11
+
+- **El gate del wizard se angosta**: bloquea sólo si un concepto no se resolvió en **ninguno** de los dos Tabulados (`sinResolverEnNinguno` en `js/ui/variacionesConceptMap.js`, reemplaza al `pendientes()` que había quedado sin uso). Que un concepto falte de un solo lado es legítimo por diseño — jornales y mensualizados son excluyentes. El fix anterior (`9540fbc`) había relajado el gate de "todo decidido" a "nada chequeado", y con eso un concepto sin resolver en los dos archivos dejaba al legajo afuera de la tabla, del export y del PDF con el control en verde.
+- **Columnas confirmadas que ya no existen en el archivo se reportan como "huérfanas"** en vez de usarse a ciegas: `resolverColumnasDeEntradas` verifica la columna guardada contra el archivo de esta corrida.
+- **El mapeo guardado se persiste por lado** (`{ anterior, actual }`): antes se aplanaba en un solo dict y la columna del período actual pisaba la del anterior apenas diferían.
+- **El PDF omite las secciones sin ningún dato real** (`gruposParaImprimir`, extraída para poder testearla) y avisa cuántas quedaron afuera — antes un concepto no resuelto salía impreso entero en 0,00.
+- `renderStepFiles` redibuja la nav al final, después de recalcular el estado que mira `canGoNext`: el botón "Siguiente" podía quedar deshabilitado con el valor previo tras cargar el segundo Tabulado.
+- El pie del standalone `reportes/opmobility-variaciones.html` queda sincronizado con el de la app (`e4b24f1` se lo había sacado sólo a la app).
+- Tests nuevos en `tests/variacionesControl.test.js` (huérfanas, filtro del PDF) y `tests/variacionesConceptMap.test.js` (gate, mapeo por lado).
+- Ver D-036 en `DECISIONS.md`.
+
 ### feat: Variaciones (POF) — dos tabulados obligatorios, conceptos confirmados por el analista y columna Modificación — 2026-08-10
 
 - **Se suben siempre los dos Tabulados.** El archivo del período anterior pasa a obligatorio y se elimina el reuso del Tabulado de la corrida del mes anterior (`previousPeriod` + `getRunFileFromPeriod` en `js/ui/controlsWizard.js`). El período y la quincena de cada archivo salen del propio archivo, no del selector de período de la app. Con los dos controles seleccionados el archivo se pide **una sola vez** (`additionalFiles[].shared`).

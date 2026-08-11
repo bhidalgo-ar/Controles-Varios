@@ -1,6 +1,6 @@
 # ROADMAP — Controles Nómina
 
-> **Última actualización:** 29 de julio de 2026
+> **Última actualización:** 11 de agosto de 2026
 > Reescrito: la v1 (18-may) quedó desactualizada frente al código real (registry de controles ya construido). Este documento parte de lo que existe hoy y prioriza el rediseño multi-cliente.
 
 ---
@@ -33,21 +33,41 @@ Prioridad 1 (más alta) a 10 (más baja). Esfuerzo: S (<1 día) · M (1-3 días)
 
 | # | Bloque | Prio | Esfuerzo | Estado |
 |---|---|---|---|---|
-| 2.1 | Migración schema v3→v4: `code` como identidad de cliente + backfill | 1 | M | planeado |
-| 2.2 | Import del seed (`hya-controles-config.json`), chequeo de versión, merge no destructivo sobre `controlRuns` | 1 | M | planeado |
-| 2.3 | Modo admin con contraseña (hash local) para editar clientes/config y exportar seed | 2 | M | planeado |
-| 2.4 | Tabla `controlConfigs` + migrar fuera de `fileProfiles` lo que no es mapeo de columnas | 2 | M | planeado |
+| 2.1 | Migración schema v3→v4: `code` como identidad de cliente + backfill | 1 | M | hecho ✅ (`db.version(4)`, cerrada en v6 — D-011/D-016) |
+| 2.2 | Import del seed (`hya-controles-config.json`), chequeo de versión, merge no destructivo sobre `controlRuns` | 1 | M | hecho ✅ (`js/seed/importSeed.js`) |
+| 2.3 | Modo admin con contraseña (hash local) para editar clientes/config y exportar seed | 2 | M | hecho ✅ (`js/ui/adminView.js` + `js/seed/exportSeed.js` — D-013) |
+| 2.4 | Tabla `controlConfigs` + migrar fuera de `fileProfiles` lo que no es mapeo de columnas | 2 | M | hecho ✅ (`db.version(5)`) |
 | 2.5 | `appliesWhen` por control + scopes general/convenio/cliente | 3 | M | hecho ✅ (2026-07-31, agrega scope `sistema`; ver `specs/segmentacion-controles-por-cliente.md`) |
 | 2.6 | Seam de adaptadores: `js/adapters/meta4/` (extraer de parsers actuales) | 3 | M | planeado |
 | 2.7 | Adaptador Axton — piloto con Merz | 4 | M | planeado |
-| 2.8 | Retirar ruta de agrupadores; reimplementar como control `scope: general` | 5 | S | planeado |
+| 2.8 | Retirar ruta de agrupadores; reimplementar como control `scope: general` | 5 | S | hecho ✅ (2026-07-31 — D-008/D-014) |
 | 2.9 | Relevar `controlConfigs` real de los 21 clientes fuera de Marval (validar `appliesWhen` con consultores) | 5 | L | planeado |
 
 **Definition of Done de v2:**
 - [x] Un analista puede seleccionar cualquiera de los 22 clientes y ver solo sus controles aplicables (2026-07-31 — hoy sólo Marval tiene los 10 controles de M4; el resto ve "Cruce por Agrupadores").
-- [ ] El seed se puede exportar desde modo admin e importar en otro navegador sin perder historial local.
+- [x] El seed se puede exportar desde modo admin e importar en otro navegador sin perder historial local (2026-07-31 — `tests/e2e/adminExport.spec.js`).
 - [ ] Merz corre con adaptador Axton y da el mismo resultado que el parser Meta4 daría con datos equivalentes.
-- [ ] No quedan dos rutas de validación paralelas.
+- [x] No quedan dos rutas de validación paralelas (2026-07-31 — D-014).
+
+---
+
+## v2.1 — Escalabilidad interna (en ejecución)
+
+Sale de la auditoría del 2026-08-11 (inventario completo en `specs/auditoria-escalabilidad-2026-08.md`).
+El orden importa: F1 destraba a las demás, y F5 es lo que evita que todo esto vuelva a pasar.
+
+| Fase | Qué | Estado |
+|---|---|---|
+| F0 | Bugs que dan un resultado incorrecto hoy | en curso — 7 cerrados, 7 abiertos |
+| F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | planeado |
+| F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | planeado |
+| F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado |
+| F4 | `fileTypes.js` con un mapa único, config declarada en el registry, matar el `Promise.all` posicional | planeado |
+| F5 | Skill `nuevo-control`: de "copiá X" a "importá X", una vez que exista el módulo de F1 | planeado |
+
+F5 no es cosmético: el skill mandaba a copiar el helper de consolidación, y por eso el mismo bug se
+arregló tres veces (Brutos, NR y GS Pers) — la copia número N siempre se olvida. Mientras el módulo
+compartido no exista, el skill ya dice buscar las copias con `grep` y extraer en vez de copiar.
 
 ---
 
