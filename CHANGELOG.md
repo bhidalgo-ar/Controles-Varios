@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: dos conceptos podían quedar mapeados a la MISMA columna (número mal, no vacío) — 2026-08-12
+
+- Hallazgo de la auditoría de campos-vs-export, reproducido antes de tocar nada. `buildParserMapping` (`js/parsers/conceptMatcher.js`) no llevaba registro de qué encabezado ya había asignado, así que **dos conceptos podían apuntar a la misma columna**. Su hermana `matchHeadersToCatalog` sí tenía ese `Set`; ésta no.
+- El caso real: `INDEM_INTEG` es el único de los 18 conceptos NR con `alias: []`, así que su único token de búsqueda es el código crudo. Como `'sacindeminteg'.includes('indeminteg')` es `true`, el paso "contains" le entregaba la columna de `SAC_INDEM_INTEG` cuando el archivo traía esa y no `INDEM_INTEG` — y el control comparaba INDEM_INTEG contra la columna equivocada.
+- **Es la peor forma del problema**, y la razón por la que volver los campos obligatorios no alcanza: no produce un vacío que un aviso de "columna sin asignar" pueda detectar, produce **un número mal**. Un `required` queda satisfecho por el valor equivocado.
+- Resuelto con dos pasadas por fuerza de match: un `exact`/`alias` de otro concepto le gana a un `contains` de este. En el caso del bug, `SAC_INDEM_INTEG` queda en su clave y `INDEM_INTEG` sin mapear — que es el resultado honesto. Nuevo `tests/conceptMatcher.test.js` (14 asserts, en la cadena de `package.json`); 3 fallan si se revierte el fix.
+
 ### fix: GS Pers modo Reporte no consolidaba por legajo (4ª aparición del mismo bug) — 2026-08-12
 
 - Encontrado por la auditoría de campos-vs-export. `runGsPersReporte` (`js/controls/gsPers.js`) hacía `tabRows.filter().map()` — **una fila de salida por liquidación** — mientras sus dos hermanos (`runBrutosReporte`, `runNrReporte`) y su propio gemelo `runGsPers` (modo Controlar) sí agrupan por legajo. Los dos helpers (`groupTabRowsByLegajo`, `sumTabColumn`) ya existían en el mismo archivo; sólo este modo no los usaba.
