@@ -53,7 +53,9 @@ Prioridad 1 (más alta) a 10 (más baja). Esfuerzo: S (<1 día) · M (1-3 días)
 
 ## v2.1 — Escalabilidad interna (en ejecución)
 
-Sale de la auditoría del 2026-08-11 (inventario completo en `specs/auditoria-escalabilidad-2026-08.md`).
+Sale de la auditoría del 2026-08-11 (inventario de bugs y hotspots en
+`specs/auditoria-escalabilidad-2026-08.md`; estado detallado fase por fase, con qué está bloqueado
+por qué decisión, en `specs/plan-escalabilidad-fases.md`).
 El orden importa: F1 destraba a las demás, y F5 es lo que evita que todo esto vuelva a pasar.
 
 | Fase | Qué | Estado |
