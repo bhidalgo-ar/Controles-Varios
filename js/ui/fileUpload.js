@@ -18,6 +18,7 @@ import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
+import { blocksProgress } from '../exports/contracts.js';
 
 // Campos "estándar" por tipo de archivo.
 // Los campos de nombre (apellido/nombre/nombreCompleto) se manejan aparte
@@ -673,9 +674,12 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
             // Tabulado" del Paso 2).
             const level = val ? 'none' : 'warn';
             const style = matchSelectStyle(level);
+            // El asterisco tiene que coincidir con lo que el gate de abajo
+            // realmente exige — si no, un campo bloqueante sale sin marcar.
+            const esBloqueante = blocksProgress(f.key, f.required);
             return `
               <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label ${f.required ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
+                <label class="form-label ${esBloqueante ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
                 <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);${style}">
                   ${opts(val)}
                 </select>
@@ -720,7 +724,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       // declarados `required: true` —puesto, ID/nombre de centro de costo,
       // departamento de Cat. Empleados, PRECIO de Rendimiento y COSTO TOTAL—
       // se podían dejar vacíos desde acá sin que nada avisara.
-      const faltantes = fields.filter(f => f.required && !newMapping[f.key]).map(f => f.label);
+      const faltantes = fields.filter(f => blocksProgress(f.key, f.required) && !newMapping[f.key]).map(f => f.label);
       if (faltantes.length) {
         showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
         btn.disabled = false;
@@ -790,9 +794,10 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
         const val   = savedMapping?.[f.key] || '';
         const level = fieldLevel(val);
         const style = matchSelectStyle(level);
+        const esBloqueante = blocksProgress(f.key, f.required);
         return `
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label ${f.required ? 'form-label--required' : ''}">${f.label}${matchBadge(level)}</label>
+            <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">${f.label}${matchBadge(level)}</label>
             <select class="form-select" name="${f.key}"${style ? ` style="${style}"` : ''}>
               ${opts(val)}
             </select>
@@ -918,8 +923,10 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
       }
     }
 
-    // Validar campos requeridos
-    const faltantes = fields.filter(f => f.required && !mapping[f.key]).map(f => f.label);
+    // Validar campos requeridos — deriva de EXPORT_CONTRACTS (Paso 1 de
+    // specs/contrato-export.md) para toda clave que algún export ya consuma;
+    // cae a `f.required` para lo que todavía no está contratado.
+    const faltantes = fields.filter(f => blocksProgress(f.key, f.required) && !mapping[f.key]).map(f => f.label);
     if (faltantes.length) {
       showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
       return;
