@@ -1,14 +1,14 @@
 // nr.js — Control No Remunerativos (Control NR)
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -177,6 +177,7 @@ export function renderNrResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'nr',
     resumen(panel) {
       const tone = diffRows.length === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -378,16 +379,13 @@ function renderNrDetalle(container, { relevantRows, diffRows, results }) {
 
     // Paginación (tablas de cientos de legajos) + buscador por legajo — se
     // re-inicializan porque el <tbody> se recrea entero en cada filtro.
-    const tbodyEl = tableHost.querySelector('tbody');
-    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-    initSearchCombobox(searchEl, {
+    wireTableTools(tableHost.querySelector('table'), {
       rows: shownRows,
-      trEls: pagination.dataRows,
       getLabel: r => `${r.legajo}`,
+      searchEl,
       label: 'Buscar legajo',
-      pagination,
+      stickyCols: 1,
     });
-    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
   }
 
   conceptSel.addEventListener('change', (e) => renderTable(e.target.value));
@@ -478,6 +476,7 @@ export function renderNrReporteResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'nr_reporte',
     resumen(panel) {
       renderVerdict(panel, {
         tone: relevantRows.length > 0 ? 'info' : 'warn',
@@ -600,15 +599,12 @@ function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, re
 
     // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre —
     // se re-inicializan porque el <tbody> se recrea entero en cada filtro.
-    const tbodyEl = tableHost.querySelector('tbody');
-    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-    initSearchCombobox(searchEl, {
+    wireTableTools(tableHost.querySelector('table'), {
       rows: shownRows,
-      trEls: pagination.dataRows,
       getLabel: r => r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`,
-      pagination,
+      searchEl,
+      stickyCols: 2,
     });
-    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
   }
 
   filterGroup.querySelector('[data-nr-concept-filter]')

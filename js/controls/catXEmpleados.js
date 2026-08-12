@@ -12,12 +12,12 @@
 //   5. Distribución por PUESTO — con detalle de empleados cuando hay diferencia
 //   6. Distribución por CC — ídem
 
-import { showToast } from '../ui/toast.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
-import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import { renderExportMenu } from '../ui/exportMenu.js';
+import { wireTableTools } from '../ui/tableTools.js';
+import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
 import { makeLegajoKey } from '../utils/legajo.js';
-import { renderVerdict, renderTiles, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
+import { renderVerdict, renderTiles, renderResumenDetalle } from '../ui/resultBlocks.js';
 
 /**
  * Resumen del control para la tarjeta colapsada en la pantalla de resultados.
@@ -210,6 +210,7 @@ export function renderCatXEmpleadosResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'cat_x_empleados',
     resumen(panel) {
       const tone = totalDiffs === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -418,26 +419,27 @@ function renderCatXEmpleadosDetalle(container, results) {
   const puestoHtml = distSection(byPuesto, 'Puesto', 'Distribución por Puesto', 'puesto');
   const ccHtml      = distSection(byCC, 'Centro de Costo', 'Distribución por Centro de Costo', 'cc');
 
-  // ── Botón de exportación a Excel ───────────────────────────────────────────
+  // ── Exportar ─────────────────────────────────────────────────────────────
+  // El .xlsx trae las dos distribuciones (Puesto/CC) en hojas separadas; el
+  // CSV/copiar las aplana en una sola tabla — no incluyen las 3 listas de
+  // diferencias de arriba, que son de revisión en pantalla, no del entregable.
 
   const toolbar = document.createElement('div');
   toolbar.style.cssText = 'display:flex;justify-content:flex-end;padding:var(--sp-2) var(--sp-3);';
-  const exportBtn = document.createElement('button');
-  exportBtn.className   = 'btn btn--primary btn--sm';
-  exportBtn.textContent = '⬇ Exportar .xlsx';
-  exportBtn.addEventListener('click', async () => {
-    exportBtn.disabled    = true;
-    exportBtn.textContent = 'Generando…';
-    try {
-      await exportCatXEmpleadosToXlsx(results);
-    } catch (err) {
-      showToast('Error al generar el archivo: ' + err.message, 'danger');
-    } finally {
-      exportBtn.disabled    = false;
-      exportBtn.textContent = '⬇ Exportar .xlsx';
-    }
+  const exportEl = document.createElement('div');
+  toolbar.appendChild(exportEl);
+
+  const csvHeaders = ['Agrupador', 'Valor', 'Rep. Categ.', 'Tabulado', 'Dif.'];
+  const csvRows = () => [
+    ...byPuesto.map(r => ['Puesto', r.key, r.catCount, r.tabCount, r.diff]),
+    ...byCC.map(r => ['Centro de Costo', r.key, r.catCount, r.tabCount, r.diff]),
+  ];
+
+  renderExportMenu(exportEl, {
+    onExcel: () => exportCatXEmpleadosToXlsx(results),
+    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `EE_x_CATEG_${periodSuffix(results.period)}.csv`),
+    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
-  toolbar.appendChild(exportBtn);
 
   // ── Render final ───────────────────────────────────────────────────────────
 
@@ -480,13 +482,11 @@ function wireDiffTableTools(root, diffKey, rows, getLabel) {
   const table    = root.querySelector(`table[data-diff-key="${diffKey}"]`);
   const searchEl = root.querySelector(`.js-diff-search[data-diff-key="${diffKey}"]`);
   if (!table || !searchEl) return;
-  const tbodyEl = table.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
-    rows, trEls: pagination.dataRows, getLabel, pagination,
+  wireTableTools(table, {
+    rows, getLabel, searchEl,
     label: 'Buscar', placeholder: 'ID o nombre…',
+    stickyCols: 1,
   });
-  enhanceGrid(table, { stickyCols: 1 });
 }
 
 // ── Export a Excel ────────────────────────────────────────────────────────────

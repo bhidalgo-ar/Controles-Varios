@@ -1,7 +1,7 @@
 // brutos.js — Controles del Reporte de Brutos
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -10,7 +10,7 @@ import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -212,6 +212,7 @@ export function renderBrutosResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'brutos',
     resumen(panel) {
       const tone = nadaEvaluado ? 'error' : (diffRows.length === 0 ? 'ok' : 'warn');
       renderVerdict(panel, {
@@ -353,15 +354,12 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
       </table>
     `;
 
-    const tbodyEl = tableHost.querySelector('tbody');
-    const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-    initSearchCombobox(searchEl, {
+    wireTableTools(tableHost.querySelector('table'), {
       rows: shownRows,
-      trEls: pagination.dataRows,
       getLabel: r => `${r.legajo} — ${r.nombre}`,
-      pagination,
+      searchEl,
+      stickyCols: 2,
     });
-    enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
   }
 
   filterSel.addEventListener('change', renderTable);
@@ -467,6 +465,7 @@ export function renderBrutosReporteResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'brutos_reporte',
     resumen(panel) {
       renderVerdict(panel, {
         tone: sinColumnas ? 'warn' : 'info',
@@ -525,19 +524,16 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
 
   container.appendChild(tableWrap);
 
-  const tbodyEl = tableWrap.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
   const legajoKey  = colDefs.find(c => c.key === 'legajo') ? 'legajo' : colDefs[0].key;
   const nombreKey  = cols.hasNombre ? 'nombre' : (cols.hasApellido1 ? 'apellido1' : null);
-  initSearchCombobox(searchEl, {
-    rows,
-    trEls: pagination.dataRows,
-    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
-    pagination,
-  });
   // stickyCols:0 — la 1ª/2ª columna real son FECHA_INI/FECHA_FIN (mismo orden
   // que el archivo de Brutos), no Legajo/Nombre, así que no conviene anclarlas.
-  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 0 });
+  wireTableTools(tableWrap.querySelector('table'), {
+    rows,
+    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
+    searchEl,
+    stickyCols: 0,
+  });
 
   const csvHeaders = colDefs.map(c => c.label);
   const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));

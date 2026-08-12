@@ -129,6 +129,7 @@ export function renderAgrupadoresResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'agrupadores',
     resumen(panel) {
       const tone = (unitsWithDiff === 0 && missingCount === 0) ? 'ok' : 'warn';
       renderVerdict(panel, {

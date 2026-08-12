@@ -17,8 +17,9 @@
 // Ver D-020 en DECISIONS.md.
 
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
-import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle } from '../ui/resultBlocks.js';
+import { getViewPreference } from '../ui/viewPreference.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -478,8 +479,9 @@ export function renderAcreditacionesReporteResults(results, container) {
 
   // Se recuerda la solapa activa entre draws: asignar/deshacer una fecha
   // manual (D-022) reconstruye toda la pantalla, y no tiene sentido devolver
-  // al analista al Resumen si estaba trabajando en el Detalle.
-  let activeTabId = 'resumen';
+  // al analista al Resumen si estaba trabajando en el Detalle. Arranca desde
+  // la preferencia guardada de una corrida anterior, no siempre en 'resumen'.
+  let activeTabId = getViewPreference('acreditaciones_reporte').tab || 'resumen';
 
   // draw() reconstruye toda la pantalla a partir de `res`. Se vuelve a llamar
   // cada vez que el analista asigna o deshace una fecha manual (D-022) — así el
@@ -501,6 +503,7 @@ export function renderAcreditacionesReporteResults(results, container) {
     renderResumenDetalle(container, {
       activeId: activeTabId,
       onChange(id) { activeTabId = id; },
+      controlId: 'acreditaciones_reporte',
       resumen(panel) {
         renderVerdict(panel, {
           tone: cierraOk ? 'ok' : 'error',
@@ -638,16 +641,13 @@ export function renderAcreditacionesReporteResults(results, container) {
         </p>
       `;
 
-      const tbodyEl = tableHost.querySelector('tbody');
-      const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-      initSearchCombobox(searchEl, {
+      wireTableTools(tableHost.querySelector('table'), {
         rows: shown,
-        trEls: pagination.dataRows,
         getLabel: l => `${l.n} — ${l.label} ${fmtDate(l.fecha)}`,
+        searchEl,
         label: 'Buscar lista',
-        pagination,
+        stickyCols: 1,
       });
-      enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
     }
 
     filterGroup.querySelector('[data-acred-type-filter]')
@@ -805,15 +805,12 @@ function renderAlertsTable(results, container) {
   box.appendChild(tableHost);
   container.appendChild(box);
 
-  const tbodyEl = tableHost.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
+  wireTableTools(tableHost.querySelector('table'), {
     rows: results.alerts,
-    trEls: pagination.dataRows,
     getLabel: a => `${a.legajo} — ${a.nombre}`,
-    pagination,
+    searchEl,
+    stickyCols: 1,
   });
-  enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
 }
 
 // ── Editor de configuración (Paso 2 del wizard) ───────────────────────────────

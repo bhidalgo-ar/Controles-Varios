@@ -14,9 +14,10 @@
 // Reglas de cálculo completas en specs/control-acumuladores-ganancias.md.
 
 import { initTabs } from '../ui/tabs.js';
-import { renderVerdict, renderTiles, renderIssues, renderMinorObservations, renderChecks, enhanceGrid } from '../ui/resultBlocks.js';
+import { renderVerdict, renderTiles, renderIssues, renderMinorObservations, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { wireTableTools } from '../ui/tableTools.js';
+import { getViewPreference, setViewPreference } from '../ui/viewPreference.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel } from '../utils/dates.js';
@@ -648,6 +649,8 @@ export function renderAcumuladoresResults(results, container) {
           mesConMov, datos, sinMovCount, mesProceso,
         }) },
     ],
+    activeId: getViewPreference('acumuladores_ganancias').tab,
+    onChange(id) { setViewPreference('acumuladores_ganancias', { tab: id }); },
   });
 
   // ── Export único (arma el .xlsx con ambas hojas) ──────────────────────────
@@ -1032,17 +1035,13 @@ function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
     </p>
   `;
 
-  enhanceGrid(tableHost.querySelector('table'), { stickyCols: 2 });
-
   // Sólo el <tbody> (filas de datos) — el <tfoot> es la fila de TOTAL, que
   // queda fuera de paginación y búsqueda (mismo patrón que rendXEe.js) y
   // permite que enhanceGrid() la fije abajo con sticky.
-  const tbodyEl = tableHost.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
-    rows, trEls: pagination.dataRows,
-    getLabel: r => `${r.legajo} — ${r.nombre}`,
-    pagination,
+  wireTableTools(tableHost.querySelector('table'), {
+    rows, getLabel: r => `${r.legajo} — ${r.nombre}`,
+    searchEl,
+    stickyCols: 2,
   });
 }
 

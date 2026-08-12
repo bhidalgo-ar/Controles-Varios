@@ -10,14 +10,14 @@
 import { DEFAULT_CONCEPT_CONFIG } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { buildColByCode } from './tabCodes.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 
@@ -234,6 +234,7 @@ export function renderRendXEeResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'rend_x_ee',
     resumen(panel) {
       const tone = diffRows.length === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -357,15 +358,12 @@ function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
   container.appendChild(tableWrap);
 
   // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre
-  const tbodyEl = tableWrap.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-  initSearchCombobox(searchEl, {
+  wireTableTools(tableWrap.querySelector('table'), {
     rows,
-    trEls: pagination.dataRows,
     getLabel: r => `${r.legajo} — ${r.nombre}`,
-    pagination,
+    searchEl,
+    stickyCols: 2,
   });
-  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2 });
 
   const csvHeaders = ['Legajo', 'Nombre', 'COSTO TOTAL (Reporte)', ...CATS.map(c => c.label), 'COSTO TOTAL (Calculado)', 'Dif (Reporte - Calculado)'];
   const csvRows = () => rows.map(r => [r.legajo, r.nombre, fmt(r.repTotal), ...CATS.map(c => fmt(r[c.key])), fmt(r.calcTotal), fmt(r.dif)]);

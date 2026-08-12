@@ -1,13 +1,13 @@
 // rendVsTabu.js — Control 5: Rendimiento vs Tabulado (RendvsTabu)
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { buildColByCode } from './tabCodes.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -271,6 +271,7 @@ export function renderRendVsTabuResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'rend_vs_tabu',
     resumen(panel) {
       const tone = ccsWithDiff.length === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -441,18 +442,14 @@ function renderRendVsTabuDetalle(container, { rows, results }) {
   container.appendChild(tableWrap);
 
   // Paginación (clientes con muchos CC) + buscador por código/nombre de CC
-  const tbodyEl = tableWrap.querySelector('tbody');
-  const pagination = initShowMorePagination(tbodyEl, { pageSize: 50 });
-
-  initSearchCombobox(searchEl, {
+  wireTableTools(tableWrap.querySelector('table'), {
     rows,
-    trEls: pagination.dataRows,
     getLabel: r => `${r.ccCode} — ${r.ccName}`,
-    pagination,
+    searchEl,
     label: 'Buscar centro de costo',
     placeholder: 'Código o nombre de CC…',
+    stickyCols: 2, col1Width: 100,
   });
-  enhanceGrid(tableWrap.querySelector('table'), { stickyCols: 2, col1Width: 100 });
 
   const csvHeaders = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [`${c.label} (Rend)`, `${c.label} (Tab)`, `${c.label} (CTRL)`])];
   const csvRows = () => rows.map(r => [r.ccCode, r.ccName, ...COLS.flatMap(c => [fmt(r[c.rKey]), fmt(r[c.tKey]), fmt(r[c.dKey])])]);

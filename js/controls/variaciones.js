@@ -28,7 +28,7 @@
 
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { wireTableTools } from '../ui/tableTools.js';
 import {
   renderVerdict,
   renderTiles,
@@ -845,6 +845,7 @@ function renderVariacionesResults(results, container) {
   container.appendChild(tabsHost);
 
   renderResumenDetalle(tabsHost, {
+    controlId: results.reporte.id,
     resumen: panelEl => renderPanel(panelEl, {
       results, relevantes, conDif, grupos, casos, sinCausa, labelAnterior, labelActual,
     }),
@@ -1151,17 +1152,18 @@ function renderDetalle(container, ctx) {
            </p>`
         : '');
 
-    // Paginación + buscador se re-inicializan en cada render del tbody.
+    // Paginación + buscador se re-inicializan en cada render del tbody. Sin
+    // sticky: estas tablas van una debajo de otra (una por grupo de conceptos),
+    // no en un panel de scroll acotado como las demás.
     for (const g of gruposVisibles) {
-      const tbody = tableHost.querySelector(`table[data-grupo="${g.key}"] tbody`);
+      const table = tableHost.querySelector(`table[data-grupo="${g.key}"]`);
       const host  = tableHost.querySelector(`[data-search-host="${g.key}"]`);
-      if (!tbody || !host) continue;
-      const pagination = initShowMorePagination(tbody, { pageSize: 50 });
-      initSearchCombobox(host, {
+      if (!table || !host) continue;
+      wireTableTools(table, {
         rows: filasPorGrupo.get(g.key) || [],
-        trEls: pagination.dataRows,
         getLabel: r => (r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`),
-        pagination,
+        searchEl: host,
+        sticky: false,
       });
     }
   }
