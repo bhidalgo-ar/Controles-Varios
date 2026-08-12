@@ -41,9 +41,9 @@ export const CONTROL_HELP = {
     </ol>
     <p class="help-popover__note">
       Semáforo por % de legajos con diferencia:
-      <b style="color:var(--ok-tx,#177A50);">verde</b> 0% ·
-      <b style="color:var(--warn-tx,#9A5A0B);">amarillo</b> ≤2% ·
-      <b style="color:var(--error-tx,#C0420F);">rojo</b> &gt;2%.
+      <b style="color:var(--ok-tx);">verde</b> 0% ·
+      <b style="color:var(--warn-tx);">amarillo</b> ≤2% ·
+      <b style="color:var(--error-tx);">rojo</b> &gt;2%.
     </p>
   `,
 };

@@ -1,7 +1,7 @@
 // nr.js — Control No Remunerativos (Control NR)
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -255,12 +255,6 @@ function renderNrDetalle(container, { diffRows, results }) {
   // Sólo listamos conceptos que efectivamente tienen alguna diferencia.
   const conceptsWithDiff = NR_CONCEPTS.filter(c => diffRows.some(r => isDif(r.valores[c.key].ctrl)));
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-
-  const leftGroup = document.createElement('div');
-  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
   const filterGroup = document.createElement('div');
   filterGroup.className = 'form-group';
   filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
@@ -274,16 +268,7 @@ function renderNrDetalle(container, { diffRows, results }) {
     </select>
   `;
 
-  const searchEl = document.createElement('div');
-
-  leftGroup.appendChild(filterGroup);
-  leftGroup.appendChild(searchEl);
-
-  const exportEl = document.createElement('div');
-
-  toolbar.appendChild(leftGroup);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
 
   // Exportar siempre incluye TODOS los legajos con diferencia y los 18
   // conceptos completos (igual que exportNrToXlsx) — el filtro de concepto de
@@ -483,12 +468,6 @@ function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, re
   const filteredResults = { ...results, rows: relevantRows };
 
   // ── Toolbar: filtro por concepto + buscador (izquierda) + exportar (derecha) ─
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-
-  const leftGroup = document.createElement('div');
-  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
   const filterGroup = document.createElement('div');
   filterGroup.className = 'form-group';
   filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
@@ -502,16 +481,7 @@ function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, re
     </select>
   `;
 
-  const searchEl = document.createElement('div');
-
-  leftGroup.appendChild(filterGroup);
-  leftGroup.appendChild(searchEl);
-
-  const exportEl = document.createElement('div');
-
-  toolbar.appendChild(leftGroup);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
 
   // Exportar siempre incluye TODOS los empleados con valores NR y las 18
   // columnas de conceptos completas (igual que exportNrReporteToXlsx) — el

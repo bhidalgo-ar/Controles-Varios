@@ -120,6 +120,16 @@ function metadataDeTabulado(fileData) {
 // Controles que usan la agrupación de conceptos de Rend vs Tabulado
 const REND_GROUPING_IDS = ['rend_vs_tabu', 'rend_x_ee'];
 
+// Resuelve un objeto de promesas por clave — el mismo `Promise.all` que hoy,
+// pero sin la fragilidad de destructurar un array por posición: acá desalinear
+// una entrada no puede meter la config de un control en el state de otro sin
+// ningún error, porque el resultado se lee por nombre y no por índice.
+async function promiseAllByKey(promisesByKey) {
+  const keys = Object.keys(promisesByKey);
+  const values = await Promise.all(keys.map(k => promisesByKey[k]));
+  return Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+}
+
 export async function renderControlsWizard(root, clientId) {
   const client = await getClient(clientId);
   if (!client) {
@@ -133,19 +143,28 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig, savedVariacionesConfig, savedVariacionesMap, groupers, allControlConfigs] = await Promise.all([
-    getControlConfig(client.code, 'brutos_tab_config'),
-    getClientCatalog(client.code),
-    getControlConfig(client.code, 'rendvstabu_concept_grouping'),
-    getControlConfig(client.code, 'rva_config'),
-    getControlConfig(client.code, 'agrupadores_config'),
-    getControlConfig(client.code, 'acreditaciones_config'),
-    getControlConfig(client.code, 'acumuladores_config'),
-    getControlConfig(client.code, 'variaciones_config'),
-    getControlConfig(client.code, 'variaciones_concept_map'),
-    getGroupers(client.code),
-    getControlConfigsForClient(client.code),
-  ]);
+  // Carga por clave, no por posición: un `Promise.all` de 11 promesas
+  // destructurado por orden no tiene ningún guard entre la lista y los nombres
+  // — desalinear una entrada mete la config de un control en el state de otro
+  // sin ningún error (Fase 4, Paso 0 del plan de escalabilidad).
+  const loaded = await promiseAllByKey({
+    savedBrutosConfig:         getControlConfig(client.code, 'brutos_tab_config'),
+    savedCatalog:              getClientCatalog(client.code),
+    savedRendGrouping:         getControlConfig(client.code, 'rendvstabu_concept_grouping'),
+    savedRvaConfig:            getControlConfig(client.code, 'rva_config'),
+    savedAgrupadoresConfig:    getControlConfig(client.code, 'agrupadores_config'),
+    savedAcreditacionesConfig: getControlConfig(client.code, 'acreditaciones_config'),
+    savedAcumuladoresConfig:   getControlConfig(client.code, 'acumuladores_config'),
+    savedVariacionesConfig:    getControlConfig(client.code, 'variaciones_config'),
+    savedVariacionesMap:       getControlConfig(client.code, 'variaciones_concept_map'),
+    groupers:                  getGroupers(client.code),
+    allControlConfigs:         getControlConfigsForClient(client.code),
+  });
+  const {
+    savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig,
+    savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig,
+    savedVariacionesConfig, savedVariacionesMap, groupers, allControlConfigs,
+  } = loaded;
 
   // controlConfigs por controlId — se usa para resolver qué controles aplican a
   // este cliente: un `forzado_activo`/`forzado_no_aplica` cargado desde #/admin

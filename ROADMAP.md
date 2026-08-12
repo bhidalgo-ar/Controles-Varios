@@ -62,9 +62,9 @@ El orden importa: F1 destraba a las demás, y F5 es lo que evita que todo esto v
 |---|---|---|
 | F0 | Bugs que dan un resultado incorrecto hoy | hecho ✅ (2026-08-12) — quedan 2 abiertos a propósito: el badge en dark mode se lo lleva F2, y el fallback de NR/GS Pers espera un Tabulado real (D-039) |
 | F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | planeado — **bloqueada** por dos decisiones de Willy (ver el spec de fases) |
-| F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | planeado — la que se puede arrancar sin decisión previa |
-| F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado |
-| F4 | `fileTypes.js` con un mapa único, config declarada en el registry, matar el `Promise.all` posicional | planeado |
+| F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | en curso (2026-08-12) — `createResultsToolbar()` hecho para 9/15 sitios, hex de JS cerrado; falta `css/components.css` (sin tocar a propósito, necesita navegador real) y el resto de la lista |
+| F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado — pendiente de decisión de Willy: qué recordar del toggle "sólo con diferencia/todos" |
+| F4 | `fileTypes.js` con un mapa único, config declarada en el registry, matar el `Promise.all` posicional | en curso (2026-08-12) — Paso 0 (`Promise.all` por clave en `controlsWizard.js`) hecho; el resto sigue planeado |
 | F5 | Skill `nuevo-control`: de "copiá X" a "importá X", una vez que exista el módulo de F1 | planeado |
 
 F5 no es cosmético: el skill mandaba a copiar el helper de consolidación, y por eso el mismo bug se

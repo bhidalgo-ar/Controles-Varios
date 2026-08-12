@@ -1,7 +1,7 @@
 // gsPers.js — Controles de Gastos Personales y Cochera (GS Pers)
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -202,12 +202,6 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
     return;
   }
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-
-  const leftGroup = document.createElement('div');
-  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select form-select--sm';
   filterSel.innerHTML = `
@@ -216,14 +210,7 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
   `;
   if (diffRows.length === 0) filterSel.value = 'all';
 
-  const searchEl = document.createElement('div');
-  leftGroup.appendChild(filterSel);
-  leftGroup.appendChild(searchEl);
-
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(leftGroup);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterSel });
 
   const csvHeaders = ['Legajo', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'GTOS_PERSONALES (Tab)', 'DTO_COCHERA (Tab)'];
   const csvRows = () => relevantRows.map(r => [r.legajo, fmt(r.gtos), fmt(r.ctrlGtos), fmt(r.dto), fmt(r.ctrlDto), fmt(r.tabValGtos), fmt(r.tabValDto)]);
@@ -423,12 +410,7 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
   const fmtTxt = v => v === null ? '—' : esc(String(v));
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
+  const { searchEl, exportEl } = createResultsToolbar(container);
 
   const tableWrap = document.createElement('div');
   tableWrap.innerHTML = `
@@ -452,7 +434,6 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
     </table>
   `;
 
-  container.appendChild(toolbar);
   container.appendChild(tableWrap);
 
   const tbodyEl = tableWrap.querySelector('tbody');

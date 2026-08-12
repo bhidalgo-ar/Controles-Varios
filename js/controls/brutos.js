@@ -1,7 +1,7 @@
 // brutos.js — Controles del Reporte de Brutos
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -215,12 +215,6 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
   }
 
   // Barra: filtro Sólo con diferencia/Todos (izquierda) + buscador + exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-
-  const leftGroup = document.createElement('div');
-  leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select form-select--sm';
   filterSel.innerHTML = `
@@ -229,14 +223,7 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
   `;
   if (diffRows.length === 0) filterSel.value = 'all';
 
-  const searchEl = document.createElement('div');
-  leftGroup.appendChild(filterSel);
-  leftGroup.appendChild(searchEl);
-
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(leftGroup);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterSel });
 
   // Exportar siempre incluye todos los legajos evaluados, sin importar el filtro de pantalla.
   const csvHeaders = ['Legajo', 'Nombre', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)'];
@@ -452,12 +439,7 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
   const fmtTxt = v => v === null ? '—' : esc(String(v));
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
+  const { searchEl, exportEl } = createResultsToolbar(container);
 
   // Tabla
   const tableWrap = document.createElement('div');
@@ -482,7 +464,6 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
     </table>
   `;
 
-  container.appendChild(toolbar);
   container.appendChild(tableWrap);
 
   const tbodyEl = tableWrap.querySelector('tbody');
