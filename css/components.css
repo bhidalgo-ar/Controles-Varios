@@ -1273,9 +1273,20 @@
    control que reconstruye el <tbody> al ordenar (ver rendVsAsiento.js). */
 .rb-grid-wrap { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
 table.rb-grid { border-collapse: separate; border-spacing: 0; width: 100%; }
+/* El encabezado de una grid es neutro, no el teal de `.data-table thead`: los
+   controles pintan sus columnas con tintes translúcidos (rgba …, 0.18) que sólo
+   se leen como tinte sobre un fondo neutro. Por eso va también el `color`: sin
+   él quedaba el `var(--color-white)` que hereda de `.data-table thead`, o sea
+   texto blanco sobre gris claro — el encabezado entero ilegible en modo claro
+   (en oscuro `--color-bg-subtle` es #181E22 y no se notaba, que es por lo que
+   estuvo así). Se arregla en la clase compartida y alcanza a los 15 lugares que
+   llaman a `enhanceGrid()`. */
+table.rb-grid thead {
+  background: var(--color-bg-subtle); color: var(--color-text);
+}
 table.rb-grid thead th {
   position: sticky; top: 0; z-index: 3;
-  background: var(--color-bg-subtle); box-shadow: 0 1px 0 var(--line);
+  background: var(--color-bg-subtle); color: var(--color-text); box-shadow: 0 1px 0 var(--line);
 }
 table.rb-grid tfoot td {
   position: sticky; bottom: 0; z-index: 2;
@@ -1288,6 +1299,12 @@ table.rb-grid.rb-grid--stick2 tbody > tr > :first-child,
 table.rb-grid.rb-grid--stick1 tfoot > tr > :first-child,
 table.rb-grid.rb-grid--stick2 tfoot > tr > :first-child {
   position: sticky; left: 0; z-index: 1; background: var(--color-surface); box-shadow: 1px 0 0 var(--line);
+}
+/* La 1ª columna del encabezado es encabezado, no celda de cuerpo: con
+   `--color-surface` (blanco en claro) quedaba el "Legajo" en blanco sobre blanco. */
+table.rb-grid.rb-grid--stick1 thead tr:first-child > :first-child,
+table.rb-grid.rb-grid--stick2 thead tr:first-child > :first-child {
+  background: var(--color-bg-subtle);
 }
 /* Ancho DECLARADO (--rb-stick1-width, ver enhanceGrid en resultBlocks.js) —
    nunca medido en runtime, para que el 2º sticky no se desalinee al
