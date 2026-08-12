@@ -6,6 +6,8 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
+import { EXPORT_CONTRACTS } from '../exports/contracts.js';
+import { writeContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -22,6 +24,18 @@ import {
 
 export function summarizeGsPers(results) {
   const s = results.summary;
+  const rows = results.rows;
+
+  // Evaluado = los DOS lados tenían dato — no "algún valor real en cualquiera
+  // de los dos" (eso es `gsPersHasAnyValue`, más abajo). Mismo mecanismo que
+  // brutos.js: si `gtosPersonalesColumn` nunca se mapeó en el archivo de GS
+  // Pers, "0 diferencias" no es un resultado limpio, es que no se comparó
+  // nada (Paso 5 de specs/contrato-export.md — D-041).
+  const evalGtos       = rows.filter(r => r.ctrlGtos !== null).length;
+  const evalDto        = rows.filter(r => r.ctrlDto  !== null).length;
+  const unitsEvaluated = rows.filter(r => r.ctrlGtos !== null || r.ctrlDto !== null).length;
+  const nadaEvaluado   = s.total > 0 && unitsEvaluated === 0;
+
   const hasDiff = s.conDifGtos > 0 || s.conDifDto > 0;
 
   const { unitsWithDiff, diffTotalAmount, worstCase } = diffStats(
@@ -35,27 +49,32 @@ export function summarizeGsPers(results) {
   const concepts = [];
   if (s.conDifGtos > 0) concepts.push('GTOS_PERSONALES');
   if (s.conDifDto > 0)  concepts.push('DTO_COCHERA');
-  const contextNote = concepts.length === 0
+  const contextNote = nadaEvaluado
+    ? 'sin datos para comparar — revisá el mapeo del archivo de GS Pers'
+    : concepts.length === 0
     ? 'GTOS_PERSONALES y DTO_COCHERA verificados'
     : concepts.length === 1 ? `todos en ${concepts[0]}` : concepts.join(' y ');
 
   return {
-    status:   hasDiff ? 'warning' : 'success',
-    headline: `${s.total} registros · ${s.sinTabData} sin datos en Tabulado`,
+    status:   nadaEvaluado ? 'error' : (hasDiff ? 'warning' : 'success'),
+    headline: nadaEvaluado
+      ? `${s.total} registros · ninguno se pudo comparar`
+      : `${s.total} registros · ${s.sinTabData} sin datos en Tabulado`,
     insights: [
       {
-        type:  s.conDifGtos > 0 ? 'warning' : 'success',
-        label: 'diferencias GTOS_PERSONALES vs Tabulado',
-        value: s.conDifGtos,
+        type:  evalGtos === 0 ? 'warning' : (s.conDifGtos > 0 ? 'warning' : 'success'),
+        label: evalGtos === 0 ? 'GTOS_PERSONALES — sin datos para comparar' : 'diferencias GTOS_PERSONALES vs Tabulado',
+        value: evalGtos === 0 ? 0 : s.conDifGtos,
       },
       {
-        type:  s.conDifDto > 0 ? 'warning' : 'success',
-        label: 'diferencias DTO_COCHERA vs Tabulado',
-        value: s.conDifDto,
+        type:  evalDto === 0 ? 'warning' : (s.conDifDto > 0 ? 'warning' : 'success'),
+        label: evalDto === 0 ? 'DTO_COCHERA — sin datos para comparar' : 'diferencias DTO_COCHERA vs Tabulado',
+        value: evalDto === 0 ? 0 : s.conDifDto,
       },
     ],
     unit: 'legajo',
     unitsTotal: s.total,
+    unitsEvaluated,
     unitsWithDiff,
     diffTotalAmount,
     worstCase,
@@ -141,8 +160,20 @@ export function renderGsPersResults(results, container) {
 
   const relevantRows = rows.filter(gsPersHasAnyValue);
   const diffRows     = relevantRows.filter(gsPersRowHasDiff);
-  const okCount      = relevantRows.length - diffRows.length;
   const noValueCount = rows.length - relevantRows.length;
+
+  // Evaluado = los DOS lados tenían dato — ver el comentario largo en
+  // renderBrutosResults. Mismo mecanismo, mismo motivo (D-041, Paso 5).
+  const evalGtos       = rows.filter(r => r.ctrlGtos !== null).length;
+  const evalDto        = rows.filter(r => r.ctrlDto  !== null).length;
+  const unitsEvaluated = rows.filter(r => r.ctrlGtos !== null || r.ctrlDto !== null).length;
+  const nadaEvaluado   = rows.length > 0 && evalGtos === 0 && evalDto === 0;
+  // Con dato real en algún lado pero sin par para comparar — mismo hueco que
+  // en brutos.js, mismo motivo.
+  const noEvaluatedCount = relevantRows.length - unitsEvaluated;
+  // "Sin diferencia" es sobre lo EVALUADO, no sobre "algún valor real en
+  // cualquier lado" (relevantRows) — ver el comentario largo en brutos.js.
+  const okCount = unitsEvaluated - diffRows.length;
 
   const sumGtos    = relevantRows.reduce((s, r) => s + (r.gtos       ?? 0), 0);
   const sumGtosTab = relevantRows.reduce((s, r) => s + (r.tabValGtos ?? 0), 0);
@@ -155,24 +186,34 @@ export function renderGsPersResults(results, container) {
 
   renderResumenDetalle(container, {
     resumen(panel) {
-      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      const tone = nadaEvaluado ? 'error' : (diffRows.length === 0 ? 'ok' : 'warn');
       renderVerdict(panel, {
         tone,
-        title: diffRows.length === 0
+        title: nadaEvaluado
+          ? 'No se pudo comparar ningún legajo.'
+          : diffRows.length === 0
           ? 'GTOS_PERSONALES y DTO_COCHERA coinciden con el Tabulado en todos los legajos.'
-          : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en GTOS_PERSONALES o DTO_COCHERA.`,
-        body: diffRows.length === 0
-          ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} con algún valor real, verificados contra el Tabulado sin diferencias.`
+          : `${diffRows.length} de ${unitsEvaluated} legajos tienen diferencia en GTOS_PERSONALES o DTO_COCHERA.`,
+        body: nadaEvaluado
+          ? 'El archivo de GS Pers no aportó ningún valor en GTOS_PERSONALES ni en DTO_COCHERA — revisá el mapeo de columnas de ese archivo.'
+          : diffRows.length === 0
+          ? `${unitsEvaluated} legajo${unitsEvaluated === 1 ? '' : 's'} con algún valor real, verificados contra el Tabulado sin diferencias.`
           : `Diferencia total de <strong>${fmt(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmt(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Detalle».`,
       });
 
       renderTiles(panel, [
-        { label: 'Legajos evaluados', value: relevantRows.length,
-          sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de GS Pers' },
+        { label: 'Legajos evaluados', value: unitsEvaluated,
+          sub: noEvaluatedCount > 0
+            ? `${noEvaluatedCount} con dato de un solo lado (sin comparar)`
+            : noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de GS Pers' },
         { label: 'Sin diferencia', value: okCount, tone: 'ok' },
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
-        { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
-        { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
+        evalGtos === 0
+          ? { label: 'GTOS_PERSONALES', value: 'sin datos para comparar', tone: 'error' }
+          : { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
+        evalDto === 0
+          ? { label: 'DTO_COCHERA', value: 'sin datos para comparar', tone: 'error' }
+          : { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -367,6 +408,8 @@ export function summarizeGsPersReporte(results) {
   };
 }
 
+const GS_PERS_REPORTE_CONTRACT = EXPORT_CONTRACTS.gs_pers_reporte;
+
 export function renderGsPersReporteResults(results, container) {
   const { rows, cols } = results;
 
@@ -375,21 +418,11 @@ export function renderGsPersReporteResults(results, container) {
     return;
   }
 
-  const colDefs = [
-    { label: 'FECHA_INI',         key: 'fecIni',    type: 'txt' },
-    { label: 'FECHA_FIN',         key: 'fecFin',    type: 'txt' },
-    { label: 'ID_EMPLEADO',       key: 'legajo',    type: 'txt' },
-    cols.hasNombre    && { label: 'NOMBRE',         key: 'nombre',    type: 'txt' },
-    cols.hasApellido1 && { label: 'APELLIDO_1',     key: 'apellido1', type: 'txt' },
-    cols.hasFecPago   && { label: 'FEC_PAG',        key: 'fecPago',   type: 'txt' },
-    cols.hasFecAlta   && { label: 'FECHA_ALTA',     key: 'fecAlta',   type: 'txt' },
-    cols.hasIdCC      && { label: 'ID_CENTRO_COSTO', key: 'idCC',     type: 'txt' },
-    cols.hasGtos      && { label: 'GTOS_PERSONALES', key: 'gtos',     type: 'num' },
-    cols.hasDto       && { label: 'DTO_COCHERA',     key: 'dto',      type: 'num' },
-    cols.hasNCC       && { label: 'N_CENTRO_COSTO',  key: 'nCC',      type: 'txt' },
-  ].filter(Boolean);
-
-  const sinColumnas = colDefs.length <= 3;
+  // Columnas: SIEMPRE las 11 del contrato, en su orden — layout:'fijo'
+  // (D-041, Paso 4a). Antes desaparecían con `cols.has*`; ahora pantalla,
+  // CSV y xlsx leen las tres de `GS_PERS_REPORTE_CONTRACT.columns`.
+  const colDefs = contractColDefs(GS_PERS_REPORTE_CONTRACT);
+  const sinColumnas = !Object.values(cols).some(Boolean);
 
   container.innerHTML = '';
 
@@ -405,9 +438,10 @@ export function renderGsPersReporteResults(results, container) {
           : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
       });
       if (!sinColumnas) {
+        const mapeadas = 3 + Object.values(cols).filter(Boolean).length;
         renderTiles(panel, [
           { label: 'Registros', value: rows.length },
-          { label: 'Columnas mapeadas', value: `${colDefs.length} / 11` },
+          { label: 'Columnas mapeadas', value: `${mapeadas} / ${colDefs.length}` },
         ]);
       }
     },
@@ -562,56 +596,13 @@ async function exportGsPersToXlsx(results) {
 
 async function exportGsPersReporteToXlsx(results) {
   await loadExcelJS();
-  const { rows, cols } = results;
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Reporte GS Pers');
-
-  const colDefs = [
-    { label: 'FECHA_INI',          key: 'fecIni',    type: 'txt', width: 14 },
-    { label: 'FECHA_FIN',          key: 'fecFin',    type: 'txt', width: 14 },
-    { label: 'ID_EMPLEADO',        key: 'legajo',    type: 'txt', width: 12 },
-    cols.hasNombre    && { label: 'NOMBRE',           key: 'nombre',    type: 'txt', width: 22 },
-    cols.hasApellido1 && { label: 'APELLIDO_1',       key: 'apellido1', type: 'txt', width: 22 },
-    cols.hasFecPago   && { label: 'FEC_PAG',          key: 'fecPago',   type: 'txt', width: 14 },
-    cols.hasFecAlta   && { label: 'FECHA_ALTA',       key: 'fecAlta',   type: 'txt', width: 14 },
-    cols.hasIdCC      && { label: 'ID_CENTRO_COSTO',  key: 'idCC',      type: 'txt', width: 16 },
-    cols.hasGtos      && { label: 'GTOS_PERSONALES',  key: 'gtos',      type: 'num', width: 18 },
-    cols.hasDto       && { label: 'DTO_COCHERA',      key: 'dto',       type: 'num', width: 18 },
-    cols.hasNCC       && { label: 'N_CENTRO_COSTO',   key: 'nCC',       type: 'txt', width: 22 },
-  ].filter(Boolean);
-
-  ws.columns = colDefs.map(c => ({ width: c.width }));
-
-  const hdr = ws.addRow(colDefs.map(c => c.label));
-  hdr.height = 20;
-  hdr.eachCell(cell => {
-    cell.font      = { name: 'Calibri', size: 10, bold: true };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  const numFmt = '#,##0.00';
-  for (const r of rows) {
-    const values = colDefs.map(c => r[c.key]);
-    const dr = ws.addRow(values);
-    colDefs.forEach((c, i) => {
-      const cell = dr.getCell(i + 1);
-      cell.font = { name: 'Calibri', size: 10 };
-      if (c.type === 'num') {
-        cell.numFmt    = numFmt;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      } else {
-        cell.alignment = { vertical: 'middle' };
-      }
-    });
-  }
+  // Única fuente de las 11 columnas — layout:'fijo' (Paso 4a).
+  writeContractSheet(wb, GS_PERS_REPORTE_CONTRACT, results.rows);
 
   await downloadWorkbook(wb, `GsPers_Reporte_${periodSuffix(results.period)}.xlsx`);
 }

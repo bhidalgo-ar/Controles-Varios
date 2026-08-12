@@ -6,6 +6,8 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
+import { EXPORT_CONTRACTS } from '../exports/contracts.js';
+import { writeContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -23,6 +25,20 @@ import {
 
 export function summarizeBrutos(results) {
   const s = results.summary;
+  const rows = results.rows;
+
+  // Evaluado = los DOS lados tenían dato (ctrlXxx !== null) — no confundir con
+  // "algún valor real en cualquiera de los dos lados" (eso es lo que hace
+  // `brutosHasAnyValue`, más abajo). Si el archivo de Brutos nunca tuvo
+  // `salBaseColumn` mapeado, `salBase` es `null` en TODAS las filas: `conDif`
+  // sale en 0 igual, y "0 diferencias" se leía como "verificado, todo bien"
+  // cuando en realidad no se comparó ni un legajo (Paso 5 de
+  // specs/contrato-export.md — D-041).
+  const evalSalBase     = rows.filter(r => r.ctrlSalBase     !== null).length;
+  const evalACuFutAumen = rows.filter(r => r.ctrlACuFutAumen !== null).length;
+  const unitsEvaluated  = rows.filter(r => r.ctrlSalBase !== null || r.ctrlACuFutAumen !== null).length;
+  const nadaEvaluado    = s.total > 0 && unitsEvaluated === 0;
+
   const hasDiff = s.conDifSalario > 0 || s.conDifACuFutAumen > 0;
 
   const { unitsWithDiff, diffTotalAmount, worstCase } = diffStats(
@@ -36,27 +52,36 @@ export function summarizeBrutos(results) {
   const concepts = [];
   if (s.conDifSalario > 0)     concepts.push('SAL_BASE');
   if (s.conDifACuFutAumen > 0) concepts.push('A_CTA_FUT_AUMEN');
-  const contextNote = concepts.length === 0
+  const contextNote = nadaEvaluado
+    ? 'sin datos para comparar — revisá el mapeo del archivo de Brutos'
+    : concepts.length === 0
     ? 'SAL_BASE y A_CTA_FUT_AUMEN verificados'
     : concepts.length === 1 ? `todos en ${concepts[0]}` : concepts.join(' y ');
 
   return {
-    status:   hasDiff ? 'warning' : 'success',
-    headline: `${s.total} registros · ${s.sinTabData} sin datos en Tabulado`,
+    // `nadaEvaluado` fuerza 'error' — mismo mecanismo que ya usa este campo
+    // para cortocircuitar el semáforo (CLAUDE.md: "el status crudo... es para
+    // cortocircuitar en 'error'"). Un control que verificó CERO legajos de
+    // los que tenía no es un resultado limpio, aunque unitsWithDiff sea 0.
+    status:   nadaEvaluado ? 'error' : (hasDiff ? 'warning' : 'success'),
+    headline: nadaEvaluado
+      ? `${s.total} registros · ninguno se pudo comparar`
+      : `${s.total} registros · ${s.sinTabData} sin datos en Tabulado`,
     insights: [
       {
-        type:  s.conDifSalario > 0 ? 'warning' : 'success',
-        label: 'diferencias SAL_BASE vs Tabulado',
-        value: s.conDifSalario,
+        type:  evalSalBase === 0 ? 'warning' : (s.conDifSalario > 0 ? 'warning' : 'success'),
+        label: evalSalBase === 0 ? 'SAL_BASE — sin datos para comparar' : 'diferencias SAL_BASE vs Tabulado',
+        value: evalSalBase === 0 ? 0 : s.conDifSalario,
       },
       {
-        type:  s.conDifACuFutAumen > 0 ? 'warning' : 'success',
-        label: 'diferencias A_CTA_FUT_AUMEN vs Tabulado',
-        value: s.conDifACuFutAumen,
+        type:  evalACuFutAumen === 0 ? 'warning' : (s.conDifACuFutAumen > 0 ? 'warning' : 'success'),
+        label: evalACuFutAumen === 0 ? 'A_CTA_FUT_AUMEN — sin datos para comparar' : 'diferencias A_CTA_FUT_AUMEN vs Tabulado',
+        value: evalACuFutAumen === 0 ? 0 : s.conDifACuFutAumen,
       },
     ],
     unit: 'legajo',
     unitsTotal: s.total,
+    unitsEvaluated,
     unitsWithDiff,
     diffTotalAmount,
     worstCase,
@@ -153,8 +178,29 @@ export function renderBrutosResults(results, container) {
 
   const relevantRows = rows.filter(brutosHasAnyValue);
   const diffRows      = relevantRows.filter(brutosRowHasDiff);
-  const okCount        = relevantRows.length - diffRows.length;
   const noValueCount    = rows.length - relevantRows.length;
+
+  // Evaluado = los DOS lados tenían dato — DISTINTO de `relevantRows`, que
+  // sólo pide algún valor real en CUALQUIERA de los dos lados. Si el archivo
+  // de Brutos nunca tuvo `salBaseColumn` mapeado pero el Tabulado sí tiene
+  // sueldos reales, `relevantRows` sale grande (el Tabulado aporta el valor) y
+  // `diffRows` sale en 0 (nunca hay par para comparar) — la pantalla decía
+  // "coinciden... sin diferencias" sin haber comparado un solo legajo (Paso 5
+  // de specs/contrato-export.md — D-041).
+  const evalSalBase     = rows.filter(r => r.ctrlSalBase     !== null).length;
+  const evalACuFutAumen = rows.filter(r => r.ctrlACuFutAumen !== null).length;
+  const unitsEvaluated  = rows.filter(r => r.ctrlSalBase !== null || r.ctrlACuFutAumen !== null).length;
+  const nadaEvaluado    = rows.length > 0 && evalSalBase === 0 && evalACuFutAumen === 0;
+  // Con dato real en algún lado, pero sin par para comparar (el otro lado
+  // vacío) — el hueco que `relevantRows.length - diffRows.length` tapaba
+  // antes contando estos legajos como "sin diferencia".
+  const noEvaluatedCount = relevantRows.length - unitsEvaluated;
+  // "Sin diferencia" es sobre lo EVALUADO, no sobre "relevantRows" (algún
+  // valor real en cualquier lado): antes de este fix, un legajo con dato real
+  // sólo del lado Tabulado (el archivo sin mapear) contaba como "sin
+  // diferencia" — no se había comparado nada, así que tampoco había "sin
+  // diferencia" que reportar.
+  const okCount = unitsEvaluated - diffRows.length;
 
   const sumSalBrutos = relevantRows.reduce((s, r) => s + (r.salBase   ?? 0), 0);
   const sumSalTab    = relevantRows.reduce((s, r) => s + (r.tabValSal ?? 0), 0);
@@ -167,24 +213,34 @@ export function renderBrutosResults(results, container) {
 
   renderResumenDetalle(container, {
     resumen(panel) {
-      const tone = diffRows.length === 0 ? 'ok' : 'warn';
+      const tone = nadaEvaluado ? 'error' : (diffRows.length === 0 ? 'ok' : 'warn');
       renderVerdict(panel, {
         tone,
-        title: diffRows.length === 0
+        title: nadaEvaluado
+          ? 'No se pudo comparar ningún legajo.'
+          : diffRows.length === 0
           ? 'SAL_BASE y A_CTA_FUT_AUMEN coinciden con el Tabulado en todos los legajos.'
-          : `${diffRows.length} de ${relevantRows.length} legajos tienen diferencia en SAL_BASE o A_CTA_FUT_AUMEN.`,
-        body: diffRows.length === 0
-          ? `${relevantRows.length} legajo${relevantRows.length === 1 ? '' : 's'} verificados contra el Tabulado, sin diferencias.`
+          : `${diffRows.length} de ${unitsEvaluated} legajos tienen diferencia en SAL_BASE o A_CTA_FUT_AUMEN.`,
+        body: nadaEvaluado
+          ? 'El archivo de Brutos no aportó ningún valor en SAL_BASE ni en A_CTA_FUT_AUMEN — revisá el mapeo de columnas de ese archivo.'
+          : diffRows.length === 0
+          ? `${unitsEvaluated} legajo${unitsEvaluated === 1 ? '' : 's'} verificados contra el Tabulado, sin diferencias.`
           : `Diferencia total de <strong>${fmt(diffSal)}</strong> en SAL_BASE y <strong>${fmt(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Detalle».`,
       });
 
       renderTiles(panel, [
-        { label: 'Legajos evaluados', value: relevantRows.length,
-          sub: noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de Brutos' },
+        { label: 'Legajos evaluados', value: unitsEvaluated,
+          sub: noEvaluatedCount > 0
+            ? `${noEvaluatedCount} con dato de un solo lado (sin comparar)`
+            : noValueCount > 0 ? `${noValueCount} sin valor real (no se muestran)` : 'del Reporte de Brutos' },
         { label: 'Sin diferencia', value: okCount, tone: 'ok' },
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
-        { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
-        { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
+        evalSalBase === 0
+          ? { label: 'SAL_BASE', value: 'sin datos para comparar', tone: 'error' }
+          : { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
+        evalACuFutAumen === 0
+          ? { label: 'A_CTA_FUT_AUMEN', value: 'sin datos para comparar', tone: 'error' }
+          : { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -385,6 +441,8 @@ export function summarizeBrutosReporte(results) {
   };
 }
 
+const BRUTOS_REPORTE_CONTRACT = EXPORT_CONTRACTS.brutos_reporte;
+
 export function renderBrutosReporteResults(results, container) {
   const { rows, cols } = results;
 
@@ -393,25 +451,18 @@ export function renderBrutosReporteResults(results, container) {
     return;
   }
 
-  // Definición de columnas activas (orden idéntico al archivo de Brutos)
-  const colDefs = [
-    { label: 'FECHA_INI',                            key: 'fecIni',      type: 'txt' },
-    { label: 'FECHA_FIN',                            key: 'fecFin',      type: 'txt' },
-    { label: 'ID_EMPLEADO',                          key: 'legajo',      type: 'txt' },
-    cols.hasNombre    && { label: 'NOMBRE',           key: 'nombre',      type: 'txt' },
-    cols.hasApellido1 && { label: 'APELLIDO_1',       key: 'apellido1',   type: 'txt' },
-    cols.hasFecAlta   && { label: 'FECHA_ALTA',       key: 'fecAlta',     type: 'txt' },
-    cols.hasFecBaja   && { label: 'FECHA_BAJA',       key: 'fecBaja',     type: 'txt' },
-    cols.hasFecPago   && { label: 'FEC_PAGO',         key: 'fecPago',     type: 'txt' },
-    cols.hasSalBase   && { label: 'SAL_BASE',         key: 'salBase',     type: 'num' },
-    cols.hasACuFut    && { label: 'A_CTA_FUT_AUMEN',  key: 'aCuFutAumen', type: 'num' },
-    cols.hasPuesto    && { label: 'N_PUESTO',         key: 'puesto',      type: 'txt' },
-  ].filter(Boolean);
+  // Columnas: SIEMPRE las 11 del contrato, en su orden — layout:'fijo'
+  // (D-041). Antes esta lista se armaba con `cols.has*` y la columna
+  // DESAPARECÍA si la clave de origen no estaba mapeada (Paso 4a de
+  // specs/contrato-export.md); ahora sale igual para pantalla, CSV y xlsx
+  // porque las tres leen `BRUTOS_REPORTE_CONTRACT.columns` — un solo lugar.
+  const colDefs = contractColDefs(BRUTOS_REPORTE_CONTRACT);
 
-  // Las 3 primeras entradas de `colDefs` son incondicionales: "sin columnas
-  // configuradas" es que no haya ninguna más. Con el `<= 1` que estaba acá el
-  // aviso nunca se mostraba (gsPers.js ya tenía el umbral correcto).
-  const sinColumnas = colDefs.length <= 3;
+  // "Sin columnas configuradas" ya no se puede leer del largo de `colDefs`
+  // (ahora siempre son 11): es que ninguna de las columnas opcionales del
+  // Tabulado esté mapeada — el reporte sale igual, pero vacío salvo
+  // FECHA_INI/FECHA_FIN/ID_EMPLEADO.
+  const sinColumnas = !Object.values(cols).some(Boolean);
 
   container.innerHTML = '';
 
@@ -427,9 +478,10 @@ export function renderBrutosReporteResults(results, container) {
           : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
       });
       if (!sinColumnas) {
+        const mapeadas = 3 + Object.values(cols).filter(Boolean).length; // 3 fijas + opcionales
         renderTiles(panel, [
           { label: 'Registros', value: rows.length },
-          { label: 'Columnas mapeadas', value: `${colDefs.length} / 11` },
+          { label: 'Columnas mapeadas', value: `${mapeadas} / ${colDefs.length}` },
         ]);
       }
     },
@@ -590,58 +642,14 @@ async function exportBrutosToXlsx(results) {
 
 async function exportBrutosReporteToXlsx(results) {
   await loadExcelJS();
-  const { rows, cols } = results;
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Reporte de Brutos');
-
-  // Columnas activas (orden idéntico al archivo de Brutos)
-  const colDefs = [
-    { label: 'FECHA_INI',                             key: 'fecIni',      type: 'txt', width: 14 },
-    { label: 'FECHA_FIN',                             key: 'fecFin',      type: 'txt', width: 14 },
-    { label: 'ID_EMPLEADO',        key: 'legajo',     type: 'txt', width: 12 },
-    cols.hasNombre    && { label: 'NOMBRE',            key: 'nombre',      type: 'txt', width: 22 },
-    cols.hasApellido1 && { label: 'APELLIDO_1',        key: 'apellido1',   type: 'txt', width: 22 },
-    cols.hasFecAlta   && { label: 'FECHA_ALTA',        key: 'fecAlta',     type: 'txt', width: 14 },
-    cols.hasFecBaja   && { label: 'FECHA_BAJA',        key: 'fecBaja',     type: 'txt', width: 14 },
-    cols.hasFecPago   && { label: 'FEC_PAGO',          key: 'fecPago',     type: 'txt', width: 14 },
-    cols.hasSalBase   && { label: 'SAL_BASE',          key: 'salBase',     type: 'num', width: 18 },
-    cols.hasACuFut    && { label: 'A_CTA_FUT_AUMEN',   key: 'aCuFutAumen', type: 'num', width: 20 },
-    cols.hasPuesto    && { label: 'N_PUESTO',          key: 'puesto',      type: 'txt', width: 14 },
-  ].filter(Boolean);
-
-  ws.columns = colDefs.map(c => ({ width: c.width }));
-
-  // Fila de encabezado
-  const hdr = ws.addRow(colDefs.map(c => c.label));
-  hdr.height = 20;
-  hdr.eachCell(cell => {
-    cell.font      = { name: 'Calibri', size: 10, bold: true };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  const numFmt = '#,##0.00';
-  for (const r of rows) {
-    const values = colDefs.map(c => r[c.key]);
-    const dr = ws.addRow(values);
-    colDefs.forEach((c, i) => {
-      const cell = dr.getCell(i + 1);
-      cell.font = { name: 'Calibri', size: 10 };
-      if (c.type === 'num') {
-        cell.numFmt    = numFmt;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      } else {
-        cell.alignment = { vertical: 'middle' };
-      }
-    });
-  }
+  // Única fuente de las 11 columnas — layout:'fijo' (Paso 4a): salen siempre
+  // las mismas, en el mismo orden que la tabla de pantalla y el CSV.
+  writeContractSheet(wb, BRUTOS_REPORTE_CONTRACT, results.rows);
 
   await downloadWorkbook(wb, `Brutos_Reporte_${periodSuffix(results.period)}.xlsx`);
 }

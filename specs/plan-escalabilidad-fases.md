@@ -265,20 +265,21 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-12.** Las Fases 0, 1 y 5 están cerradas. Lo que sigue, en orden de menor a mayor
-tamaño:
+**Actualizado el 2026-08-13.** Las Fases 0, 1 y 5 están cerradas. Los Pasos 4a y 5 del contrato de export
+también (`specs/contrato-export.md`) — el Paso 5 cerró el último falso verde conocido: Brutos/GS Pers con
+la columna del archivo sin mapear pasaban por "0 diferencias = todo bien" cuando en realidad no se había
+comparado un solo legajo. Lo que sigue, en orden de menor a mayor tamaño:
 
-1. **Pasos 4a y 5 del contrato de export** (`specs/contrato-export.md`) — desbloqueados desde que Willy
-   respondió "que salga vacía". El Paso 5 (separar "no evaluado" de "sin diferencia" en el semáforo) es el
-   que mata el último falso verde conocido.
-2. **Cerrar la Fase 2** — queda `css/components.css`, que hay que hacer con la app abierta en un navegador
-   real en modo claro y oscuro (más blast radius que un `style=""` puntual, y no se puede verificar a
-   ciegas). Willy también tiene que confirmar visualmente el panel "Columnas del Tabulado" de Brutos en dark
-   mode, que se arregló sin poder verlo.
-3. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
+1. **Cerrar la Fase 2** — queda `css/components.css`, con la app en un navegador real en modo claro y
+   oscuro. Deja de estar bloqueado por "no se puede verificar a ciegas desde este entorno": desde el
+   2026-08-13 hay Chromium disponible en el sandbox (`PLAYWRIGHT_CHROMIUM_PATH`), así que esto ya se puede
+   hacer sin esperar a que Willy abra la app — igual conviene que confirme el resultado.
+2. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
    preferencia de vista por control ya no está bloqueada: Willy confirmó el 2026-08-12 que el toggle "sólo
    con diferencia / todos" está bien como está por default, y que lo que cada control puede agregar es una
    agrupación propia que le sirva.
+3. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
+   (des-duplicación, no fix de comportamiento) y que el resto de los controles declare su contrato.
 4. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
 5. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
    sobre parsers todavía duplicados hereda la duplicación.

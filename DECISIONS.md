@@ -678,3 +678,53 @@ entregables, y el legajo de 9 liquidaciones sumando 30.000 en los dos lados.
 ambigüedad semántica — no es la clase de duplicación que produce bugs); el override de clave de legajo por
 corrida (ver D-038, punto 2); y los 6 puntos de integración de un control nuevo, que esta entrada no baja
 — lo que elimina es que uno de ellos sea "copiá el helper de consolidación de otro control".
+
+---
+
+## D-043 — Pasos 4a/5 del contrato de export: `writeContractSheet` y el falso verde de "0 diferencias"
+
+**Fecha:** 2026-08-13
+**Contexto:** D-041 dejó el Paso 5 como "el que mata el último falso verde conocido": si el archivo de
+Brutos o de GS Pers nunca tuvo su columna mapeada (`salBaseColumn`, `aCuFutAumenColumn`,
+`gtosPersonalesColumn`, `dtoCocheraColumn` — `OBLIGATORIA` en el contrato pero sin bloqueo en la carga del
+archivo, ver la nota de alcance del Paso 2 en D-041), la pantalla de resultados leía "0 diferencias" como
+"todo verificado". El mecanismo exacto: `relevantRows` (definido antes de esta entrada) cuenta un legajo
+como "evaluable" si hay **algún valor real en cualquiera de los dos lados** — con el Tabulado aportando
+sueldos reales y el archivo del reporte vacío por la columna sin mapear, `relevantRows` salía grande y
+`diffRows` salía en 0 (nunca hay par para comparar), así que el tile "Sin diferencia" contaba esos legajos
+como verificados sin haber comparado ni uno.
+**Decisión:**
+1. **`js/exports/contractSheet.js` (Paso 4a).** `writeContractSheet(wb, contract, rows)` es el único lugar
+   que hace `ws.addRow` para un export con contrato — layout:'fijo' (D-041): las columnas de
+   `contract.columns` salen siempre, en ese orden, con la celda vacía si `row[key]` es `null`.
+   `contractColDefs(contract)` da la misma lista en la forma que ya usan la tabla de pantalla y el CSV.
+   Brutos y GS Pers modo Reporte migrados — los `colDefs` que cada uno tenía **dos veces** (pantalla vs
+   export, ya divergidos: el `width` sólo vivía en la copia del export) desaparecen. NR Reporte no lo
+   necesitaba: ya emitía las 18 columnas siempre.
+2. **`unitsEvaluated` (Paso 5).** `summarizeBrutos`/`summarizeGsPers` distinguen "evaluado" (los DOS lados
+   tenían dato — `ctrlXxx !== null`) de "relevante" (algún valor real en cualquiera de los dos lados). El
+   tile "Sin diferencia" pasa a contarse sobre `unitsEvaluated`, no sobre `relevantRows`. Con
+   `unitsEvaluated === 0` (nada comparable en absoluto), `summary.status` pasa a `'error'`.
+3. **`'error'` es el lever existente, no una categoría nueva.** `computeSemaforoStatus()` (semaforo.js) es
+   compartida por las 4 pantallas (checklist, wizard, resultados, lista de clientes) y CLAUDE.md la trata
+   como intocable a la ligera — no se le agregó un cuarto estado. El único lever sancionado para forzar un
+   color sin pasar por el % de diferencia es `summary.status === 'error'`, que ya usan las 4 pantallas de
+   la misma forma (verificado leyendo las 4 antes de decidir esto). Un control que evaluó CERO legajos de
+   los que tenía es, por definición, un estado de error.
+4. **Cobertura parcial no fuerza error completo.** Si un campo está mapeado y limpio y el otro no, sólo el
+   insight del campo faltante avisa "sin datos para comparar" — el campo que sí verificó no queda tapado
+   por un rojo desproporcionado. `status:'error'` sólo se fuerza cuando **ningún** campo del control tuvo
+   ni un legajo evaluado.
+**Alternativas descartadas:** Agregar un 4° estado a `computeSemaforoStatus` (ej. `'sin-evaluar'`) — más
+riesgoso de tocar una función compartida por 4 pantallas para un caso que el mecanismo existente ya cubre;
+cambiar el denominador del semáforo (`unitsTotal` → `unitsEvaluated`) en vez de usar el status — deja
+`computeSemaforoStatus(0, 0)` devolviendo `'ok'` igual (`!unitsTotal` es la primera guarda de esa función),
+así que no resuelve el caso "cero evaluados" sin tocar la función de todas formas; forzar `'error'` también
+en cobertura parcial — tapa un campo limpio por otro sin mapear, desproporcionado.
+**Verificación:** `tests/contractSheet.test.js` (fake mínimo de ExcelJS — no es una dependencia de npm, se
+carga por CDN en el navegador); `tests/brutosControl.test.js` (nuevo — no existía ningún test de Brutos) y
+`tests/gsPersControl.test.js` cubren `unitsEvaluated`/`status:'error'`/cobertura parcial;
+`tests/e2e/brutosGsPersEvaluados.spec.js` en un navegador real, con capturas en claro y oscuro — confirmado
+que falla si se revierte el fix del tile "Sin diferencia" (se probó explícitamente, no se asumió).
+**Motivo:** Continuación directa de D-041 (Paso 5, "el que mata el último falso verde") — misma auditoría,
+mismo pedido de Willy.
