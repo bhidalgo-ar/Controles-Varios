@@ -711,6 +711,23 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
         const k = sel.dataset.fuRemapKey;
         if (sel.value) newMapping[k] = sel.value;
       });
+
+      // Mismo gate que el formulario de carga inicial (ver el submit de
+      // renderMappingForm). Este panel no lo tenía: se podía vaciar una columna
+      // obligatoria, reprocesar, y quedaba persistida en el perfil del cliente
+      // para la próxima corrida. Los `throw` de los parsers tapaban sólo las
+      // columnas identificatorias (legajo, empleado, CC, F. BAJA); seis campos
+      // declarados `required: true` —puesto, ID/nombre de centro de costo,
+      // departamento de Cat. Empleados, PRECIO de Rendimiento y COSTO TOTAL—
+      // se podían dejar vacíos desde acá sin que nada avisara.
+      const faltantes = fields.filter(f => f.required && !newMapping[f.key]).map(f => f.label);
+      if (faltantes.length) {
+        showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
+        btn.disabled = false;
+        btn.textContent = '✓ Aplicar cambios';
+        return;
+      }
+
       try {
         const result = parseFile(arrayBuffer, fileType, newMapping);
         if (dataClientCode) await saveFileProfile(dataClientCode, fileType, newMapping).catch(() => {});

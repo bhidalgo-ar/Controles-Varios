@@ -306,21 +306,30 @@ export function runGsPersReporte(_primaryRows, tabRows, mapping) {
   const idCCCol      = tm.idCCColumn || null;
   const ccCol        = tm.ccColumn   || null;
 
-  const rows = tabRows
-    .filter(row => !!norm(row[tm.empleadoColumn]))
-    .map(row => ({
+  // Un legajo puede tener más de una liquidación en el mes (ej: baja después de
+  // haber cobrado el mensual). Consolidamos por legajo: los importes se suman
+  // —Meta4 informa el total del mes por empleado— y los datos de referencia
+  // (nombre, fechas, CC) se toman de la última liquidación. Mismo criterio que
+  // runBrutosReporte y runNrReporte, y que el modo Controlar de este archivo.
+  // Sin esto el .xlsx generado saca dos filas por cada legajo con doble paga,
+  // con los importes partidos entre ellas.
+  const tabGroups = groupTabRowsByLegajo(tabRows, tm.empleadoColumn);
+  const rows = [...tabGroups.entries()].map(([legajo, group]) => {
+    const last = group[group.length - 1];
+    return {
       fecIni:       fecIniStr,
       fecFin:       fecFinStr,
-      legajo:       norm(row[tm.empleadoColumn]),
-      nombre:       nombreCol    ? norm(row[nombreCol])    : null,
-      apellido1:    apellido1Col ? norm(row[apellido1Col]) : null,
-      fecAlta:      tm.tabFecAltaColumn ? fmtDate(row[tm.tabFecAltaColumn]) : null,
-      fecPago:      tm.tabFecPagoColumn ? fmtDate(row[tm.tabFecPagoColumn]) : null,
-      idCC:         idCCCol ? norm(row[idCCCol]) : null,
-      gtos:         tm.tabGtosPersonalesColumn ? toNum(row[tm.tabGtosPersonalesColumn]) : null,
-      dto:          tm.tabDtoCocheraColumn     ? toNum(row[tm.tabDtoCocheraColumn])     : null,
-      nCC:          ccCol ? norm(row[ccCol]) : null,
-    }));
+      legajo,
+      nombre:       nombreCol    ? norm(last[nombreCol])    : null,
+      apellido1:    apellido1Col ? norm(last[apellido1Col]) : null,
+      fecAlta:      tm.tabFecAltaColumn ? fmtDate(last[tm.tabFecAltaColumn]) : null,
+      fecPago:      tm.tabFecPagoColumn ? fmtDate(last[tm.tabFecPagoColumn]) : null,
+      idCC:         idCCCol ? norm(last[idCCCol]) : null,
+      gtos:         sumTabColumn(group, tm.tabGtosPersonalesColumn),
+      dto:          sumTabColumn(group, tm.tabDtoCocheraColumn),
+      nCC:          ccCol ? norm(last[ccCol]) : null,
+    };
+  });
 
   return {
     summary: { total: rows.length },
