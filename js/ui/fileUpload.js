@@ -15,6 +15,10 @@ import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
 import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
+import {
+  parseFinadietAsiento,
+  detectHeaders as detectHeadersFinadietAsiento,
+} from '../parsers/finadietAsientoParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
@@ -119,6 +123,21 @@ const FIELD_DEFS = {
   // todas las cuentas de Axton. Se sube uno por mes de la ventana del SAC
   // teórico (additionalFiles[].multi: true) — ver control acumuladores_ganancias.
   acumuladores_file: [],
+  // Conceptos liquidados de FINADIET (excel "FINADIET CONCEPTOS" de Meta4). Las
+  // 4 primeras son requeridas: sin los dos códigos de cuenta, el importe y el
+  // centro de costo no hay asiento posible, y completarlas con nada sería
+  // exactamente el default silencioso que CLAUDE.md prohíbe. Las otras 4 son
+  // rótulos del entregable: si faltan, la celda sale vacía y se avisa.
+  asiento_conceptos_file: [
+    { key: 'cuentaDebeColumn',        label: 'Columna de Código de cuenta Debe',   required: true  },
+    { key: 'cuentaHaberColumn',       label: 'Columna de Código de cuenta Haber',  required: true  },
+    { key: 'importeColumn',           label: 'Columna de Importe',                 required: true  },
+    { key: 'centroColumn',            label: 'Columna de Centro de Costo',         required: true  },
+    { key: 'cuentaDebeNombreColumn',  label: 'Columna de Nombre de cuenta Debe',   required: false },
+    { key: 'cuentaHaberNombreColumn', label: 'Columna de Nombre de cuenta Haber',  required: false },
+    { key: 'nroConceptoColumn',       label: 'Columna de Código de concepto',      required: false },
+    { key: 'conceptoColumn',          label: 'Columna de Concepto',                required: false },
+  ],
 };
 
 // Tabulado del período anterior (control de Variaciones): es el MISMO archivo
@@ -642,7 +661,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       + (parseMetadata?.noRemu       ? ` · ${parseMetadata.noRemu} no_remu`          : '')
       + (parseMetadata?.aporte       ? ` · ${parseMetadata.aporte} aportes`          : '')
       + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
-  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'acumuladores_file' || fileType === 'tab_prev_file') {
+  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'acumuladores_file' || fileType === 'asiento_conceptos_file' || fileType === 'tab_prev_file') {
     metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
   } else {
     metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
@@ -954,6 +973,12 @@ function detectHeadersFor(fileType, arrayBuffer) {
   if (fileType === 'tab_control' || fileType === 'tab_prev_file') {
     return detectHeadersTabulado(arrayBuffer);
   }
+  // El excel de conceptos de FINADIET abre con filas de título: con el detector
+  // plano, los desplegables del mapeo listarían el texto del título en vez de
+  // las columnas.
+  if (fileType === 'asiento_conceptos_file') {
+    return detectHeadersFinadietAsiento(arrayBuffer);
+  }
   return detectHeadersXlsx(arrayBuffer);
 }
 
@@ -973,6 +998,7 @@ function parseFile(arrayBuffer, fileType, mapping) {
     case 'cc_x_ee_file':                return parseCcXEmpleado(arrayBuffer);
     case 'acreditaciones_file':         return parseAcreditaciones(arrayBuffer);
     case 'acumuladores_file':           return parseAcumuladores(arrayBuffer);
+    case 'asiento_conceptos_file':      return parseFinadietAsiento(arrayBuffer, mapping);
     case 'concept_catalog':             return parseConceptCatalog(arrayBuffer);
     default: throw new Error(`Tipo de archivo desconocido: "${fileType}".`);
   }
@@ -994,6 +1020,7 @@ function fileTypeLabel(fileType) {
     cc_x_ee_file:                'CC x Empleado',
     acreditaciones_file:         'Acreditaciones (export de Axton)',
     acumuladores_file:           'Acumuladores (export de Axton)',
+    asiento_conceptos_file:      'Conceptos liquidados de FINADIET (Meta4)',
     tab_prev_file:               'Tabulado del período anterior',
     concept_catalog:             'Catálogo de Conceptos',
   }[fileType] || fileType;

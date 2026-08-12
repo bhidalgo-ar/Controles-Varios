@@ -63,18 +63,41 @@ for (const c of contracts) {
 // declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
 // no lo necesita hasta que tenga un consumidor real.
 
-for (const exportId of ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte']) {
+for (const exportId of ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte',
+  'finadiet_asiento_cc', 'finadiet_asiento_gral']) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {
     assert(`${exportId}.${col.key}: tiene width (el writer lo necesita)`,
       typeof col.width === 'number' && col.width > 0);
   }
 }
 
-// ── D-020: los contratos 'payroll' de hoy no llevan nada de Finanzas todavía ──
-// (Acreditaciones, el único 'finanzas', se declara en el Paso 6.)
+// ── D-020: un contrato 'finanzas' no lleva atributos de HR ───────────────────
+//
+// Antes de que existiera el primer contrato 'finanzas' esto era un assert de
+// "todavía no hay ninguno". Ya hay (las dos solapas planas del asiento de
+// FINADIET, que recibe Contaduría del cliente), así que lo que se hace cumplir
+// es la regla real: a Finanzas va lo necesario para pagar o para asentar
+// (legajo, nombre, CUIT, CBU, importe, fecha, cuenta, concepto) y NUNCA los
+// atributos del empleado — puesto, categoría, centro de trabajo, altas y bajas,
+// dotación. En muchos clientes Finanzas no tiene acceso a eso.
 
-assert('ningún contrato de hoy es audience:\'finanzas\' — Acreditaciones llega en el Paso 6',
-  contracts.every(c => c.audience === 'payroll'));
+const ATRIBUTOS_HR = [
+  'puesto', 'categoria', 'centrotrab', 'idcentro', 'fecalta', 'fecbaja',
+  'depto', 'dotacion', 'antiguedad', 'convenio',
+];
+const esAtributoHR = (col) => {
+  const candidatos = [col.key, ...col.from].map(s => String(s).toLowerCase());
+  return ATRIBUTOS_HR.some(hr => candidatos.some(c => c.includes(hr)));
+};
+
+const contratosFinanzas = contracts.filter(c => c.audience === 'finanzas');
+assert('hay al menos un contrato audience:\'finanzas\' (si no, el assert de abajo no prueba nada)',
+  contratosFinanzas.length > 0);
+for (const c of contratosFinanzas) {
+  for (const col of c.columns) {
+    assert(`${c.exportId}.${col.key}: no es un atributo de HR (D-020)`, !esAtributoHR(col));
+  }
+}
 
 // ── El mapa derivado no le baja la necesidad a nada que hoy ya bloquea ───────
 //

@@ -267,13 +267,58 @@ const nrReporte = {
   ],
 };
 
+// ── FINADIET · Asiento de Remuneraciones ──────────────────────────────────────
+//
+// Las DOS solapas planas del asiento (Paso 6 del contrato de export). La tercera
+// solapa, ASIENTO, no tiene contrato a propósito: no es una tabla plana — lleva
+// un encabezado con mes y fecha, una fila de título por centro de costo y por
+// categoría, y un TOTAL al pie. `writeContractSheet` describe hojas de
+// "encabezado + N filas iguales", y forzar esa forma acá sería más maquinaria de
+// la que el caso necesita (el mismo criterio con el que el Paso 4b se dejó
+// separado del 4a).
+//
+// `audience: 'finanzas'`: el archivo lo recibe Contaduría de FINADIET, no el
+// equipo de Payroll. Por eso no lleva NADA de HR — ni legajo, ni nombre de
+// empleado, ni dotación (D-020). Un asiento contable se lee por cuenta y por
+// concepto de liquidación; el empleado no aparece en ningún lado, y esto es lo
+// que lo hace cumplir en el único lugar que emite las columnas.
+//
+// La fila TOTAL viaja como una fila más de `rows` (con 'TOTAL' en la columna de
+// concepto) y no como un `addRow` aparte: `writeContractSheet` es el único lugar
+// que escribe filas de un export con contrato (D-043), así que el total entra
+// por la misma puerta que el resto.
+
+const finadietAsientoColumns = () => ([
+  { label: 'Código de cuenta', key: 'cuenta',   from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 18 },
+  { label: 'Concepto',         key: 'concepto', from: ['conceptoColumn'],     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 45 },
+  { label: 'Cód. concepto',    key: 'nro',      from: ['nroConceptoColumn'],  necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+  { label: 'Suma DEBE',        key: 'debe',     from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+  { label: 'Suma HABER',       key: 'haber',    from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+]);
+
+/** Cuenta CON prefijo de centro de costo (o `100.` si es Patrimonial). */
+const finadietAsientoPorCentro = {
+  exportId: 'finadiet_asiento_cc', sheet: 'Ctas Cbles CENTRO COSTO',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: finadietAsientoColumns(),
+};
+
+/** La misma tabla con el código de cuenta limpio, sin prefijo. */
+const finadietAsientoGral = {
+  exportId: 'finadiet_asiento_gral', sheet: 'Cuentas Contables GRAL',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: finadietAsientoColumns(),
+};
+
 export const EXPORT_CONTRACTS = {
-  brutos:           brutosControlar,
-  brutos_reporte:   brutosReporte,
-  gs_pers:          gsPersControlar,
-  gs_pers_reporte:  gsPersReporte,
-  nr:               nrControlar,
-  nr_reporte:       nrReporte,
+  brutos:                brutosControlar,
+  brutos_reporte:        brutosReporte,
+  gs_pers:               gsPersControlar,
+  gs_pers_reporte:       gsPersReporte,
+  nr:                    nrControlar,
+  nr_reporte:            nrReporte,
+  finadiet_asiento_cc:   finadietAsientoPorCentro,
+  finadiet_asiento_gral: finadietAsientoGral,
 };
 
 /**

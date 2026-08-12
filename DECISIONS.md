@@ -768,3 +768,69 @@ el `:root` nuevo (se probó explícitamente: revertido, corrido, visto fallar, r
 claro/oscuro para banner, toasts, botones (normal + `:hover`), pill, checkbox y exec-step.
 **Motivo:** Continuación del plan de escalabilidad, Fase 2 — cierra el último ítem que quedaba abierto de
 esa fase.
+
+---
+
+## D-045 — El asiento de FINADIET entra a la app como control, no como HTML standalone en `reportes/`
+
+**Fecha:** 2026-08-12
+**Contexto:** El asiento contable de remuneraciones de FINADIET (lógica y tablas validadas con Gaby
+Fukuhara sobre datos reales el 12/08/2026) se construyó primero como HTML standalone en
+`reportes/finadiet-asiento-remuneraciones.html` (PR #111), citando el patrón de D-022 — el reporte de
+Variaciones de OPmobility. Pero D-022 ya había sido corregida por **D-023**: ese standalone se trajo a la
+app porque Willy fue a buscarlo a la pantalla de Controles del cliente y no estaba, "y ahí es donde tiene
+que estar". Los dos motivos por los que D-022 descartó `mode: 'Generar Reporte'` tampoco aplican al asiento:
+es **un** período con **un** archivo (no una comparación entre dos), y el entregable es un `.xlsx` para el
+cliente, no un PDF. Desde D-022, además, el registry ganó exactamente la forma que este caso necesita —
+`tabRequired: false` + un `additionalFiles` + un `.xlsx` de salida — y ya la usan dos controles
+(`acreditaciones_reporte`, `acumuladores_ganancias`). FINADIET es cliente activo Meta4 del seed, así que
+tiene pantalla de controles donde el control aparece solo.
+**Decisión:**
+1. **Entra al `CONTROL_REGISTRY` como `finadiet_asiento`** (`scope: 'cliente'` de FINADIET, `mode: 'Generar
+   Reporte'`, `tabRequired: false`, un archivo adicional `asiento_conceptos_file`). Con eso queda en la
+   pantalla del cliente, deja `controlRuns` para el checklist mensual y el semáforo, y va a poder contarse
+   en el registro de cobertura mensual (ROADMAP 3.2) — nada de lo cual existe para un HTML suelto.
+2. **Nada de código propio para lo que ya está construido.** El importe se lee con `toNum` (F1), las dos
+   solapas planas se escriben con `writeContractSheet` sobre un contrato de export declarado (Paso 6 de
+   `specs/contrato-export.md`), la tabla de detalle usa `wireTableTools` (F3) y los colores salen de
+   `tokens.css` (F2). El standalone tenía su propio `esc`, su propio formateo de moneda, su propio armado
+   de `aoa`/`!cols`/`numFmt` y **SheetJS entero embebido minificado** (902 KB en el repo, contra la regla
+   de CLAUDE.md de que las librerías entran por CDN).
+3. **La tabla de cuentas contables, los centros de costo y el orden de categorías son config del cliente**
+   (`controlConfigs`, `finadiet_asiento_config`), editables desde el Paso 2 y distribuidas en el seed. En el
+   código quedan sólo como **semilla** (D-035). En el standalone estaban cableadas en el HTML y el aviso en
+   pantalla decía "avisale a Gaby/Lau para agregarlas al archivo": una cuenta nueva del cliente exigía un
+   commit. La config guardada **reemplaza** a la semilla, no se mergea — si se mergeara, una cuenta que el
+   analista borró del editor volvería sola y el editor dejaría de decir la verdad sobre qué tabla corre.
+4. **Las columnas del archivo se resuelven por nombre de encabezado, no por posición.** El standalone leía
+   `COL = { IMPORTE: 25, ... }` y `aoa.slice(3)` sin mirar nunca la fila de encabezados: una columna
+   insertada por Meta4 corre todas las de la derecha y sale un asiento **coherente y mal**. Ahora la fila de
+   encabezados se ubica por densidad, la auto-detección propone por alias, y lo que el analista confirma en
+   el Paso 2 gana siempre (D-039); una requerida sin resolver bloquea con asterisco en vez de leer la
+   columna de al lado.
+5. **Cero lados clasificables devuelve `{ error }`, no un asiento vacío.** Un asiento sin líneas tiene
+   Debe = Haber = 0 y "cierra": el standalone mostraba banner verde "El asiento cierra" si se le subía
+   cualquier otro excel. Es el mismo falso verde que D-043 mató en Brutos/GS Pers, y se resuelve con el
+   mismo lever ya sancionado: `summary.status === 'error'`.
+6. **Una fila sin centro de costo pierde sólo su pata de Resultado, no la fila.** El prefijo de una cuenta
+   de Resultado ES el código del centro, así que sin centro esa pata no se puede asentar; la pata
+   Patrimonial lleva `100` sin importar el centro y entra igual. El standalone descartaba la fila completa
+   (`if (!centro) return`), que le sacaba al asiento un importe que sí correspondía — y de forma
+   inconsistente con el caso "centro desconocido", donde sí conservaba la pata patrimonial.
+7. **Tolerancia 0,01, la del proyecto.** El standalone declaraba 0,005 en su spec y comparaba con `>= 0.5`
+   en el código: 49 centavos de descuadre se informaban como "el asiento cierra".
+8. **`audience: 'finanzas'` en los dos contratos** (D-020): el archivo lo recibe Contaduría del cliente, así
+   que no lleva legajo, nombre ni atributos del empleado — un asiento se lee por cuenta y por concepto.
+   `tests/exportContracts.test.js` pasa de asertar "todavía no hay ningún contrato finanzas" a hacer cumplir
+   la regla real: ningún contrato `finanzas` lleva atributos de HR (puesto, categoría, centro de trabajo,
+   altas/bajas, dotación).
+**Alternativas descartadas:** Dejarlo standalone y sólo arreglarle los bugs (queda afuera del checklist, del
+semáforo y de la cobertura mensual, y con la tabla de cuentas cableada seguiría necesitando un commit por
+cada cuenta nueva del cliente); mergear la config guardada sobre la semilla (una cuenta borrada del editor
+resucita); mantener las posiciones de columna como fallback silencioso cuando el encabezado no se reconoce
+(es exactamente el default silencioso que CLAUDE.md prohíbe — el Paso 2 ya es la vía de escape visible);
+darle contrato de export también a la solapa ASIENTO (no es una tabla plana: tiene encabezado con mes y
+fecha, filas de título por bloque y total al pie; forzarla sería más maquinaria que la que el caso pide,
+mismo criterio con el que el Paso 4b quedó separado del 4a).
+**Motivo:** Corrige el alcance del PR #111 antes de que entre. La lógica contable y las tablas de ese PR se
+conservan enteras (son el trabajo validado con Gaby); lo que cambia es dónde vive y de dónde saca sus datos.
