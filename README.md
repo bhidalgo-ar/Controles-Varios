@@ -67,7 +67,7 @@ Algunos entregables no son un control de la batería sino un HTML aparte que se 
 
 ### Modo admin
 
-`#/admin` habilita editar clientes y la configuración de controles (`controlConfigs`), y exportar el seed (`hya-controles-config.json`) que se distribuye al resto del equipo. Está protegido por contraseña (hash SHA-256 local) — es una barrera contra el acceso accidental, no un control de seguridad real (ver `ARCHITECTURE.md` §7 y `DECISIONS.md` D-013). La contraseña no vive en este README; pedísela a Willy.
+`#/admin` habilita editar clientes y la configuración de controles (`controlConfigs`), y exportar el seed (`hya-controles-config.json`) que se distribuye al resto del equipo. Está protegido por contraseña (hash SHA-256 local) — es una barrera contra el acceso accidental, no un control de seguridad real (ver `ARCHITECTURE.md` §7 y `DECISIONS.md` D-013). La primera vez se entra con la contraseña de arranque (pedísela a Willy); la pantalla avisa que hay que cambiarla y desde ahí se define una propia, que queda guardada en ese navegador y no en el repo. Es por navegador: cada uno la define una vez.
 
 ---
 

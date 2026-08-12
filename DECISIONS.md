@@ -133,6 +133,34 @@
 **Alternativas descartadas:** Bloquear T6 hasta tener respuesta (la tajada no dependía de nada más para avanzar); dejar un valor por defecto obvio tipo "admin" (peor barrera de acceso accidental, que es la única función real que cumple).
 **Motivo:** Auto Mode — con una decisión de bajo impacto y reversible (rotar la contraseña es cambiar una constante), conviene avanzar y avisar en vez de bloquear la tajada.
 
+**Cierre 2026-08-12 (decisión de Willy).** El hash **sale del código fuente**. Ahora la contraseña se
+cambia desde un panel en `#/admin` ("🔑 Cambiar contraseña") y su hash queda en
+`appConfig.adminPasswordHash` (IndexedDB del navegador). La contraseña la elige Willy, nunca un agente, y
+no vuelve a quedar escrita en un repo público. La del código queda como **contraseña de arranque**: sirve
+sólo mientras ese navegador no tenga una propia guardada —así ningún navegador del equipo queda afuera— y
+mientras se use, la pantalla lo avisa y ofrece cambiarla. Mínimo 12 caracteres.
+
+**Lo que Willy pidió y no se puede hacer, con el motivo:** que la app le mande la contraseña por mail a
+`gesposito@bhidalgo.com.ar` y la vaya rotando por apertura. Las dos cosas necesitan un servidor: uno que
+guarde la credencial del correo (en una página estática iría en el mismo repo público donde ya estaba el
+hash, o sea peor que el problema que resuelve) y uno que sepa cuál es la clave vigente en cada apertura —
+un navegador no puede coordinar eso con otro. Sumar un servicio de mail de terceros tampoco entra: la app
+no tiene dependencias de runtime más allá de los CDN de `index.html` (CLAUDE.md).
+
+Si eso se quiere de verdad, el camino es el que ya está en el ROADMAP: mudar el hosting de GitHub Pages a
+infraestructura de H&A, y ahí sí un endpoint mínimo puede mandar un código de un solo uso por mail. Es
+trabajo de v4 (backend real), no algo que se pueda encajar en la app de hoy.
+
+**Se descartó también** un script de línea de comandos (`tools/hash-admin-password.mjs`, escrito y borrado
+el mismo día): calculaba el hash sin que la contraseña pasara por un chat, pero obligaba a Willy a abrir
+una terminal para rotar una clave, que es exactamente la fricción que hizo que el tema quedara abierto seis
+semanas. Un panel en la pantalla que ya está abierta no tiene ese problema.
+
+**Límite que sigue en pie:** la contraseña guardada es **por navegador**. No viaja en el seed a propósito —
+un seed es un archivo que se manda por SharePoint y se importa a mano, así que meter ahí el hash de acceso
+lo reparte en un archivo que circula por mail, que es el mismo problema con más pasos. Cada navegador del
+equipo la define una vez.
+
 ---
 
 ## D-014 — T9 ejecutado: agrupadores como control del registry, sin migrar el historial viejo

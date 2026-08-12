@@ -11,7 +11,10 @@
 // controlConfigs) y se exporta un archivo con el mismo shape que
 // importSeed.js sabe leer — no un formato paralelo.
 
-import { getClients, getClient, updateClient, getControlConfigsForClient, saveControlConfig } from '../db.js';
+import {
+  getClients, getClient, updateClient, getControlConfigsForClient, saveControlConfig,
+  getConfig, setConfig,
+} from '../db.js';
 import {
   LEGAJO_KEY_MODES, LEGAJO_KEY_MODE_LABELS, DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode,
 } from '../utils/legajo.js';
@@ -22,9 +25,19 @@ import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { scopeLabel, controlAppliesToClient } from '../controls/scope.js';
 
-// SHA-256 de la contraseña de acceso. Generada al implementar T6 (el usuario
-// no llegó a elegir una propia) — hay que avisarle que puede rotarla acá.
-const ADMIN_PASSWORD_HASH = '84c88b598db066db85f30cc6b48a64fdf731e6adac8654e567df125a3c170ccc';
+// La contraseña de admin **la elige Willy desde esta misma pantalla** y su hash
+// SHA-256 queda en IndexedDB (`appConfig.adminPasswordHash`), no en este archivo
+// (D-013). Antes estaba escrita acá: un hash a la vista en un repo público, y
+// encima elegido por un agente y no por él.
+//
+// La de abajo es la **contraseña de arranque**, la que ya estaba en el código.
+// Sigue funcionando mientras no haya una propia guardada, para no dejar afuera de
+// #/admin a ningún navegador del equipo que ya la venía usando — y mientras se
+// use, la pantalla avisa en pantalla que hay que cambiarla. En cuanto se guarda
+// una propia, esta deja de servir.
+const BOOTSTRAP_PASSWORD_HASH = '84c88b598db066db85f30cc6b48a64fdf731e6adac8654e567df125a3c170ccc';
+const ADMIN_PASSWORD_CONFIG_KEY = 'adminPasswordHash';
+const MIN_PASSWORD_LENGTH = 12;
 const UNLOCK_SESSION_KEY = 'admin-unlocked';
 
 const CONTROL_CONFIG_STATUSES = [
@@ -41,16 +54,30 @@ async function sha256Hex(text) {
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Hash vigente: el propio si ya se definió uno, el de arranque si no.
+ * `usandoArranque` es lo que dispara el aviso en pantalla — no se puede saber
+ * mirando el hash a secas.
+ */
+async function currentPasswordHash() {
+  const saved = await getConfig(ADMIN_PASSWORD_CONFIG_KEY);
+  return {
+    hash: saved || BOOTSTRAP_PASSWORD_HASH,
+    usandoArranque: !saved,
+  };
+}
+
 export async function renderAdminView(root) {
   const unlocked = sessionStorage.getItem(UNLOCK_SESSION_KEY) === '1';
   if (!unlocked) {
-    renderPasswordGate(root);
+    await renderPasswordGate(root);
     return;
   }
   await renderAdminPanel(root);
 }
 
-function renderPasswordGate(root) {
+async function renderPasswordGate(root) {
+  const { usandoArranque } = await currentPasswordHash();
   root.innerHTML = `
     <div class="page-content" style="max-width:420px;margin:0 auto;">
       <div class="card" style="padding:var(--sp-5);">
@@ -59,6 +86,11 @@ function renderPasswordGate(root) {
           Esta contraseña es una barrera de acceso accidental, no una protección real
           (el código de esta app es público). Sirve para no entrar acá sin querer.
         </p>
+        ${usandoArranque ? `
+          <p class="text-sm" style="color:var(--color-warning);">
+            ⚠ Estás usando la contraseña de arranque, que está a la vista en el repo.
+            Cuando entres, cambiala desde «Cambiar contraseña».
+          </p>` : ''}
         <form id="js-admin-password-form">
           <div class="form-group">
             <label class="form-label">Contraseña</label>
@@ -76,7 +108,8 @@ function renderPasswordGate(root) {
     e.preventDefault();
     const input = root.querySelector('#js-admin-password');
     const hash = await sha256Hex(input.value);
-    if (hash !== ADMIN_PASSWORD_HASH) {
+    const { hash: esperado } = await currentPasswordHash();
+    if (hash !== esperado) {
       showToast('Contraseña incorrecta.', 'danger');
       return;
     }
@@ -96,10 +129,13 @@ async function renderAdminPanel(root) {
           <h2>Modo admin</h2>
         </div>
         <div class="page-actions__buttons">
+          <button class="btn btn--ghost btn--pill" id="js-admin-password-btn">🔑 Cambiar contraseña</button>
           <button class="btn btn--ghost btn--pill" id="js-admin-lock-btn">🔒 Salir del modo admin</button>
           <button class="btn btn--primary btn--pill" id="js-admin-export-btn">⬇ Exportar seed actualizado</button>
         </div>
       </div>
+
+      <div id="js-admin-password-panel"></div>
 
       ${clients.length === 0 ? `
         <div class="empty-state"><p>Todavía no hay clientes cargados.</p></div>
@@ -125,6 +161,12 @@ async function renderAdminPanel(root) {
   });
 
   root.querySelector('#js-admin-export-btn').addEventListener('click', handleExport);
+  root.querySelector('#js-admin-password-btn').addEventListener('click', () => {
+    renderPasswordChangePanel(root);
+  });
+
+  const { usandoArranque } = await currentPasswordHash();
+  if (usandoArranque) renderPasswordChangePanel(root, { aviso: true });
 
   const select = root.querySelector('#js-admin-client-select');
   if (select) {
@@ -148,6 +190,74 @@ async function handleExport() {
   } catch (err) {
     showToast(`Error al exportar el seed: ${err.message}`, 'danger');
   }
+}
+
+/**
+ * Panel para cambiar la contraseña. El hash queda en IndexedDB de ESTE
+ * navegador: no hay servidor donde guardarlo ni a quién mandarlo por mail, así
+ * que cada navegador del equipo la define una vez (ver D-013).
+ */
+function renderPasswordChangePanel(root, { aviso = false } = {}) {
+  const panel = root.querySelector('#js-admin-password-panel');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="card" style="padding:var(--sp-4);margin-bottom:var(--sp-4);">
+      <h3 style="margin-top:0;">Cambiar contraseña de #/admin</h3>
+      ${aviso ? `
+        <p class="text-sm" style="color:var(--color-warning);margin-top:0;">
+          ⚠ Estás usando la contraseña de arranque, que está escrita en el código de un repo
+          público. Cambiala por una tuya: queda guardada en este navegador y nunca se sube al repo.
+        </p>` : ''}
+      <p class="text-sm text-muted" style="margin-top:0;">
+        Mínimo ${MIN_PASSWORD_LENGTH} caracteres — usá una frase, no una palabra. Se guarda sólo el
+        hash, en este navegador. Si la olvidás, la contraseña de arranque vuelve a servir recién si
+        borrás la guardada, así que anotala donde guardes las claves del estudio.
+      </p>
+      <form id="js-admin-password-change-form" style="display:grid;gap:var(--sp-3);max-width:420px;">
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Contraseña nueva</label>
+          <input type="password" class="form-input" id="js-admin-new-password" autocomplete="new-password">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">Repetila</label>
+          <input type="password" class="form-input" id="js-admin-new-password-2" autocomplete="new-password">
+        </div>
+        <div style="display:flex;gap:var(--sp-2);">
+          <button type="submit" class="btn btn--primary">Guardar contraseña</button>
+          <button type="button" class="btn btn--ghost" id="js-admin-password-cancel">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  panel.querySelector('#js-admin-password-cancel').addEventListener('click', () => {
+    panel.innerHTML = '';
+  });
+
+  panel.querySelector('#js-admin-password-change-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nueva  = panel.querySelector('#js-admin-new-password').value;
+    const repite = panel.querySelector('#js-admin-new-password-2').value;
+
+    if (nueva.trim().length < MIN_PASSWORD_LENGTH) {
+      showToast(`La contraseña tiene que tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`, 'danger');
+      return;
+    }
+    if (nueva !== repite) {
+      showToast('Las dos contraseñas no coinciden.', 'danger');
+      return;
+    }
+
+    try {
+      await setConfig(ADMIN_PASSWORD_CONFIG_KEY, await sha256Hex(nueva));
+    } catch (err) {
+      showToast(`No se pudo guardar la contraseña: ${err.message}`, 'danger');
+      return;
+    }
+    panel.innerHTML = '';
+    showToast('Contraseña actualizada en este navegador.', 'success');
+  });
 }
 
 async function renderClientDetail(root, state) {
