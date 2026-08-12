@@ -13,6 +13,7 @@
 //   └── solapa "Detalle": la tabla completa (buscador + paginación + export)
 
 import { initTabs } from './tabs.js';
+import { getViewPreference, setViewPreference } from './viewPreference.js';
 
 function esc(str) {
   return String(str ?? '')
@@ -210,14 +211,25 @@ export function renderChecks(container, { heading, items } = {}) {
 // dos solapas son para lo que sigue: el resumen (tiles/casos/chequeos) y el
 // detalle (la tabla completa con buscador, paginación y export).
 
-export function renderResumenDetalle(container, { resumen, detalle, detalleLabel = 'Detalle', activeId, onChange }) {
+/**
+ * @param {string} [controlId] - id del registry (ver `js/controls/registry.js`).
+ *   Con esto, la solapa que el analista dejó abierta la última vez para ESTE
+ *   control se recuerda entre sesiones (`viewPreference.js`) y es la que abre
+ *   por default en la próxima corrida — a menos que el propio control fuerce
+ *   `activeId` (ej. acreditaciones.js, que necesita mantener la solapa activa
+ *   entre sus propios re-renders dentro de la misma corrida).
+ */
+export function renderResumenDetalle(container, { resumen, detalle, detalleLabel = 'Detalle', activeId, onChange, controlId }) {
   return initTabs(container, {
     tabs: [
       { id: 'resumen', label: 'Resumen', render: resumen },
       { id: 'detalle', label: detalleLabel, render: detalle },
     ],
-    activeId,
-    onChange,
+    activeId: activeId ?? getViewPreference(controlId).tab,
+    onChange(id) {
+      setViewPreference(controlId, { tab: id });
+      onChange?.(id);
+    },
   });
 }
 

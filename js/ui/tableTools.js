@@ -8,6 +8,8 @@
 // qué se ve "por longitud", el combobox decide qué se ve "por búsqueda", y
 // applyVisibility() combina ambos criterios.
 
+import { enhanceGrid } from './resultBlocks.js';
+
 const PAGE_SIZE_DEFAULT = 50;
 
 /**
@@ -100,6 +102,48 @@ export function initShowMorePagination(tbodyEl, { pageSize = PAGE_SIZE_DEFAULT }
     dataRows,
     setFilter(matchSet) { filterSet = matchSet; applyVisibility(); },
   };
+}
+
+/**
+ * Encadena los tres pasos que siempre van juntos después de pintar una tabla
+ * de detalle: paginar el `<tbody>`, montar el buscador sobre esas mismas
+ * filas, y fijar columnas/encabezado con sticky. Estaba escrito a mano en 13
+ * sitios de 9 controles — algunos re-renderizan la tabla entera al cambiar un
+ * filtro y vuelven a llamar esto con la tabla nueva, otros la montan una sola
+ * vez.
+ *
+ * No reemplaza `createResultsToolbar()` (la barra de arriba) ni
+ * `renderExportMenu()` (que necesita sus propios `onExcel`/`onCsv`/`onCopy`
+ * por control) — sólo el tramo de abajo, sobre la tabla ya en el DOM.
+ *
+ * @param {HTMLTableElement} tableEl - la tabla ya insertada en el DOM, con su `<tbody>`
+ * @param {object} opts
+ * @param {any[]} opts.rows - filas en el MISMO orden que las `<tr>` del tbody
+ * @param {(row: any) => string} opts.getLabel - texto buscable de `initSearchCombobox`
+ * @param {HTMLElement} opts.searchEl - dónde montar el buscador (el de `createResultsToolbar`)
+ * @param {number} [opts.pageSize=50]
+ * @param {string} [opts.label] - override de `initSearchCombobox`
+ * @param {string} [opts.placeholder] - override de `initSearchCombobox`
+ * @param {boolean} [opts.sticky=true] - false para saltear `enhanceGrid` (variaciones.js no lo usa en esta tabla)
+ * @param {0|1|2} [opts.stickyCols=1]
+ * @param {number} [opts.col1Width]
+ * @returns {{ dataRows: HTMLTableRowElement[], setFilter: (s: Set|null) => void }} el resultado de `initShowMorePagination`
+ */
+export function wireTableTools(tableEl, {
+  rows, getLabel, searchEl,
+  pageSize = PAGE_SIZE_DEFAULT,
+  label, placeholder,
+  sticky = true, stickyCols = 1, col1Width,
+} = {}) {
+  const tbodyEl = tableEl.querySelector('tbody');
+  const pagination = initShowMorePagination(tbodyEl, { pageSize });
+  initSearchCombobox(searchEl, {
+    rows, trEls: pagination.dataRows, getLabel, pagination,
+    ...(label !== undefined ? { label } : {}),
+    ...(placeholder !== undefined ? { placeholder } : {}),
+  });
+  if (sticky) enhanceGrid(tableEl, { stickyCols, ...(col1Width !== undefined ? { col1Width } : {}) });
+  return pagination;
 }
 
 let comboIdCounter = 0;

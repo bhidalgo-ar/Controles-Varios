@@ -1,6 +1,7 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
-import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import { renderExportMenu } from '../ui/exportMenu.js';
+import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -810,6 +811,7 @@ export function renderRendVsAsientoResults(results, container) {
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
+    controlId: 'rend_vs_asiento',
     resumen(panel) {
       const tone = ccsWithDiff.length === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -1047,11 +1049,20 @@ function renderRendVsAsientoDetalle(container, results) {
   // ── Render final ─────────────────────────────────────────────────────────
   container.innerHTML = '';
 
-  // Botón exportar
-  const exportBtn = document.createElement('div');
-  exportBtn.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:var(--sp-2);';
-  exportBtn.innerHTML = `<button type="button" id="js-rva-export" class="btn btn--ghost btn--sm">⬇ Exportar a Excel</button>`;
-  container.appendChild(exportBtn);
+  // Exportar — sin buscador (la tabla es por CC, se ordena por columna, no se
+  // busca), así que no monta el molde completo de createResultsToolbar().
+  const exportBar = document.createElement('div');
+  exportBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:var(--sp-2);';
+  container.appendChild(exportBar);
+
+  const csvHeaders = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [`${c.label} (Rend)`, `${c.label} (CONTA)`, `${c.label} (CTRL)`])];
+  const csvRows = () => rows.map(r => [r.ccCode, r.ccName, ...COLS.flatMap(c => [fmt(r[c.rKey]), fmt(r[c.cKey]), fmt(r[c.dKey])])]);
+
+  renderExportMenu(exportBar, {
+    onExcel: () => exportRendVsAsientoToXlsx(results),
+    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `RendVsAsiento_${periodSuffix(results.period)}.csv`),
+    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  });
 
   // Panel de cuentas
   const accountPanel = document.createElement('details');
@@ -1139,8 +1150,6 @@ function renderRendVsAsientoDetalle(container, results) {
     else { accountMapSortCol = col; accountMapSortAsc = true; }
     mapDiv.innerHTML = buildAccountMapHtml();
   });
-
-  container.querySelector('#js-rva-export')?.addEventListener('click', () => exportRendVsAsientoToXlsx(results));
 }
 
 // ── Excel export ──────────────────────────────────────────────────────────────

@@ -231,17 +231,40 @@ checkbox y exec-step — todas idénticas a como se veían antes del cambio.
 
 ## Fase 3 — Tablas y vistas de resultados
 
-**Estado: planeada.** Es donde se cumple "los resultados se ven parecido, y elegís cómo verlos".
+**Estado: cerrada** (2026-08-12). Es donde se cumple "los resultados se ven parecido, y elegís cómo
+verlos".
 
-- `wireTableTools()` en `js/ui/tableTools.js` — la secuencia de toolbar + paginación + buscador +
-  sticky + export está copiada 13 veces en 9 archivos.
-- Migrar `catXEmpleados.js` y `rendVsAsiento.js` a `renderExportMenu`/`resultBlocks.js` — son los
-  dos controles que quedaron con un botón de Excel armado a mano y por eso no tienen CSV ni "copiar
-  tabla" como los otros 9.
-- Preferencia de vista por control (qué solapa abre, qué filtro), guardada — recién tiene sentido
-  después de unificar el toggle "sólo con diferencia / todos", que hoy tiene 3 implementaciones.
+- **`wireTableTools()` en `js/ui/tableTools.js`: hecho.** Encadena `initShowMorePagination` +
+  `initSearchCombobox` + `enhanceGrid` — el tramo de abajo que estaba escrito a mano en los 13 sitios
+  de 9 archivos (`acreditaciones.js` ×2, `acumuladoresGanancias.js`, `brutos.js` ×2, `catXEmpleados.js`
+  ×1 vía `wireDiffTableTools` llamado 3 veces, `gsPers.js` ×2, `nr.js` ×2, `rendVsTabu.js`,
+  `rendXEe.js`, `variaciones.js`). No absorbe `createResultsToolbar()` ni `renderExportMenu()` (cada
+  control necesita sus propios `onExcel`/`onCsv`/`onCopy`) — sólo pagina+busca+sticky sobre la tabla ya
+  en el DOM. `variaciones.js` es el único caso con `sticky: false`: sus tablas van una debajo de otra,
+  no en un panel de scroll acotado como las demás, y ya no llamaba a `enhanceGrid` antes de este
+  cambio — se preservó ese comportamiento en vez de agregarlo de yapa.
+- **Migrar `catXEmpleados.js` y `rendVsAsiento.js`: hecho.** Los dos tenían un botón de Excel armado a
+  mano, sin CSV ni "copiar tabla". Ahora usan `renderExportMenu()`: el CSV/copiar de `catXEmpleados`
+  aplana las dos distribuciones (Puesto/CC) que ya trae el .xlsx — no las 3 listas de diferencias de
+  arriba, que son de revisión en pantalla, no del entregable. El de `rendVsAsiento` espeja las 3
+  columnas (Rend/CONTA/CTRL) por categoría de la tabla principal.
+- **Preferencia de vista por control: hecho.** `js/ui/viewPreference.js` (localStorage, clave
+  `viewPref:<controlId>`) recuerda qué solapa (Resumen/Detalle) dejó abierta el analista la última vez
+  para ESE control, y la reabre por default la próxima corrida. Cableado en `renderResumenDetalle()`
+  (`js/ui/resultBlocks.js`) vía un `controlId` opcional — los 11 controles que la usan lo declaran; no
+  se tocó el toggle "sólo con diferencia/todos" (Willy confirmó el 2026-08-12 que queda como está, con
+  sus 3 implementaciones, y que lo que cada control puede sumar es una agrupación propia que le sirva,
+  no una unificación). `acreditaciones.js` combina esto con su manejo propio de `activeId` entre
+  redraws (D-022): arranca desde la preferencia guardada, y sigue actualizando su `activeTabId` en
+  memoria para los redraws dentro de la misma corrida. `acumuladoresGanancias.js` (3 solapas
+  Resumen/Fichas/Planilla, `initTabs` directo, no `renderResumenDetalle`) tiene su propio cableado
+  equivalente. Test: `tests/viewPreference.test.js`.
 
-Depende parcialmente de la Fase 2 (el toolbar compartido).
+Verificado: `npm run test:unit` (510 asserts, incluidas las 7 nuevas de `viewPreference.test.js`) y los
+e2e que ejercitan las tablas migradas (`gridHeaderContrast.spec.js`, `brutosGsPersEvaluados.spec.js`)
+en verde contra Chromium real. Los e2e que fallan en este sandbox (`seedImport`, `agrupadoresControl`,
+`adminExport`, etc.) lo hacen por la misma razón que ya estaba documentada más abajo — sin red al CDN
+la app no llega a levantar Dexie — y se confirmó que fallan igual en la rama sin estos cambios.
 
 ---
 
@@ -287,19 +310,16 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-13 (segunda pasada del día).** Las Fases 0, 1, 2 y 5 están cerradas. Los Pasos
-4a y 5 del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último falso verde
-conocido: Brutos/GS Pers con la columna del archivo sin mapear pasaban por "0 diferencias = todo bien"
-cuando en realidad no se había comparado un solo legajo. Lo que sigue, en orden de menor a mayor tamaño:
+**Actualizado el 2026-08-12 (tercera pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas. Los
+Pasos 4a y 5 del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último
+falso verde conocido: Brutos/GS Pers con la columna del archivo sin mapear pasaban por "0 diferencias =
+todo bien" cuando en realidad no se había comparado un solo legajo. Lo que sigue, en orden de menor a
+mayor tamaño:
 
-1. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
-   preferencia de vista por control ya no está bloqueada: Willy confirmó el 2026-08-12 que el toggle "sólo
-   con diferencia / todos" está bien como está por default, y que lo que cada control puede agregar es una
-   agrupación propia que le sirva.
-2. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
+1. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
    (des-duplicación, no fix de comportamiento) y que el resto de los controles declare su contrato.
-3. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
-4. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
+2. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
+3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
    sobre parsers todavía duplicados hereda la duplicación.
 
 **Nota de entorno, para no repetir la pregunta:** desde esta sesión hay Chromium real disponible en el
