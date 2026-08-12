@@ -678,3 +678,93 @@ entregables, y el legajo de 9 liquidaciones sumando 30.000 en los dos lados.
 ambigüedad semántica — no es la clase de duplicación que produce bugs); el override de clave de legajo por
 corrida (ver D-038, punto 2); y los 6 puntos de integración de un control nuevo, que esta entrada no baja
 — lo que elimina es que uno de ellos sea "copiá el helper de consolidación de otro control".
+
+---
+
+## D-043 — Pasos 4a/5 del contrato de export: `writeContractSheet` y el falso verde de "0 diferencias"
+
+**Fecha:** 2026-08-13
+**Contexto:** D-041 dejó el Paso 5 como "el que mata el último falso verde conocido": si el archivo de
+Brutos o de GS Pers nunca tuvo su columna mapeada (`salBaseColumn`, `aCuFutAumenColumn`,
+`gtosPersonalesColumn`, `dtoCocheraColumn` — `OBLIGATORIA` en el contrato pero sin bloqueo en la carga del
+archivo, ver la nota de alcance del Paso 2 en D-041), la pantalla de resultados leía "0 diferencias" como
+"todo verificado". El mecanismo exacto: `relevantRows` (definido antes de esta entrada) cuenta un legajo
+como "evaluable" si hay **algún valor real en cualquiera de los dos lados** — con el Tabulado aportando
+sueldos reales y el archivo del reporte vacío por la columna sin mapear, `relevantRows` salía grande y
+`diffRows` salía en 0 (nunca hay par para comparar), así que el tile "Sin diferencia" contaba esos legajos
+como verificados sin haber comparado ni uno.
+**Decisión:**
+1. **`js/exports/contractSheet.js` (Paso 4a).** `writeContractSheet(wb, contract, rows)` es el único lugar
+   que hace `ws.addRow` para un export con contrato — layout:'fijo' (D-041): las columnas de
+   `contract.columns` salen siempre, en ese orden, con la celda vacía si `row[key]` es `null`.
+   `contractColDefs(contract)` da la misma lista en la forma que ya usan la tabla de pantalla y el CSV.
+   Brutos y GS Pers modo Reporte migrados — los `colDefs` que cada uno tenía **dos veces** (pantalla vs
+   export, ya divergidos: el `width` sólo vivía en la copia del export) desaparecen. NR Reporte no lo
+   necesitaba: ya emitía las 18 columnas siempre.
+2. **`unitsEvaluated` (Paso 5).** `summarizeBrutos`/`summarizeGsPers` distinguen "evaluado" (los DOS lados
+   tenían dato — `ctrlXxx !== null`) de "relevante" (algún valor real en cualquiera de los dos lados). El
+   tile "Sin diferencia" pasa a contarse sobre `unitsEvaluated`, no sobre `relevantRows`. Con
+   `unitsEvaluated === 0` (nada comparable en absoluto), `summary.status` pasa a `'error'`.
+3. **`'error'` es el lever existente, no una categoría nueva.** `computeSemaforoStatus()` (semaforo.js) es
+   compartida por las 4 pantallas (checklist, wizard, resultados, lista de clientes) y CLAUDE.md la trata
+   como intocable a la ligera — no se le agregó un cuarto estado. El único lever sancionado para forzar un
+   color sin pasar por el % de diferencia es `summary.status === 'error'`, que ya usan las 4 pantallas de
+   la misma forma (verificado leyendo las 4 antes de decidir esto). Un control que evaluó CERO legajos de
+   los que tenía es, por definición, un estado de error.
+4. **Cobertura parcial no fuerza error completo.** Si un campo está mapeado y limpio y el otro no, sólo el
+   insight del campo faltante avisa "sin datos para comparar" — el campo que sí verificó no queda tapado
+   por un rojo desproporcionado. `status:'error'` sólo se fuerza cuando **ningún** campo del control tuvo
+   ni un legajo evaluado.
+**Alternativas descartadas:** Agregar un 4° estado a `computeSemaforoStatus` (ej. `'sin-evaluar'`) — más
+riesgoso de tocar una función compartida por 4 pantallas para un caso que el mecanismo existente ya cubre;
+cambiar el denominador del semáforo (`unitsTotal` → `unitsEvaluated`) en vez de usar el status — deja
+`computeSemaforoStatus(0, 0)` devolviendo `'ok'` igual (`!unitsTotal` es la primera guarda de esa función),
+así que no resuelve el caso "cero evaluados" sin tocar la función de todas formas; forzar `'error'` también
+en cobertura parcial — tapa un campo limpio por otro sin mapear, desproporcionado.
+**Verificación:** `tests/contractSheet.test.js` (fake mínimo de ExcelJS — no es una dependencia de npm, se
+carga por CDN en el navegador); `tests/brutosControl.test.js` (nuevo — no existía ningún test de Brutos) y
+`tests/gsPersControl.test.js` cubren `unitsEvaluated`/`status:'error'`/cobertura parcial;
+`tests/e2e/brutosGsPersEvaluados.spec.js` en un navegador real, con capturas en claro y oscuro — confirmado
+que falla si se revierte el fix del tile "Sin diferencia" (se probó explícitamente, no se asumió).
+**Motivo:** Continuación directa de D-041 (Paso 5, "el que mata el último falso verde") — misma auditoría,
+mismo pedido de Willy.
+
+---
+
+## D-044 — Cierre de la Fase 2: `css/components.css` tenía 6 tokens sin default en `:root`
+
+**Fecha:** 2026-08-13
+**Contexto:** El grep del 2026-08-12 (ver nota de Fase 2 en `specs/plan-escalabilidad-fases.md`) había
+encontrado hex fuera de `tokens.css` en `css/components.css` y lo dejó sin tocar "a propósito" — sin
+navegador real disponible en el entorno, tocar CSS que renderiza en toda la app no se podía verificar, y
+asumía que los fallbacks `var(--token, #hex)` eran "posiblemente muertos igual que los de
+`helpPopover.js`". Con Chromium disponible en el sandbox desde esta sesión, se pudo medir en vez de
+asumir — y el supuesto estaba mal para el caso que más importaba.
+**Hallazgo:** `--color-banner-text`, los 4 `--color-toast-*` y `--color-warning-bg-hover` sólo tenían
+valor dentro de `@media (prefers-color-scheme: dark)`, `[data-theme="dark"]` y `[data-theme="light"]` —
+nunca en un `:root` base, a diferencia de todo lo demás en `tokens.css` (que define el claro en `:root` y
+recién después overridea el oscuro). En el estado por default del navegador (sin `data-theme`, sistema en
+modo claro) ninguna de las tres reglas aplicaba: la variable quedaba indefinida, confirmado con
+`getComputedStyle(:root).getPropertyValue(...)` devolviendo `''` en un navegador real. No se rompía nada
+visible porque el fallback inline tapaba el hueco exacto en el que hacía falta — pero eran los únicos 6
+fallbacks vivos de toda la lista que el grep había encontrado, no "posiblemente muertos".
+**Decisión:**
+1. Se agrega un `:root` base a `css/components.css` con los 6 valores en claro — mismo patrón que
+   `tokens.css` usa para todo lo demás. Los 6 fallbacks inline, ahora sí muertos, se sacan.
+2. `#009ABF`/`#B71C1C` (hover de `.btn--primary`/`.btn--danger`/`.pill--active`) y `#fff` (texto sobre
+   `var(--celeste)` en `.ctrl-filter.is-active`/`.ctrl-row--active`/`.threshold-checkbox-static__box`/
+   `.exec-step__dot`) se relocalizan a `--color-primary-hover`/`--color-danger-hover` (`tokens.css`) y
+   `var(--color-white)`, con el **mismo valor exacto** — verificado en navegador real (captura antes/
+   después, claro y oscuro, estado `:hover` incluido) que no cambia nada visualmente. No se les inventó un
+   tono distinto por tema: eso es una decisión de diseño que nadie pidió, no una migración mecánica.
+**Alternativas descartadas:** Sacar los 6 fallbacks sin agregar el `:root` (rompía el banner de privacidad
+y los 4 toasts en el estado por default); inventar valores de hover distintos por tema para
+`--color-primary-hover`/`--color-danger-hover` (ninguna de las dos bases —`--color-primary`/
+`--color-danger`— sigue el mismo patrón entre sí: `--color-primary` es fijo en los dos temas,
+`--color-danger` sí varía — diseñar un hover "correcto" para cada caso es un juicio de diseño, no algo que
+se pueda derivar mecánicamente, y no hay un defecto confirmado que lo exija).
+**Verificación:** `tests/e2e/tokenDefaults.spec.js`, confirmado que la primera aserción falla si se saca
+el `:root` nuevo (se probó explícitamente: revertido, corrido, visto fallar, restaurado). Screenshots en
+claro/oscuro para banner, toasts, botones (normal + `:hover`), pill, checkbox y exec-step.
+**Motivo:** Continuación del plan de escalabilidad, Fase 2 — cierra el último ítem que quedaba abierto de
+esa fase.

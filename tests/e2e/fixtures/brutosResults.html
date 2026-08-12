@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Fixture de verificación manual del Paso 5 (D-041) — NO es una pantalla de
+     la app. Monta renderBrutosResults con datos inventados, sin IndexedDB ni
+     wizard, para ver en un navegador real cómo se ve el caso "nada evaluado"
+     arreglado (antes salía verde, "todo coincide"). -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+</head><body><div id="host" style="padding:16px"></div>
+<script type="module">
+import { renderBrutosResults } from '../../../js/controls/brutos.js';
+const caso = new URLSearchParams(location.search).get('caso');
+
+const rowsNada = [
+  { legajo: '1', nombre: 'Perez', salBase: 999, aCuFutAumen: 999, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
+  { legajo: '2', nombre: 'Gomez', salBase: 999, aCuFutAumen: 999, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
+];
+const rowsOk = [
+  { legajo: '1', nombre: 'Perez', salBase: 850000, aCuFutAumen: 30000, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
+  { legajo: '2', nombre: 'Gomez', salBase: 920000, aCuFutAumen: 30000, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
+];
+
+const rows = caso === 'ok' ? rowsOk : rowsNada;
+renderBrutosResults({ rows, summary: { total: rows.length, conDifSalario: 0, conDifACuFutAumen: 0, sinTabData: 0 }, period: '2026-04' },
+  document.getElementById('host'));
+</script></body></html>

@@ -50,6 +50,18 @@ const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
  *                                 (D-039) — [] si la columna es derivada
  *                                 (se calcula, no sale de ningún archivo)
  * @property {string}   necessity  uno de NECESSITY.*
+ * @property {'txt'|'num'} type    cómo se formatea (alineación + `numFmt` en
+ *                                 el xlsx). Obligatorio en toda columna — un
+ *                                 contrato que se olvida declararlo es
+ *                                 exactamente el default silencioso ("sale
+ *                                 mal alineado y nada avisa") que este diseño
+ *                                 existe para evitar; lo hace cumplir
+ *                                 `tests/exportContracts.test.js`.
+ * @property {number}  [width]    ancho de columna en el xlsx (unidades de
+ *                                 Excel). Sólo lo consume `writeContractSheet`
+ *                                 (Paso 4a) — los contratos "Controlar" (Paso
+ *                                 4b, todavía con su propio encabezado de dos
+ *                                 niveles) no lo necesitan aún.
  */
 
 /**
@@ -70,35 +82,36 @@ const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
 const brutosControlar = {
   exportId: 'brutos', sheet: 'Control de Brutos', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'Legajo',              key: 'legajo',         from: ['legajoColumn'],         necessity: NECESSITY.CLAVE },
-    { label: 'Apellido y Nombre',   key: 'nombre',         from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL },
-    { label: 'SAL_BASE',            key: 'salBase',        from: ['salBaseColumn'],        necessity: NECESSITY.OBLIGATORIA },
-    { label: 'CTRL SALARIO BASE',   key: 'ctrlSalBase',    from: [],                       necessity: NECESSITY.OBLIGATORIA },
-    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    from: ['aCuFutAumenColumn'],    necessity: NECESSITY.OBLIGATORIA },
-    { label: 'CTRL A_CTA_FUT_AUMEN', key: 'ctrlACuFutAumen', from: [],                     necessity: NECESSITY.OBLIGATORIA },
-    { label: 'Legajo (Tab)',        key: 'legajo',         from: ['empleadoColumn'],       necessity: NECESSITY.CLAVE },
-    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      from: ['tabSalBaseColumn'],     necessity: NECESSITY.OBLIGATORIA },
-    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      from: ['tabACuFutAumenColumn'], necessity: NECESSITY.OBLIGATORIA },
+    { label: 'Legajo',              key: 'legajo',         from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Apellido y Nombre',   key: 'nombre',         from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
+    { label: 'SAL_BASE',            key: 'salBase',        from: ['salBaseColumn'],        necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'CTRL SALARIO BASE',   key: 'ctrlSalBase',    from: [],                       necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    from: ['aCuFutAumenColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'CTRL A_CTA_FUT_AUMEN', key: 'ctrlACuFutAumen', from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Legajo (Tab)',        key: 'legajo',         from: ['empleadoColumn'],       necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      from: ['tabSalBaseColumn'],     necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      from: ['tabACuFutAumenColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
   ],
 };
 
-/** Modo Generar Reporte: hoy usa `cols.has*` — la columna DESAPARECE si la
- * clave de origen no está mapeada (10 columnas en vez de 11). Paso 4a migra
- * esto a layout:'fijo' (encabezado siempre, celda vacía). */
+/** Modo Generar Reporte: migrado a `writeContractSheet` (Paso 4a) — antes usaba
+ * `cols.has*` y la columna DESAPARECÍA si la clave de origen no estaba mapeada
+ * (10 columnas en vez de 11). Ahora layout:'fijo': el encabezado sale siempre,
+ * la celda va vacía. Anchos = los que ya tenía el `.xlsx` a mano. */
 const brutosReporte = {
   exportId: 'brutos_reporte', sheet: 'Reporte de Brutos', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'FECHA_INI',      key: 'fecIni',      from: [],                                      necessity: NECESSITY.OBLIGATORIA },
-    { label: 'FECHA_FIN',      key: 'fecFin',      from: [],                                      necessity: NECESSITY.OBLIGATORIA },
-    { label: 'ID_EMPLEADO',    key: 'legajo',      from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE },
-    { label: 'NOMBRE',         key: 'nombre',      from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL },
-    { label: 'APELLIDO_1',     key: 'apellido1',   from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL },
-    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL },
-    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'],                     necessity: NECESSITY.OPCIONAL },
-    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL },
-    { label: 'SAL_BASE',       key: 'salBase',     from: ['tabSalBaseColumn'],                     necessity: NECESSITY.OBLIGATORIA },
-    { label: 'A_CTA_FUT_AUMEN', key: 'aCuFutAumen', from: ['tabACuFutAumenColumn'],                necessity: NECESSITY.OBLIGATORIA },
-    { label: 'N_PUESTO',       key: 'puesto',      from: ['puestoColumn'],                         necessity: NECESSITY.OPCIONAL },
+    { label: 'FECHA_INI',      key: 'fecIni',      from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
+    { label: 'FECHA_FIN',      key: 'fecFin',      from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
+    { label: 'ID_EMPLEADO',    key: 'legajo',      from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
+    { label: 'NOMBRE',         key: 'nombre',      from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
+    { label: 'APELLIDO_1',     key: 'apellido1',   from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
+    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'SAL_BASE',       key: 'salBase',     from: ['tabSalBaseColumn'],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'A_CTA_FUT_AUMEN', key: 'aCuFutAumen', from: ['tabACuFutAumenColumn'],                necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 20 },
+    { label: 'N_PUESTO',       key: 'puesto',      from: ['puestoColumn'],                         necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
   ],
 };
 
@@ -107,30 +120,31 @@ const brutosReporte = {
 const gsPersControlar = {
   exportId: 'gs_pers', sheet: 'Control GS Pers', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'Legajo',               key: 'legajo',   from: ['legajoColumn'],           necessity: NECESSITY.CLAVE },
-    { label: 'GTOS_PERSONALES',      key: 'gtos',     from: ['gtosPersonalesColumn'],   necessity: NECESSITY.OBLIGATORIA },
-    { label: 'CTRL GTOS_PERSONALES', key: 'ctrlGtos', from: [],                         necessity: NECESSITY.OBLIGATORIA },
-    { label: 'DTO_COCHERA',          key: 'dto',      from: ['dtoCocheraColumn'],       necessity: NECESSITY.OBLIGATORIA },
-    { label: 'CTRL DTO_COCHERA',     key: 'ctrlDto',  from: [],                         necessity: NECESSITY.OBLIGATORIA },
-    { label: 'GTOS_PERSONALES (Tab)', key: 'tabValGtos', from: ['tabGtosPersonalesColumn'], necessity: NECESSITY.OBLIGATORIA },
-    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', from: ['tabDtoCocheraColumn'],    necessity: NECESSITY.OBLIGATORIA },
+    { label: 'Legajo',               key: 'legajo',   from: ['legajoColumn'],           necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'GTOS_PERSONALES',      key: 'gtos',     from: ['gtosPersonalesColumn'],   necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'CTRL GTOS_PERSONALES', key: 'ctrlGtos', from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'DTO_COCHERA',          key: 'dto',      from: ['dtoCocheraColumn'],       necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'CTRL DTO_COCHERA',     key: 'ctrlDto',  from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'GTOS_PERSONALES (Tab)', key: 'tabValGtos', from: ['tabGtosPersonalesColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', from: ['tabDtoCocheraColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num' },
   ],
 };
 
+/** Migrado a `writeContractSheet` (Paso 4a) — mismo motivo que Brutos. */
 const gsPersReporte = {
   exportId: 'gs_pers_reporte', sheet: 'Reporte GS Pers', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'FECHA_INI',         key: 'fecIni',    from: [],                                      necessity: NECESSITY.OBLIGATORIA },
-    { label: 'FECHA_FIN',         key: 'fecFin',    from: [],                                      necessity: NECESSITY.OBLIGATORIA },
-    { label: 'ID_EMPLEADO',       key: 'legajo',    from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE },
-    { label: 'NOMBRE',            key: 'nombre',    from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL },
-    { label: 'APELLIDO_1',        key: 'apellido1', from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL },
-    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL },
-    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL },
-    { label: 'ID_CENTRO_COSTO',   key: 'idCC',      from: ['idCCColumn'],                           necessity: NECESSITY.OPCIONAL },
-    { label: 'GTOS_PERSONALES',   key: 'gtos',      from: ['tabGtosPersonalesColumn'],              necessity: NECESSITY.OBLIGATORIA },
-    { label: 'DTO_COCHERA',       key: 'dto',       from: ['tabDtoCocheraColumn'],                  necessity: NECESSITY.OBLIGATORIA },
-    { label: 'N_CENTRO_COSTO',    key: 'nCC',       from: ['ccColumn'],                             necessity: NECESSITY.OPCIONAL },
+    { label: 'FECHA_INI',         key: 'fecIni',    from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
+    { label: 'FECHA_FIN',         key: 'fecFin',    from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
+    { label: 'ID_EMPLEADO',       key: 'legajo',    from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
+    { label: 'NOMBRE',            key: 'nombre',    from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
+    { label: 'APELLIDO_1',        key: 'apellido1', from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
+    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'ID_CENTRO_COSTO',   key: 'idCC',      from: ['idCCColumn'],                           necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 16 },
+    { label: 'GTOS_PERSONALES',   key: 'gtos',      from: ['tabGtosPersonalesColumn'],              necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'DTO_COCHERA',       key: 'dto',       from: ['tabDtoCocheraColumn'],                  necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'N_CENTRO_COSTO',    key: 'nCC',       from: ['ccColumn'],                             necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
   ],
 };
 
@@ -141,29 +155,33 @@ const gsPersReporte = {
 // los dos modos.
 
 const nrConceptColumn = (c, key) => ({
-  label: c.label, key: c.key, from: [key], necessity: NECESSITY.OBLIGATORIA,
+  label: c.label, key: c.key, from: [key], necessity: NECESSITY.OBLIGATORIA, type: 'num',
 });
 
 const nrControlar = {
   exportId: 'nr', sheet: 'Control NR', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'Legajo', key: 'legajo', from: ['legajoColumn'], necessity: NECESSITY.CLAVE },
-    { label: '# Difs', key: 'difs',   from: [],                necessity: NECESSITY.OBLIGATORIA },
+    { label: 'Legajo', key: 'legajo', from: ['legajoColumn'], necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: '# Difs', key: 'difs',   from: [],                necessity: NECESSITY.OBLIGATORIA, type: 'num' },
     ...NR_CONCEPTS.map(c => nrConceptColumn(c, c.nrKey)),
   ],
 };
 
+// NR Reporte ya emite las 18 columnas siempre (no tiene el bug de `cols.has*`
+// que Brutos/GS Pers sí tenían) — no necesita el fix de comportamiento de
+// Paso 4a. Queda igual sin `width`: migrarlo a `writeContractSheet` es Paso 4b
+// (des-duplicación, no corrección).
 const nrReporte = {
   exportId: 'nr_reporte', sheet: 'Reporte NR', layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label: 'ID_EMPLEADO',     key: 'legajo',          from: ['empleadoColumn'],  necessity: NECESSITY.CLAVE },
-    { label: 'NOMBRE',          key: 'nombre',          from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL },
-    { label: 'APELLIDO_1',      key: 'apellido1',       from: ['tabApellido1Column'], necessity: NECESSITY.OPCIONAL },
-    { label: 'FECHA_ALTA',      key: 'fecAlta',         from: ['tabFecAltaColumn'],  necessity: NECESSITY.OPCIONAL },
-    { label: 'FECHA_BAJA',      key: 'fecBaja',         from: ['tabFecBajaColumn'],  necessity: NECESSITY.OPCIONAL },
-    { label: 'FEC_PAGO',        key: 'fecPago',         from: ['tabFecPagoColumn'],  necessity: NECESSITY.OPCIONAL },
-    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    from: ['tabIdCentroTrabColumn'], necessity: NECESSITY.OPCIONAL },
-    { label: 'ID_CATEGORIA',    key: 'idCategoria',     from: ['tabIdCategoriaColumn'],  necessity: NECESSITY.OPCIONAL },
+    { label: 'ID_EMPLEADO',     key: 'legajo',          from: ['empleadoColumn'],  necessity: NECESSITY.CLAVE,    type: 'txt' },
+    { label: 'NOMBRE',          key: 'nombre',          from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'APELLIDO_1',      key: 'apellido1',       from: ['tabApellido1Column'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_ALTA',      key: 'fecAlta',         from: ['tabFecAltaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_BAJA',      key: 'fecBaja',         from: ['tabFecBajaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FEC_PAGO',        key: 'fecPago',         from: ['tabFecPagoColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    from: ['tabIdCentroTrabColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CATEGORIA',    key: 'idCategoria',     from: ['tabIdCategoriaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
     ...NR_CONCEPTS.map(c => nrConceptColumn(c, c.tabKey)),
   ],
 };

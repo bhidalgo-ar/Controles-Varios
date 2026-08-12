@@ -44,6 +44,26 @@ for (const c of contracts) {
     assert(`${c.exportId}.${col.key}: from es array`, Array.isArray(col.from));
     assert(`${c.exportId}.${col.key}: necessity es uno de NECESSITY.*`,
       VALID_NECESSITY.has(col.necessity));
+    // `type` es obligatorio en TODA columna, aunque no todos los contratos
+    // tengan hoy un consumidor de `writeContractSheet` (Paso 4a) — si no se
+    // hace cumplir para los 6 contratos por igual, un contrato nuevo se
+    // olvida declararlo, `writeContractSheet` no tiene con qué alinear la
+    // celda, y sale mal sin que nada avise (exactamente el default silencioso
+    // que este diseño existe para evitar).
+    assert(`${c.exportId}.${col.key}: type es 'txt' o 'num'`,
+      col.type === 'txt' || col.type === 'num');
+  }
+}
+
+// ── `width` — sólo donde hay un consumidor real (Paso 4a) ────────────────────
+// Los contratos "Controlar" (Paso 4b, con su propio encabezado de dos niveles
+// con merges y bandas de color) no pasan por `writeContractSheet` todavía, así
+// que no se les exige `width`. Los dos "Generar Reporte" migrados sí.
+
+for (const exportId of ['brutos_reporte', 'gs_pers_reporte']) {
+  for (const col of EXPORT_CONTRACTS[exportId].columns) {
+    assert(`${exportId}.${col.key}: tiene width (writeContractSheet lo necesita)`,
+      typeof col.width === 'number' && col.width > 0);
   }
 }
 
