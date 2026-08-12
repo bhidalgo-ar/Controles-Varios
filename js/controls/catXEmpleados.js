@@ -16,6 +16,7 @@ import { showToast } from '../ui/toast.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
+import { makeLegajoKey } from '../utils/legajo.js';
 import { renderVerdict, renderTiles, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 
 /**
@@ -69,6 +70,12 @@ export function summarizeCatXEmpleados(results) {
 export function runCatXEmpleados(catAllRows, tabRows, mapping) {
   const cm = mapping.cat;
   const tm = mapping.tab;
+
+  // Clave de comparación de legajo para este cliente (D-038). Antes era un
+  // `normId` local con `parseInt`, que además de ignorar los ceros a la
+  // izquierda colapsaba `'12-B'` y `'12-C'` en el mismo `12` — un match falso,
+  // no un match más flexible.
+  const normId = makeLegajoKey(mapping.legajoKeyMode);
 
   // Partir el reporte en activos y bajas usando F. BAJA.
   const fBajaCol = cm.fBajaColumn;
@@ -162,13 +169,13 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
   });
 
   const byPuesto = mergeAggregations(
-    groupByKey(catActivos,     cm.puestoColumn, dedupeCAT, catDispFn),
-    groupByKey(tabRowsForDist, tm.puestoColumn, dedupeTAB, tabDispFn)
+    groupByKey(catActivos,     cm.puestoColumn, dedupeCAT, catDispFn, normId),
+    groupByKey(tabRowsForDist, tm.puestoColumn, dedupeTAB, tabDispFn, normId)
   );
 
   const byCC = mergeAggregations(
-    groupByKey(catActivos,     cm.centroCostoColumn, dedupeCAT, catDispFn),
-    groupByKey(tabRowsForDist, tm.ccColumn,           dedupeTAB, tabDispFn)
+    groupByKey(catActivos,     cm.centroCostoColumn, dedupeCAT, catDispFn, normId),
+    groupByKey(tabRowsForDist, tm.ccColumn,           dedupeTAB, tabDispFn, normId)
   );
 
   return {
@@ -582,14 +589,14 @@ function addDistributionSheet(wb, sheetName, labelCol, rows, styleHeader, base, 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
 /** Agrupa filas por groupCol, indexando por idCol → displayFn(row).
- *  Usa normId para la clave interna de deduplicación (elimina ceros a la izquierda). */
-function groupByKey(rows, groupCol, idCol, displayFn) {
+ *  `keyOf` es la clave de legajo del cliente (D-038) y se usa para deduplicar. */
+function groupByKey(rows, groupCol, idCol, displayFn, keyOf) {
   const map = new Map();
   if (!groupCol || !idCol) return map;
   for (const r of rows) {
     const key = norm(r[groupCol]) || '(sin valor)';
     if (!map.has(key)) map.set(key, new Map());
-    const id = normId(r[idCol]);
+    const id = keyOf(r[idCol]);
     if (id) map.get(key).set(id, displayFn(r));
   }
   return map;
@@ -623,15 +630,6 @@ function fmtDate(val) {
 }
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
-
-/** Normaliza IDs numéricos eliminando ceros a la izquierda para comparación.
- *  "0870" → "870", "870" → "870". Texto no numérico queda igual. */
-function normId(v) {
-  const s = norm(v);
-  if (s === '') return '';
-  const n = parseInt(s, 10);
-  return isNaN(n) ? s : String(n);
-}
 
 function esc(str) {
   return String(str ?? '')

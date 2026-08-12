@@ -7,6 +7,8 @@
 // Dexie (cargado desde el CDN en index.html) está disponible como variable global.
 /* global Dexie */
 
+import { DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode } from './utils/legajo.js';
+
 const db = new Dexie('controles-nomina');
 
 // Acá definimos las "tablas" de la base de datos y qué campos se pueden buscar.
@@ -287,6 +289,12 @@ export async function createClient(name, notes = '', extra = {}) {
     entityCount:  extra.entityCount || 1,
     active:       true,
     attributes:   extra.attributes || {},
+    // Cómo se compara el legajo en este cliente (D-038). Se declara acá y no se
+    // deja salir del `extra` sin default: un cliente sin el campo haría que cada
+    // control caiga en su propio criterio, que es justo lo que esto cierra.
+    legajoKeyMode: isValidLegajoKeyMode(extra.legajoKeyMode)
+      ? extra.legajoKeyMode
+      : DEFAULT_LEGAJO_KEY_MODE,
     createdAt: now,
     updatedAt: now,
   });

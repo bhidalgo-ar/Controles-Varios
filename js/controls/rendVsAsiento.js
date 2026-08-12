@@ -1,7 +1,7 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
-import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
+import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid,
@@ -124,11 +124,6 @@ function configToDisplayBlocks(config) {
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
 
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
 
 function esc(str) {
   return String(str ?? '')

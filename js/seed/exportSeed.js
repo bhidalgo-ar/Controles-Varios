@@ -7,6 +7,7 @@
 // paralelo — ver guardrail de T6 en specs/plan-v2-t0-t6.md.
 
 import { getClients, getControlConfigsForClient, getConfig } from '../db.js';
+import { DEFAULT_LEGAJO_KEY_MODE } from '../utils/legajo.js';
 import { SEED_SCHEMA_VERSION } from './importSeed.js';
 
 /**
@@ -31,6 +32,10 @@ export async function buildSeedExport(updatedBy = 'admin') {
     ccts:         c.ccts || [],
     entityCount:  c.entityCount || 1,
     sourceSystem: c.sourceSystem || 'meta4',
+    // Cómo se compara el legajo en este cliente (D-038): viaja en el seed para
+    // que la decisión se tome una vez y valga para todo el equipo, no una vez
+    // por navegador.
+    legajoKeyMode: c.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE,
     active:       c.active !== undefined ? c.active : true,
     attributes:   c.attributes || {},
   }));

@@ -22,6 +22,69 @@ export function parseAmount(value) {
   return isNaN(num) ? 0 : redondear(num);
 }
 
+/**
+ * Convierte una celda a número **para comparar**, o `null` si no hay dato.
+ *
+ * `null` no es `0` (ver CLAUDE.md): `null` = la celda está vacía o no es un
+ * número, `0` = hay dato y vale cero. Por eso esto no es `parseAmount`, que
+ * devuelve `0` para una celda vacía — sirve para sumar totales, no para decidir
+ * si un concepto se liquidó.
+ *
+ * Reemplaza las 7 copias que había en los módulos de control (D-042). Las 6
+ * copias naive hacían `Number(v)`, que da `null` para `"1.234,56"`; la de
+ * `variaciones.js` era el único parser es-AR completo, pero adoptarla a ciegas
+ * rompía al revés: con SheetJS la celda de un .xlsx real llega ya como número,
+ * y `"1234.56"` leído como es-AR daría `123456`. Así que el criterio **no es
+ * elegir un bando**, es distinguir los dos casos:
+ *
+ *   - `1234.56` (number, viene de SheetJS)        → 1234.56, sin tocar
+ *   - `"1.234,56"` (string es-AR, Tabulado HTML)  → 1234.56
+ *   - `"1.234"`    (miles es-AR, grupos de 3)     → 1234
+ *   - `"1234.56"`  (string con punto decimal)     → 1234.56
+ *   - `"(1.234,56)"` / `"-1.234,56"`              → -1234.56
+ *   - `""`, `"-"`, `"Null"`, `"abc"`, `undefined` → null
+ *
+ * Cuando aparecen los dos separadores, el **último** es el decimal y el otro es
+ * de miles — así `"1.234,56"` y `"1,234.56"` dan lo mismo sin adivinar locale.
+ * Con un solo punto, se lee como separador de miles sólo si forma grupos de tres
+ * exactos (`1.234`, `12.345.678`); si no, es decimal (`1234.56`, `1.5`).
+ */
+export function toNum(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'boolean' || value instanceof Date) return null;
+
+  // Espacio duro (U+00A0): los exports HTML de Meta4 lo usan como separador de miles.
+  let s = String(value).replace(/ /g, ' ').trim();
+  if (s === '' || s === '-') return null;
+
+  let negativo = false;
+  if (/^\(.*\)$/.test(s)) { negativo = true; s = s.slice(1, -1).trim(); }
+  if (s.startsWith('-'))      { negativo = true; s = s.slice(1).trim(); }
+  else if (s.startsWith('+')) { s = s.slice(1).trim(); }
+
+  s = s.replace(/[^\d.,]/g, ''); // saca "$", espacios de miles, "ARS", etc.
+  if (!/\d/.test(s)) return null;
+
+  const ultimaComa  = s.lastIndexOf(',');
+  const ultimoPunto = s.lastIndexOf('.');
+  if (ultimaComa !== -1 && ultimoPunto !== -1) {
+    s = ultimaComa > ultimoPunto
+      ? s.replace(/\./g, '').replace(',', '.')  // es-AR: "1.234,56"
+      : s.replace(/,/g, '');                    // en-US: "1,234.56"
+  } else if (ultimaComa !== -1) {
+    // Una sola coma es decimal ("1.234,56" ya salió arriba); varias sólo pueden
+    // ser separadores de miles, porque no hay número con dos decimales.
+    s = (s.match(/,/g).length === 1) ? s.replace(',', '.') : s.replace(/,/g, '');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '');
+  }
+
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return null;
+  return negativo ? -n : n;
+}
+
 /** Redondea a 2 decimales (evita errores de coma flotante como 0.1+0.2=0.30000000004) */
 export function redondear(num) {
   return Math.round(num * 100) / 100;

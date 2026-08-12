@@ -495,12 +495,38 @@
 
 ## D-038 — Clave de legajo: un estándar por cliente, precargado por corrida y editable sin pisar el default
 
-**Estado:** acordada, **no implementada** — Fase 1 del plan de escalabilidad (`ROADMAP.md`).
-**Fecha:** 2026-08-11
+**Estado:** **implementada** el 2026-08-12 (`js/utils/legajo.js`, `tests/consolidate.test.js`).
+**Fecha:** 2026-08-11, cerrada el 2026-08-12
 **Contexto:** Hoy conviven tres criterios distintos para decidir si `"007"` y `"7"` son el mismo empleado: `norm()` (sólo `trim`) en `nr.js`, `brutos.js`, `gsPers.js`, `variaciones.js` y `rendVsAsiento.js`; `normId()` con `replace(/^0+/, '')` en `rendXEe.js`; y otro `normId()` con `parseInt` en `catXEmpleados.js`. Dos controles corridos sobre los mismos dos archivos pueden entonces contar dotaciones distintas, y cuál "acierta" depende de cómo emita los legajos el sistema del cliente — que es dato del cliente, no del control.
 **Decisión:** La clave de legajo pasa a ser un **estándar por cliente**, guardado en `controlConfigs` (mismo mecanismo que `variaciones_config`, D-035), **precargado al ejecutar** y **editable para esa corrida sin pisar el default del cliente** — cuando un archivo puntual viene distinto, el analista lo corrige desde la pantalla y el estándar del cliente queda como estaba. Un único helper compartido reemplaza a los tres criterios actuales; entra junto con el `toNum` único y la extracción del módulo de consolidación.
 **Alternativas descartadas:** Unificar los tres en el más permisivo (`parseInt`) sin configuración (colapsa legajos que algún cliente sí distingue: si el sistema de origen no rellena con ceros, `"0012"` y `"12"` pueden ser dos empleados); dejar los tres criterios y sólo documentar la diferencia (es la clase de divergencia que produce un número mal sin que nadie lo note — no falla, cuenta distinto).
 **Motivo:** Decisión de Guillermo el 2026-08-11, tomada antes de implementar. Lo que hay que preservar hasta entonces no es el helper (eso se escribe solo) sino las tres propiedades del criterio: por cliente, precargado, y override por corrida que no pisa el default.
+
+**Cierre 2026-08-12 (decisión de Willy).** `"007"` y `"7"` **son el mismo empleado**: el default global es
+`sin_ceros`. Willy había marcado la letra (a) —sólo `trim`— y a la vez escrito "son el mismo empleado",
+que es la (b); se le repreguntó con el dato de que en los tres archivos reales de Marval (04-2026) los
+legajos son enteros sin ceros a la izquierda, así que para el cliente que corre hoy las dos opciones dan
+idéntico resultado, y confirmó la (b). Es además lo que ya hacían `rendXEe` y `catXEmpleados`, así que
+unifica hacia arriba en vez de degradar dos módulos que matcheaban bien.
+
+Tres precisiones sobre lo implementado, respecto de lo que esta entrada había acordado en agosto:
+
+1. **Vive en `clients.legajoKeyMode`, no en `controlConfigs`.** Willy pidió "que el controlConfigs tenga
+   las opciones de elegir cómo se toma el legajo para cada cliente"; la tabla `controlConfigs` tiene clave
+   `[clientCode+controlId]`, o sea que todo lo que se guarde ahí es config **de un control**. La clave de
+   legajo es del **cliente** y tiene que alcanzar también a los controles que no tienen ninguna fila de
+   config — meterla ahí obligaba a inventar un `controlId` fantasma que después aparece como control en
+   las pantallas que listan `controlConfigs`. Guardada en el registro del cliente se edita desde `#/admin`,
+   viaja en el seed (así la decisión se toma una vez para todo el equipo, no una vez por navegador) y el
+   wizard la resuelve **una sola vez por corrida** en `mapping.legajoKeyMode`, que es lo que hace que
+   valga para todos los controles y entregables de ese cliente sin tocar control por control.
+2. **El override por corrida sin pisar el default queda pendiente.** Lo que entró es el estándar por
+   cliente editable desde `#/admin`. El override efímero para el archivo que viene distinto un mes no se
+   implementó — no había pantalla donde ponerlo sin agrandar el PR, y sin un caso real no está claro si el
+   lugar es el Paso 1 o el Paso 2.
+3. **El `parseInt` de `catXEmpleados` no se conservó como opción.** Además de ignorar los ceros a la
+   izquierda, colapsaba `'12-B'` y `'12-C'` en el mismo `12`: un match falso, no un match más flexible.
+   El modo `sin_ceros` sólo toca legajos enteramente numéricos.
 
 ---
 
@@ -516,6 +542,38 @@
 **Motivo:** Precedencia confirmada por Guillermo el 2026-08-11. Se anota porque la asimetría entre los tres controles se lee como bug y la corrección "obvia" (emparejarlos) es la equivocada.
 
 **Actualización 2026-08-12:** el punto 3 sigue abierto por decisión de Guillermo — no se agrega fallback a NR ni a GS Pers mientras no haya un Tabulado real contra el cual confirmar los códigos. Hasta entonces los dos controles piden la columna explícitamente cuando no está mapeada, que es el comportamiento correcto: un dato que no se puede resolver se informa, no se completa con 0,00. Es el único ítem de la Fase 0 que queda abierto a propósito.
+
+**Cierre del punto 3 — 2026-08-12 (segunda actualización del día).** Willy trajo el Tabulado real
+(Marval 04-2026, 101 columnas) junto con el Reporte de NR y el de Gastos personales del mismo período, así
+que los códigos ya no se infieren: se leyeron del archivo. Quedan como **semilla** en
+`js/controls/tabCodes.js` (`TAB_CODE_SEEDS`), no en los módulos de control:
+
+- **GS Pers:** `8802` (`8802-GTOS_PERSONAL`) y `8805` (`8805-DTO_COCHERA`).
+- **NR:** 10 de los 18 conceptos — `3025`, `3903`, `3905`, `3913`, `3943`, `3945`, `3973`, `3974`, `1203`, `4897`.
+- **Brutos:** `1003` y `1017` confirmados, los que ya estaban cableados.
+- **Los 8 conceptos NR restantes** (`INDEM_ANT_FALLE`, `INDM_MATERNIDAD`, `GRAT_VAC`, `GRA_VACNOG_SAC`,
+  `INDEM_FUER_MAY`, `INDEM_EMBARAZO`, `ASIG_PAS`, `INCREMENTO_ST`) **no aparecen en ese Tabulado**: no se
+  liquidaron ese mes, así que no hay con qué confirmar su código y **siguen sin semilla a propósito**. Se
+  piden explícitamente en el Paso 2, que es el comportamiento correcto (D-036). Confirmarlos necesita un
+  Tabulado de un mes con indemnizaciones liquidadas.
+
+Dos correcciones que salieron de mirar el archivo real, y que son el motivo de que esto no se pudiera
+"emparejar por simetría" antes:
+
+1. **El fallback que tenía Brutos era letra muerta.** `sumTabColumn(rows, col, '1003')` buscaba una columna
+   llamada literalmente `'1003'`; Meta4 la exporta `'1003-SUELDO'`. Nunca se activó contra un archivo real.
+   La resolución ahora es por **prefijo de código** (`buildColByCode`), que cubre los dos formatos.
+2. **La búsqueda por nombre elegía mal en un caso concreto.** El Tabulado trae `'4899-COCHERA_IG'` y
+   `'8805-DTO_COCHERA'`: matchear "COCHERA" por nombre puede enganchar el impuesto a las ganancias de la
+   cochera en lugar del descuento. Por código no hay ambigüedad.
+
+**Dónde vive la resolución:** en la auto-detección del Paso 2 del wizard, **después** del catálogo del
+cliente y sólo para las claves que quedaron vacías. El catálogo es dato del cliente y los códigos son
+semilla, así que esto no cambia nada de lo que ya resolvía bien — sólo completa lo que antes quedaba en
+"— Sin asignar —". Verificado contra los archivos reales: **las 14 semillas resuelven solas**, y el control
+de NR cruza los 527 legajos (5.270 celdas comparadas con dato en los dos lados, 550 con importe distinto de
+cero) sin una sola diferencia; las 4.216 celdas de los 8 conceptos sin semilla quedan con dato de un solo
+lado y **no se comparan**, que es exactamente lo que D-036 pide.
 
 ---
 
@@ -545,3 +603,50 @@
 **Alternativas descartadas:** Marcar `required: true` en los campos que faltan sin tocar el mecanismo (no arregla nada — 15 de 102 ya lo tenían); un flag booleano único en vez de tres niveles (no puede expresar "obligatoria pero con salida" sin una segunda estructura aparte); omisión con motivo de texto libre obligatorio (más fricción, mismo riesgo de "firma sin verificación" que la versión sin motivo — ver el límite explícito más abajo).
 **Límite conocido, no un descuido:** la omisión declarada es una firma, no una prueba — un analista puede declarar ausente una columna que el archivo sí trae. La mejora sobre el estado anterior es que queda asentado, visible en el panel y fuera del semáforo verde; no que sea imposible.
 **Motivo:** Decisión de Willy el 2026-08-12, sobre la auditoría de campos-vs-export. Plan completo, con lo que falta y lo que este diseño no resuelve (D-038, `toNum`, el mis-mapeo que la mandatoriedad *empeora*), en `specs/contrato-export.md`.
+
+---
+
+## D-042 — Fundamentos de cálculo compartidos: un `toNum`, una clave de legajo, un módulo de consolidación
+
+**Fecha:** 2026-08-12
+**Contexto:** La Fase 1 del plan de escalabilidad estaba trabada desde el 2026-08-11 esperando dos
+decisiones de Willy, y trababa a su vez al resto del plan. El problema de fondo era medible: **7 copias de
+`toNum`**, **3 criterios distintos de clave de legajo** (D-038) y **4 copias del par
+`groupRowsByLegajo`/`sumColumn`** con cuatro nombres distintos (`groupTabRowsByLegajo`/`sumTabColumn` en
+Brutos y GS Pers, `groupRowsByLegajo`/`sumColumn` en NR y Variaciones). La consecuencia no era estética: el
+bug de "consolidar por legajo en vez de pisar" se arregló **cuatro veces por separado** (Brutos `bba8958`,
+NR `b2f8bef`, GS Pers el 2026-08-11, GS Pers modo Reporte el 2026-08-12), porque la copia número N siempre
+se olvida.
+**Decisión:**
+1. **`toNum` único en `js/utils/currency.js`.** No se unificó "hacia el más común" ni se adoptó el parser
+   es-AR de Variaciones a ciegas — las dos cosas rompían al revés, y es lo que hacía que la decisión no
+   fuera mecánica. El criterio es **distinguir los dos casos de entrada**: un `number` (SheetJS ya parseó
+   la celda del `.xlsx`) pasa sin tocar; un string se lee como es-AR. Cuando hay dos separadores, el
+   **último** es el decimal (así `"1.234,56"` y `"1,234.56"` dan lo mismo sin adivinar locale); con un solo
+   punto, es separador de miles sólo si forma grupos de tres exactos (`"1.234"` → 1234), y si no es decimal
+   (`"1234.56"` → 1234.56, que las 6 copias naive leían como `null` y la de Variaciones como `123456`).
+2. **Clave de legajo:** ver D-038, cerrada el mismo día. `js/utils/legajo.js`, default `sin_ceros`,
+   configurable por cliente, resuelta una vez por corrida en `mapping.legajoKeyMode`.
+3. **`js/controls/consolidate.js`** con `groupRowsByLegajo(rows, col, { keyFn })`, `sumColumn(group, col,
+   { toNum })` y `lastRow(group)`. Los dos primeros **parametrizados**: el intento anterior de este plan
+   proponía una versión sin parámetros, que rompía Variaciones. Las 4 copias se borraron.
+4. **`js/controls/tabCodes.js`** con `buildColByCode` (estaba duplicado en `rendXEe` y `rendVsTabu`) y las
+   semillas de código de concepto confirmadas contra un Tabulado real — ver D-039.
+5. **Los dos lados de cada cruce se consolidan.** Brutos y GS Pers consolidaban el Tabulado pero recorrían
+   el reporte fila por fila (`brutosRows.map`), lo que da una diferencia falsa en cuanto el reporte trae dos
+   filas de un legajo. Verificado que el Reporte de NR real **sí** trae una fila por liquidación (un legajo
+   con 9 pagas aparece 9 veces en los dos archivos), así que la asimetría era una bomba de tiempo, no un
+   caso imposible. Los archivos de Brutos y GS Pers del período de muestra no traen legajos repetidos, así
+   que el cambio no altera ningún resultado de hoy.
+**Alternativas descartadas:** Emparejar copia por copia sin extraer (es lo que se hizo cuatro veces con el
+bug de consolidación); extraer la consolidación antes de tener el `toNum` único (rompía Variaciones, por eso
+el orden de las fases era obligatorio y no preferencia); dejar `norm()` como clave de legajo y sólo
+documentar la diferencia entre módulos (la clase de divergencia que cuenta distinto sin fallar).
+**Verificación:** `tests/consolidate.test.js` (69 asserts, en la cadena de `npm run test:unit`) + corrida
+de NR, GS Pers y los tres modos "Generar Reporte" contra los archivos reales de Marval 04-2026 que trajo
+Willy: 527 legajos consolidados de 543 filas de reporte, 0 diferencias, una fila por empleado en los tres
+entregables, y el legajo de 9 liquidaciones sumando 30.000 en los dos lados.
+**Lo que esto NO resuelve:** el `norm()` de limpieza de texto sigue copiado en cada módulo (4 líneas, sin
+ambigüedad semántica — no es la clase de duplicación que produce bugs); el override de clave de legajo por
+corrida (ver D-038, punto 2); y los 6 puntos de integración de un control nuevo, que esta entrada no baja
+— lo que elimina es que uno de ellos sea "copiá el helper de consolidación de otro control".

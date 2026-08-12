@@ -74,23 +74,40 @@ la constante de IDs junto a las que ya están.
 
 ### 4 — el módulo del control
 
-**Consolidar por legajo.** El Tabulado trae una fila **por liquidación**, no por empleado: un legajo
-con mensual + baja aparece dos veces y Meta4 informa el total sumado. Sin consolidar, la última
-liquidación pisa a las anteriores → diferencias falsas en todo empleado con doble paga. Ya pasó tres
-veces (Brutos, NR, GS Pers).
+**Consolidar por legajo, los dos lados.** El Tabulado trae una fila **por liquidación**, no por
+empleado: un legajo con mensual + baja aparece dos veces. El reporte informa el total sumado — salvo
+el de NR, que también trae una fila por liquidación. Sin consolidar, la última liquidación pisa a las
+anteriores → diferencias falsas en todo empleado con doble paga. Ya pasó **cuatro** veces (Brutos, NR,
+GS Pers modo Controlar y GS Pers modo Reporte), y por eso ahora hay un módulo compartido.
 
-No lo escribas de cero ni lo copies. Buscá primero:
+No lo escribas de cero ni lo copies — **importalo**:
 
+```js
+import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
+import { makeLegajoKey } from '../utils/legajo.js';
+import { toNum } from '../utils/currency.js';
+
+// Una vez por corrida: la clave de legajo es del cliente (D-038), y los DOS
+// lados del cruce tienen que usar la misma o el control informa faltantes que
+// no faltan.
+const keyFn = makeLegajoKey(mapping.legajoKeyMode);
+
+for (const [legajo, group] of groupRowsByLegajo(tabRows, tm.empleadoColumn, { keyFn })) {
+  const total = sumColumn(group, tm.miConceptoColumn);   // null si no hay dato, nunca 0
+  const ficha = lastRow(group);                          // nombre/CC/fecha: NO se suman
+}
 ```
-grep -rn "function sumColumn\|function sumTabColumn" js/
-```
 
-Si hay un módulo compartido, **importalo**. Si todavía sigue duplicado en `nr.js` / `brutos.js` /
-`gsPers.js` / `variaciones.js`, extraelo a un módulo compartido en tu mismo PR y hacé que esos cuatro
-importen de ahí — sale más barato que mantener la quinta copia, y es lo que la Fase 1 del ROADMAP
-tiene planeado igual. La regla está escrita como test ejecutable en `tests/gsPersControl.test.js`:
-copiá **ese escenario** a tu test. Copiar tests está bien; copiar lógica de producción es
-exactamente lo que produjo el bug tres veces.
+Tres cosas que se rompen si las escribís a mano: `sumColumn` devuelve `null` —no `0`— cuando ninguna
+liquidación trajo dato; `toNum` distingue el string es-AR (`"1.234,56"`) del número que SheetJS ya
+parseó, que es lo que hacía divergir a las 7 copias que había; y `lastRow` marca explícitamente qué
+datos se toman de la última liquidación en vez de sumarse. La regla está escrita como test ejecutable
+en `tests/consolidate.test.js` y `tests/gsPersControl.test.js`: copiá **ese escenario** a tu test.
+Copiar tests está bien; copiar lógica de producción es exactamente lo que produjo el bug cuatro veces.
+
+**Y si tu control resuelve columnas del Tabulado por código de concepto**, importá `buildColByCode` de
+`js/controls/tabCodes.js` y agregá tu semilla a `TAB_CODE_SEEDS` — sólo si la confirmaste contra un
+Tabulado real del cliente (D-039). Un código inventado por analogía es un default silencioso.
 
 Excepción conocida: `acreditaciones.js`, donde la unidad del reporte es la acreditación y no el
 empleado-mes (D-021). Si creés estar en ese caso, confirmalo con Willy.

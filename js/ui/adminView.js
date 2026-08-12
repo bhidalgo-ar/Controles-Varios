@@ -12,6 +12,9 @@
 // importSeed.js sabe leer — no un formato paralelo.
 
 import { getClients, getClient, updateClient, getControlConfigsForClient, saveControlConfig } from '../db.js';
+import {
+  LEGAJO_KEY_MODES, LEGAJO_KEY_MODE_LABELS, DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode,
+} from '../utils/legajo.js';
 import { buildClientCatalogs } from './clientsList.js';
 import { buildSeedExport } from '../seed/exportSeed.js';
 import { downloadBlob } from '../utils/exportData.js';
@@ -160,6 +163,9 @@ async function renderClientDetail(root, state) {
   ]);
   const configByControl = new Map(configs.map(c => [c.controlId, c]));
   const attrs = client.attributes || {};
+  const legajoKeyMode = isValidLegajoKeyMode(client.legajoKeyMode)
+    ? client.legajoKeyMode
+    : DEFAULT_LEGAJO_KEY_MODE;
 
   container.innerHTML = `
     <h3 style="margin-top:0;">${esc(client.name)} <span class="text-sm text-muted">(${esc(client.code || '—')})</span></h3>
@@ -189,6 +195,19 @@ async function renderClientDetail(root, state) {
       <div class="form-group">
         <label class="form-label">Dotación</label>
         <input type="number" class="form-input" id="js-admin-pays" min="0" value="${client.pays ?? ''}">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label class="form-label">Cómo se compara el legajo</label>
+        <select class="form-input" id="js-admin-legajo-key">
+          ${Object.values(LEGAJO_KEY_MODES).map(mode => `
+            <option value="${esc(mode)}" ${legajoKeyMode === mode ? 'selected' : ''}>
+              ${esc(LEGAJO_KEY_MODE_LABELS[mode])}
+            </option>`).join('')}
+        </select>
+        <p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">
+          Se aplica a todos los controles y entregables de este cliente. Cambialo sólo si
+          los archivos del cliente rellenan el legajo con ceros de forma distinta entre sí.
+        </p>
       </div>
       <div class="form-group" style="grid-column:1/-1;">
         <label class="form-label">Convenios / CCTs</label>
@@ -270,6 +289,7 @@ async function renderClientDetail(root, state) {
     try {
       await updateClient(client.id, {
         sourceSystem: container.querySelector('#js-admin-source-system').value,
+        legajoKeyMode: container.querySelector('#js-admin-legajo-key').value,
         team:         container.querySelector('#js-admin-team').value,
         consultant:   container.querySelector('#js-admin-consultant').value,
         ccts,

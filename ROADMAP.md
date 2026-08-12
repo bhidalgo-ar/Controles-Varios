@@ -60,16 +60,22 @@ El orden importa: F1 destraba a las demás, y F5 es lo que evita que todo esto v
 
 | Fase | Qué | Estado |
 |---|---|---|
-| F0 | Bugs que dan un resultado incorrecto hoy | hecho ✅ (2026-08-12) — quedan 2 abiertos a propósito: el badge en dark mode se lo lleva F2, y el fallback de NR/GS Pers espera un Tabulado real (D-039) |
-| F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | planeado — **bloqueada** por dos decisiones de Willy (ver el spec de fases) |
+| F0 | Bugs que dan un resultado incorrecto hoy | hecho ✅ (2026-08-12) — cerrado del todo: el fallback de NR/GS Pers se resolvió con el Tabulado real que trajo Willy (D-039), y el badge en dark mode se lo llevó F2 |
+| F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | hecho ✅ (2026-08-12) — `js/utils/currency.js` (`toNum`), `js/utils/legajo.js`, `js/controls/consolidate.js`, `js/controls/tabCodes.js`; las 7 copias de `toNum`, los 3 criterios de legajo y las 4 de consolidación borradas. Verificado contra archivos reales de Marval (D-042). Pendiente: override de clave por corrida (D-038 punto 2) |
 | F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | en curso (2026-08-12) — `createResultsToolbar()` hecho para 9/15 sitios, hex de JS cerrado; falta `css/components.css` (sin tocar a propósito, necesita navegador real) y el resto de la lista |
-| F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado — pendiente de decisión de Willy: qué recordar del toggle "sólo con diferencia/todos" |
+| F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado — ya **no** bloqueado: Willy confirmó el 2026-08-12 que el toggle "sólo con diferencia/todos" queda como está por default, y que lo que cada control puede sumar es una agrupación propia que le sirva |
 | F4 | `fileTypes.js` con un mapa único, config declarada en el registry, matar el `Promise.all` posicional | en curso (2026-08-12) — Paso 0 (`Promise.all` por clave) hecho. El resto se replantea como **contrato de export** a partir de la auditoría de campos-vs-export: plan por pasos en `specs/contrato-export.md`, con 2 preguntas abiertas para Willy |
-| F5 | Skill `nuevo-control`: de "copiá X" a "importá X", una vez que exista el módulo de F1 | planeado |
+| F5 | Skill `nuevo-control`: de "copiá X" a "importá X", una vez que exista el módulo de F1 | hecho ✅ (2026-08-12) — el módulo de F1 ya existe, así que el skill apunta a `consolidate.js` en vez de decir "extraelo vos" |
 
 F5 no es cosmético: el skill mandaba a copiar el helper de consolidación, y por eso el mismo bug se
-arregló tres veces (Brutos, NR y GS Pers) — la copia número N siempre se olvida. Mientras el módulo
-compartido no exista, el skill ya dice buscar las copias con `grep` y extraer en vez de copiar.
+arregló **cuatro** veces (Brutos, NR, GS Pers modo Controlar y GS Pers modo Reporte) — la copia número N
+siempre se olvida. Con `js/controls/consolidate.js` en pie, el skill ya no manda a copiar ni a extraer:
+manda a importar.
+
+**Lo que queda de la F1**, y no es bloqueante: el override de clave de legajo **por corrida** sin pisar el
+default del cliente (D-038 punto 2). Entró el estándar por cliente, editable desde `#/admin` y distribuido
+en el seed; el override efímero para el mes en que un archivo viene distinto necesita decidir en qué paso
+del wizard va, y sin un caso real no se puede decidir bien.
 
 ---
 
@@ -111,6 +117,11 @@ compartido no exista, el skill ya dice buscar las copias con `grep` y extraer en
 - **Variación entre períodos — reuso de la corrida anterior.** Volver a resolver el período anterior desde IndexedDB para subir un solo archivo por mes. Requiere primero **cerrar con el cliente la regla de qué quincena compara contra cuál** (los dos tabulados de muestra comparan 2ª de marzo contra 2ª de abril, pero el documento base dice que los jornales van contra la quincena inmediata anterior y los mensuales contra el mes anterior), y que el histórico del cliente guarde la quincena y no sólo el mes. Se sacó en D-035 justamente porque adivinarlo armaba comparaciones mal sin avisar.
 - **Variación entre períodos — concepto `1000` (mensuales) sin validar.** No aparece en ninguno de los tabulados de muestra. La lógica está y suma sola cuando exista, pero nunca corrió contra datos reales.
 - **Variación entre períodos — promoción a control de sistema.** Con los códigos fuera del código fuente, lo único específico de `POF` que queda es la semilla de la config. Cuando haya un segundo cliente con el mismo reporte, evaluar pasar el scope de `cliente` a `sistema`, igual que se hizo con los de Marval (D-015).
+- **Los 8 conceptos NR sin semilla de código.** `INDEM_ANT_FALLE`, `INDM_MATERNIDAD`, `GRAT_VAC`,
+  `GRA_VACNOG_SAC`, `INDEM_FUER_MAY`, `INDEM_EMBARAZO`, `ASIG_PAS` e `INCREMENTO_ST` no aparecen en el
+  Tabulado de Marval 04-2026, así que su código no se pudo confirmar y se siguen pidiendo a mano en el Paso
+  2 (D-039). Para cerrarlo hace falta un Tabulado de un mes con indemnizaciones liquidadas — no se inventan
+  por analogía.
 - **`tests/rendVsAsientoDrill.test.js` a CI.** Hoy es un test manual: necesita los archivos reales del cliente en `archivos test/`, que son datos de nómina y no se versionan. Para que entre a `npm run test:unit` hay que rehacerlo con fixtures anonimizados, como el resto de los tests.
 - **Variación entre períodos — "Dirección B" (ficha por legajo).** Al rediseñar la pantalla de resultados (D-025) se evaluaron tres direcciones: "Qué cambió y por qué" (implementada, es la pantalla actual) y "Detalle" (implementada, es la solapa de tabla) resuelven "¿por qué bajó?" y "quiero ver los 71 juntos"; queda pendiente la tercera — una ficha expandible por legajo (patrón `.emp-card`, como el modo detalle de SIRADIG) que junta premios + bruto + horas del mismo empleado en una vista vertical sin scroll horizontal, para cuando el analista ya sabe qué legajo mirar y quiere el contexto completo de ese empleado. Explorada visualmente en `https://claude.ai/code/artifact/a69789a0-65e7-4b43-84af-b06a9c448491` (Dirección B). No es urgente: la solapa «Detalle» ya permite buscar un legajo puntual.
 

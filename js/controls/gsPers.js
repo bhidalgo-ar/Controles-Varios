@@ -3,7 +3,9 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmt } from '../utils/currency.js';
+import { formatAmount as fmt, toNum } from '../utils/currency.js';
+import { makeLegajoKey } from '../utils/legajo.js';
+import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -68,21 +70,22 @@ export function runGsPers(gsRows, tabRows, mapping) {
   const gtosTabCol = tm.tabGtosPersonalesColumn || null;
   const dtoTabCol  = tm.tabDtoCocheraColumn     || null;
 
-  // Índice del Tabulado: legajo → { valGtos, valDto } sumado entre todas las
-  // liquidaciones del legajo en el mes (ej: mensual + baja) — igual que en
-  // Brutos y NR (ver groupTabRowsByLegajo/sumTabColumn más abajo).
+  // Los dos lados se consolidan por legajo: un legajo puede tener más de una
+  // liquidación en el mes (ej: mensual + baja) y el reporte informa el total
+  // sumado (ver ./consolidate.js). Este control ya arrastró el bug dos veces —
+  // en modo Controlar y en modo Reporte — por tener el helper copiado.
+  const keyFn = makeLegajoKey(mapping.legajoKeyMode);
   const tabByLegajo = new Map();
-  for (const [id, group] of groupTabRowsByLegajo(tabRows, tm.empleadoColumn)) {
+  for (const [id, group] of groupRowsByLegajo(tabRows, tm.empleadoColumn, { keyFn })) {
     tabByLegajo.set(id, {
-      valGtos: sumTabColumn(group, gtosTabCol),
-      valDto:  sumTabColumn(group, dtoTabCol),
+      valGtos: sumColumn(group, gtosTabCol),
+      valDto:  sumColumn(group, dtoTabCol),
     });
   }
 
-  const rows = gsRows.map(row => {
-    const legajo = norm(row[gm.legajoColumn]);
-    const gtos   = toNum(row[gm.gtosPersonalesColumn]);
-    const dto    = toNum(row[gm.dtoCocheraColumn]);
+  const rows = [...groupRowsByLegajo(gsRows, gm.legajoColumn, { keyFn }).entries()].map(([legajo, group]) => {
+    const gtos   = sumColumn(group, gm.gtosPersonalesColumn);
+    const dto    = sumColumn(group, gm.dtoCocheraColumn);
     const tab    = tabByLegajo.get(legajo) ?? { valGtos: null, valDto: null };
 
     const ctrlGtos = tab.valGtos !== null && gtos !== null ? tab.valGtos - gtos : null;
@@ -313,9 +316,11 @@ export function runGsPersReporte(_primaryRows, tabRows, mapping) {
   // runBrutosReporte y runNrReporte, y que el modo Controlar de este archivo.
   // Sin esto el .xlsx generado saca dos filas por cada legajo con doble paga,
   // con los importes partidos entre ellas.
-  const tabGroups = groupTabRowsByLegajo(tabRows, tm.empleadoColumn);
+  const tabGroups = groupRowsByLegajo(tabRows, tm.empleadoColumn, {
+    keyFn: makeLegajoKey(mapping.legajoKeyMode),
+  });
   const rows = [...tabGroups.entries()].map(([legajo, group]) => {
-    const last = group[group.length - 1];
+    const last = lastRow(group);
     return {
       fecIni:       fecIniStr,
       fecFin:       fecFinStr,
@@ -325,8 +330,8 @@ export function runGsPersReporte(_primaryRows, tabRows, mapping) {
       fecAlta:      tm.tabFecAltaColumn ? fmtDate(last[tm.tabFecAltaColumn]) : null,
       fecPago:      tm.tabFecPagoColumn ? fmtDate(last[tm.tabFecPagoColumn]) : null,
       idCC:         idCCCol ? norm(last[idCCCol]) : null,
-      gtos:         sumTabColumn(group, tm.tabGtosPersonalesColumn),
-      dto:          sumTabColumn(group, tm.tabDtoCocheraColumn),
+      gtos:         sumColumn(group, tm.tabGtosPersonalesColumn),
+      dto:          sumColumn(group, tm.tabDtoCocheraColumn),
       nCC:          ccCol ? norm(last[ccCol]) : null,
     };
   });
@@ -613,38 +618,9 @@ async function exportGsPersReporteToXlsx(results) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Limpieza de texto (nombre, centro de costo). La clave de legajo NO sale de
+// acá: sale de `makeLegajoKey(mapping.legajoKeyMode)` (D-038).
 function norm(v) { return v != null ? String(v).trim() : ''; }
-
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
-
-// Agrupa las filas del Tabulado por legajo, preservando el orden de aparición.
-// Espeja groupTabRowsByLegajo de brutos.js.
-function groupTabRowsByLegajo(tabRows, empleadoColumn) {
-  const groups = new Map();
-  for (const row of tabRows) {
-    const id = norm(row[empleadoColumn]);
-    if (!id) continue;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(row);
-  }
-  return groups;
-}
-
-// Suma un concepto a través de las liquidaciones de un legajo. Devuelve null
-// si la columna no está mapeada o ninguna liquidación tiene dato (distinto de 0).
-function sumTabColumn(rows, col) {
-  if (!col) return null;
-  let total = null;
-  for (const row of rows) {
-    const v = toNum(row[col]);
-    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
-  }
-  return total;
-}
 
 // Convierte un serial de fecha Excel a "D/M/YYYY".
 function fmtDate(v) {
