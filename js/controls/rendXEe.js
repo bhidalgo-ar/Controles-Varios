@@ -12,7 +12,9 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmt } from '../utils/currency.js';
+import { buildColByCode } from './tabCodes.js';
+import { makeLegajoKey } from '../utils/legajo.js';
+import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -40,41 +42,16 @@ const DIF_XLBG  = 'FFE2EFDA';
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
 
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
 
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Normaliza legajo para matching: quita ceros iniciales → "0870" y "870" matchean
-function normId(v) {
-  const s = String(v ?? '').trim().replace(/^0+/, '');
-  return s || null;
-}
 
 const THRESHOLD = 0.01;
 const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
 
-// Construye mapa código numérico → clave de columna a partir de los headers del Tabulado.
-// Soporta formato "1003-SUELDO" (extrae "1003") o nombre numérico exacto "1003".
-function buildColByCode(sampleRow) {
-  const colByCode = {};
-  for (const col of Object.keys(sampleRow)) {
-    const s = String(col).trim();
-    const m = s.match(/^(\d+)[-_]/);
-    if (m) {
-      if (!colByCode[m[1]]) colByCode[m[1]] = col;
-    } else if (/^\d+$/.test(s)) {
-      if (!colByCode[s]) colByCode[s] = col;
-    }
-  }
-  return colByCode;
-}
 
 // ── summarizeRendXEe ──────────────────────────────────────────────────────────
 
@@ -125,6 +102,10 @@ export function summarizeRendXEe(results) {
 export function runRendXEe(ctRows, tabRows, mapping) {
   const cm = mapping.costoTotal;
   const tm = mapping.tab;
+
+  // Clave de comparación de legajo para este cliente (D-038) — antes era un
+  // `normId` local, uno de los tres criterios que convivían en el repo.
+  const normId = makeLegajoKey(mapping.legajoKeyMode);
 
   // Misma agrupación de conceptos que Rend vs Tabulado (personalizada o default)
   const conceptConfig = mapping.conceptGrouping || DEFAULT_CONCEPT_CONFIG;

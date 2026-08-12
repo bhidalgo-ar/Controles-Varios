@@ -19,20 +19,25 @@ Mostrar algo funcionando temprano vale más que un plan largo.
 
 ## Gotchas — lo que cuesta caro si no lo sabés de antemano
 
-**Consolidar por legajo, siempre que se cruce contra el Tabulado.** El Tabulado trae una fila **por
-liquidación**, no por empleado: un legajo con la mensual y la baja del mismo mes aparece dos veces, y
-el reporte de Meta4 informa el total sumado. Si pisás en vez de sumar, salen diferencias falsas en
-todos los empleados con doble paga. Es el bug más caro del repo: se arregló tres veces por separado
-(Brutos `bba8958`, NR `b2f8bef`, GS Pers el 2026-08-11). La regla está escrita como test ejecutable
-en `tests/gsPersControl.test.js` — leelo antes de escribir un cruce nuevo. Y **reusá** el helper en
-vez de copiarlo: hoy hay cuatro copias de `groupRowsByLegajo`/`sumColumn` (`nr.js`, `brutos.js`,
-`gsPers.js`, `variaciones.js`) que ya divergieron entre sí. Excepción conocida: `acreditaciones.js`,
-donde la unidad del reporte es la acreditación y no el empleado-mes (D-021).
+**Consolidar por legajo, los DOS lados, siempre que se cruce contra el Tabulado.** El Tabulado trae una
+fila **por liquidación**, no por empleado: un legajo con la mensual y la baja del mismo mes aparece dos
+veces. El reporte de Meta4 informa el total sumado — salvo el de NR, que también trae una fila por
+liquidación (verificado con archivos reales: un legajo con 9 pagas aparece 9 veces en los dos archivos).
+Si pisás en vez de sumar, salen diferencias falsas en todos los empleados con doble paga. Es el bug más
+caro del repo: se arregló **cuatro** veces por separado antes de que existiera un módulo compartido (Brutos
+`bba8958`, NR `b2f8bef`, GS Pers el 2026-08-11, GS Pers modo Reporte el 2026-08-12).
+**Importá `js/controls/consolidate.js`** — `groupRowsByLegajo(rows, col, { keyFn })` y
+`sumColumn(group, col)` — y pasale la **misma** `keyFn` a los dos lados del cruce
+(`makeLegajoKey(mapping.legajoKeyMode)`, resuelta una vez por corrida). La regla está escrita como test
+ejecutable en `tests/consolidate.test.js` y `tests/gsPersControl.test.js`. Excepción conocida:
+`acreditaciones.js`, donde la unidad del reporte es la acreditación y no el empleado-mes (D-021).
 
 **`null` no es `0`.** `null` = no hay dato (la columna no está mapeada, o ninguna liquidación trajo
 valor); `0` = hay dato y vale cero. La diferencia se calcula sólo si los dos lados son distintos de
 `null`, y se compara con tolerancia (`Math.abs(diff) > 0.01`): los floats de Excel no dan igualdad
-exacta.
+exacta. Para leer un importe usá `toNum()` de
+`js/utils/currency.js` — no `Number(v)`, que da `null` para `"1.234,56"`, ni `parseAmount()`, que devuelve
+`0` para una celda vacía (sirve para totalizar, no para decidir si un concepto se liquidó).
 
 **Un default silencioso es un bug.** Si un control no puede resolver una columna o un concepto, no lo
 completa con 0,00: lo pide explícitamente y no deja avanzar, o sale como aviso en resultados. Igual
@@ -58,16 +63,21 @@ confirmó en el Paso 2, guardado en `controlConfigs` por `[clientCode+controlId]
 (2) búsqueda por catálogo/código matcheando por **prefijo** del encabezado; (3) recién ahí, un
 fallback cableado. Los códigos que están en el módulo son **semilla** para el cliente que todavía no
 configuró nada, no identidad: una renumeración del cliente se arregla desde la pantalla y no con un
-commit (D-035). Deuda conocida: `brutos.js` tiene `'1003'`/`'1017'` como fallback y `rendVsTabu.js`
-una lista de códigos cableada; si NR o GS Pers necesitan fallback, los códigos los confirma Willy
-contra un Tabulado real, no se infieren por simetría.
+commit (D-035). Las semillas de código de concepto viven en
+`js/controls/tabCodes.js` (`TAB_CODE_SEEDS`, confirmadas contra un Tabulado real de Marval) y las resuelve
+la auto-detección del Paso 2, después del catálogo del cliente y sólo para lo que quedó vacío. Buscá por
+**código**, nunca por nombre: el Tabulado trae `'4899-COCHERA_IG'` y `'8805-DTO_COCHERA'`, y matchear
+"COCHERA" agarra el equivocado. Deuda conocida: 8 de los 18 conceptos de NR siguen sin semilla porque no se
+liquidaron en el mes de muestra —no se inventan por analogía— y `rendVsTabu.js` todavía tiene su lista de
+códigos cableada.
 
-**Un legajo no siempre matchea consigo mismo.** Conviven tres criterios para decidir si `'007'` y
-`'7'` son el mismo empleado: `norm()` (sólo `trim`, en nr/brutos/gsPers/variaciones/rendVsAsiento),
-`normId()` con `replace(/^0+/,'')` en `rendXEe.js`, y `normId()` con `parseInt` en
-`catXEmpleados.js`. Está acordado unificarlo como estándar por cliente en `controlConfigs` pero no
-está implementado (D-038). Si un cruce devuelve empleados "faltantes" de un solo lado, mirá esto
-antes que nada.
+**Un legajo matchea consigo mismo con la clave del cliente, no con `trim`.** Por default `'007'` y `'7'`
+son el **mismo** empleado; cada cliente puede cambiarlo desde `#/admin` (`clients.legajoKeyMode`, viaja en
+el seed) y el wizard lo resuelve una vez por corrida en `mapping.legajoKeyMode` (D-038/D-042). Usá
+`makeLegajoKey(mapping.legajoKeyMode)` de `js/utils/legajo.js` — nunca `String(v).trim()` a mano, y nunca
+`parseInt` (colapsa `'12-B'` y `'12-C'` en `12`). El `norm()` que sigue en cada módulo es para limpiar
+texto (nombres, centro de costo), no para comparar legajos. Si un cruce devuelve empleados "faltantes" de
+un solo lado, mirá esto antes que nada.
 
 **Lo que va a Finanzas no lleva información de HR.** Cuando el archivo que genera un control lo
 recibe Finanzas/tesorería del cliente y no el equipo de Payroll, va sólo lo necesario para pagar:

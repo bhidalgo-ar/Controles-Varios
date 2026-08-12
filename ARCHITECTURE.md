@@ -145,7 +145,7 @@ Archivo `hya-controles-config.json`, generado desde modo admin, distribuido por 
 
 ## 7. Modo admin
 
-Pantalla dentro de la misma app, protegida por contraseña cuyo hash (SHA-256) se compara del lado del cliente. Como el código corre en GitHub Pages, esto es una barrera contra el acceso accidental, no un control de seguridad real — cualquiera con acceso al código fuente puede leer el hash y, con esfuerzo, evadirlo. El control de seguridad real es el permiso de escritura sobre la carpeta de SharePoint donde vive el seed: un analista que accede al modo admin puede editar su copia local, pero no puede publicar cambios que afecten a los demás. Ver `DECISIONS.md` para el registro de esta decisión.
+Pantalla dentro de la misma app, protegida por contraseña cuyo hash (SHA-256) se compara del lado del cliente. El hash **no está en el código**: se define desde `#/admin` y vive en `appConfig.adminPasswordHash` (IndexedDB), por navegador. La constante que queda en `adminView.js` es sólo la contraseña de arranque, para que ningún navegador del equipo quede afuera mientras no defina la suya (D-013). Como el código corre en GitHub Pages, esto es una barrera contra el acceso accidental, no un control de seguridad real — cualquiera con acceso al código fuente puede leer el hash y, con esfuerzo, evadirlo. El control de seguridad real es el permiso de escritura sobre la carpeta de SharePoint donde vive el seed: un analista que accede al modo admin puede editar su copia local, pero no puede publicar cambios que afecten a los demás. Ver `DECISIONS.md` para el registro de esta decisión.
 
 El modo admin habilita: editar atributos de cliente, editar `controlConfigs`, y exportar el seed actualizado.
 

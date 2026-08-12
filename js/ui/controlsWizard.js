@@ -34,6 +34,8 @@ import { autoDetectNrMapping }          from '../parsers/nrParser.js';
 import { autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
 import { autoDetectCostoTotalMapping }  from '../parsers/costoTotalParser.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
+import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
+import { DEFAULT_LEGAJO_KEY_MODE }      from '../utils/legajo.js';
 import { currentPeriod, periodOptions, previousPeriod, periodToLabel } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
 import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
@@ -1352,6 +1354,21 @@ function autoDetectTabExtraConfig(tabHeaders, catalogRows) {
 
   const conceptMapping = buildParserMapping(tabHeaders, catalog, TAB_EXTRA_CODIGO_TO_KEY);
 
+  // Lo que el catálogo del cliente no pudo resolver por nombre, se intenta por
+  // **código** de concepto (D-039): el nombre del encabezado lo renombra el
+  // cliente, el código es estable. Va después del catálogo y no antes porque el
+  // catálogo es dato del cliente y los códigos son sólo semilla — así esto no
+  // cambia nada de lo que ya resolvía bien, y sólo completa lo que quedaba vacío.
+  //
+  // Es lo que le faltaba a GS Pers y a NR: hasta acá el único con fallback era
+  // Brutos, y encima el suyo era letra muerta contra un Tabulado real, porque
+  // buscaba una columna llamada `'1003'` cuando Meta4 la exporta
+  // `'1003-SUELDO'`. `buildColByCode` cubre los dos formatos.
+  const colByCode = buildColByCode(tabHeaders);
+  for (const [key, code] of Object.entries(TAB_CODE_SEEDS)) {
+    if (!conceptMapping[key] && colByCode[code]) conceptMapping[key] = colByCode[code];
+  }
+
   return {
     ...conceptMapping,
     tabNombreColumn:      (nombre && nombre !== apellido) ? nombre : '',
@@ -1803,6 +1820,11 @@ async function executeControls(state, statusEl, container, root) {
       const mapping = {
         tab:    { ...(tab?.mapping || {}), ...state.tabExtraConfig },
         period: state.period,
+        // Cómo se decide si dos legajos son el mismo empleado, para ESTE cliente
+        // (D-038). Se resuelve una vez por corrida y viaja en el mapping para
+        // que los dos lados de cada cruce usen la misma clave — con criterios
+        // distintos por lado, el control informa faltantes que no faltan.
+        legajoKeyMode: state.client?.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE,
       };
       if ((REND_GROUPING_IDS.includes(controlId) || controlId === 'rend_vs_asiento') && state.rendVsTabuGrouping) {
         mapping.conceptGrouping = state.rendVsTabuGrouping;

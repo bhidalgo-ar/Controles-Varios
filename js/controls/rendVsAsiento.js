@@ -1,7 +1,8 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
-import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
+import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
+import { makeLegajoKey } from '../utils/legajo.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid,
@@ -124,11 +125,6 @@ function configToDisplayBlocks(config) {
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
 
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
 
 function esc(str) {
   return String(str ?? '')
@@ -561,6 +557,11 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   const contaRows = mapping.contaRows || [];
   const ccXEeRows = mapping.ccXEeRows || [];
   const config    = mapping.rvaConfig || DEFAULT_RVA_CONFIG;
+  // El override de CC x Empleado cruza legajos entre dos archivos del cliente,
+  // así que usa la clave de legajo del cliente y no `trim` a secas (D-038): con
+  // un archivo que rellena con ceros y otro que no, el override no se aplicaba y
+  // el CC caía al del asiento sin ningún aviso.
+  const legajoKeyOf = makeLegajoKey(mapping.legajoKeyMode);
   const { cuentaToCat, provCcss, ccRedir, ccRedirLbl } = buildIndexes(config);
 
   if (!rendRows?.length)  return { error: 'No hay datos del Reporte de Rendimiento.' };
@@ -569,7 +570,7 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   // Mapa de override por ID_EMPLEADO → CENTRO_COSTO (CC x Empleado opcional)
   const ccOverride = new Map();
   for (const r of ccXEeRows) {
-    const emp = norm(r.id_empleado);
+    const emp = legajoKeyOf(r.id_empleado);
     const cc  = norm(r.centro_costo);
     if (emp && cc) ccOverride.set(emp, cc);
   }
@@ -586,7 +587,7 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   const CAT_LABEL = Object.fromEntries(COLS.map(c => [c.key, c.label]));
 
   for (const row of contaRows) {
-    const empleado = norm(row.id_empleado);
+    const empleado = legajoKeyOf(row.id_empleado);
     const ccRaw    = hasOverride && empleado && ccOverride.has(empleado)
       ? ccOverride.get(empleado)
       : norm(row.cc_nombre);

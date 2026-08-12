@@ -3,7 +3,9 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmt } from '../utils/currency.js';
+import { formatAmount as fmt, toNum } from '../utils/currency.js';
+import { makeLegajoKey } from '../utils/legajo.js';
+import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -66,30 +68,33 @@ export function runBrutos(brutosRows, tabRows, mapping) {
   const bm = mapping.brutos;
   const tm = mapping.tab;
 
-  // Columnas del Tabulado para los conceptos — configuradas por el usuario en el mapeo.
-  // Fallback a '1003' / '1017' por compatibilidad con tabulados que usan código solo.
+  // Columnas del Tabulado para los conceptos. La resolución por código de
+  // concepto ('1003' / '1017') vive en la auto-detección del Paso 2 (D-039), que
+  // cubre los dos formatos de encabezado — el fallback que había acá buscaba una
+  // columna llamada literalmente '1003' y era letra muerta contra un Tabulado
+  // real, donde Meta4 la exporta '1003-SUELDO'.
   const salBaseTabCol   = tm.tabSalBaseColumn    || null;
   const aCuFutAuTabCol  = tm.tabACuFutAumenColumn || null;
 
-  // Índice del Tabulado: legajo → { valSal, valAcu }
-  // Un legajo puede tener más de una liquidación en el mes (ej: baja después
-  // de haber cobrado el mensual). Meta4 suma todas las liquidaciones del
-  // legajo en el Reporte de Brutos real, así que consolidamos igual acá para
-  // comparar contra el mismo total (en vez de quedarnos solo con la última).
-  const tabGroups = groupTabRowsByLegajo(tabRows, tm.empleadoColumn);
+  // Un legajo puede tener más de una liquidación en el mes (ej: baja después de
+  // haber cobrado el mensual), en el Tabulado y también en el reporte. Meta4
+  // informa el total sumado, así que se consolidan los DOS lados por legajo
+  // (ver ./consolidate.js) — comparar una liquidación suelta contra un total
+  // consolidado da una diferencia falsa.
+  const keyFn = makeLegajoKey(mapping.legajoKeyMode);
+  const tabGroups = groupRowsByLegajo(tabRows, tm.empleadoColumn, { keyFn });
   const tabByLegajo = new Map();
   for (const [id, group] of tabGroups) {
-    const last   = group[group.length - 1];
-    const valSal = sumTabColumn(group, salBaseTabCol, '1003');
-    const valAcu = sumTabColumn(group, aCuFutAuTabCol, '1017');
+    const last   = lastRow(group);
+    const valSal = sumColumn(group, salBaseTabCol);
+    const valAcu = sumColumn(group, aCuFutAuTabCol);
     const nombre = tm.apellidoNombreColumn ? norm(last[tm.apellidoNombreColumn]) : '';
     tabByLegajo.set(id, { valSal, valAcu, nombre });
   }
 
-  const rows = brutosRows.map(row => {
-    const legajo      = norm(row[bm.legajoColumn]);
-    const salBase     = toNum(row[bm.salBaseColumn]);
-    const aCuFutAumen = toNum(row[bm.aCuFutAumenColumn]);
+  const rows = [...groupRowsByLegajo(brutosRows, bm.legajoColumn, { keyFn }).entries()].map(([legajo, group]) => {
+    const salBase     = sumColumn(group, bm.salBaseColumn);
+    const aCuFutAumen = sumColumn(group, bm.aCuFutAumenColumn);
     const tab         = tabByLegajo.get(legajo) ?? { valSal: null, valAcu: null };
 
     const ctrlSalBase     = tab.valSal !== null && salBase !== null
@@ -327,9 +332,11 @@ export function runBrutosReporte(_primaryRows, tabRows, mapping) {
   // de haber cobrado el mensual). Consolidamos por legajo: los importes se
   // suman (igual que hace Meta4 en el Reporte de Brutos real) y los datos de
   // referencia (nombre, fechas, puesto) se toman de la última liquidación.
-  const tabGroups = groupTabRowsByLegajo(tabRows, tm.empleadoColumn);
+  const tabGroups = groupRowsByLegajo(tabRows, tm.empleadoColumn, {
+    keyFn: makeLegajoKey(mapping.legajoKeyMode),
+  });
   const rows = [...tabGroups.entries()].map(([legajo, group]) => {
-    const last = group[group.length - 1];
+    const last = lastRow(group);
     return {
       fecIni:      fecIniStr,
       fecFin:      fecFinStr,
@@ -339,8 +346,8 @@ export function runBrutosReporte(_primaryRows, tabRows, mapping) {
       fecAlta:     tm.tabFecAltaColumn ? fmtDate(last[tm.tabFecAltaColumn]) : null,
       fecBaja:     tm.tabFecBajaColumn ? fmtDate(last[tm.tabFecBajaColumn]) : null,
       fecPago:     tm.tabFecPagoColumn ? fmtDate(last[tm.tabFecPagoColumn]) : null,
-      salBase:     sumTabColumn(group, tm.tabSalBaseColumn,     null),
-      aCuFutAumen: sumTabColumn(group, tm.tabACuFutAumenColumn, null),
+      salBase:     sumColumn(group, tm.tabSalBaseColumn),
+      aCuFutAumen: sumColumn(group, tm.tabACuFutAumenColumn),
       puesto:      tm.puestoColumn ? norm(last[tm.puestoColumn]) : null,
     };
   });
@@ -641,42 +648,9 @@ async function exportBrutosReporteToXlsx(results) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Limpieza de texto (nombre, puesto). La clave de legajo NO sale de acá: sale
+// de `makeLegajoKey(mapping.legajoKeyMode)` (D-038).
 function norm(v) { return v != null ? String(v).trim() : ''; }
-
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
-
-// Agrupa las filas del Tabulado por legajo, preservando el orden de aparición
-// (tanto de los legajos como de las liquidaciones dentro de cada uno).
-function groupTabRowsByLegajo(tabRows, empleadoColumn) {
-  const groups = new Map();
-  for (const row of tabRows) {
-    const id = norm(row[empleadoColumn]);
-    if (!id) continue;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(row);
-  }
-  return groups;
-}
-
-// Suma un mismo concepto a través de varias liquidaciones del mismo legajo.
-// `col` es la columna configurada por el usuario; si no está configurada y se
-// pasa `fallbackCode`, intenta leer esa columna por código (ej: '1003').
-// Devuelve null si ninguna liquidación tiene datos (para distinguir de 0).
-function sumTabColumn(rows, col, fallbackCode) {
-  if (!col && !fallbackCode) return null;
-  let total = null;
-  for (const row of rows) {
-    const v = col
-      ? toNum(row[col])
-      : (toNum(row[fallbackCode]) ?? toNum(row[Number(fallbackCode)]));
-    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
-  }
-  return total;
-}
 
 function fmtRaw(v) {
   if (v === null || v === undefined) return null;

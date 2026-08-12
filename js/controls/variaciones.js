@@ -36,7 +36,9 @@ import {
   renderResumenDetalle,
 } from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmtNum } from '../utils/currency.js';
+import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
+import { makeLegajoKey } from '../utils/legajo.js';
+import { groupRowsByLegajo, sumColumn } from './consolidate.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
 import { clavesUnicas } from '../parsers/tabuladoHtml.js';
 
@@ -69,22 +71,9 @@ const MAX_VALORES_ESCALA = 6;
 
 // ── Helpers de datos ─────────────────────────────────────────────────────────
 
+// Limpieza de texto. La clave de legajo NO sale de acá: sale de
+// `makeLegajoKey(mapping.legajoKeyMode)` (D-038).
 const norm = v => (v === null || v === undefined ? '' : String(v).trim());
-
-/** Parsea un importe en formato es-AR ("1.234,56", "(1.234,56)", "-1.234,56"). */
-function toNum(v) {
-  if (v === null || v === undefined) return null;
-  if (typeof v === 'number') return isFinite(v) ? v : null;
-  let s = String(v).replace(/ /g, ' ').trim();
-  if (s === '' || s === '-') return null;
-  let neg = false;
-  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  if (s.startsWith('-')) { neg = true; s = s.slice(1); }
-  s = s.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
-  const n = parseFloat(s);
-  if (!isFinite(n)) return null;
-  return neg ? -n : n;
-}
 
 /** Código del encabezado de concepto: "899999 - BASE de Escala…" → "899999". */
 function codigoDeHeader(header) {
@@ -216,32 +205,6 @@ function resolverColumnaNombre(rows, preferida) {
 function resolverColumnaBruto(rows) {
   const keys = clavesDeFilas(rows);
   return [...keys].find(k => /^bruto$/i.test(norm(k))) || null;
-}
-
-// Agrupa filas por legajo preservando el orden de aparición. Un legajo puede
-// tener más de una liquidación en el mismo período (mensual + baja, quincena +
-// sobregiro) y el importe del concepto es la suma de todas.
-function groupRowsByLegajo(rows, legajoColumn) {
-  const groups = new Map();
-  for (const row of rows) {
-    const id = norm(row[legajoColumn]);
-    if (!id) continue;
-    if (!groups.has(id)) groups.set(id, []);
-    groups.get(id).push(row);
-  }
-  return groups;
-}
-
-// Suma un concepto a través de las liquidaciones de un legajo.
-// null = la columna no existe o ninguna liquidación tiene dato; 0 = hay dato y es cero.
-function sumColumn(group, col) {
-  if (!col) return null;
-  let total = null;
-  for (const row of group) {
-    const v = toNum(row[col]);
-    total = (total === null && v === null) ? null : (total ?? 0) + (v ?? 0);
-  }
-  return total;
 }
 
 /**
@@ -451,8 +414,9 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
   const ausenciaPrevCols = resolverColumnasAusencia(codigosAusencia, prevRows);
   const ausenciaActCols  = resolverColumnasAusencia(codigosAusencia, actRows);
 
-  const gPrev = groupRowsByLegajo(prevRows, legPrev);
-  const gAct  = groupRowsByLegajo(actRows, legAct);
+  const keyFn = makeLegajoKey(mapping.legajoKeyMode);
+  const gPrev = groupRowsByLegajo(prevRows, legPrev, { keyFn });
+  const gAct  = groupRowsByLegajo(actRows, legAct, { keyFn });
 
   const legajos = Array.from(new Set([...gPrev.keys(), ...gAct.keys()]))
     .sort((a, b) => {

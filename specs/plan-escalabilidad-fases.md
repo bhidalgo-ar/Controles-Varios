@@ -17,14 +17,15 @@ alcance a todos los controles que corresponda, en vez de tocar 9-13 archivos por
 
 ## Fase 0 — Bugs que dan un resultado incorrecto hoy
 
-**Estado: cerrada** (2026-08-12). Los 5 ítems que quedaban accionables se arreglaron; los 2 que
-siguen abiertos lo están por decisión de Guillermo, no por falta de tiempo:
+**Estado: cerrada del todo** (2026-08-12, segunda pasada del día). Los 5 ítems accionables se arreglaron, y
+los 2 que quedaban por decisión de Guillermo también se cerraron:
 
-- **#3 — badge "⚠ sin asignar" ilegible en dark mode.** Va a la Fase 2, que rehace esa capa entera
-  (los 2 hex cableados son un caso del "sin hex fuera de `tokens.css`" de esa fase).
-- **#6 — fallback de columna para NR y GS Pers (D-039).** Necesita un Tabulado real contra el cual
-  confirmar los códigos. Hasta entonces los dos controles piden la columna explícitamente, que es el
-  comportamiento correcto: un dato que no se puede resolver se informa, no se completa con 0,00.
+- **#3 — badge "⚠ sin asignar" ilegible en dark mode.** Lo cerró la Fase 2 (los 2 hex pasaron a
+  `var(--color-warning)`). Falta sólo que Willy lo confirme visualmente en un navegador.
+- **#6 — fallback de columna para NR y GS Pers (D-039).** Cerrado: Willy trajo el Tabulado real de Marval
+  04-2026 y los códigos se leyeron del archivo en vez de inferirse. 14 semillas en
+  `js/controls/tabCodes.js`; los 8 conceptos NR que no se liquidaron ese mes siguen sin semilla a propósito
+  y se piden explícitamente, que es el comportamiento correcto.
 
 ### Cerrados en el tercer PR (2026-08-12)
 
@@ -65,7 +66,7 @@ el sentido del inventario de la auditoría, que agrupa algunos juntos.)
 | # | Qué | Severidad | Bloqueado por |
 |---|---|---|---|
 | 3 | Badge "⚠ sin asignar" ilegible en dark mode (2 hex cableados en vez de tokens) | media | nada — **movido a la Fase 2**, que rehace esa capa entera |
-| 6 | Fallback de columna sólo lo tiene Brutos (`'1003'`/`'1017'` cableados) | — | **decisión de Guillermo**: ¿NR/GS Pers necesitan fallback propio y con qué códigos? Se confirman contra un Tabulado real, no por simetría (D-039) |
+| 6 | Fallback de columna sólo lo tiene Brutos (`'1003'`/`'1017'` cableados) | — | ✅ cerrado 2026-08-12 — códigos confirmados contra el Tabulado real; y el fallback de Brutos resultó ser **letra muerta** (buscaba una columna `'1003'`, Meta4 la exporta `'1003-SUELDO'`) |
 
 ### Decisiones pendientes, no técnicas (fuera del inventario de bugs pero abiertas desde antes)
 
@@ -78,11 +79,40 @@ el sentido del inventario de la auditoría, que agrupa algunos juntos.)
 
 ## Fase 1 — Fundamentos de cálculo
 
-**Estado: planeada, no arrancada.** Es la que **destraba** a las Fases 2-4: extraer un módulo
-compartido de consolidación antes de que exista un `toNum()` único rompería a Variaciones (ver
-motivo abajo), así que el orden es obligatorio, no preferencia.
+**Estado: cerrada** (2026-08-12). Willy resolvió las dos decisiones que la trababan y trajo, además, los
+tres archivos reales (Tabulado 04-2026 de Marval + Reporte de NR + Gastos personales y dto cochera del
+mismo período) que también destrabaron el punto 3 de D-039. Detalle completo en D-042.
 
-**Bloqueada por dos decisiones de Guillermo:**
+**Lo que entró:**
+
+- **`toNum` único** en `js/utils/currency.js`. No se eligió un bando: un `number` (SheetJS ya parseó la
+  celda) pasa sin tocar, y un string se lee como es-AR; con dos separadores el **último** es el decimal, y
+  con un solo punto es de miles sólo si forma grupos de tres exactos. Las 7 copias, borradas.
+- **`js/utils/legajo.js`** — default `sin_ceros` (`'007'` y `'7'` son el mismo empleado), configurable por
+  cliente en `clients.legajoKeyMode` desde `#/admin`, distribuido en el seed, resuelto una vez por corrida
+  en `mapping.legajoKeyMode`. Los 3 criterios que convivían, borrados.
+- **`js/controls/consolidate.js`** — `groupRowsByLegajo(rows, col, { keyFn })`, `sumColumn(group, col,
+  { toNum })`, `lastRow(group)`. Parametrizados, que es lo que el primer intento de este plan había hecho
+  mal. Las 4 copias, borradas.
+- **`js/controls/tabCodes.js`** — `buildColByCode` (estaba duplicado en `rendXEe` y `rendVsTabu`) más las
+  14 semillas de código confirmadas contra el Tabulado real.
+- **Los dos lados de cada cruce se consolidan.** Brutos y GS Pers consolidaban el Tabulado pero recorrían
+  el reporte fila por fila. Con el reporte de NR real, que trae una fila por liquidación, quedó demostrado
+  que no es un caso hipotético.
+
+**Verificación contra los archivos reales** (no sólo tests con datos inventados): las 14 semillas resuelven
+solas; NR consolida 543 filas de reporte en 527 legajos y cruza sin una sola diferencia (5.270 celdas
+comparadas con dato en los dos lados, 550 con importe distinto de cero); los tres modos "Generar Reporte"
+sacan una fila por empleado; el legajo con 9 liquidaciones suma 30.000 en los dos lados.
+
+**Lo que queda de esta fase:** el **override de clave de legajo por corrida** sin pisar el default del
+cliente (D-038 punto 2). Entró el estándar por cliente; el override efímero necesita decidir en qué paso del
+wizard va, y sin un caso real esa decisión se toma mal.
+
+<details>
+<summary>El estado anterior de esta fase, para entender por qué el orden era obligatorio</summary>
+
+**Estaba bloqueada por dos decisiones de Guillermo:**
 
 1. **`toNum()` único** (7 implementaciones hoy: la mayoría hace `Number(v)`, y `variaciones.js`
    tiene el único parser es-AR completo — maneja miles, decimales y paréntesis para negativos). **No
@@ -116,6 +146,8 @@ motivo abajo), así que el orden es obligatorio, no preferencia.
 **Qué YA está listo para cuando se resuelvan las decisiones:** el skill `nuevo-control` (ver Fase 5)
 ya le dice a cualquiera que agregue un control que busque este módulo con `grep` antes de copiar
 nada — así que en cuanto exista, se adopta solo.
+
+</details>
 
 ---
 
@@ -211,6 +243,15 @@ es por tamaño.
 
 ## Fase 5 — Cerrar el ciclo (el skill)
 
+**Estado: cerrada** (2026-08-12). Con `consolidate.js` en pie, el skill dejó de decir "buscá con `grep`; si
+no está, extraelo" y pasa a mostrar el `import` concreto, con las tres cosas que se rompen al escribirlo a
+mano (`null` vs `0`, el string es-AR vs el número ya parseado, y qué datos salen de `lastRow` en vez de
+sumarse). También apunta a `tabCodes.js` para la resolución por código, con la advertencia de que una semilla
+se confirma contra un Tabulado real y no por analogía.
+
+<details>
+<summary>Estado anterior</summary>
+
 **Estado: adelantada.** El objetivo de esta fase era que el skill `nuevo-control` dejara de mandar a
 copiar código — eso **ya se hizo** en el rightsizing del contexto del 2026-08-11, antes incluso de
 que exista `consolidate.js`: hoy dice "buscá con `grep` si hay un módulo compartido; si no, extraelo
@@ -224,6 +265,27 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
+**Actualizado el 2026-08-12.** Las Fases 0, 1 y 5 están cerradas. Lo que sigue, en orden de menor a mayor
+tamaño:
+
+1. **Pasos 4a y 5 del contrato de export** (`specs/contrato-export.md`) — desbloqueados desde que Willy
+   respondió "que salga vacía". El Paso 5 (separar "no evaluado" de "sin diferencia" en el semáforo) es el
+   que mata el último falso verde conocido.
+2. **Cerrar la Fase 2** — queda `css/components.css`, que hay que hacer con la app abierta en un navegador
+   real en modo claro y oscuro (más blast radius que un `style=""` puntual, y no se puede verificar a
+   ciegas). Willy también tiene que confirmar visualmente el panel "Columnas del Tabulado" de Brutos en dark
+   mode, que se arregló sin poder verlo.
+3. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
+   preferencia de vista por control ya no está bloqueada: Willy confirmó el 2026-08-12 que el toggle "sólo
+   con diferencia / todos" está bien como está por default, y que lo que cada control puede agregar es una
+   agrupación propia que le sirva.
+4. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
+5. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
+   sobre parsers todavía duplicados hereda la duplicación.
+
+<details>
+<summary>Cómo se retomaba antes de cerrar las Fases 0/1/5</summary>
+
 1. Si no se resolvieron las decisiones de Fase 1 (toNum + clave de legajo), no arrancar ahí — pedirle
    a Guillermo que elija entre las opciones de arriba. Es lo primero que hay que preguntarle: la Fase
    0 ya no tiene nada accionable, así que las dos decisiones de Fase 1 son lo único que traba el
@@ -235,3 +297,5 @@ el texto del skill para eso, ya está escrito en modo condicional.
    escribió esto.
 3. Todo lo que se cierre, actualizar `specs/auditoria-escalabilidad-2026-08.md` (bugs) o este archivo
    (fases) — son los dos documentos que existen para no perder este estado entre sesiones.
+
+</details>

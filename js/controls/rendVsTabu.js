@@ -3,7 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
+import { buildColByCode } from './tabCodes.js';
+import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
@@ -67,11 +68,6 @@ const COLS = [
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
 
-function toNum(v) {
-  if (v === null || v === undefined || String(v).trim() === '') return null;
-  const n = Number(v);
-  return isNaN(n) ? null : n;
-}
 
 function esc(str) {
   return String(str ?? '')
@@ -99,21 +95,6 @@ function normCCName(v) {
 const THRESHOLD = 0.01;
 const hasDiff   = d => Number.isFinite(d) && Math.abs(d) > THRESHOLD;
 
-// Construye mapa código numérico → clave de columna a partir de los headers del Tabulado.
-// Soporta formato "1003-SUELDO" (extrae "1003") o nombre numérico exacto "1003".
-function buildColByCode(sampleRow) {
-  const colByCode = {};
-  for (const col of Object.keys(sampleRow)) {
-    const s = String(col).trim();
-    const m = s.match(/^(\d+)[-_]/);
-    if (m) {
-      if (!colByCode[m[1]]) colByCode[m[1]] = col;
-    } else if (/^\d+$/.test(s)) {
-      if (!colByCode[s]) colByCode[s] = col;
-    }
-  }
-  return colByCode;
-}
 
 // ── summarize ─────────────────────────────────────────────────────────────────
 
