@@ -153,8 +153,9 @@ nada — así que en cuanto exista, se adopta solo.
 
 ## Fase 2 — Capa visual unificada
 
-**Estado: en curso** (2026-08-12) — no depende de la Fase 1, así que se arrancó sin esperar las
-decisiones de Guillermo.
+**Estado: cerrada** (2026-08-13). Lo único que faltaba —`css/components.css`— se cerró con Chromium real
+disponible en el sandbox desde esta sesión (antes no se podía verificar sin abrir la app a mano). Detalle
+al final de esta fase.
 
 - **Hex hardcodeados: cerrado.** El bug abierto #3 de Fase 0 (badge "⚠ sin asignar" en
   `fileUpload.js`, ilegible en dark mode) tenía dos causas juntas: una copia local de
@@ -188,22 +189,43 @@ decisiones de Guillermo.
   compartir — no la hay. Se retoma cuando exista un segundo PDF (ver `specs/spec-control-netos.md`
   y `specs/spec-gross-up.md`, los dos candidatos más próximos en v3).
 
-Falta, de lo que sí es Fase 2 real — grep final del 2026-08-12 sobre `css/*.css` y todo `js/`:
-- **`js/controls/variaciones.js:995`** (heatmap "Cómo se movieron los escalones"): `const fg = t > 0.62
-  ? '#fff' : 'inherit';`. Se revisó y se deja: no es un color de UI, es una decisión de contraste
-  contra un fondo calculado con `color-mix()` que se satura progresivamente — no hay token de
-  tokens.css pensado para "texto sobre una celda de heatmap", así que no hay a qué `var()` migrarlo
-  sin inventar un token para un solo caso.
-- **`css/components.css` queda sin auditar** — tiene hex fuera de `tokens.css`: fallbacks
-  `var(--token, #hex)` en `.banner`/`.toast--*`/`.badge--warning-hover` (líneas 12, 383, 685-688,
-  posiblemente muertos igual que los de `helpPopover.js`, a confirmar) y valores literales en clases
-  (`#009ABF`/`#B71C1C` en algunos `.btn--*`, `#fff` en `.ctrl-filter`/`.ctrl-row--active`/badges). A
-  diferencia de lo ya cerrado, tocar esto es CSS que renderiza en toda la app, no un `style=""`
-  puntual en un módulo — más blast radius y ninguna forma de verificarlo visualmente desde este
-  entorno. **No se tocó a propósito.** Cuando se retome, hacerlo con la app abierta en un navegador
-  real (luz y oscuro), no a ciegas.
-- No se pudo verificar visualmente en dark mode lo que sí se cerró hoy. Pedirle a Willy que abra el
-  panel "Columnas del Tabulado" de Brutos en dark mode antes de dar el ítem por cerrado del todo.
+**`js/controls/variaciones.js:995`** (heatmap "Cómo se movieron los escalones"): `const fg = t > 0.62
+? '#fff' : 'inherit';`. Se revisó y se deja: no es un color de UI, es una decisión de contraste
+contra un fondo calculado con `color-mix()` que se satura progresivamente — no hay token de
+tokens.css pensado para "texto sobre una celda de heatmap", así que no hay a qué `var()` migrarlo
+sin inventar un token para un solo caso.
+
+### `css/components.css` (cerrado 2026-08-13)
+
+El grep del 2026-08-12 había encontrado dos clases de hex fuera de `tokens.css`, y asumía que los
+fallbacks `var(--token, #hex)` eran "posiblemente muertos igual que los de `helpPopover.js`". Con
+Chromium real disponible, se pudo medir en vez de asumir — y **el supuesto estaba mal para el caso más
+importante**:
+
+- **`--color-banner-text`, los 4 `--color-toast-*` y `--color-warning-bg-hover` NO estaban muertos —
+  eran los únicos vivos.** Sólo tenían valor dentro de `@media (prefers-color-scheme: dark)`,
+  `[data-theme="dark"]` y `[data-theme="light"]` — nunca en un `:root` base, a diferencia de TODO lo
+  demás en `tokens.css` (que siempre define el claro en `:root` y recién después overridea el
+  oscuro). En el estado por default del navegador (sin `data-theme`, sistema en modo claro) ninguna
+  de las tres reglas aplicaba: la variable quedaba indefinida, confirmado con
+  `getComputedStyle(:root).getPropertyValue(...)` devolviendo `''`. No se rompía nada visible porque
+  el fallback inline tapaba el hueco — pero sacarlo a ciegas (como sí correspondía para
+  `helpPopover.js`, donde el token SÍ estaba siempre definido) habría roto el banner de privacidad y
+  los 4 toasts en ese estado. Fix real: un `:root` con el default, igual que hace `tokens.css` para
+  todo lo demás — no un fallback por cada `var()` que usa el token. Los 6 fallbacks, ahora sí muertos,
+  se sacaron.
+- **`#009ABF`/`#B71C1C` en `.btn--primary:hover`/`.btn--danger:hover`/`.pill--active:hover`, y `#fff`
+  en `.ctrl-filter.is-active`/`.ctrl-row--active`/`.threshold-checkbox-static__box`/`.exec-step__dot`**
+  — verificados en navegador real (captura antes/después, claro y oscuro, hover incluido): legibles
+  en los dos temas, sin defecto visual. Relocalizados a `--color-primary-hover`/`--color-danger-hover`
+  (`tokens.css`) y `var(--color-white)` con el mismo valor exacto — cero cambio visual, sólo
+  cumplimiento de "nada de hex en los módulos". No se les inventó un tono distinto por tema: eso es
+  una decisión de diseño, no una migración mecánica, y no hay una razón confirmada para pedirla.
+
+**Verificación:** `tests/e2e/tokenDefaults.spec.js` — confirmado que la primera assertion falla si se
+saca el `:root` nuevo (se probó explícitamente: se revirtió el fix, corrió el test, falló, se
+restauró). Capturas de pantalla en claro/oscuro para banner, toasts, botones (normal + hover), pill,
+checkbox y exec-step — todas idénticas a como se veían antes del cambio.
 
 ---
 
@@ -265,24 +287,28 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-13.** Las Fases 0, 1 y 5 están cerradas. Los Pasos 4a y 5 del contrato de export
-también (`specs/contrato-export.md`) — el Paso 5 cerró el último falso verde conocido: Brutos/GS Pers con
-la columna del archivo sin mapear pasaban por "0 diferencias = todo bien" cuando en realidad no se había
-comparado un solo legajo. Lo que sigue, en orden de menor a mayor tamaño:
+**Actualizado el 2026-08-13 (segunda pasada del día).** Las Fases 0, 1, 2 y 5 están cerradas. Los Pasos
+4a y 5 del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último falso verde
+conocido: Brutos/GS Pers con la columna del archivo sin mapear pasaban por "0 diferencias = todo bien"
+cuando en realidad no se había comparado un solo legajo. Lo que sigue, en orden de menor a mayor tamaño:
 
-1. **Cerrar la Fase 2** — queda `css/components.css`, con la app en un navegador real en modo claro y
-   oscuro. Deja de estar bloqueado por "no se puede verificar a ciegas desde este entorno": desde el
-   2026-08-13 hay Chromium disponible en el sandbox (`PLAYWRIGHT_CHROMIUM_PATH`), así que esto ya se puede
-   hacer sin esperar a que Willy abra la app — igual conviene que confirme el resultado.
-2. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
+1. **Fase 3** — `wireTableTools()` y migrar `catXEmpleados`/`rendVsAsiento` a `renderExportMenu`. La
    preferencia de vista por control ya no está bloqueada: Willy confirmó el 2026-08-12 que el toggle "sólo
    con diferencia / todos" está bien como está por default, y que lo que cada control puede agregar es una
    agrupación propia que le sirva.
-3. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
+2. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
    (des-duplicación, no fix de comportamiento) y que el resto de los controles declare su contrato.
-4. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
-5. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
+3. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
+4. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
    sobre parsers todavía duplicados hereda la duplicación.
+
+**Nota de entorno, para no repetir la pregunta:** desde esta sesión hay Chromium real disponible en el
+sandbox (`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, ver
+`playwright.config.js`). Lo que antes quedaba "no se puede verificar a ciegas desde este entorno" ya no
+aplica — se puede montar cualquier módulo en un fixture de `tests/e2e/fixtures/` y verificarlo en los dos
+temas antes de tocar CSS compartido. Sigue faltando red al CDN (Dexie/XLSX/ExcelJS no cargan en este
+sandbox), así que la app completa con IndexedDB real no arranca acá — los e2e que la necesitan siguen
+corriendo sólo en CI.
 
 <details>
 <summary>Cómo se retomaba antes de cerrar las Fases 0/1/5</summary>

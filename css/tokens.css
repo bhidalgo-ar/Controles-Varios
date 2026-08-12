@@ -27,6 +27,14 @@
   --color-warning-bg:  #FFF8E1;
   --color-info-bg:     #E1F5FE;
 
+  /* Hover de botones primario/danger — mismo valor en los dos temas a
+     propósito (igual que --color-primary, que tampoco varía): eran hex
+     cableados en components.css, sin defecto visual confirmado (verificado en
+     navegador real, claro y oscuro — legible en los dos), así que se
+     relocalizan tal cual, sin inventar un tono nuevo por tema. */
+  --color-primary-hover: #009ABF;
+  --color-danger-hover:   #B71C1C;
+
   /* Match de columnas (mapeo de archivos)
      exact  = auto-detectado con nombre idéntico   → verde medio
      saved  = viene de sesión anterior             → verde suave  */

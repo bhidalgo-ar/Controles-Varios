@@ -728,3 +728,43 @@ carga por CDN en el navegador); `tests/brutosControl.test.js` (nuevo — no exis
 que falla si se revierte el fix del tile "Sin diferencia" (se probó explícitamente, no se asumió).
 **Motivo:** Continuación directa de D-041 (Paso 5, "el que mata el último falso verde") — misma auditoría,
 mismo pedido de Willy.
+
+---
+
+## D-044 — Cierre de la Fase 2: `css/components.css` tenía 6 tokens sin default en `:root`
+
+**Fecha:** 2026-08-13
+**Contexto:** El grep del 2026-08-12 (ver nota de Fase 2 en `specs/plan-escalabilidad-fases.md`) había
+encontrado hex fuera de `tokens.css` en `css/components.css` y lo dejó sin tocar "a propósito" — sin
+navegador real disponible en el entorno, tocar CSS que renderiza en toda la app no se podía verificar, y
+asumía que los fallbacks `var(--token, #hex)` eran "posiblemente muertos igual que los de
+`helpPopover.js`". Con Chromium disponible en el sandbox desde esta sesión, se pudo medir en vez de
+asumir — y el supuesto estaba mal para el caso que más importaba.
+**Hallazgo:** `--color-banner-text`, los 4 `--color-toast-*` y `--color-warning-bg-hover` sólo tenían
+valor dentro de `@media (prefers-color-scheme: dark)`, `[data-theme="dark"]` y `[data-theme="light"]` —
+nunca en un `:root` base, a diferencia de todo lo demás en `tokens.css` (que define el claro en `:root` y
+recién después overridea el oscuro). En el estado por default del navegador (sin `data-theme`, sistema en
+modo claro) ninguna de las tres reglas aplicaba: la variable quedaba indefinida, confirmado con
+`getComputedStyle(:root).getPropertyValue(...)` devolviendo `''` en un navegador real. No se rompía nada
+visible porque el fallback inline tapaba el hueco exacto en el que hacía falta — pero eran los únicos 6
+fallbacks vivos de toda la lista que el grep había encontrado, no "posiblemente muertos".
+**Decisión:**
+1. Se agrega un `:root` base a `css/components.css` con los 6 valores en claro — mismo patrón que
+   `tokens.css` usa para todo lo demás. Los 6 fallbacks inline, ahora sí muertos, se sacan.
+2. `#009ABF`/`#B71C1C` (hover de `.btn--primary`/`.btn--danger`/`.pill--active`) y `#fff` (texto sobre
+   `var(--celeste)` en `.ctrl-filter.is-active`/`.ctrl-row--active`/`.threshold-checkbox-static__box`/
+   `.exec-step__dot`) se relocalizan a `--color-primary-hover`/`--color-danger-hover` (`tokens.css`) y
+   `var(--color-white)`, con el **mismo valor exacto** — verificado en navegador real (captura antes/
+   después, claro y oscuro, estado `:hover` incluido) que no cambia nada visualmente. No se les inventó un
+   tono distinto por tema: eso es una decisión de diseño que nadie pidió, no una migración mecánica.
+**Alternativas descartadas:** Sacar los 6 fallbacks sin agregar el `:root` (rompía el banner de privacidad
+y los 4 toasts en el estado por default); inventar valores de hover distintos por tema para
+`--color-primary-hover`/`--color-danger-hover` (ninguna de las dos bases —`--color-primary`/
+`--color-danger`— sigue el mismo patrón entre sí: `--color-primary` es fijo en los dos temas,
+`--color-danger` sí varía — diseñar un hover "correcto" para cada caso es un juicio de diseño, no algo que
+se pueda derivar mecánicamente, y no hay un defecto confirmado que lo exija).
+**Verificación:** `tests/e2e/tokenDefaults.spec.js`, confirmado que la primera aserción falla si se saca
+el `:root` nuevo (se probó explícitamente: revertido, corrido, visto fallar, restaurado). Screenshots en
+claro/oscuro para banner, toasts, botones (normal + `:hover`), pill, checkbox y exec-step.
+**Motivo:** Continuación del plan de escalabilidad, Fase 2 — cierra el último ítem que quedaba abierto de
+esa fase.

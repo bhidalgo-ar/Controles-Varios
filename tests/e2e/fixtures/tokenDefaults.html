@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/tokenDefaults.spec.js — NO es una pantalla de la
+     app. Monta el banner de privacidad y los 4 toasts para verificar que sus
+     tokens (--color-banner-text, --color-toast-*, --color-warning-bg-hover)
+     resuelven en el estado por DEFAULT del navegador: sin `data-theme` y sin
+     preferencia de sistema forzada — el estado que `@media(dark)`,
+     `[data-theme="dark"]` y `[data-theme="light"]` NO cubren ninguno de los
+     tres. -->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="../../../css/tokens.css"><link rel="stylesheet" href="../../../css/base.css"><link rel="stylesheet" href="../../../css/components.css">
+<style>body{background:var(--color-bg);padding:20px;}</style></head>
+<body>
+<div class="privacy-banner"><span class="privacy-banner__icon">🔒</span><span class="privacy-banner__text">Los datos de empleados no salen de tu navegador.</span></div>
+<br>
+<div class="toast-container" style="position:static;">
+  <div class="toast toast--success">Guardado correctamente.</div>
+  <div class="toast toast--danger">No se pudo guardar.</div>
+  <div class="toast toast--warning">Revisá el mapeo de columnas.</div>
+  <div class="toast toast--info">Se importó el seed.</div>
+</div>
+</body></html>
