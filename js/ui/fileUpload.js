@@ -664,10 +664,19 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);">
           ${fields.map(f => {
             const val = mapping?.[f.key] || '';
+            // Sólo se marca el estado "sin asignar". Acá el mapeo ya está
+            // confirmado, así que distinguir "✓ auto" de "↺ sesión anterior"
+            // sería informar el origen del pre-completado del momento de la
+            // carga — un dato ya viejo que puede mentir. Lo que sí sigue siendo
+            // cierto es que la columna quedó vacía, y sin el aviso se ve igual
+            // que una mapeada (mismo criterio que el panel "Columnas del
+            // Tabulado" del Paso 2).
+            const level = val ? 'none' : 'warn';
+            const style = matchSelectStyle(level);
             return `
               <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label ${f.required ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}</label>
-                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);">
+                <label class="form-label ${f.required ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
+                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);${style}">
                   ${opts(val)}
                 </select>
               </div>

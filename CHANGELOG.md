@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: el panel "Ver / ajustar mapeo de columnas" avisa qué columna quedó sin asignar — 2026-08-12
+
+- Reportado por Willy mirando Brutos en producción: en el panel colapsable **"Ver / ajustar mapeo de columnas"** (el del archivo ya cargado, `renderAlreadyLoaded` en `js/ui/fileUpload.js`), una columna opcional en «— Sin asignar —» se veía **exactamente igual** que una mapeada — sin badge ni borde. En su caso era `Columna de CUIL` en el Tabulado, pero aplica a los 6 campos opcionales de `tab_control` y a los de todos los demás tipos.
+- Ese panel nunca había usado los helpers de match: pintaba el `<label>` pelado. Ahora reusa `matchSelectStyle`/`matchBadge` —los mismos del panel "Columnas del Tabulado" del Paso 2, así que hereda los tokens y anda bien en dark mode.
+- **Sólo se marca el estado "sin asignar"**, no los verdes. Ahí el mapeo ya está confirmado, así que un `✓ auto` / `↺ sesión anterior` estaría informando el origen del pre-completado *del momento de la carga* — un dato viejo que puede mentir. Lo que sigue siendo cierto es que la columna quedó vacía.
+- Ojo con `nr_file`: tiene 18 campos opcionales, así que un archivo de NR que no traiga todos los conceptos va a mostrar un badge por cada uno que falte. Es el mismo comportamiento que ya tenía el panel del Paso 2 para esos mismos 18 conceptos; si en la práctica resulta ruidoso, se acota ahí.
+
 ### refactor: arranque de la Fase 2 (capa visual) + Paso 0 de la Fase 4 — 2026-08-12
 
 - **`Promise.all` posicional de `controlsWizard.js` (Paso 0 de Fase 4).** Un array de 11 promesas
