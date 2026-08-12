@@ -23,7 +23,12 @@ import { blocksProgress } from '../exports/contracts.js';
 // Campos "estándar" por tipo de archivo.
 // Los campos de nombre (apellido/nombre/nombreCompleto) se manejan aparte
 // con un selector especial porque pueden venir en 1 o 2 columnas.
-const FIELD_DEFS = {
+//
+// Exportado sólo para `tests/exportContracts.test.js`, que deriva de acá el
+// assert de "ningún contrato debilita un `required: true` que ya existía" —
+// leerlo del original es lo único que hace que ese assert valga para los 15
+// tipos de archivo sin una segunda lista que mantener a mano.
+export const FIELD_DEFS = {
   nomina_maestra: [
     { key: 'legajoColumn',         label: 'Columna de Legajo',                required: true  },
     { key: 'conceptColumnsStartAt', label: 'Primera columna de conceptos',     required: true  },

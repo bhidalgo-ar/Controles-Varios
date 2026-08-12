@@ -12,7 +12,14 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress } =
+// fileUpload.js (de donde sale FIELD_DEFS, ver el barrido de "piso, nunca
+// techo" más abajo) arrastra js/db.js — necesita Dexie sobre una IndexedDB
+// falsa, igual que tests/variacionesConceptMap.test.js.
+import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
+globalThis.Dexie = Dexie;
+
+const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress, FINANZAS_ALLOWED_KEYS } =
   await import('./js/exports/contracts.js');
 
 let ok = 0, fail = 0;
@@ -63,28 +70,86 @@ for (const c of contracts) {
 // declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
 // no lo necesita hasta que tenga un consumidor real.
 
-for (const exportId of ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte']) {
+const CON_WRITER = ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte'];
+for (const exportId of CON_WRITER) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {
     assert(`${exportId}.${col.key}: tiene width (el writer lo necesita)`,
       typeof col.width === 'number' && col.width > 0);
   }
 }
 
-// ── D-020: los contratos 'payroll' de hoy no llevan nada de Finanzas todavía ──
-// (Acreditaciones, el único 'finanzas', se declara en el Paso 6.)
+// Y al revés: los contratos del Paso 6 declaran semántica, no layout. Sus
+// writers todavía arman el .xlsx a mano, así que un `width`/`groups`/
+// `headerRows` acá no lo leería nadie — sería una segunda fuente de verdad
+// desincronizada del archivo real. Este assert es el que impide que se cuele
+// "de paso": el día que se migre uno de esos writers, entra a CON_WRITER y
+// declara su layout, en el mismo PR.
+for (const c of contracts) {
+  if (CON_WRITER.includes(c.exportId)) continue;
+  const conLayout = c.columns.filter(col =>
+    col.width !== undefined || col.group !== undefined || col.diffHighlight !== undefined);
+  assert(`${c.exportId}: sin writer todavía → no declara layout (${conLayout.length} columnas lo harían)`,
+    conLayout.length === 0 && c.groups === undefined && c.headerRows === undefined);
+}
 
-assert('ningún contrato de hoy es audience:\'finanzas\' — Acreditaciones llega en el Paso 6',
-  contracts.every(c => c.audience === 'payroll'));
+// ── D-020: lo que va a Finanzas no lleva información de HR ───────────────────
+// Acreditaciones es el único `audience: 'finanzas'` (Paso 6). Su .xlsx lo
+// recibe tesorería del cliente, no Payroll, y en muchos clientes Finanzas no
+// tiene acceso a dotación/altas/bajas/atributos del empleado. Con la lista de
+// columnas declarada en el contrato, D-020 deja de ser un comentario y pasa a
+// ser esto: agregar una columna de HR a ese export rompe el test.
 
-// ── El mapa derivado no le baja la necesidad a nada que hoy ya bloquea ───────
+const finanzas = contracts.filter(c => c.audience === 'finanzas');
+assert('hay exactamente un contrato audience:\'finanzas\' (Acreditaciones)', finanzas.length === 1);
+for (const c of finanzas) {
+  for (const col of c.columns) {
+    assert(`D-020 · ${c.exportId}.${col.key}: es una columna de pago, no de HR`,
+      FINANZAS_ALLOWED_KEYS.has(col.key));
+  }
+  // El conteo de empleados y las alertas se ven en pantalla, nunca en el .xlsx
+  // (lo dice el pie de la tabla de resultados) — el assert lo hace cumplir.
+  assert(`D-020 · ${c.exportId}: ninguna columna de conteo/dotación`,
+    !c.columns.some(col => /count|dotacion|dotación|alta|baja|alert/i.test(`${col.key} ${col.label}`)));
+}
+
+// ── Un contrato es un PISO, nunca un techo ───────────────────────────────────
 //
-// Campos con required:true HOY (leídos a mano de FIELD_DEFS/TAB_*_FIELDS al
-// escribir este test — si cambian ahí sin actualizar acá, es la señal de que
-// hace falta un contrato nuevo, no de que este test esté desactualizado):
-//   FIELD_DEFS.tab_control.empleadoColumn, .brutos_file.legajoColumn,
-//   .gs_pers_file.legajoColumn, .nr_file.legajoColumn (todos CLAVE hoy),
-//   TAB_BRUTOS_FIELDS (tabSalBaseColumn, tabACuFutAumenColumn) y
-//   TAB_GS_PERS_FIELDS (tabGtosPersonalesColumn, tabDtoCocheraColumn).
+// Derivado de `FIELD_DEFS` (el original en `js/ui/fileUpload.js`, no una copia
+// acá): ninguna clave con `required: true` puede dejar de bloquear porque
+// algún contrato la declare OPCIONAL. Este es el assert que faltaba — la
+// versión a mano de más abajo cubría 6 claves elegidas al escribirla, y el caso
+// que se escapó no estaba entre ellas.
+//
+// El caso real: `puestoColumn` existe en DOS fileTypes con necesidades
+// opuestas (`tab_control` opcional · `cat_empleados` **required**), y
+// `fieldNecessityMap()` es plano por clave, no por `(fileType, clave)`. El
+// contrato de `brutos_reporte` la declara OPCIONAL desde el lado del Tabulado,
+// y eso apagaba el gate de la Columna de Puesto del Reporte de Categorías:
+// se podía subir sin ella, y EE x CATEG salteaba en silencio el chequeo de
+// discrepancias de Puesto y armaba la distribución con la columna sin resolver.
+// Recorrer los 15 fileTypes en vez de 6 claves es lo que lo agarra, y lo que va
+// a agarrar la próxima colisión cuando el Paso 6 sume más contratos.
+
+const { FIELD_DEFS } = await import('./js/ui/fileUpload.js');
+
+let requiredChecked = 0;
+for (const [fileType, fields] of Object.entries(FIELD_DEFS)) {
+  for (const f of fields) {
+    if (!f.required) continue;
+    requiredChecked++;
+    assert(`${fileType}.${f.key}: sigue bloqueando (ningún contrato le baja la necesidad)`,
+      blocksProgress(f.key, true) === true);
+  }
+}
+assert('el barrido recorrió los required:true de verdad (si no, los asserts de arriba pasan por vacuidad)',
+  requiredChecked >= 20);
+
+// ── El mapa derivado cubre lo que ya bloqueaba (coverage, no fuerza) ─────────
+//
+// Estas 6 además tienen que estar DECLARADAS en algún contrato — que sigan
+// bloqueando ya lo garantiza el barrido de arriba; esto verifica que el
+// contrato las conoce, que es lo que hace que su necesidad se derive en vez de
+// depender del flag legado.
 
 const YA_BLOQUEABAN_HOY = {
   empleadoColumn:          NECESSITY.CLAVE,
@@ -150,11 +215,26 @@ assert('un concepto NR (nrKey, modo Controlar) sale OBLIGATORIA en el mapa deriv
 // el mapa la resolvería mal: le prestaría la necesidad más fuerte de un
 // archivo no relacionado, sobre-bloqueando un campo que no debería estarlo.
 //
-// Mientras el esquema siga siendo un mapa plano (no `{ fileType, key }`), este
-// assert es lo que impide que ese caso entre en silencio: si dos contratos
-// alguna vez piden necesidades distintas para la misma clave, falla ACÁ y no
-// en producción. Ver specs/contrato-export.md — es una simplificación
-// deliberada del diseño, no un descuido.
+// **El Paso 6 hizo que esto dejara de ser hipotético.** Hay dos claves que
+// existen en DOS fileTypes con necesidades legítimamente distintas:
+//
+//   puestoColumn     · tab_control: opcional   · cat_empleados: required
+//   costoTotalColumn · rend_file:   opcional   · costo_total_file: required
+//
+// No es un error a corregir en los contratos: la misma columna es opcional en
+// un archivo y obligatoria en otro, y con un mapa plano eso no se puede
+// declarar sin mentir de un lado. La forma correcta es scopear el mapa por
+// `(fileType, clave)` — sigue pendiente, ahora con dos casos concretos en vez
+// de cero (ver specs/contrato-export.md).
+//
+// Lo que este assert protege mientras tanto es lo que SÍ puede producir un gate
+// incorrecto. Después del arreglo de "piso, nunca techo", lo único que el
+// contrato aporta al gate por sí solo es CLAVE (`blocksProgress`): una clave
+// declarada CLAVE en un contrato y no-CLAVE en otro bloquearía la carga de un
+// archivo que no la necesita. La divergencia OPCIONAL/OBLIGATORIA, en cambio,
+// no puede: ninguna de las dos bloquea sola, y el `required: true` de cada
+// fileType lo aporta `FIELD_DEFS` —que sí está scopeado— y ya no se puede
+// apagar (ver el barrido de arriba).
 
 {
   const porClave = new Map(); // key -> Map<exportId, necessity>
@@ -167,19 +247,27 @@ assert('un concepto NR (nrKey, modo Controlar) sale OBLIGATORIA en el mapa deriv
     }
   }
 
-  const colisiones = [];
+  const claveInconsistente = [];
   for (const [key, porContrato] of porClave) {
-    const necesidades = new Set(porContrato.values());
-    if (necesidades.size > 1) colisiones.push([key, [...porContrato.entries()]]);
+    const necesidades = [...porContrato.values()];
+    const algunaClave = necesidades.some(n => n === NECESSITY.CLAVE);
+    const todasClave  = necesidades.every(n => n === NECESSITY.CLAVE);
+    if (algunaClave && !todasClave) claveInconsistente.push([key, [...porContrato.entries()]]);
   }
 
-  assert('ninguna clave de mapeo pide necesidades DISTINTAS en contratos distintos',
-    colisiones.length === 0);
-  if (colisiones.length > 0) {
-    for (const [key, usos] of colisiones) {
-      console.error(`    ${key}: ${usos.map(([id, n]) => `${id}=${n}`).join(', ')}`);
-    }
+  assert('ninguna clave es CLAVE en un contrato y no-CLAVE en otro (lo único que puede dar un gate incorrecto)',
+    claveInconsistente.length === 0);
+  for (const [key, usos] of claveInconsistente) {
+    console.error(`    ${key}: ${usos.map(([id, n]) => `${id}=${n}`).join(', ')}`);
   }
+
+  // Las divergencias no-CLAVE que sí existen quedan a la vista en la salida del
+  // test, para que se vean crecer: si esta lista se estira más allá de las dos
+  // colisiones conocidas, es la señal de que el mapa scopeado dejó de poder
+  // esperar.
+  const divergentes = [...porClave].filter(([, m]) => new Set(m.values()).size > 1);
+  assert(`las divergencias OPCIONAL/OBLIGATORIA conocidas siguen siendo 2 (hoy: ${divergentes.map(([k]) => k).join(', ') || 'ninguna'})`,
+    divergentes.length === 2);
 }
 
 // ── blocksProgress: Paso 1 — SIN cambio de comportamiento todavía ────────────
@@ -198,8 +286,14 @@ assert('blocksProgress: OBLIGATORIA NO bloquea todavía si el flag legado es fal
   blocksProgress('reinHomeOficeColumn', false) === false);
 assert('blocksProgress: OBLIGATORIA respeta el flag legado si YA bloqueaba (tabSalBaseColumn)',
   blocksProgress('tabSalBaseColumn', true) === true);
-assert('blocksProgress: OPCIONAL nunca bloquea, ni con el flag legado en true',
-  blocksProgress('apellidoNombreColumn', true) === false);
+assert('blocksProgress: OPCIONAL no bloquea por sí sola (flag legado en false)',
+  blocksProgress('apellidoNombreColumn', false) === false);
+// Antes este assert afirmaba lo contrario ("OPCIONAL nunca bloquea, ni con el
+// flag legado en true") y por eso el contrato podía APAGAR un `required: true`
+// de otro fileType — es el bug de `puestoColumn` documentado en el barrido de
+// arriba. El contrato suma obligación, nunca la saca.
+assert('blocksProgress: OPCIONAL NO desactiva un required:true del fileType (piso, no techo)',
+  blocksProgress('apellidoNombreColumn', true) === true);
 assert('blocksProgress: una clave no contratada cae 100% al flag legado (true)',
   blocksProgress('idPueColumn', true) === true);
 assert('blocksProgress: una clave no contratada cae 100% al flag legado (false)',

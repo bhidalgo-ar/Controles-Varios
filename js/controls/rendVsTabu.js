@@ -49,7 +49,14 @@ export const DEFAULT_CONCEPT_CONFIG = {
 
 // ── Definición de columnas de comparación ────────────────────────────────────
 
-const COLS = [
+// Exportado para que js/exports/contracts.js derive de ACÁ las columnas de los
+// contratos de Rend vs Tabulado / Rend vs Asiento / Rend x EE (las tres usan
+// las mismas 6 categorías con las mismas etiquetas), en vez de mantener una
+// cuarta copia de la lista. Ojo con el ciclo de módulos: contracts.js importa
+// este archivo, así que este archivo NO puede importar contracts.js con un
+// `import` estático — si alguna vez lo necesita, usar `import()` dinámico
+// adentro de la función, como hace nr.js (ver la nota de D-041 ahí).
+export const COLS = [
   { key: 'precio',   label: 'PRECIO',          rKey: 'rPrecio',   tKey: 'tPrecio',   dKey: 'dPrecio',
     hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)',  xlHdr: 'FFCCE0F5', xlBg: 'FFF0F6FD' },
   { key: 'estimulo', label: 'ASIG. ESTÍMULO',  rKey: 'rEstimulo', tKey: 'tEstimulo', dKey: 'dEstimulo',
