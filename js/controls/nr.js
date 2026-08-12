@@ -6,6 +6,7 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
+import { writeGroupedContractSheet } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
@@ -47,6 +48,16 @@ export const NR_CONCEPTS = [
   { key: 'reintGuard',     label: 'REINT_GUARD',      tabKey: 'tabReintGuardColumn',     nrKey: 'reintGuardColumn',     group: 'otros' },
   { key: 'incrementoSt',   label: 'INCREMENTO_ST',    tabKey: 'tabIncrementoStColumn',   nrKey: 'incrementoStColumn',   group: 'otros' },
 ];
+
+// NOTA: contracts.js importa `NR_CONCEPTS` de ESTE archivo — un `import`
+// estático de `contracts.js` acá arriba arma un ciclo de módulos donde,
+// según qué archivo cargue primero, `contracts.js` puede intentar leer
+// `NR_CONCEPTS` antes de que este módulo termine de definirlo (confirmado:
+// rompía en el navegador aunque los tests de Node, con otro orden de carga,
+// no lo agarraban). Las dos funciones de export de acá abajo importan
+// `contracts.js` con `import()` dinámico en vez de un `import` estático — para
+// cuando esa promesa resuelve (el analista ya clickeó "Exportar"), toda la
+// app terminó de cargar y el ciclo ya no es un problema.
 
 // ── Modo 1: Controlar ─────────────────────────────────────────────────────────
 
@@ -617,178 +628,32 @@ function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, re
 // XLSX "Controlar": Legajo + 18 columnas CTRL (Tab − NR), coloreadas por grupo
 async function exportNrToXlsx(results) {
   await loadExcelJS();
-  const { rows } = results;
 
+  // El contrato lee columnas planas (`row[c.key]`); `runNr()` guarda cada
+  // concepto anidado en `valores[c.key].ctrl` — se aplana acá, una sola vez,
+  // en vez de que el writer conozca esa forma.
+  const flatRows = results.rows.map(r => {
+    const flat = { legajo: r.legajo, difs: NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length };
+    for (const c of NR_CONCEPTS) flat[c.key] = r.valores[c.key].ctrl;
+    return flat;
+  });
+
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-
-  const ws = wb.addWorksheet('Control NR');
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-
-  // ARGB: Indemnizatorios = verde suave, Otros NR = naranja suave
-  const INDEM_HDR = 'FFD4EDDA';
-  const INDEM_BG  = 'FFEAF5EE';
-  const OTROS_HDR = 'FFFFE4CC';
-  const OTROS_BG  = 'FFFFEFE0';
-  const GRAY_HDR  = 'FFE8E8E8';
-
-  const conceptHdr = c => c.group === 'indem' ? INDEM_HDR : OTROS_HDR;
-  const conceptBg  = c => c.group === 'indem' ? INDEM_BG  : OTROS_BG;
-
-  ws.columns = [
-    { width: 12 },  // Legajo
-    { width: 10 },  // # Difs
-    ...NR_CONCEPTS.map(() => ({ width: 16 })),
-  ];
-
-  // Fila de headers
-  const hdrRow = ws.addRow(['Legajo', '# Difs', ...NR_CONCEPTS.map(c => c.label)]);
-  hdrRow.height = 20;
-
-  hdrRow.getCell(1).fill = solidFill(GRAY_HDR);
-  hdrRow.getCell(2).fill = solidFill(GRAY_HDR);
-  NR_CONCEPTS.forEach((c, i) => {
-    const cell = hdrRow.getCell(i + 3);
-    cell.fill      = solidFill(conceptHdr(c));
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-  hdrRow.getCell(1).font = { ...bold };
-  hdrRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-  hdrRow.getCell(1).border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  hdrRow.getCell(2).font = { ...bold };
-  hdrRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-  hdrRow.getCell(2).border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  const numFmt = '#,##0.00';
-  const isDif  = v => v !== null && Math.abs(v) > 0.01;
-
-  for (const r of rows) {
-    const difs   = NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length;
-    const values = [r.legajo, difs || 0, ...NR_CONCEPTS.map(c => r.valores[c.key].ctrl)];
-    const dr     = ws.addRow(values);
-
-    dr.getCell(1).font = { ...base };
-    dr.getCell(2).font = difs > 0 ? { ...bold, color: { argb: 'FFCC0000' } } : { ...base };
-    dr.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-
-    NR_CONCEPTS.forEach((c, i) => {
-      const cell  = dr.getCell(i + 3);
-      const ctrl  = r.valores[c.key].ctrl;
-      cell.fill   = solidFill(conceptBg(c));
-      cell.numFmt = numFmt;
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      if (isDif(ctrl)) {
-        cell.font = { ...bold, color: { argb: 'FFCC0000' } };
-      } else {
-        cell.font = { ...base };
-      }
-    });
-  }
-
+  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.nr, flatRows);
   await downloadWorkbook(wb, `NR_Control_${periodSuffix(results.period)}.xlsx`);
 }
 
 // XLSX "Generar Reporte": A(vacía) · B=ID_EMPLEADO · ... · I=ID_CATEGORIA · J-AA=18 conceptos
 async function exportNrReporteToXlsx(results) {
   await loadExcelJS();
-  const { rows } = results;
-
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-
-  const ws = wb.addWorksheet('Reporte NR');
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-
-  const INDEM_HDR = 'FFD4EDDA';
-  const INDEM_BG  = 'FFEAF5EE';
-  const OTROS_HDR = 'FFFFE4CC';
-  const OTROS_BG  = 'FFFFEFE0';
-  const GRAY_HDR  = 'FFE8E8E8';
-
-  // A=empty, B-I = campos fijos, J-AA = conceptos
-  ws.columns = [
-    { width: 4  },   // A (vacía)
-    { width: 12 },   // B ID_EMPLEADO
-    { width: 22 },   // C NOMBRE
-    { width: 22 },   // D APELLIDO_1
-    { width: 14 },   // E FECHA_ALTA
-    { width: 14 },   // F FECHA_BAJA
-    { width: 14 },   // G FEC_PAGO
-    { width: 16 },   // H ID_CENTRO_TRAB
-    { width: 16 },   // I ID_CATEGORIA
-    ...NR_CONCEPTS.map(() => ({ width: 16 })),  // J-AA
-  ];
-
-  const fixedLabels  = [null, 'ID_EMPLEADO', 'NOMBRE', 'APELLIDO_1', 'FECHA_ALTA', 'FECHA_BAJA', 'FEC_PAGO', 'ID_CENTRO_TRAB', 'ID_CATEGORIA'];
-  const conceptLabels = NR_CONCEPTS.map(c => c.label);
-  const hdrRow = ws.addRow([...fixedLabels, ...conceptLabels]);
-  hdrRow.height = 20;
-
-  // Headers fijos — gris
-  fixedLabels.forEach((lbl, i) => {
-    if (lbl === null) return;
-    const cell = hdrRow.getCell(i + 1);
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = solidFill(GRAY_HDR);
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  // Headers conceptos — coloreados por grupo
-  NR_CONCEPTS.forEach((c, i) => {
-    const cell = hdrRow.getCell(fixedLabels.length + i + 1);  // +1 para 1-index
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill      = solidFill(c.group === 'indem' ? INDEM_HDR : OTROS_HDR);
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  const numFmt = '#,##0.00';
-  for (const r of rows) {
-    const values = [
-      null,          // A vacía
-      r.legajo,
-      r.nombre,
-      r.apellido1,
-      r.fecAlta,
-      r.fecBaja,
-      r.fecPago,
-      r.idCentroTrab,
-      r.idCategoria,
-      ...NR_CONCEPTS.map(c => r[c.key]),
-    ];
-    const dr = ws.addRow(values);
-
-    // Campos fijos
-    for (let i = 2; i <= fixedLabels.length; i++) {
-      dr.getCell(i).font      = { ...base };
-      dr.getCell(i).alignment = { vertical: 'middle' };
-    }
-
-    // Conceptos
-    NR_CONCEPTS.forEach((c, i) => {
-      const cell = dr.getCell(fixedLabels.length + i + 1);
-      cell.font      = { ...base };
-      cell.numFmt    = numFmt;
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      cell.fill      = solidFill(c.group === 'indem' ? INDEM_BG : OTROS_BG);
-    });
-  }
-
+  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.nr_reporte, results.rows);
   await downloadWorkbook(wb, `NR_Reporte_${periodSuffix(results.period)}.xlsx`);
 }
 

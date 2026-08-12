@@ -42,6 +42,20 @@ export const LAYOUT_FIJO = 'fijo';
 // antes de subirlas — no antes.
 const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
 
+// Colores compartidos por los 3 contratos "Controlar" (Paso 4b) — eran 3
+// copias idénticas del mismo hex, una por control, antes de existir un lugar
+// único de dónde salieran. `writeGroupedContractSheet` (js/exports/contractSheet.js)
+// es quien los consume vía `contract.groups`.
+const CYAN_HDR  = 'FFC7ECF6';
+const CYAN_BG   = 'FFE6F8FB';
+const LILAC_HDR = 'FFE6DCF4';
+const LILAC_BG  = 'FFF4EFFA';
+const GRAY_HDR  = 'FFE8E8E8';
+const INDEM_HDR = 'FFD4EDDA';
+const INDEM_BG  = 'FFEAF5EE';
+const OTROS_HDR = 'FFFFE4CC';
+const OTROS_BG  = 'FFFFEFE0';
+
 /**
  * @typedef {object} ExportColumn
  * @property {string}   label      encabezado literal del archivo entregado
@@ -58,10 +72,39 @@ const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
  *                                 existe para evitar; lo hace cumplir
  *                                 `tests/exportContracts.test.js`.
  * @property {number}  [width]    ancho de columna en el xlsx (unidades de
- *                                 Excel). Sólo lo consume `writeContractSheet`
- *                                 (Paso 4a) — los contratos "Controlar" (Paso
- *                                 4b, todavía con su propio encabezado de dos
- *                                 niveles) no lo necesitan aún.
+ *                                 Excel). Si falta, `writeContractSheet`/
+ *                                 `writeGroupedContractSheet` caen a un default.
+ * @property {string}  [group]    id de `contract.groups` — coloca la columna
+ *                                 dentro de ese grupo (encabezado agrupado y/o
+ *                                 fondo de dato compartido). Sin esto, la
+ *                                 columna no pertenece a ningún grupo.
+ * @property {boolean} [diffHighlight] esta columna es una diferencia: si el
+ *                                 valor no es `null` y `|valor| > 0.01`, sale
+ *                                 en negrita y rojo (sólo lo usa
+ *                                 `writeGroupedContractSheet`).
+ * @property {'left'|'center'|'right'} [dataAlign] override de la alineación
+ *                                 horizontal en la fila de datos (default:
+ *                                 'right' si `type:'num'`, si no ninguna).
+ * @property {boolean} [numFmt]   `false` saca el formato moneda de una columna
+ *                                 `type:'num'` (ej. NR "# Difs": es un conteo,
+ *                                 no un importe).
+ * @property {boolean} [spacer]   columna deliberadamente sin encabezado ni
+ *                                 estilo — la columna A vacía heredada del
+ *                                 layout de Meta4 en el Reporte NR. `label`
+ *                                 puede quedar `''` sólo en estas columnas.
+ */
+
+/**
+ * @typedef {object} ExportColumnGroup
+ * @property {string} [label]     texto del encabezado agrupado (fila 1 cuando
+ *                                 `headerRows:2`). Sin esto, el grupo sólo
+ *                                 aporta color — no hay merge de encabezado
+ *                                 (caso de NR, `headerRows:1`).
+ * @property {string} headerColor ARGB del encabezado (fila agrupada, o cada
+ *                                 columna individual si `headerRows:1`).
+ * @property {string} [dataColor] ARGB de fondo en la fila de datos. Sin esto,
+ *                                 la celda de datos queda sin relleno (ej. el
+ *                                 grupo "Valores Tabulado" de Brutos/GS Pers).
  */
 
 /**
@@ -71,6 +114,11 @@ const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
  * @property {'fijo'}        layout
  * @property {'payroll'|'finanzas'} audience  D-020: 'finanzas' no puede
  *                                            llevar columnas de dotación/HR.
+ * @property {1|2}           [headerRows]  filas de encabezado — 1 (default) o
+ *                                 2 (encabezado agrupado con merges, sólo lo
+ *                                 usa `writeGroupedContractSheet`).
+ * @property {Object<string,ExportColumnGroup>} [groups] grupos de columnas,
+ *                                 sólo los consume `writeGroupedContractSheet`.
  * @property {ExportColumn[]} columns
  */
 
@@ -78,19 +126,26 @@ const NO_TOCAR_TODAVIA = new Set(['apellidoNombreColumn', 'puestoColumn']);
 
 /** Modo Controlar: comparación fija de 9 columnas, sin `cols.has*` — ya se
  * comporta como layout:'fijo' por construcción (nombre/legajo siempre se
- * emiten, aunque nombre pueda venir vacío). */
+ * emiten, aunque nombre pueda venir vacío). Encabezado de dos filas —
+ * migrado a `writeGroupedContractSheet` en el Paso 4b. */
 const brutosControlar = {
   exportId: 'brutos', sheet: 'Control de Brutos', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 2,
+  groups: {
+    salBase: { label: 'Salario Base',    headerColor: CYAN_HDR,  dataColor: CYAN_BG },
+    acfa:    { label: 'A Cta Fut Aumen', headerColor: LILAC_HDR, dataColor: LILAC_BG },
+    tab:     { label: 'Valores Tabulado', headerColor: GRAY_HDR }, // sin dataColor: sin fondo en los datos
+  },
   columns: [
-    { label: 'Legajo',              key: 'legajo',         from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: 'Apellido y Nombre',   key: 'nombre',         from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
-    { label: 'SAL_BASE',            key: 'salBase',        from: ['salBaseColumn'],        necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'CTRL SALARIO BASE',   key: 'ctrlSalBase',    from: [],                       necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    from: ['aCuFutAumenColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'CTRL A_CTA_FUT_AUMEN', key: 'ctrlACuFutAumen', from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'Legajo (Tab)',        key: 'legajo',         from: ['empleadoColumn'],       necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      from: ['tabSalBaseColumn'],     necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      from: ['tabACuFutAumenColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Legajo',              key: 'legajo',         width: 12, from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Apellido y Nombre',   key: 'nombre',         width: 28, from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
+    { label: 'SAL_BASE',            key: 'salBase',        width: 18, from: ['salBaseColumn'],        necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'salBase' },
+    { label: 'CTRL SALARIO BASE',   key: 'ctrlSalBase',    width: 22, from: [],                       necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'salBase', diffHighlight: true },
+    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    width: 20, from: ['aCuFutAumenColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'acfa' },
+    { label: 'CTRL A_CTA_FUT_AUMEN', key: 'ctrlACuFutAumen', width: 24, from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'acfa', diffHighlight: true },
+    { label: 'Legajo (Tab)',        key: 'legajo',         width: 12, from: ['empleadoColumn'],       necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
+    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      width: 18, from: ['tabSalBaseColumn'],     necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      width: 18, from: ['tabACuFutAumenColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
   ],
 };
 
@@ -117,16 +172,24 @@ const brutosReporte = {
 
 // ── GS Pers ───────────────────────────────────────────────────────────────────
 
+/** Encabezado de dos filas — migrado a `writeGroupedContractSheet` en el Paso 4b. */
 const gsPersControlar = {
   exportId: 'gs_pers', sheet: 'Control GS Pers', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 2,
+  groups: {
+    gtos: { label: 'GTOS_PERSONALES', headerColor: CYAN_HDR,  dataColor: CYAN_BG },
+    dto:  { label: 'DTO_COCHERA',     headerColor: LILAC_HDR, dataColor: LILAC_BG },
+    tab:  { label: 'Valores Tabulado', headerColor: GRAY_HDR },
+  },
   columns: [
-    { label: 'Legajo',               key: 'legajo',   from: ['legajoColumn'],           necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: 'GTOS_PERSONALES',      key: 'gtos',     from: ['gtosPersonalesColumn'],   necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'CTRL GTOS_PERSONALES', key: 'ctrlGtos', from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'DTO_COCHERA',          key: 'dto',      from: ['dtoCocheraColumn'],       necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'CTRL DTO_COCHERA',     key: 'ctrlDto',  from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'GTOS_PERSONALES (Tab)', key: 'tabValGtos', from: ['tabGtosPersonalesColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', from: ['tabDtoCocheraColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['legajoColumn'],           necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'GTOS_PERSONALES',      key: 'gtos',     width: 20, from: ['gtosPersonalesColumn'],   necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'gtos' },
+    { label: 'CTRL GTOS_PERSONALES', key: 'ctrlGtos', width: 24, from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'gtos', diffHighlight: true },
+    { label: 'DTO_COCHERA',          key: 'dto',      width: 18, from: ['dtoCocheraColumn'],       necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dto' },
+    { label: 'CTRL DTO_COCHERA',     key: 'ctrlDto',  width: 22, from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dto', diffHighlight: true },
+    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['empleadoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
+    { label: 'GTOS_PERS (Tab)',      key: 'tabValGtos', width: 22, from: ['tabGtosPersonalesColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', width: 22, from: ['tabDtoCocheraColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
   ],
 };
 
@@ -154,35 +217,53 @@ const gsPersReporte = {
 // modo: el archivo NR (`nrKey`) en modo Controlar, el Tabulado (`tabKey`) en
 // los dos modos.
 
-const nrConceptColumn = (c, key) => ({
-  label: c.label, key: c.key, from: [key], necessity: NECESSITY.OBLIGATORIA, type: 'num',
+const nrConceptColumn = (c, key, extra = {}) => ({
+  label: c.label, key: c.key, from: [key], necessity: NECESSITY.OBLIGATORIA, type: 'num', ...extra,
 });
 
+// Grupos de color compartidos por los dos modos (Controlar y Reporte): cada
+// concepto NR se pinta según `c.group` ('indem'/'otros'), tanto si la columna
+// sale de nrKey (Controlar) como de tabKey (Reporte) — es el mismo concepto.
+const NR_CONCEPT_GROUPS = {
+  indem: { headerColor: INDEM_HDR, dataColor: INDEM_BG },
+  otros: { headerColor: OTROS_HDR, dataColor: OTROS_BG },
+};
+
+/** Encabezado de una sola fila, coloreado por columna (sin merges) — migrado
+ * a `writeGroupedContractSheet` en el Paso 4b. */
 const nrControlar = {
   exportId: 'nr', sheet: 'Control NR', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 1,
+  groups: NR_CONCEPT_GROUPS,
   columns: [
-    { label: 'Legajo', key: 'legajo', from: ['legajoColumn'], necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: '# Difs', key: 'difs',   from: [],                necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    ...NR_CONCEPTS.map(c => nrConceptColumn(c, c.nrKey)),
+    { label: 'Legajo', key: 'legajo', width: 12, from: ['legajoColumn'], necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: '# Difs', key: 'difs',   width: 10, from: [],                necessity: NECESSITY.OBLIGATORIA, type: 'num',
+      diffHighlight: true, dataAlign: 'center', numFmt: false },
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.nrKey, { diffHighlight: true }), width: 16, group: c.group })),
   ],
 };
 
 // NR Reporte ya emite las 18 columnas siempre (no tiene el bug de `cols.has*`
 // que Brutos/GS Pers sí tenían) — no necesita el fix de comportamiento de
-// Paso 4a. Queda igual sin `width`: migrarlo a `writeContractSheet` es Paso 4b
-// (des-duplicación, no corrección).
+// Paso 4a. Mismo encabezado de una fila coloreado por grupo que NR Controlar,
+// más una columna A vacía (separador heredado del layout de Meta4) y sin
+// `diffHighlight` — es un reporte, no hay `ctrl` que resaltar. Migrado a
+// `writeGroupedContractSheet` en el Paso 4b.
 const nrReporte = {
   exportId: 'nr_reporte', sheet: 'Reporte NR', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 1,
+  groups: NR_CONCEPT_GROUPS,
   columns: [
-    { label: 'ID_EMPLEADO',     key: 'legajo',          from: ['empleadoColumn'],  necessity: NECESSITY.CLAVE,    type: 'txt' },
-    { label: 'NOMBRE',          key: 'nombre',          from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'APELLIDO_1',      key: 'apellido1',       from: ['tabApellido1Column'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_ALTA',      key: 'fecAlta',         from: ['tabFecAltaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_BAJA',      key: 'fecBaja',         from: ['tabFecBajaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FEC_PAGO',        key: 'fecPago',         from: ['tabFecPagoColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    from: ['tabIdCentroTrabColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'ID_CATEGORIA',    key: 'idCategoria',     from: ['tabIdCategoriaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    ...NR_CONCEPTS.map(c => nrConceptColumn(c, c.tabKey)),
+    { label: '', key: '__blank__', width: 4, from: [], necessity: NECESSITY.OPCIONAL, type: 'txt', spacer: true },
+    { label: 'ID_EMPLEADO',     key: 'legajo',          width: 12, from: ['empleadoColumn'],  necessity: NECESSITY.CLAVE,    type: 'txt' },
+    { label: 'NOMBRE',          key: 'nombre',          width: 22, from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'APELLIDO_1',      key: 'apellido1',       width: 22, from: ['tabApellido1Column'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_ALTA',      key: 'fecAlta',         width: 14, from: ['tabFecAltaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_BAJA',      key: 'fecBaja',         width: 14, from: ['tabFecBajaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FEC_PAGO',        key: 'fecPago',         width: 14, from: ['tabFecPagoColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    width: 16, from: ['tabIdCentroTrabColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CATEGORIA',    key: 'idCategoria',     width: 16, from: ['tabIdCategoriaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.tabKey), width: 16, group: c.group })),
   ],
 };
 

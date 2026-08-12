@@ -7,7 +7,7 @@ import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
-import { writeContractSheet, contractColDefs } from '../exports/contractSheet.js';
+import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
@@ -407,6 +407,7 @@ export function summarizeGsPersReporte(results) {
 }
 
 const GS_PERS_REPORTE_CONTRACT = EXPORT_CONTRACTS.gs_pers_reporte;
+const GS_PERS_CONTROLAR_CONTRACT = EXPORT_CONTRACTS.gs_pers;
 
 export function renderGsPersReporteResults(results, container) {
   const { rows, cols } = results;
@@ -507,86 +508,10 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
 
 async function exportGsPersToXlsx(results) {
   await loadExcelJS();
-  const { rows } = results;
-
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-
-  const ws = wb.addWorksheet('Control GS Pers');
-  ws.columns = [
-    { width: 12 }, { width: 20 }, { width: 24 },
-    { width: 18 }, { width: 22 }, { width: 12 },
-    { width: 22 }, { width: 22 },
-  ];
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-
-  const CYAN_HDR  = 'FFC7ECF6';
-  const CYAN_BG   = 'FFE6F8FB';
-  const LILAC_HDR = 'FFE6DCF4';
-  const LILAC_BG  = 'FFF4EFFA';
-  const GRAY_HDR  = 'FFE8E8E8';
-
-  const r1 = ws.addRow(['Legajo', 'GTOS_PERSONALES', null, 'DTO_COCHERA', null, 'Valores Tabulado', null, null]);
-  const r2 = ws.addRow(['', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'Legajo', 'GTOS_PERS (Tab)', 'DTO_COCHERA (Tab)']);
-
-  ws.mergeCells('A1:A2');
-  ws.mergeCells('B1:C1');
-  ws.mergeCells('D1:E1');
-  ws.mergeCells('F1:H1');
-  r1.height = 22;
-  r2.height = 20;
-
-  const styleGrp = (cell, bg) => {
-    cell.font = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill = solidFill(bg);
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-  };
-  styleGrp(r1.getCell(1), GRAY_HDR);
-  styleGrp(r1.getCell(2), CYAN_HDR);
-  styleGrp(r1.getCell(4), LILAC_HDR);
-  styleGrp(r1.getCell(6), GRAY_HDR);
-
-  const styleCol = (cell, bg, isBold = false) => {
-    cell.font = isBold ? { ...bold } : { ...base };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill = solidFill(bg);
-    cell.border = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  };
-  styleCol(r2.getCell(2), CYAN_HDR,  false);
-  styleCol(r2.getCell(3), CYAN_HDR,  true);
-  styleCol(r2.getCell(4), LILAC_HDR, false);
-  styleCol(r2.getCell(5), LILAC_HDR, true);
-  styleCol(r2.getCell(6), GRAY_HDR,  false);
-  styleCol(r2.getCell(7), GRAY_HDR,  false);
-  styleCol(r2.getCell(8), GRAY_HDR,  false);
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 2 }];
-
-  const numFmt = '#,##0.00';
-  for (const r of rows) {
-    const dr = ws.addRow([r.legajo, r.gtos, r.ctrlGtos, r.dto, r.ctrlDto, r.legajo, r.tabValGtos, r.tabValDto]);
-    dr.getCell(2).fill = solidFill(CYAN_BG);
-    dr.getCell(3).fill = solidFill(CYAN_BG);
-    dr.getCell(4).fill = solidFill(LILAC_BG);
-    dr.getCell(5).fill = solidFill(LILAC_BG);
-    for (const col of [2, 3, 4, 5, 7, 8]) {
-      dr.getCell(col).numFmt    = numFmt;
-      dr.getCell(col).alignment = { horizontal: 'right', vertical: 'middle' };
-      dr.getCell(col).font      = { ...base };
-    }
-    if (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01)
-      dr.getCell(3).font = { ...base, bold: true, color: { argb: 'FFCC0000' } };
-    if (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01)
-      dr.getCell(5).font = { ...base, bold: true, color: { argb: 'FFCC0000' } };
-    dr.getCell(1).font = { ...base };
-    dr.getCell(6).font = { ...base };
-  }
-
+  writeGroupedContractSheet(wb, GS_PERS_CONTROLAR_CONTRACT, results.rows);
   await downloadWorkbook(wb, `GsPers_Control_${periodSuffix(results.period)}.xlsx`);
 }
 

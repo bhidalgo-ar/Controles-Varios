@@ -7,7 +7,7 @@ import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
-import { writeContractSheet, contractColDefs } from '../exports/contractSheet.js';
+import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
@@ -440,6 +440,7 @@ export function summarizeBrutosReporte(results) {
 }
 
 const BRUTOS_REPORTE_CONTRACT = EXPORT_CONTRACTS.brutos_reporte;
+const BRUTOS_CONTROLAR_CONTRACT = EXPORT_CONTRACTS.brutos;
 
 export function renderBrutosReporteResults(results, container) {
   const { rows, cols } = results;
@@ -549,91 +550,11 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
 
 async function exportBrutosToXlsx(results) {
   await loadExcelJS();
-  const { rows, period } = results;
-
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-
-  const ws = wb.addWorksheet('Reporte de Brutos');
-  ws.columns = [
-    { width: 12 }, { width: 28 }, { width: 18 }, { width: 22 },
-    { width: 20 }, { width: 24 }, { width: 12 },
-    { width: 18 }, { width: 18 },
-  ];
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-
-  const CYAN_HDR  = 'FFC7ECF6';
-  const CYAN_BG   = 'FFE6F8FB';
-  const LILAC_HDR = 'FFE6DCF4';
-  const LILAC_BG  = 'FFF4EFFA';
-  const GRAY_HDR  = 'FFE8E8E8';
-
-  // Fila 1: grupos  (col A=Legajo, B=Nombre, C:D=Salario Base, E:F=ACFA, G:I=Tabulado)
-  const r1 = ws.addRow(['Legajo', 'Apellido y Nombre', 'Salario Base', null, 'A Cta Fut Aumen', null, 'Valores Tabulado', null, null]);
-  const r2 = ws.addRow(['', '', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'Legajo', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)']);
-
-  ws.mergeCells('A1:A2');
-  ws.mergeCells('B1:B2');
-  ws.mergeCells('C1:D1');
-  ws.mergeCells('E1:F1');
-  ws.mergeCells('G1:I1');
-  r1.height = 22;
-  r2.height = 20;
-
-  const styleGrp = (cell, bg) => {
-    cell.font = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill = solidFill(bg);
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-  };
-  styleGrp(r1.getCell(1), GRAY_HDR);
-  styleGrp(r1.getCell(2), GRAY_HDR);
-  styleGrp(r1.getCell(3), CYAN_HDR);
-  styleGrp(r1.getCell(5), LILAC_HDR);
-  styleGrp(r1.getCell(7), GRAY_HDR);
-
-  const styleCol = (cell, bg, isBold = false) => {
-    cell.font = isBold ? { ...bold } : { ...base };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill = solidFill(bg);
-    cell.border = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  };
-  styleCol(r2.getCell(3), CYAN_HDR,  false);
-  styleCol(r2.getCell(4), CYAN_HDR,  true);
-  styleCol(r2.getCell(5), LILAC_HDR, false);
-  styleCol(r2.getCell(6), LILAC_HDR, true);
-  styleCol(r2.getCell(7), GRAY_HDR,  false);
-  styleCol(r2.getCell(8), GRAY_HDR,  false);
-  styleCol(r2.getCell(9), GRAY_HDR,  false);
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 2 }];
-
-  const numFmt = '#,##0.00';
-  for (const r of rows) {
-    const dr = ws.addRow([r.legajo, r.nombre, r.salBase, r.ctrlSalBase, r.aCuFutAumen, r.ctrlACuFutAumen, r.legajo, r.tabValSal, r.tabValAcu]);
-    dr.getCell(3).fill = solidFill(CYAN_BG);
-    dr.getCell(4).fill = solidFill(CYAN_BG);
-    dr.getCell(5).fill = solidFill(LILAC_BG);
-    dr.getCell(6).fill = solidFill(LILAC_BG);
-    for (const col of [3, 4, 5, 6, 8, 9]) {
-      dr.getCell(col).numFmt    = numFmt;
-      dr.getCell(col).alignment = { horizontal: 'right', vertical: 'middle' };
-      dr.getCell(col).font      = { ...base };
-    }
-    if (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01)
-      dr.getCell(4).font = { ...base, bold: true, color: { argb: 'FFCC0000' } };
-    if (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01)
-      dr.getCell(6).font = { ...base, bold: true, color: { argb: 'FFCC0000' } };
-    dr.getCell(1).font = { ...base };
-    dr.getCell(2).font = { ...base };
-    dr.getCell(7).font = { ...base };
-  }
-
-  await downloadWorkbook(wb, `Brutos_Control_${periodSuffix(period)}.xlsx`);
+  writeGroupedContractSheet(wb, BRUTOS_CONTROLAR_CONTRACT, results.rows);
+  await downloadWorkbook(wb, `Brutos_Control_${periodSuffix(results.period)}.xlsx`);
 }
 
 async function exportBrutosReporteToXlsx(results) {
