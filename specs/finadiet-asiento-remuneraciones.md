@@ -141,9 +141,10 @@ asiento y no se emite. Todas las comparaciones de importe usan la tolerancia del
 | **Cuentas Contables GRAL** | La misma tabla con el código de cuenta limpio, sin prefijo. |
 
 Las **dos solapas planas tienen contrato de export** (`finadiet_asiento_cc` y `finadiet_asiento_gral` en
-`js/exports/contracts.js`) y las escribe `writeContractSheet` — el Paso 6 del contrato de export para este
-control. La fila `TOTAL` viaja como una fila más, para que `writeContractSheet` siga siendo el único lugar
-que escribe filas de estas hojas (D-043).
+`js/exports/contracts.js`) y las escribe `writeContractSheet`. Son las dos únicas del Paso 6 que nacen con
+writer, así que declaran también su layout (`width`); el resto del Paso 6 declara sólo semántica hasta que su
+writer las consuma (D-045). La fila `TOTAL` viaja como una fila más, para que `writeContractSheet` siga
+siendo el único lugar que escribe filas de estas hojas (D-043).
 
 La solapa ASIENTO **no** tiene contrato a propósito: no es una tabla plana (encabezado con mes y fecha,
 filas de título por bloque, total al pie), y forzarle esa forma sería más maquinaria de la que el caso
@@ -151,9 +152,10 @@ necesita — el mismo criterio con el que el Paso 4b quedó separado del 4a.
 
 **`audience: 'finanzas'` (D-020).** El archivo lo recibe Contaduría del cliente, no el equipo de Payroll:
 no lleva ni legajo, ni nombre de empleado, ni dotación. Un asiento se lee por cuenta y por concepto de
-liquidación, y el empleado no aparece en ninguna de las tres solapas. Lo hace cumplir
-`tests/exportContracts.test.js`, que a partir de este control valida que ningún contrato `finanzas` lleve
-atributos de HR.
+liquidación, y el empleado no aparece en ninguna de las tres solapas. Lo hace cumplir la allow-list
+`FINANZAS_ALLOWED_KEYS` de `js/exports/contracts.js` (D-045), que a partir de este control declara sus **dos**
+usos: pagar (Acreditaciones → tesorería) y asentar (este asiento → Contaduría). Una columna nueva en un
+export de Finanzas no pasa el test hasta que alguien la agregue ahí a mano.
 
 `Mes` sale del período de la corrida. `Fecha de emisión` la completa el analista en el Paso 2: no se
 infiere del archivo ni se completa con la de hoy — una fecha inventada en un comprobante contable no la

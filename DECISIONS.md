@@ -771,7 +771,71 @@ esa fase.
 
 ---
 
-## D-045 — El asiento de FINADIET entra a la app como control, no como HTML standalone en `reportes/`
+## D-045 — Paso 6 del contrato de export: un contrato es un PISO, nunca un techo (y la colisión de clave plana dejó de ser hipotética)
+
+**Fecha:** 2026-08-12
+**Contexto:** El Paso 6 (que los 7 controles restantes declaren su contrato) destapó dos cosas al
+intentar escribirlo, ninguna de las dos prevista en D-041.
+
+**1. Un bug vivo en `main`, no una deuda.** `blocksProgress()` decía
+`if (necessity === OPCIONAL) return false` **antes** de mirar el flag legado, así que un contrato podía
+*apagar* un `required: true` que ya existía. Y lo estaba haciendo: `puestoColumn` existe en dos
+`FIELD_DEFS` con necesidades opuestas (`tab_control` opcional · `cat_empleados` **required**), el mapa de
+necesidad es plano por clave y no por `(fileType, clave)`, y el contrato de `brutos_reporte` la declara
+OPCIONAL desde el lado del Tabulado. Resultado: la **Columna de Puesto del Reporte de Categorías dejó de
+bloquear**. Se podía subir el archivo sin ella, y EE x CATEG salteaba en silencio el chequeo de
+discrepancias de Puesto (`if (cm.puestoColumn && tm.puestoColumn)`) y armaba la "Distribución por Puesto"
+agrupando por una columna sin resolver. Es exactamente el default silencioso que el Paso 1 había cerrado
+para esos mismos 6 campos (ver el comentario del panel de remapeo en `fileUpload.js`): el fix de entonces
+lo reabrió para uno de ellos. Alcance medido: **1 campo hoy**, y el Paso 6 lo multiplicaba
+(`costoTotalColumn` era el siguiente).
+
+**2. El assert que D-041 dejó "por las dudas" se disparó.** D-041 documentó el mapa plano como
+"fragilidad, hoy no hay colisión real (verificado)" y lo blindó con un assert de "ninguna clave pide
+necesidades distintas en contratos distintos". Con los contratos del Paso 6 hay **dos** colisiones
+legítimas: `puestoColumn` y `costoTotalColumn` (`rend_file` opcional · `costo_total_file` required). No
+son un error a corregir en los contratos —la misma columna es opcional en un archivo y obligatoria en
+otro— sino la señal de que el esquema plano no puede declararlas sin mentir de un lado.
+
+**Decisión:**
+1. **`blocksProgress()`: el contrato suma obligación, nunca la saca.** Sólo `CLAVE` bloquea por sí sola;
+   todo lo demás cae al `required` del `FIELD_DEFS` de **su propio** fileType, que sí está scopeado. Es lo
+   que el diseño siempre dijo (el test lo afirma desde el Paso 0: "el mapa derivado no le baja la necesidad
+   a nada que hoy ya bloquea"); el código decía otra cosa. Con esto la colisión de clave plana deja de
+   poder producir un gate incorrecto, aunque siga sin poder representarse.
+2. **El assert de "no debilitar" se deriva de `FIELD_DEFS`, no de una lista a mano.** La versión anterior
+   enumeraba 6 claves elegidas al escribirla y el caso que se escapó no estaba entre ellas. Ahora recorre
+   los 15 fileTypes: toda clave con `required: true` tiene que seguir bloqueando. `FIELD_DEFS` se exportó
+   de `js/ui/fileUpload.js` sólo para esto.
+3. **El assert de colisión se hace preciso en vez de amplio.** Lo que puede dar un gate incorrecto es que
+   una clave sea `CLAVE` en un contrato y no-`CLAVE` en otro — eso sigue prohibido. La divergencia
+   OPCIONAL/OBLIGATORIA queda permitida y **contada**: el test afirma que son exactamente 2 y las nombra,
+   así que si aparece una tercera hay que mirarla, no descubrirla en producción.
+4. **Se declaran 5 de los 7 contratos**, y los contratos del Paso 6 declaran **semántica, no layout**
+   (nada de `width`/`groups`/`headerRows`/`diffHighlight`). Sus writers todavía arman el `.xlsx` a mano:
+   un `width` declarado que ningún writer lee es una segunda fuente de verdad que se desincroniza del
+   archivo real sin que nada avise — justo lo que el contrato existe para evitar. Un assert lo hace
+   cumplir en las dos direcciones (los migrados declaran layout, los no migrados no).
+5. **`acreditaciones_reporte` es el primer `audience: 'finanzas'`**, y con eso **D-020 pasa de comentario a
+   assert**: sus columnas tienen que estar en `FINANZAS_ALLOWED_KEYS` (legajo, nombre, CUIT, neto, fecha,
+   banco, CBU) y no puede aparecer ninguna de conteo/dotación/alta/baja.
+
+**Lo que queda afuera, a propósito:** `variaciones` y `acumuladores`. `ExportContract` modela **una** hoja
+con nombre declarado, y esos dos generan un **conjunto** de hojas calculado en runtime (una por grupo de
+conceptos configurado por cliente · una por período). Declararles un contrato de una hoja pondría en
+`sheet` un nombre que nunca aparece en el archivo — una mentira en la fuente única, peor que no declararlos.
+Ninguno de los dos usa claves de `FIELD_DEFS` (sus parsers dan filas de forma fija), así que no declararlos
+no deja ningún gate sin derivar: es el único costo, y es cero.
+
+**Verificación:** `tests/exportContracts.test.js` (970 asserts). El barrido nuevo se probó revirtiendo el
+fix de `blocksProgress`: falla en `cat_empleados.puestoColumn`, se restaura, pasa. `npx playwright test`
+completo para descartar un ciclo de módulos como el de D-041 (`contracts.js` ahora importa también
+`COLS` de `rendVsTabu.js`).
+**Motivo:** Paso 6 de `specs/contrato-export.md`.
+
+---
+
+## D-046 — El asiento de FINADIET entra a la app como control, no como HTML standalone en `reportes/`
 
 **Fecha:** 2026-08-12
 **Contexto:** El asiento contable de remuneraciones de FINADIET (lógica y tablas validadas con Gaby
@@ -820,10 +884,14 @@ tiene pantalla de controles donde el control aparece solo.
 7. **Tolerancia 0,01, la del proyecto.** El standalone declaraba 0,005 en su spec y comparaba con `>= 0.5`
    en el código: 49 centavos de descuadre se informaban como "el asiento cierra".
 8. **`audience: 'finanzas'` en los dos contratos** (D-020): el archivo lo recibe Contaduría del cliente, así
-   que no lleva legajo, nombre ni atributos del empleado — un asiento se lee por cuenta y por concepto.
-   `tests/exportContracts.test.js` pasa de asertar "todavía no hay ningún contrato finanzas" a hacer cumplir
-   la regla real: ningún contrato `finanzas` lleva atributos de HR (puesto, categoría, centro de trabajo,
-   altas/bajas, dotación).
+   que no lleva legajo, nombre ni atributos del empleado — un asiento se lee por cuenta y por concepto, y el
+   empleado no aparece en ninguna de las tres solapas. D-045 (mergeada antes que esto) ya había convertido
+   D-020 en un assert con `FINANZAS_ALLOWED_KEYS`, una allow-list modelada sobre Acreditaciones, que es un
+   archivo de **pago**. Un asiento es el otro destino legítimo de Finanzas y pide columnas distintas, así que
+   la lista pasa a declarar los dos usos —pagar (legajo, nombre, CUIT, CBU, banco, importe, fecha) y asentar
+   (cuenta, concepto, código de concepto, debe, haber)— y el assert de "hay exactamente un contrato finanzas"
+   se cambia por "hay al menos uno": ese número va a seguir creciendo y contarlo no prueba nada, mientras que
+   la allow-list sí — una columna nueva en un export de Finanzas no pasa hasta que alguien la agregue a mano.
 **Alternativas descartadas:** Dejarlo standalone y sólo arreglarle los bugs (queda afuera del checklist, del
 semáforo y de la cobertura mensual, y con la tabla de cuentas cableada seguiría necesitando un commit por
 cada cuenta nueva del cliente); mergear la config guardada sobre la semilla (una cuenta borrada del editor

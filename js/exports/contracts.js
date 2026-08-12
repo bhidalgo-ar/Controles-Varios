@@ -5,10 +5,22 @@
 // — no se declara dos veces.
 //
 // Ver specs/contrato-export.md para el porqué y el plan completo por pasos
-// (D-041 en DECISIONS.md). `layout` recién se usa a partir del Paso 4
-// (writeContractSheet, todavía no existe).
+// (D-041, D-043, D-045 y D-046 en DECISIONS.md).
+//
+// Dos reglas que no se deducen leyendo:
+//   1. **El contrato es un PISO, nunca un techo** — puede agregar obligación
+//      sobre el `required` de FIELD_DEFS, nunca sacarla (ver blocksProgress()).
+//   2. Los 8 contratos migrados a un writer declaran también su layout
+//      (`width`/`groups`/`headerRows`); los del Paso 6, que todavía arman el
+//      .xlsx a mano, declaran sólo semántica. Declarar layout que nadie lee es
+//      una segunda fuente de verdad que se desincroniza en silencio, y hay un
+//      assert en tests/exportContracts.test.js que lo impide en los dos sentidos.
 
 import { NR_CONCEPTS } from '../controls/nr.js';
+import { COLS } from '../controls/rendVsTabu.js';
+
+/** 'precio' → 'Precio', para armar las claves rPrecio/cPrecio/dPrecio. */
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * Cuánto pesa una columna para quien recibe el archivo.
@@ -267,9 +279,136 @@ const nrReporte = {
   ],
 };
 
+// ── Rendimiento (Paso 6) ─────────────────────────────────────────────────────
+// Las tres pantallas de Rendimiento comparten las MISMAS 6 categorías, con las
+// mismas etiquetas: se derivan de `COLS` (js/controls/rendVsTabu.js) en vez de
+// repetirlas acá, igual que NR deriva sus 18 conceptos de `NR_CONCEPTS`.
+//
+// De qué columna del Reporte de Rendimiento sale cada categoría. Es
+// conocimiento de contrato ("esta columna del export se alimenta de esta clave
+// de mapeo"), por eso vive acá y no en el módulo del control.
+const REND_CAT_KEY = {
+  precio:   'precioColumn',
+  estimulo: 'estimuloColumn',
+  cargas:   'cargasColumn',
+  provMes:  'provMesColumn',
+  provCcss: 'provCcssColumn',
+  total:    'costoTotalColumn',
+};
+
+// `precioColumn` y `ccNameColumn` son las dos únicas `required: true` de
+// `FIELD_DEFS.rend_file`; el resto de las categorías son opcionales ahí y el
+// contrato no las sube (subirlas a OBLIGATORIA no bloquearía nada hoy —ver
+// `blocksProgress`— pero declararía una expectativa que el archivo real de
+// varios clientes no cumple).
+const rendCatNecessity = key =>
+  key === 'precio' ? NECESSITY.OBLIGATORIA : NECESSITY.OPCIONAL;
+
+// Los 5 contratos del Paso 6 declaran SEMÁNTICA (qué columna sale de qué clave
+// de mapeo y cuánto pesa), no layout — nada de `width`/`groups`/`headerRows`/
+// `diffHighlight`. Sus writers todavía arman el .xlsx a mano, así que un
+// `width` acá no lo leería nadie: sería una segunda fuente de verdad que se
+// desincroniza del archivo real sin que nada avise, justo lo que el contrato
+// existe para evitar. El layout se declara cuando el writer lo consuma — ver
+// specs/contrato-export.md, "Lo que falta para migrar los writers del Paso 6".
+
+/** Rend vs Tabulado: CC + 3 columnas por categoría (Rend · Tab · CTRL). */
+const rendVsTabuControlar = {
+  exportId: 'rend_vs_tabu', sheet: 'Rend vs Tabulado', layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label: 'CC',              key: 'ccCode', from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
+    { label: 'Centro de Costo', key: 'ccName', from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    ...COLS.flatMap(c => [
+      { label: `${c.label} · Rend`, key: c.rKey, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num' },
+      // El lado Tabulado se calcula por CÓDIGO de concepto (js/controls/tabCodes.js),
+      // no sale de una columna mapeada — por eso `from: []`.
+      { label: `${c.label} · Tab`,  key: c.tKey, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+      { label: `${c.label} · CTRL`, key: c.dKey, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    ]),
+  ],
+};
+
+/** Rend vs Asiento: mismo molde, pero el 2º lado es CONTA (Contabilidad Desglosada). */
+const rendVsAsientoControlar = {
+  exportId: 'rend_vs_asiento', sheet: 'Resumen', layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label: 'Código CC',       key: 'ccCode', from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
+    { label: 'Centro de Costo', key: 'ccName', from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    // `rKey`/`dKey` son idénticos en los dos módulos; el del medio es el que
+    // cambia (`tKey` en Rend vs Tabulado, `cKey` acá), así que se arma.
+    ...COLS.flatMap(c => [
+      { label: `${c.label} · Rend`,  key: c.rKey,           from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num' },
+      // CONTA se clasifica por CUENTA_CONTAB / ID_CONCEPTO según `rvaConfig`,
+      // no por una columna mapeada (`FIELD_DEFS.conta_file` no declara ninguna).
+      { label: `${c.label} · CONTA`, key: `c${cap(c.key)}`, from: [],                    necessity: NECESSITY.OBLIGATORIA,   type: 'num' },
+      { label: `${c.label} · CTRL`,  key: c.dKey,           from: [],                    necessity: NECESSITY.OBLIGATORIA,   type: 'num' },
+    ]),
+  ],
+};
+
+/** Rend x EE: una fila por legajo — Costo Total del reporte vs. el calculado del Tabulado. */
+const rendXEeControlar = {
+  exportId: 'rend_x_ee', sheet: 'Rendimiento x EE', layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label: 'Legajo', key: 'legajo', from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,    type: 'txt' },
+    { label: 'Nombre', key: 'nombre', from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', from: ['costoTotalColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    // Las 5 categorías salen del Tabulado por código de concepto, igual que en
+    // Rend vs Tabulado — ninguna sale de una columna mapeada.
+    ...COLS.filter(c => c.key !== 'total').map(c => ({
+      label: c.label, key: c.key, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num',
+    })),
+    { label: 'COSTO TOTAL (Calculado)',   key: 'calcTotal', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Dif (Reporte − Calculado)', key: 'dif',       from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+  ],
+};
+
+// ── EE x CATEG (Paso 6) ──────────────────────────────────────────────────────
+// Dos hojas con el MISMO molde de 4 columnas; lo único que cambia es por qué
+// campo agrupa (y de qué par de claves sale ese campo: una del Reporte de
+// Categorías y otra del Tabulado).
+const catDistribucion = (exportId, sheet, label, from) => ({
+  exportId, sheet, layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label,                key: 'key',      from,     necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    // Conteos de empleados, no importes (por eso el writer no les pone formato
+    // de moneda) — `type:'num'` igual, que es lo que declara el contrato.
+    { label: 'Rep. Categ.', key: 'catCount', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Tabulado',    key: 'tabCount', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Dif.',        key: 'diff',     from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+  ],
+});
+
+// ── Acreditaciones (Paso 6) ──────────────────────────────────────────────────
+// **El primer contrato `audience: 'finanzas'`** (D-020) — los otros dos son las
+// solapas planas del asiento de FINADIET, más abajo: este .xlsx lo recibe
+// Finanzas/tesorería del cliente, no el equipo de Payroll, así que lleva sólo
+// lo necesario para pagar. Que la lista de columnas esté acá y no repartida en
+// el módulo es lo que hace que D-020 se pueda verificar como assert en vez de
+// como comentario — ver `tests/exportContracts.test.js`.
+//
+// Es el layout de cada hoja de detalle (una por acreditación real). La hoja
+// CONTROL que las lista y cierra contra el archivo de origen no se modela acá:
+// es una hoja de cierre con fórmulas entre hojas, no una tabla de datos.
+const acreditacionesReporte = {
+  exportId: 'acreditaciones_reporte', sheet: 'Detalle de acreditación',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: [
+    { label: 'Legajo',             key: 'legajo', from: [], necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Apellido y Nombre',  key: 'nombre', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'CUIT',               key: 'cuit',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'Neto',               key: 'neto',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Fecha Acreditacion', key: 'fecha',  from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'Banco',              key: 'banco',  from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'CBU',                key: 'cbu',    from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+  ],
+};
+
 // ── FINADIET · Asiento de Remuneraciones ──────────────────────────────────────
 //
-// Las DOS solapas planas del asiento (Paso 6 del contrato de export). La tercera
+// Las DOS solapas planas del asiento. Son las únicas del Paso 6 que ya tienen
+// writer (`writeContractSheet`), así que declaran también su layout — el resto
+// del Paso 6 declara sólo semántica hasta que su writer las consuma. La tercera
 // solapa, ASIENTO, no tiene contrato a propósito: no es una tabla plana — lleva
 // un encabezado con mes y fecha, una fila de título por centro de costo y por
 // categoría, y un TOTAL al pie. `writeContractSheet` describe hojas de
@@ -311,15 +450,51 @@ const finadietAsientoGral = {
 };
 
 export const EXPORT_CONTRACTS = {
-  brutos:                brutosControlar,
-  brutos_reporte:        brutosReporte,
-  gs_pers:               gsPersControlar,
-  gs_pers_reporte:       gsPersReporte,
-  nr:                    nrControlar,
-  nr_reporte:            nrReporte,
-  finadiet_asiento_cc:   finadietAsientoPorCentro,
-  finadiet_asiento_gral: finadietAsientoGral,
+  brutos:           brutosControlar,
+  brutos_reporte:   brutosReporte,
+  gs_pers:          gsPersControlar,
+  gs_pers_reporte:  gsPersReporte,
+  nr:               nrControlar,
+  nr_reporte:       nrReporte,
+  // Paso 6
+  rend_vs_tabu:     rendVsTabuControlar,
+  rend_vs_asiento:  rendVsAsientoControlar,
+  rend_x_ee:        rendXEeControlar,
+  cat_x_empleados_puesto: catDistribucion('cat_x_empleados_puesto', 'Por Puesto', 'Puesto', ['puestoColumn']),
+  // `from` es sólo la clave del Reporte de Categorías: el Tabulado agrupa por
+  // `ccColumn`, que ya está contratada como OPCIONAL por gs_pers_reporte y
+  // tiene otra necesidad (opcional en el Tabulado, `required` en el Reporte).
+  // Listar las dos bajo una sola `necessity` afirmaría de una lo que vale para
+  // la otra.
+  cat_x_empleados_cc:     catDistribucion('cat_x_empleados_cc', 'Por Centro de Costo', 'Centro de Costo', ['centroCostoColumn']),
+  acreditaciones_reporte: acreditacionesReporte,
+  // Asiento de FINADIET: los dos únicos del Paso 6 que ya salen por
+  // `writeContractSheet`, así que declaran también su layout (D-046).
+  finadiet_asiento_cc:    finadietAsientoPorCentro,
+  finadiet_asiento_gral:  finadietAsientoGral,
 };
+
+/**
+ * Columnas que un export `audience: 'finanzas'` puede llevar (D-020): lo
+ * necesario para **pagar** o para **asentar**, y nada de HR. No es una lista de
+ * deseos — es el assert de `tests/exportContracts.test.js`, así que agregar acá
+ * una columna de dotación/conteo/alta-baja es una decisión explícita, no un
+ * descuido.
+ *
+ * Los dos destinos que existen hoy piden columnas distintas y ninguno pide
+ * atributos del empleado:
+ *   - pagar (Acreditaciones → tesorería): legajo, nombre, CUIT, CBU, banco,
+ *     importe y fecha.
+ *   - asentar (asiento de FINADIET → Contaduría): cuenta, concepto y los dos
+ *     lados del movimiento. Acá no aparece ni el legajo: un asiento se lee por
+ *     cuenta contable, no por empleado.
+ */
+export const FINANZAS_ALLOWED_KEYS = new Set([
+  // pagar
+  'legajo', 'nombre', 'cuit', 'neto', 'fecha', 'banco', 'cbu',
+  // asentar
+  'cuenta', 'concepto', 'nro', 'debe', 'haber',
+]);
 
 /**
  * Todas las claves de mapeo que alguna columna de ALGÚN contrato consume,
@@ -388,27 +563,41 @@ export function esOmitido(value) {
  * ¿Esta clave de mapeo tiene que estar resuelta para poder avanzar, SIN vía
  * de escape?
  *
- * A propósito **sólo bloquea fuerte en CLAVE**, no en OBLIGATORIA. Bloquear
- * OBLIGATORIA sin la omisión declarada (Paso 2 de specs/contrato-export.md,
- * todavía no existe) rompería la carga hoy mismo: los 18 conceptos de NR son
- * OBLIGATORIA en el contrato y `legacyRequired` es `false` en los 18 — si
- * OBLIGATORIA bloqueara ya, ningún archivo de NR que no tenga las 18 columnas
- * se podría subir, y ningún cliente tiene las 18. Marcar algo OBLIGATORIA
- * declara la expectativa; **bloquear sin la salida de "esto no lo trae" es
- * peor que no bloquear**, así que hasta que exista esa salida, OBLIGATORIA
- * cae al flag legado (sin cambio de comportamiento) y sólo CLAVE es duro.
+ * **El contrato es un piso, nunca un techo:** puede AGREGAR obligación sobre
+ * el flag legado, nunca sacarla. Es lo que el diseño siempre quiso decir (el
+ * test `tests/exportContracts.test.js` lo afirma desde el Paso 0: "el mapa
+ * derivado no le baja la necesidad a nada que hoy ya bloquea"), pero el código
+ * decía otra cosa: un `return false` en OPCIONAL le ganaba a `legacyRequired`.
  *
- * Para una clave que todavía no está en ningún contrato (los controles del
- * Paso 6: rend_file, cat_empleados, costo_total_file, acreditaciones,
- * variaciones, acumuladores) también cae al flag legado.
+ * Eso era un bug real, no teórico. `fieldNecessityMap()` es plano por clave y
+ * no por `(fileType, clave)` — una fragilidad que el Paso 0 documentó como "hoy
+ * no hay colisión real". Sí la había: `puestoColumn` existe en DOS archivos con
+ * necesidades opuestas (`tab_control` opcional, `cat_empleados` **required**), y
+ * como el contrato de `brutos_reporte` la declara OPCIONAL desde el lado del
+ * Tabulado, la Columna de Puesto del Reporte de Categorías dejó de bloquear:
+ * se podía subir sin ella y EE x CATEG salteaba en silencio el chequeo de
+ * discrepancias de Puesto y armaba la "Distribución por Puesto" con la columna
+ * sin resolver. Justo el default silencioso que el Paso 1 había cerrado para
+ * esos mismos 6 campos (ver el comentario del panel de remapeo en
+ * `fileUpload.js`). Con el contrato como piso, la colisión deja de poder
+ * producir un gate incorrecto: cada `legacyRequired` lo aporta el `FIELD_DEFS`
+ * de SU propio fileType, que sí está scopeado.
+ *
+ * Sobre OBLIGATORIA: sigue sin bloquear por sí sola, y es a propósito. Los 18
+ * conceptos de NR son OBLIGATORIA con `legacyRequired` en `false`; si
+ * OBLIGATORIA bloqueara acá, ningún archivo de NR sin las 18 columnas se podría
+ * subir, y ningún cliente las tiene. Marcar algo OBLIGATORIA declara la
+ * expectativa; **bloquear sin la salida de "esto no lo trae" es peor que no
+ * bloquear**. Esa salida (`OMITIDO`) hoy existe sólo en el panel del Paso 2, no
+ * en el formulario de mapeo de archivo — hasta que exista ahí, OBLIGATORIA cae
+ * al flag legado.
  *
  * @param {string} key
  * @param {boolean} [legacyRequired] — el `required` de FIELD_DEFS/TAB_*_FIELDS
  */
 export function blocksProgress(key, legacyRequired = false) {
-  const necessity = necessityOfKey(key);
-  if (necessity === NECESSITY.CLAVE)    return true;
-  if (necessity === NECESSITY.OPCIONAL) return false;
-  // OBLIGATORIA (o clave no contratada todavía): sin cambio hasta el Paso 2.
+  if (necessityOfKey(key) === NECESSITY.CLAVE) return true;
+  // OBLIGATORIA / OPCIONAL / no contratada: el flag legado manda. Un contrato
+  // nunca desactiva un `required: true` que ya existía.
   return !!legacyRequired;
 }

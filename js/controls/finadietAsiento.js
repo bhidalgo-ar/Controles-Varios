@@ -24,7 +24,8 @@
 // (`finadiet_asiento_config`), editable en el Paso 2 del wizard. Una cuenta nueva
 // del cliente se agrega desde la pantalla, no con un commit.
 //
-// Reglas completas en specs/finadiet-asiento-remuneraciones.md.
+// Reglas completas en specs/finadiet-asiento-remuneraciones.md; por qué está acá
+// y no como HTML standalone en reportes/, en D-046.
 
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';

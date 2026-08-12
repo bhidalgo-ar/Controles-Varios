@@ -310,18 +310,29 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-12 (cuarta pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas. Los
-Pasos 4a, 5 y 4b del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último
-falso verde conocido: Brutos/GS Pers con la columna del archivo sin mapear pasaban por "0 diferencias =
-todo bien" cuando en realidad no se había comparado un solo legajo. El Paso 4b sacó las últimas ~80
-líneas de ExcelJS a mano por control (Brutos/GS Pers/NR Controlar + NR Reporte) a
-`writeGroupedContractSheet()`. Lo que sigue, en orden de menor a mayor tamaño:
+**Actualizado el 2026-08-12 (quinta pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas, y el
+contrato de export (`specs/contrato-export.md`) llegó al **Paso 6**: el 5 cerró el último falso verde
+conocido (Brutos/GS Pers con la columna sin mapear pasaban por "0 diferencias = todo bien" sin haber
+comparado un solo legajo), el 4b sacó las últimas ~80 líneas de ExcelJS a mano por control a
+`writeGroupedContractSheet()`, y el 6 declaró los 5 contratos que faltaban — y de paso destapó un bug
+vivo: un contrato podía **apagar** un `required: true` de otro tipo de archivo, y estaba apagando el de
+la Columna de Puesto del Reporte de Categorías (D-045). Lo que sigue, en orden de menor a mayor tamaño:
 
-1. **Paso 6 del contrato de export** — el resto de los controles (`rendVsTabu`, `rendVsAsiento`,
-   `rendXEe`, `catXEmpleados`, `variaciones`, `acumuladores`, `acreditaciones`) declara su contrato.
+1. **Migrar los writers del Paso 6** — los 5 contratos nuevos declaran semántica pero su `.xlsx` todavía
+   se arma a mano. No es mecánico: al writer le faltan **fila de TOTAL** (la usan Rend vs Tabulado, Rend
+   x EE, EE x CATEG y acumuladores) y **filas atenuadas** (Rend x EE pinta en gris los legajos sin
+   contraparte). Migrar sin eso sería una regresión visible en el entregable — detalle en
+   `specs/contrato-export.md`, "Lo que falta para migrar los writers del Paso 6".
 2. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
 3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
    sobre parsers todavía duplicados hereda la duplicación.
+
+**Pendiente de fondo, sin urgencia pero ya no hipotético:** el mapa de necesidad de `contracts.js` es
+plano por clave y no por `(fileType, clave)`. El Paso 6 encontró **dos** colisiones reales
+(`puestoColumn`, `costoTotalColumn`: la misma columna es opcional en un archivo y obligatoria en otro).
+Hoy no puede producir un gate incorrecto —el contrato pasó a ser un piso, nunca un techo (D-045)— pero
+tampoco se puede declarar la verdad de los dos lados. El test cuenta las divergencias y falla si aparece
+una tercera.
 
 **Nota de entorno, para no repetir la pregunta:** desde esta sesión hay Chromium real disponible en el
 sandbox (`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, ver
