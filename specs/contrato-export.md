@@ -1,8 +1,11 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** **Pasos 0-5 hechos**, y ahora **4b también** (2026-08-12). Sólo queda el Paso 6 (el resto
-> de los exports declara contrato). Ver "Ya cerrado" para el detalle de cada paso, y "Plan por pasos"
-> para lo que falta.
+> **Estado:** **Pasos 0-5 hechos**, incluidos 4b y el **Paso 6** (2026-08-12). Del Paso 6 quedan afuera
+> a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por qué"), y queda
+> pendiente migrar los writers de los 5 contratos nuevos. Ver "Ya cerrado" para el detalle de cada paso.
+>
+> **El Paso 6 destapó un bug vivo**, no sólo deuda: un contrato podía *apagar* un `required: true` de
+> otro tipo de archivo. Detalle en "Paso 6" abajo y en D-045.
 >
 > **Origen:** auditoría del 2026-08-12 pedida por Willy — 8 buckets cubriendo los 15 controles y los
 > 10 tipos de archivo, **214 campos de mapeo relevados**, cada hallazgo verificado adversarialmente
@@ -160,7 +163,7 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **4a** | `writeContractSheet` + migrar los 2 exports "Generar Reporte" con `cols.has*` (Brutos, GS Pers — NR ya emite las 18 columnas siempre, no necesita este fix) a `layout: 'fijo'` ("que salga vacía", respuesta de Willy). | ✅ hecho — `js/exports/contractSheet.js`, `tests/contractSheet.test.js` |
 | **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) + NR Reporte al mismo mecanismo. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | ✅ hecho — `writeGroupedContractSheet()` en `js/exports/contractSheet.js` |
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
-| **6** | El resto de los exports (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados`, `variaciones`, `acumuladores`, `acreditaciones`) declaran su contrato. | No arrancado |
+| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. | ✅ hecho (2026-08-12) — D-045 |
 | **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
@@ -269,3 +272,52 @@ error — no una categoría nueva que hubiera que inventar en `semaforo.js`.
 | **Gotcha real, ya resuelto:** `contracts.js` importa `NR_CONCEPTS` de `nr.js` desde el Paso 0. Agregar un `import` estático de `contracts.js` en `nr.js` (para las funciones de export) arma un ciclo de módulos que **rompía sólo en el navegador** (Playwright), no en los tests de Node — el orden de carga real de la app resuelve el ciclo al revés que la cadena de `test:unit`, y `contracts.js` terminaba leyendo `NR_CONCEPTS` antes de que `nr.js` la definiera. Se resolvió con `import()` dinámico dentro de las dos funciones de export de NR (recién se ejecutan después de que toda la app cargó) en vez de un `import` estático arriba del archivo. Si algo más necesita `EXPORT_CONTRACTS` desde `nr.js`, usar el mismo patrón. | `js/controls/nr.js` |
 
 Verificado con los 3 contratos reales escritos contra un fake de ExcelJS (merges exactos, colores exactos, `diffHighlight` con y sin diferencia) y contra la app real: `npx playwright test` completo en verde, incluidos los 2 specs que ejercitan Brutos/GS Pers/NR en pantalla (`gridHeaderContrast.spec.js`, `brutosGsPersEvaluados.spec.js`) — fallaron primero por el ciclo de módulos de arriba, confirmando que el bug era real y no hipotético, y pasaron después del fix.
+
+### Paso 6 (2026-08-12)
+
+Escribir los contratos que faltaban destapó **un bug vivo en `main`**, no deuda técnica. Detalle completo
+en D-045; lo esencial:
+
+| Qué | Dónde |
+|---|---|
+| **Un contrato podía APAGAR un `required: true`.** `blocksProgress()` devolvía `false` en OPCIONAL **antes** de mirar el flag legado. Como el mapa de necesidad es plano por clave y no por `(fileType, clave)`, y `puestoColumn` existe en dos archivos con necesidades opuestas (`tab_control` opcional · `cat_empleados` **required**), el contrato de `brutos_reporte` —que la declara OPCIONAL desde el lado del Tabulado— apagaba el gate de la **Columna de Puesto del Reporte de Categorías**. Se podía subir sin ella y EE x CATEG salteaba en silencio el chequeo de discrepancias de Puesto y agrupaba la distribución por una columna sin resolver. Alcance medido: 1 campo. Fix: el contrato es un **piso, nunca un techo** — sólo `CLAVE` bloquea sola, el resto cae al `required` del `FIELD_DEFS` de su propio fileType, que sí está scopeado. | `js/exports/contracts.js` |
+| **El assert de "no debilitar" ahora se deriva de `FIELD_DEFS`.** La versión anterior enumeraba 6 claves elegidas a mano y el caso que se escapó no estaba entre ellas. Ahora recorre los 15 fileTypes: toda clave `required: true` tiene que seguir bloqueando. Probado revirtiendo el fix (falla en `cat_empleados.puestoColumn`) y restaurando. | `tests/exportContracts.test.js` · `FIELD_DEFS` exportado de `js/ui/fileUpload.js` |
+| **La colisión de clave plana dejó de ser hipotética.** El Paso 0 la documentó como "hoy no hay colisión real (verificado)"; ahora hay **dos**: `puestoColumn` y `costoTotalColumn` (`rend_file` opcional · `costo_total_file` required). No son un error a corregir en los contratos —la misma columna es opcional en un archivo y obligatoria en otro— así que el assert pasó de "ninguna clave puede divergir" a lo que de verdad puede dar un gate incorrecto: **ninguna clave puede ser `CLAVE` en un contrato y no-`CLAVE` en otro**. La divergencia OPCIONAL/OBLIGATORIA queda permitida y **contada** (el test afirma que son exactamente 2 y las nombra). | `tests/exportContracts.test.js` |
+| **D-020 pasa de comentario a assert.** `acreditaciones_reporte` es el primer `audience: 'finanzas'`: sus columnas tienen que estar en `FINANZAS_ALLOWED_KEYS` (legajo, nombre, CUIT, neto, fecha, banco, CBU) y no puede colarse ninguna de conteo/dotación/alta/baja. | `js/exports/contracts.js` · `tests/exportContracts.test.js` |
+| **Los 6 contratos del Paso 6 declaran semántica, no layout.** Nada de `width`/`groups`/`headerRows`/`diffHighlight`: sus writers todavía arman el `.xlsx` a mano, así que declararlo sería una segunda fuente de verdad que se desincroniza del archivo real sin que nada avise. Un assert lo hace cumplir en las dos direcciones. | `tests/exportContracts.test.js` |
+
+Las 6 categorías de Rendimiento (PRECIO · ASIG. ESTÍMULO · CARGAS SS · PROV. MES · PROV. CCSS MES ·
+COSTO TOTAL) se derivan de `COLS` (`js/controls/rendVsTabu.js`, ahora exportado) en vez de repetirlas,
+igual que NR deriva sus 18 conceptos de `NR_CONCEPTS` — las tres pantallas de Rendimiento usan las mismas.
+**Ojo con el ciclo de módulos:** `contracts.js` importa `rendVsTabu.js`, así que ese archivo no puede
+importar `contracts.js` con un `import` estático (mismo caso que `nr.js` en el Paso 4b — ahí rompía sólo
+en el navegador y los tests de Node no lo agarraban; se usa `import()` dinámico adentro de la función).
+
+#### Los 2 que no se declaran, y por qué
+
+`variaciones` y `acumuladores` generan un **conjunto** de hojas calculado en runtime: una por grupo de
+conceptos configurado por cliente, y una por período. `ExportContract` modela **una** hoja con nombre
+declarado (`sheet`), así que declararles un contrato de una sola hoja pondría ahí un nombre que nunca
+aparece en el archivo — una mentira en la fuente única, que es peor que no declararlos. Inventar un
+segundo concepto ("contrato de conjunto de hojas") para una población de 2 casos es la abstracción que
+`CLAUDE.md` pide no sumar.
+
+**El costo de no declararlos es cero, y está medido:** ninguno de los dos usa claves de `FIELD_DEFS` (sus
+parsers dan filas de forma fija; `variaciones` resuelve sus columnas por `variaciones_concept_map`), así
+que no hay ninguna necesidad de campo que se quede sin derivar. Se retoma si aparece un tercer export con
+hojas dinámicas, o si alguno de estos dos pasa a alimentarse de columnas mapeadas.
+
+#### Lo que falta para migrar los writers del Paso 6
+
+Ninguno de los 5 contratos nuevos pasa todavía por `writeContractSheet`/`writeGroupedContractSheet`, y no
+es sólo trabajo mecánico — a los writers les faltan dos cosas que estos exports sí usan:
+
+1. **Fila de TOTAL.** La tienen Rend vs Tabulado, Rend x EE, EE x CATEG y acumuladores. Hoy cada uno la
+   arma a mano después de las filas de datos.
+2. **Filas atenuadas.** Rend x EE pinta en gris los legajos con `sinTabData`/`soloEnTab`; es un estilo por
+   fila que depende de los datos, y el writer sólo sabe de estilos por columna.
+
+Y dos que sólo necesita una parte: **fórmulas** (EE x CATEG escribe `=B2-C2` y `SUM(...)` en vez de
+valores; acreditaciones cierra entre hojas) y **multi-hoja** (acreditaciones: CONTROL + una por
+acreditación). Migrar sin esas dos primeras sería una regresión visible en el entregable, así que el paso
+siguiente es agregarlas al writer con un test que las fije, no forzar la migración.
