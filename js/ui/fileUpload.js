@@ -664,10 +664,19 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);">
           ${fields.map(f => {
             const val = mapping?.[f.key] || '';
+            // Sólo se marca el estado "sin asignar". Acá el mapeo ya está
+            // confirmado, así que distinguir "✓ auto" de "↺ sesión anterior"
+            // sería informar el origen del pre-completado del momento de la
+            // carga — un dato ya viejo que puede mentir. Lo que sí sigue siendo
+            // cierto es que la columna quedó vacía, y sin el aviso se ve igual
+            // que una mapeada (mismo criterio que el panel "Columnas del
+            // Tabulado" del Paso 2).
+            const level = val ? 'none' : 'warn';
+            const style = matchSelectStyle(level);
             return `
               <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label ${f.required ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}</label>
-                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);">
+                <label class="form-label ${f.required ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
+                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);${style}">
                   ${opts(val)}
                 </select>
               </div>
@@ -702,6 +711,23 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
         const k = sel.dataset.fuRemapKey;
         if (sel.value) newMapping[k] = sel.value;
       });
+
+      // Mismo gate que el formulario de carga inicial (ver el submit de
+      // renderMappingForm). Este panel no lo tenía: se podía vaciar una columna
+      // obligatoria, reprocesar, y quedaba persistida en el perfil del cliente
+      // para la próxima corrida. Los `throw` de los parsers tapaban sólo las
+      // columnas identificatorias (legajo, empleado, CC, F. BAJA); seis campos
+      // declarados `required: true` —puesto, ID/nombre de centro de costo,
+      // departamento de Cat. Empleados, PRECIO de Rendimiento y COSTO TOTAL—
+      // se podían dejar vacíos desde acá sin que nada avisara.
+      const faltantes = fields.filter(f => f.required && !newMapping[f.key]).map(f => f.label);
+      if (faltantes.length) {
+        showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
+        btn.disabled = false;
+        btn.textContent = '✓ Aplicar cambios';
+        return;
+      }
+
       try {
         const result = parseFile(arrayBuffer, fileType, newMapping);
         if (dataClientCode) await saveFileProfile(dataClientCode, fileType, newMapping).catch(() => {});

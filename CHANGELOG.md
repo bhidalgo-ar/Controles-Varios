@@ -7,6 +7,27 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: dos conceptos podían quedar mapeados a la MISMA columna (número mal, no vacío) — 2026-08-12
+
+- Hallazgo de la auditoría de campos-vs-export, reproducido antes de tocar nada. `buildParserMapping` (`js/parsers/conceptMatcher.js`) no llevaba registro de qué encabezado ya había asignado, así que **dos conceptos podían apuntar a la misma columna**. Su hermana `matchHeadersToCatalog` sí tenía ese `Set`; ésta no.
+- El caso real: `INDEM_INTEG` es el único de los 18 conceptos NR con `alias: []`, así que su único token de búsqueda es el código crudo. Como `'sacindeminteg'.includes('indeminteg')` es `true`, el paso "contains" le entregaba la columna de `SAC_INDEM_INTEG` cuando el archivo traía esa y no `INDEM_INTEG` — y el control comparaba INDEM_INTEG contra la columna equivocada.
+- **Es la peor forma del problema**, y la razón por la que volver los campos obligatorios no alcanza: no produce un vacío que un aviso de "columna sin asignar" pueda detectar, produce **un número mal**. Un `required` queda satisfecho por el valor equivocado.
+- Resuelto con dos pasadas por fuerza de match: un `exact`/`alias` de otro concepto le gana a un `contains` de este. En el caso del bug, `SAC_INDEM_INTEG` queda en su clave y `INDEM_INTEG` sin mapear — que es el resultado honesto. Nuevo `tests/conceptMatcher.test.js` (14 asserts, en la cadena de `package.json`); 3 fallan si se revierte el fix.
+
+### fix: GS Pers modo Reporte no consolidaba por legajo (4ª aparición del mismo bug) — 2026-08-12
+
+- Encontrado por la auditoría de campos-vs-export. `runGsPersReporte` (`js/controls/gsPers.js`) hacía `tabRows.filter().map()` — **una fila de salida por liquidación** — mientras sus dos hermanos (`runBrutosReporte`, `runNrReporte`) y su propio gemelo `runGsPers` (modo Controlar) sí agrupan por legajo. Los dos helpers (`groupTabRowsByLegajo`, `sumTabColumn`) ya existían en el mismo archivo; sólo este modo no los usaba.
+- Consecuencia: el `.xlsx` generado —un entregable que replica un reporte de Meta4, y Meta4 informa el total del mes por empleado— sacaba **dos filas para todo legajo con doble paga**, con los importes partidos entre ellas.
+- Es la **cuarta** vez que se arregla el mismo bug: Brutos (`bba8958`), NR (`b2f8bef`), GS Pers modo Controlar (2026-08-11) y ahora GS Pers modo Reporte. Los asserts nuevos están en `tests/gsPersControl.test.js` y **fallan los 5 si se revierte el fix**.
+
+### fix: el panel "Ver / ajustar mapeo de columnas" avisa qué columna quedó sin asignar — 2026-08-12
+
+- Reportado por Willy mirando Brutos en producción: en el panel colapsable **"Ver / ajustar mapeo de columnas"** (el del archivo ya cargado, `renderAlreadyLoaded` en `js/ui/fileUpload.js`), una columna opcional en «— Sin asignar —» se veía **exactamente igual** que una mapeada — sin badge ni borde. En su caso era `Columna de CUIL` en el Tabulado, pero aplica a los 6 campos opcionales de `tab_control` y a los de todos los demás tipos.
+- Ese panel nunca había usado los helpers de match: pintaba el `<label>` pelado. Ahora reusa `matchSelectStyle`/`matchBadge` —los mismos del panel "Columnas del Tabulado" del Paso 2, así que hereda los tokens y anda bien en dark mode.
+- **Sólo se marca el estado "sin asignar"**, no los verdes. Ahí el mapeo ya está confirmado, así que un `✓ auto` / `↺ sesión anterior` estaría informando el origen del pre-completado *del momento de la carga* — un dato viejo que puede mentir. Lo que sigue siendo cierto es que la columna quedó vacía.
+- Ojo con `nr_file`: tiene 18 campos opcionales, así que un archivo de NR que no traiga todos los conceptos va a mostrar un badge por cada uno que falte. Es el mismo comportamiento que ya tenía el panel del Paso 2 para esos mismos 18 conceptos; si en la práctica resulta ruidoso, se acota ahí.
+- **Y además valida.** La auditoría mostró que avisar no alcanzaba: este panel armaba `newMapping` sólo con los selects no vacíos y llamaba directo a `parseFile` + `saveFileProfile`, **sin mirar `f.required`** — se podía vaciar una columna obligatoria, reprocesar, y quedaba persistida en el perfil del cliente para la próxima corrida. Los `throw` de los parsers tapaban sólo las columnas identificatorias (legajo, empleado, CC, F. BAJA); quedaban **seis campos `required: true` vaciables sin ningún aviso**: `puestoColumn`, `idCenColumn`, `centroCostoColumn` y `departamentoColumn` de Cat. Empleados, `precioColumn` de Rendimiento y `costoTotalColumn`. Ahora corre el mismo gate que el formulario de carga inicial.
+
 ### refactor: arranque de la Fase 2 (capa visual) + Paso 0 de la Fase 4 — 2026-08-12
 
 - **`Promise.all` posicional de `controlsWizard.js` (Paso 0 de Fase 4).** Un array de 11 promesas

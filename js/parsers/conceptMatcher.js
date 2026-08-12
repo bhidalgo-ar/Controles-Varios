@@ -150,10 +150,30 @@ export function buildParserMapping(headers, catalogRows, codigoToKey) {
   const mapping = {};
   const catalogByCodigo = new Map(catalogRows.map(c => [c.codigo, c]));
 
-  for (const [codigo, key] of Object.entries(codigoToKey)) {
-    const concept = catalogByCodigo.get(codigo) || { codigo, alias: [] };
-    const m = findHeaderForConcept(concept, headers);
-    if (m) mapping[key] = m.header;
+  // Una columna no puede quedar asignada a dos conceptos, y se resuelve en dos
+  // pasadas por FUERZA de match: un 'exact'/'alias' de otro concepto le gana a
+  // un 'contains' de este.
+  //
+  // Sin esto, con un archivo que trae SAC_INDEM_INTEG y NO trae INDEM_INTEG, el
+  // paso "contains" de INDEM_INTEG (único de los 18 conceptos NR con `alias: []`,
+  // así que su token es el código crudo, y 'sacindeminteg'.includes('indeminteg')
+  // es true) se quedaba con la columna de SAC_INDEM_INTEG, y los DOS conceptos
+  // terminaban apuntando ahí. El control comparaba INDEM_INTEG contra la columna
+  // equivocada: un número mal, no un vacío — y por eso ningún aviso de "columna
+  // sin asignar" lo agarra. `matchHeadersToCatalog` ya tenía este Set; acá no.
+  const usados = new Set();
+  const esFuerte = s => s === 'exact' || s === 'alias';
+
+  for (const buscandoFuertes of [true, false]) {
+    for (const [codigo, key] of Object.entries(codigoToKey)) {
+      if (mapping[key]) continue;
+      const concept    = catalogByCodigo.get(codigo) || { codigo, alias: [] };
+      const disponibles = headers.filter(h => !usados.has(h));
+      const m = findHeaderForConcept(concept, disponibles);
+      if (!m || esFuerte(m.strategy) !== buscandoFuertes) continue;
+      mapping[key] = m.header;
+      usados.add(m.header);
+    }
   }
 
   return mapping;
