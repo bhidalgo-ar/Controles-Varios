@@ -1325,6 +1325,18 @@ function autoDetectTabExtraConfig(tabHeaders, catalogRows) {
   };
 }
 
+/**
+ * ¿`value` es un valor guardado de una carga ANTERIOR que ya no está entre
+ * los encabezados de ESTE Tabulado (renumeración del cliente, otro layout)?
+ *
+ * Sin `tabHeaders` (todavía no se cargó ningún Tabulado en esta sesión) nunca
+ * es obsoleto — no hay contra qué comparar, y tratarlo como obsoleto vaciaría
+ * cualquier config guardada antes de que el archivo termine de cargar.
+ */
+export function isStaleTabValue(value, tabHeaders) {
+  return !!value && tabHeaders.length > 0 && !tabHeaders.includes(value);
+}
+
 function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr }) {
   const tabHeaders = state.tab?.parsedRows?.length > 0
     ? Object.keys(state.tab.parsedRows[0])
@@ -1336,7 +1348,12 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
     const detected = autoDetectTabExtraConfig(tabHeaders, catalogRows);
     let anyNew = false;
     for (const [k, v] of Object.entries(detected)) {
-      if (v && !state.tabExtraConfig[k]) {
+      const actual = state.tabExtraConfig[k];
+      // Repara un valor obsoleto además de completar lo que estaba vacío.
+      // Antes el guard sólo miraba "vacío", así que un valor viejo nunca se
+      // dejaba corregir por la auto-detección aunque ya no matcheara ninguna
+      // columna real de este archivo (ver `val` más abajo).
+      if (v && (!actual || isStaleTabValue(actual, tabHeaders))) {
         state.tabExtraConfig[k] = v;
         anyNew = true;
       }
@@ -1388,7 +1405,16 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
             </div>
           `;
         }
-        const val   = state.tabExtraConfig[f.key] || '';
+        // Un valor guardado que ya no está entre los encabezados de ESTE
+        // Tabulado (renumeración, otro layout) se trata como si no estuviera
+        // asignado: el <select> ya lo dibuja en "— Sin asignar —" (`opts()`
+        // no encuentra `option` que matchear y el navegador cae a la
+        // primera), pero antes el badge seguía diciendo "✓ auto" o "↺ sesión
+        // anterior" en verde — el badge afirmaba lo contrario de lo que se
+        // veía en pantalla. Tratarlo como vacío hace que salga "⚠ sin
+        // asignar", que es lo que hay que corregir.
+        const rawVal = state.tabExtraConfig[f.key] || '';
+        const val    = isStaleTabValue(rawVal, tabHeaders) ? '' : rawVal;
         const level = matchLevel(val, { autoDetected, hasSavedMapping: hasSavedConfig });
         const style = matchSelectStyle(level);
         const badge = matchBadge(level);
