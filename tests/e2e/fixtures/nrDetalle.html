@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/gridHeaderContrast.spec.js — NO es una pantalla de la app.
+     Monta la solapa «Detalle» del control NR con datos inventados y sin tocar
+     IndexedDB ni los CDN de index.html, que es lo que permite verificar la capa
+     visual de un control en un navegador real (ver ROADMAP, Fase 2). --><html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css"><link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+</head><body><div id="host" style="padding:16px"></div>
+<script type="module">
+import { renderNrResults, NR_CONCEPTS } from '../../../js/controls/nr.js';
+const mk = (legajo, vals) => ({
+  legajo, sinTabData: false,
+  valores: Object.fromEntries(NR_CONCEPTS.map(c => {
+    const v = vals[c.key] || [null, null];
+    return [c.key, { nrVal: v[0], tabVal: v[1], ctrl: (v[0] !== null && v[1] !== null) ? v[1] - v[0] : null }];
+  })),
+});
+const caso = new URLSearchParams(location.search).get('caso');
+const rows = caso === 'dif'
+  ? [mk('1', { reinHomeOfice: [30000, 30000] }), mk('2', { indemPreaviso: [1000, 1500] })]
+  : [mk('1', { reinHomeOfice: [30000, 30000] }), mk('2', { reinHomeOfice: [12750, 12750] })];
+renderNrResults({ rows, summary: { total: rows.length, conDif: caso === 'dif' ? 1 : 0, sinTabData: 0 }, period: '2026-04' },
+  document.getElementById('host'));
+</script></body></html>

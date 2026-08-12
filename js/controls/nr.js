@@ -136,12 +136,15 @@ export function runNr(nrRows, tabRows, mapping) {
   };
 }
 
+/** ¿Este concepto tiene algún valor real en alguna de las dos fuentes? */
+function hasValor(v) {
+  return (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01);
+}
+
 // Un empleado es "relevante" si tiene algún valor NR (Tab o reporte) distinto de cero.
 // Filtra el ruido de legajos que no cobran ningún concepto no remunerativo.
 function hasAnyNrValue(r) {
-  return Object.values(r.valores).some(v =>
-    (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01)
-  );
+  return Object.values(r.valores).some(hasValor);
 }
 
 const isDif = v => v !== null && Math.abs(v) > 0.01;
@@ -218,50 +221,91 @@ export function renderNrResults(results, container) {
   });
 }
 
-function renderNrDetalle(container, { diffRows, results }) {
-  // Si no hay ninguna diferencia, la tabla no aporta nada: mostramos el OK y salimos.
-  if (diffRows.length === 0) {
-    container.innerHTML = `
-      <div style="display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid var(--color-success);border-radius:var(--radius-md);background:var(--color-surface);">
-        <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-        <span>Todos los empleados con valores NR coinciden con el Tabulado. No hay diferencias para revisar.</span>
-      </div>
-    `;
+function renderNrDetalle(container, { relevantRows, diffRows, results }) {
+  if (relevantRows.length === 0) {
+    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún empleado tiene valor real en los 18 conceptos NR.</p>`;
     return;
   }
 
-  const filteredResults = { ...results, rows: diffRows };
+  // Cuando no hay ninguna diferencia igual se muestra la tabla de evaluados: es
+  // el respaldo de que el control se corrió y cerró. Antes acá se salía con el
+  // cartel de OK y sin toolbar, y eso se llevaba puesto el exportable — que es
+  // justo lo que el analista archiva cuando todo coincide.
+  if (diffRows.length === 0) {
+    const ok = document.createElement('div');
+    ok.style.cssText = 'display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid var(--color-success);border-radius:var(--radius-md);background:var(--color-surface);';
+    ok.innerHTML = `
+      <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
+      <span>Todos los empleados con valores NR coinciden con el Tabulado. No hay diferencias para revisar.</span>
+    `;
+    container.appendChild(ok);
+  }
 
-  // ── Toolbar: filtro por concepto + buscador (izquierda) + exportar (derecha) ─
-  // Sólo listamos conceptos que efectivamente tienen alguna diferencia.
-  const conceptsWithDiff = NR_CONCEPTS.filter(c => diffRows.some(r => isDif(r.valores[c.key].ctrl)));
+  // ── Toolbar: alcance + filtro por concepto + buscador (izq) + exportar (der) ─
+  // Mismo molde que Brutos y GS Pers: con cero diferencias el alcance arranca en
+  // "Todos los evaluados", que es lo único que hay para mirar.
+  const scopeSel = document.createElement('select');
+  scopeSel.className = 'form-select form-select--sm';
+  scopeSel.dataset.nrScopeFilter = '';
+  scopeSel.innerHTML = `
+    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
+    <option value="all">Todos los evaluados (${relevantRows.length})</option>
+  `;
+  if (diffRows.length === 0) scopeSel.value = 'all';
+
+  const conceptSel = document.createElement('select');
+  conceptSel.className = 'form-select form-select--sm';
+  conceptSel.dataset.nrConceptFilter = '';
 
   const filterGroup = document.createElement('div');
   filterGroup.className = 'form-group';
-  filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
-  filterGroup.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Filtrar por concepto</label>
-    <select class="form-select form-select--sm" data-nr-concept-filter>
-      <option value="all">Todos los conceptos con diferencia (${conceptsWithDiff.length})</option>
-      ${conceptsWithDiff.map(c =>
-        `<option value="${esc(c.key)}">${esc(c.label)}</option>`
-      ).join('')}
-    </select>
-  `;
+  filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;display:flex;gap:var(--sp-2);flex-wrap:wrap;';
+  const scopeWrap = document.createElement('div');
+  scopeWrap.innerHTML = `<label class="form-label" style="font-size:var(--text-sm);">Alcance</label>`;
+  scopeWrap.appendChild(scopeSel);
+  const conceptWrap = document.createElement('div');
+  conceptWrap.innerHTML = `<label class="form-label" style="font-size:var(--text-sm);">Filtrar por concepto</label>`;
+  conceptWrap.appendChild(conceptSel);
+  filterGroup.append(scopeWrap, conceptWrap);
 
   const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
 
-  // Exportar siempre incluye TODOS los legajos con diferencia y los 18
-  // conceptos completos (igual que exportNrToXlsx) — el filtro de concepto de
-  // arriba sólo recorta lo que se ve en pantalla, no lo que se exporta.
+  /** Filas del alcance elegido — de acá salen la tabla y el export. */
+  const scopeRows = () => (scopeSel.value === 'dif' ? diffRows : relevantRows);
+
+  /**
+   * Conceptos que el alcance actual tiene sentido mostrar: con diferencia
+   * cuando se miran las diferencias, con algún valor cuando se miran todos
+   * (si no, la tabla de un control que cerró en cero saldría sin columnas).
+   */
+  const conceptsInScope = () => scopeSel.value === 'dif'
+    ? NR_CONCEPTS.filter(c => diffRows.some(r => isDif(r.valores[c.key].ctrl)))
+    : NR_CONCEPTS.filter(c => relevantRows.some(r => {
+        const v = r.valores[c.key];
+        return (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01);
+      }));
+
+  function renderConceptOptions() {
+    const inScope = conceptsInScope();
+    const label = scopeSel.value === 'dif' ? 'con diferencia' : 'con algún valor';
+    conceptSel.innerHTML = `
+      <option value="all">Todos los conceptos ${label} (${inScope.length})</option>
+      ${inScope.map(c => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join('')}
+    `;
+  }
+
+  // Exportar sigue al alcance, no al filtro de concepto: con diferencias el
+  // default es "sólo con diferencia" (lo que exportaba antes), y con el control
+  // en cero exporta los evaluados en vez de un archivo vacío. Siempre con los 18
+  // conceptos completos, igual que exportNrToXlsx.
   const csvHeaders = ['Legajo', '# Difs', ...NR_CONCEPTS.map(c => c.label)];
-  const csvRows = () => diffRows.map(r => {
+  const csvRows = () => scopeRows().map(r => {
     const difs = NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length;
     return [r.legajo, difs, ...NR_CONCEPTS.map(c => fmtNum(r.valores[c.key].ctrl))];
   });
 
   renderExportMenu(exportEl, {
-    onExcel: () => exportNrToXlsx(filteredResults),
+    onExcel: () => exportNrToXlsx({ ...results, rows: scopeRows() }),
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Control_${periodSuffix(results.period)}.csv`),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
@@ -272,14 +316,19 @@ function renderNrDetalle(container, { diffRows, results }) {
   container.appendChild(tableHost);
 
   function renderTable(selectedKey) {
-    // Filas: todas las que tienen diferencia, o sólo las que difieren en el concepto elegido.
-    const shownRows = selectedKey === 'all'
-      ? diffRows
-      : diffRows.filter(r => isDif(r.valores[selectedKey].ctrl));
+    const inScope = conceptsInScope();
+    const base = scopeRows();
 
-    // Columnas: sólo las que tienen diferencia (oculta las 0/vacías), o sólo la elegida.
+    // Filas: las del alcance, o sólo las que tienen algo en el concepto elegido.
+    const shownRows = selectedKey === 'all'
+      ? base
+      : base.filter(r => scopeSel.value === 'dif'
+          ? isDif(r.valores[selectedKey].ctrl)
+          : hasValor(r.valores[selectedKey]));
+
+    // Columnas: las del alcance (oculta las que no tienen nada), o sólo la elegida.
     const shownConcepts = selectedKey === 'all'
-      ? conceptsWithDiff
+      ? inScope
       : NR_CONCEPTS.filter(c => c.key === selectedKey);
 
     const hiddenCols = NR_CONCEPTS.length - shownConcepts.length;
@@ -305,7 +354,7 @@ function renderNrDetalle(container, { diffRows, results }) {
             return `
               <tr>
                 <td>${esc(r.legajo)}</td>
-                <td style="text-align:center;font-weight:700;color:var(--color-danger);">${difs}</td>
+                <td style="text-align:center;font-weight:700;${difs > 0 ? 'color:var(--color-danger);' : 'color:var(--color-success);'}">${difs}</td>
                 ${shownConcepts.map(c => diffCellHtml(r.valores[c.key].ctrl, { max: maxAbs, background: cellBg(c) })).join('')}
               </tr>
             `;
@@ -319,9 +368,10 @@ function renderNrDetalle(container, { diffRows, results }) {
         </tfoot>
       </table>
       <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-        Mostrando ${shownRows.length} empleado${shownRows.length === 1 ? '' : 's'} con diferencia.
+        Mostrando ${shownRows.length} empleado${shownRows.length === 1 ? '' : 's'}
+        ${scopeSel.value === 'dif' ? 'con diferencia' : 'evaluado' + (shownRows.length === 1 ? '' : 's')}.
         Valores: Tab − NR.
-        ${hiddenCols > 0 ? `Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} sin diferencias.` : ''}
+        ${hiddenCols > 0 ? `Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} ${scopeSel.value === 'dif' ? 'sin diferencias' : 'sin valores'}.` : ''}
         Exportá el .xlsx para ver los valores originales de cada fuente.
       </p>
     `;
@@ -340,10 +390,19 @@ function renderNrDetalle(container, { diffRows, results }) {
     enhanceGrid(tableHost.querySelector('table'), { stickyCols: 1 });
   }
 
-  filterGroup.querySelector('[data-nr-concept-filter]')
-    .addEventListener('change', (e) => renderTable(e.target.value));
+  conceptSel.addEventListener('change', (e) => renderTable(e.target.value));
+  scopeSel.addEventListener('change', () => {
+    // Cambiar el alcance cambia qué conceptos tienen sentido, así que la lista se
+    // rearma y el filtro de concepto vuelve a "todos" en vez de quedar apuntando
+    // a uno que ya no está en la lista.
+    renderConceptOptions();
+    renderTable('all');
+  });
+
+  renderConceptOptions();
   renderTable('all');
 }
+
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
 
