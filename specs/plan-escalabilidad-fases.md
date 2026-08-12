@@ -310,14 +310,15 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-12 (tercera pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas. Los
-Pasos 4a y 5 del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último
+**Actualizado el 2026-08-12 (cuarta pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas. Los
+Pasos 4a, 5 y 4b del contrato de export también (`specs/contrato-export.md`) — el Paso 5 cerró el último
 falso verde conocido: Brutos/GS Pers con la columna del archivo sin mapear pasaban por "0 diferencias =
-todo bien" cuando en realidad no se había comparado un solo legajo. Lo que sigue, en orden de menor a
-mayor tamaño:
+todo bien" cuando en realidad no se había comparado un solo legajo. El Paso 4b sacó las últimas ~80
+líneas de ExcelJS a mano por control (Brutos/GS Pers/NR Controlar + NR Reporte) a
+`writeGroupedContractSheet()`. Lo que sigue, en orden de menor a mayor tamaño:
 
-1. **Paso 4b y 6 del contrato de export** — migrar los 3 exports "Controlar" a `writeContractSheet`
-   (des-duplicación, no fix de comportamiento) y que el resto de los controles declare su contrato.
+1. **Paso 6 del contrato de export** — el resto de los controles (`rendVsTabu`, `rendVsAsiento`,
+   `rendXEe`, `catXEmpleados`, `variaciones`, `acumuladores`, `acreditaciones`) declara su contrato.
 2. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
 3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
    sobre parsers todavía duplicados hereda la duplicación.

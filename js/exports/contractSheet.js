@@ -73,3 +73,146 @@ export function writeContractSheet(wb, contract, rows) {
 export function contractColDefs(contract) {
   return contract.columns.map(({ label, key, type }) => ({ label, key, type }));
 }
+
+// ── writeGroupedContractSheet (Paso 4b) ─────────────────────────────────────
+//
+// Variante de `writeContractSheet` para los exports "Controlar" de
+// Brutos/GS Pers/NR (+ NR Reporte): encabezado agrupado por color (con o sin
+// merge de dos filas) y resaltado condicional (negrita+rojo) en las columnas
+// de diferencia. Antes cada uno tenía sus ~80 líneas de ExcelJS a mano,
+// idénticas en estructura y sólo distintas en colores/agrupación — eso es lo
+// que ahora vive en `contract.groups`/`contract.headerRows` (ver contracts.js).
+//
+// No reemplaza a `writeContractSheet`: los exports "Generar Reporte" (Paso 4a)
+// no tienen grupos ni columnas de diferencia, y agregarles esta maquinaria
+// sería más parámetros de los que necesitan.
+
+const DIFF_COLOR = 'FFCC0000';
+
+/**
+ * @param {object} wb
+ * @param {import('./contracts.js').ExportContract} contract - con `groups`
+ *   y, opcionalmente, `headerRows: 2` (default 1)
+ * @param {object[]} rows
+ * @returns {object} la worksheet creada
+ */
+export function writeGroupedContractSheet(wb, contract, rows) {
+  const ws = wb.addWorksheet(contract.sheet);
+  const cols = contract.columns;
+  const groups = contract.groups || {};
+  const headerRows = contract.headerRows || 1;
+
+  ws.columns = cols.map(c => ({ width: c.width || DEFAULT_WIDTH }));
+
+  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+  const base = { name: 'Calibri', size: 10 };
+  const bold = { ...base, bold: true };
+
+  // Encabezado de grupo (fila agrupada, o la única fila cuando headerRows:1):
+  // borde fino, sin wrapText — mismo molde que `styleGrp` en los 3 originales.
+  const styleGroupHeader = (cell, bg) => {
+    cell.font      = { ...bold };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.fill      = solidFill(bg);
+    cell.border    = { bottom: { style: 'thin', color: { argb: BORDER_COLOR } } };
+  };
+  // Encabezado de columna individual (2ª fila de un grupo con label): borde
+  // medio, wrapText — mismo molde que `styleCol` en los 3 originales.
+  const styleColHeader = (cell, bg, isBold) => {
+    cell.font      = isBold ? { ...bold } : { ...base };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.fill      = solidFill(bg);
+    cell.border    = { bottom: { style: 'medium', color: { argb: BORDER_COLOR } } };
+  };
+
+  // Tramos contiguos de columnas que comparten el mismo `group` CON label —
+  // esas se mergean horizontalmente en la fila 1. Todo lo demás (sin grupo, o
+  // grupo sin label — caso NR) es un "tramo" de 1 sola columna.
+  const runs = [];
+  {
+    let i = 0;
+    while (i < cols.length) {
+      const g = cols[i].group ? groups[cols[i].group] : null;
+      if (g?.label) {
+        let j = i;
+        while (j < cols.length && cols[j].group === cols[i].group) j++;
+        runs.push({ start: i, end: j, group: g });
+        i = j;
+      } else {
+        runs.push({ start: i, end: i + 1, group: g });
+        i++;
+      }
+    }
+  }
+
+  if (headerRows === 2) {
+    // Fila 1: label del grupo en la 1ª columna del tramo (o el label propio si
+    // el tramo es de 1 sola columna sin grupo-con-label); el resto del tramo,
+    // vacío. Fila 2: el label individual de cada columna, sólo en tramos
+    // agrupados (en un tramo de 1 columna, la fila 2 queda vacía porque esa
+    // columna se mergea verticalmente con la fila 1).
+    const r1Values = new Array(cols.length).fill(null);
+    const r2Values = new Array(cols.length).fill(null);
+    for (const { start, end, group } of runs) {
+      if (group?.label) {
+        r1Values[start] = group.label;
+        for (let k = start; k < end; k++) r2Values[k] = cols[k].label;
+      } else {
+        r1Values[start] = cols[start].label;
+      }
+    }
+    const r1 = ws.addRow(r1Values);
+    const r2 = ws.addRow(r2Values);
+    r1.height = 22;
+    r2.height = 20;
+
+    for (const { start, end, group } of runs) {
+      if (group?.label) {
+        ws.mergeCells(1, start + 1, 1, end); // horizontal, sólo fila 1
+        styleGroupHeader(r1.getCell(start + 1), group.headerColor);
+        for (let k = start; k < end; k++) {
+          styleColHeader(r2.getCell(k + 1), group.headerColor, !!cols[k].diffHighlight);
+        }
+      } else {
+        ws.mergeCells(1, start + 1, 2, start + 1); // vertical, 1 columna
+        styleGroupHeader(r1.getCell(start + 1), group?.headerColor || HEADER_FILL);
+      }
+    }
+    ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 2 }];
+  } else {
+    // Una sola fila: cada columna lleva su propio color de grupo (si tiene),
+    // sin merges. La columna "vacía" (label === '') queda sin estilo, igual
+    // que en NR Reporte (columna A separadora, heredada del layout Meta4).
+    const hdr = ws.addRow(cols.map(c => c.label));
+    hdr.height = 20;
+    cols.forEach((c, idx) => {
+      if (c.label === '') return;
+      const g = c.group ? groups[c.group] : null;
+      styleColHeader(hdr.getCell(idx + 1), g?.headerColor || HEADER_FILL, true);
+    });
+    ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
+  }
+
+  const numFmt = '#,##0.00';
+  for (const row of rows) {
+    const values = cols.map(c => row[c.key] ?? null);
+    const dr = ws.addRow(values);
+    cols.forEach((c, idx) => {
+      if (c.label === '') return; // columna separadora: sin estilo, igual que el original
+      const cell = dr.getCell(idx + 1);
+      const g = c.group ? groups[c.group] : null;
+      if (g?.dataColor) cell.fill = solidFill(g.dataColor);
+
+      if (c.type === 'num' && c.numFmt !== false) cell.numFmt = numFmt;
+      if (c.type === 'num' || c.dataAlign) {
+        cell.alignment = { horizontal: c.dataAlign || 'right', vertical: 'middle' };
+      }
+
+      const v = values[idx];
+      const flagged = c.diffHighlight && v !== null && Math.abs(v) > 0.01;
+      cell.font = flagged ? { ...bold, color: { argb: DIFF_COLOR } } : { ...base };
+    });
+  }
+
+  return ws;
+}

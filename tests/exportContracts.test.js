@@ -39,7 +39,10 @@ for (const c of contracts) {
     Array.isArray(c.columns) && c.columns.length > 0);
 
   for (const col of c.columns) {
-    assert(`${c.exportId}.${col.key}: tiene label`, typeof col.label === 'string' && col.label.length > 0);
+    // `spacer` es la única excepción a "toda columna tiene label": la columna
+    // A vacía de NR Reporte, heredada del layout de Meta4 (D-041/Paso 4b).
+    assert(`${c.exportId}.${col.key}: tiene label${col.spacer ? ' (spacer, vacío a propósito)' : ''}`,
+      col.spacer ? col.label === '' : (typeof col.label === 'string' && col.label.length > 0));
     assert(`${c.exportId}.${col.key}: tiene key`, typeof col.key === 'string' && col.key.length > 0);
     assert(`${c.exportId}.${col.key}: from es array`, Array.isArray(col.from));
     assert(`${c.exportId}.${col.key}: necessity es uno de NECESSITY.*`,
@@ -55,14 +58,14 @@ for (const c of contracts) {
   }
 }
 
-// ── `width` — sólo donde hay un consumidor real (Paso 4a) ────────────────────
-// Los contratos "Controlar" (Paso 4b, con su propio encabezado de dos niveles
-// con merges y bandas de color) no pasan por `writeContractSheet` todavía, así
-// que no se les exige `width`. Los dos "Generar Reporte" migrados sí.
+// ── `width` — sólo donde hay un consumidor real (Pasos 4a y 4b) ──────────────
+// Los 6 contratos migrados a `writeContractSheet`/`writeGroupedContractSheet`
+// declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
+// no lo necesita hasta que tenga un consumidor real.
 
-for (const exportId of ['brutos_reporte', 'gs_pers_reporte']) {
+for (const exportId of ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte']) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {
-    assert(`${exportId}.${col.key}: tiene width (writeContractSheet lo necesita)`,
+    assert(`${exportId}.${col.key}: tiene width (el writer lo necesita)`,
       typeof col.width === 'number' && col.width > 0);
   }
 }
@@ -126,7 +129,7 @@ const nrReporteKeys = new Set(EXPORT_CONTRACTS.nr_reporte.columns.map(c => c.key
 assert('los 18 conceptos de NR_CONCEPTS están todos en el contrato del Reporte',
   NR_CONCEPTS.every(c => nrReporteKeys.has(c.key)));
 assert('el contrato de NR Reporte no tiene más conceptos que NR_CONCEPTS (nada inventado)',
-  NR_CONCEPTS.length === nrReporteKeys.size - 8); // 8 campos fijos + 18 conceptos
+  NR_CONCEPTS.length === nrReporteKeys.size - 9); // spacer + 8 campos fijos + 18 conceptos
 
 // necessityOfKey de un concepto NR debe salir OBLIGATORIA por el lado tabKey
 // (nr_reporte) — el punto entero del Paso 2 es que esto pase a gatear.
