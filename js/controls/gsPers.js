@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { formatAmount as fmt } from '../utils/currency.js';
+import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -112,10 +114,6 @@ const CYAN_BG   = 'rgba(0,172,212,0.10)';
 const CYAN_HDR  = 'rgba(0,172,212,0.22)';
 const LILAC_BG  = 'rgba(130,80,200,0.09)';
 const LILAC_HDR = 'rgba(130,80,200,0.20)';
-
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
 // DTO_COCHERA en cualquiera de las dos fuentes — la mayoría de los legajos no
@@ -422,7 +420,6 @@ function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumna
     return;
   }
 
-  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtTxt = v => v === null ? '—' : esc(String(v));
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
@@ -674,16 +671,6 @@ function fmtDate(v) {
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
 }
 
 function firstBusinessDay(year, month) {

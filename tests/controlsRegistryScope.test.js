@@ -57,5 +57,46 @@ for (const c of controls) {
   assert(`${c.id}: sigue aplicando igual aunque el cliente tenga todos los atributos activados`, c.appliesWhen(clienteConTodosLosAtributos) === true);
 }
 
+// ── group.primary — qué selecciona "Seleccionar todos" (D-040) ───────────────
+// El botón del Paso 1 filtra por `!ctrl.group || ctrl.group.primary`. Antes
+// infería la intención de `group.mode === 'Controlar'`, y como el registry
+// tiene cinco modes distintos, un cliente cuyos controles no usan ese string
+// —POF ('Sueldos'/'Conceptos'), Axton ('Generar Reporte')— se quedaba con el
+// botón sin efecto. Estos asserts fallan si alguien agrega un grupo nuevo y se
+// olvida de declarar cuál es su variante principal.
+const groups = new Map();
+for (const c of controls) {
+  if (!c.group) continue;
+  if (!groups.has(c.group.id)) groups.set(c.group.id, []);
+  groups.get(c.group.id).push(c);
+}
+
+for (const [groupId, variants] of groups) {
+  assert(`grupo "${groupId}": al menos una variante marcada primary`,
+    variants.some(c => c.group.primary === true));
+}
+
+// Simula el filtro del botón sobre el registry entero.
+const seleccionables = controls.filter(c => !c.group || c.group.primary);
+const seleccionablesIds = new Set(seleccionables.map(c => c.id));
+
+// Las variantes "Generar Reporte" de Brutos/GS Pers/NR quedan afuera: son el
+// entregable, no el control, y el control gemelo ya está seleccionado.
+for (const id of ['brutos_reporte', 'gs_pers_reporte', 'nr_reporte']) {
+  assert(`"Seleccionar todos" NO incluye ${id} (es la variante entregable)`,
+    !seleccionablesIds.has(id));
+}
+
+// Los que antes quedaban afuera por no llamarse 'Controlar'.
+for (const id of ['variaciones_sueldos', 'variaciones_conceptos', 'acreditaciones_reporte']) {
+  assert(`"Seleccionar todos" incluye ${id} (antes quedaba afuera)`,
+    seleccionablesIds.has(id));
+}
+
+// Un control sin grupo (no tiene variantes) siempre entra.
+const sinGrupo = controls.filter(c => !c.group);
+assert('hay controles sin grupo y todos entran en "Seleccionar todos"',
+  sinGrupo.length > 0 && sinGrupo.every(c => seleccionablesIds.has(c.id)));
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

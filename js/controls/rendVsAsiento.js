@@ -1,6 +1,8 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
+import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid,
   mvClass, mvArrow, fmtSigned,
@@ -141,10 +143,6 @@ function normCCName(v) {
     .replace(/\s+/g, ' ')
     || null;
 }
-
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const THRESHOLD = 0.01;
 const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
@@ -682,8 +680,6 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     const conta   = nameKey ? contaGroups.get(nameKey) : null;
     if (conta) matchedCCs.add(nameKey);
 
-    const diff = (c, r) => (c != null && r != null) ? c - r : null;
-
     rows.push({
       ccCode, ccName,
       rPrecio, rEstimulo, rCargas, rProvMes, rProvCcss, rTotal,
@@ -693,12 +689,12 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
       cProvMes:  conta ? conta.provMes  : null,
       cProvCcss: conta ? conta.provCcss : null,
       cTotal:    conta ? conta.total    : null,
-      dPrecio:   diff(conta?.precio,   rPrecio),
-      dEstimulo: diff(conta?.estimulo, rEstimulo),
-      dCargas:   diff(conta?.cargas,   rCargas),
-      dProvMes:  diff(conta?.provMes,  rProvMes),
-      dProvCcss: diff(conta?.provCcss, rProvCcss),
-      dTotal:    diff(conta?.total,    rTotal),
+      dPrecio:   diffOrNull(conta?.precio, rPrecio),
+      dEstimulo: diffOrNull(conta?.estimulo, rEstimulo),
+      dCargas:   diffOrNull(conta?.cargas, rCargas),
+      dProvMes:  diffOrNull(conta?.provMes, rProvMes),
+      dProvCcss: diffOrNull(conta?.provCcss, rProvCcss),
+      dTotal:    diffOrNull(conta?.total, rTotal),
       sinContaData: conta === null,
     });
   }
@@ -1147,16 +1143,6 @@ function renderRendVsAsientoDetalle(container, results) {
 }
 
 // ── Excel export ──────────────────────────────────────────────────────────────
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
-}
 
 // ── Pestañas adicionales del export ──────────────────────────────────────────
 

@@ -17,9 +17,32 @@ alcance a todos los controles que corresponda, en vez de tocar 9-13 archivos por
 
 ## Fase 0 — Bugs que dan un resultado incorrecto hoy
 
-**Estado: en curso.** 7 cerrados (PR #98 + PR #99, mergeados a `main`), 7 abiertos.
+**Estado: cerrada** (2026-08-12). Los 5 ítems que quedaban accionables se arreglaron; los 2 que
+siguen abiertos lo están por decisión de Guillermo, no por falta de tiempo:
 
-### Cerrados
+- **#3 — badge "⚠ sin asignar" ilegible en dark mode.** Va a la Fase 2, que rehace esa capa entera
+  (los 2 hex cableados son un caso del "sin hex fuera de `tokens.css`" de esa fase).
+- **#6 — fallback de columna para NR y GS Pers (D-039).** Necesita un Tabulado real contra el cual
+  confirmar los códigos. Hasta entonces los dos controles piden la columna explícitamente, que es el
+  comportamiento correcto: un dato que no se puede resolver se informa, no se completa con 0,00.
+
+### Cerrados en el tercer PR (2026-08-12)
+
+| # | Qué | Dónde |
+|---|---|---|
+| 1 | `rendVsTabu` daba `NaN` y pintaba el tile en **verde** — la única de severidad alta | `diffOrNull()` en `js/utils/currency.js` · `tests/rendVsTabuControl.test.js` |
+| 2 | "Seleccionar todos" no seleccionaba nada en POF ni Acreditaciones | `group.primary` en el registry · D-040 |
+| 4 | Reintentar tras un error de parseo perdía la auto-detección | `showMappingForm()` en `js/ui/fileUpload.js` |
+| 5 | El mapeo de conceptos de Variaciones se perdía al salir del wizard | `controlConfigs` / `variaciones_concept_map` |
+| 7 | Las divergencias entre copias del mismo molde | `js/utils/dates.js` + `formatAmount` · ver la auditoría |
+
+El #7 se cerró **extrayendo** en vez de emparejando copia por copia: `dateSuffix`/`periodSuffix`
+salieron de los 9 controles a `js/utils/dates.js`, y las 9 copias de `fmt`/`fmtNum` pasaron a
+importar `formatAmount` de `js/utils/currency.js`, que ya existía y ya tenía el guard que a 8 de
+ellas les faltaba. No toca la Fase 1: son helpers de formato sin la ambigüedad semántica que traba a
+`toNum` y a la clave de legajo.
+
+### Cerrados antes (PR #98 + PR #99)
 
 | # | Qué | Dónde |
 |---|---|---|
@@ -41,13 +64,8 @@ el sentido del inventario de la auditoría, que agrupa algunos juntos.)
 
 | # | Qué | Severidad | Bloqueado por |
 |---|---|---|---|
-| 1 | `rendVsTabu` produce `NaN` (usa `!==` en vez de `!=`) y el tile se pinta **verde** — un control roto que dice estar bien | **alta** | nada — se puede arreglar ya |
-| 2 | "Seleccionar todos" filtra por `group.mode === 'Controlar'`; no selecciona ningún control real de POF ni de Axton | media | decisión: ¿que entren también variantes "Generar Reporte"? |
-| 3 | Badge "⚠ sin asignar" ilegible en dark mode (2 hex cableados en vez de tokens) | media | nada — Fase 2 la toca de todas formas |
-| 4 | Reintentar tras un error de parseo pierde la auto-detección | media | nada |
-| 5 | `variacionesMapGuardado` nunca se persiste en IndexedDB (el comentario dice que sí) | media | nada |
-| 6 | Fallback de columna sólo lo tiene Brutos (`'1003'`/`'1017'` cableados) | — | **decisión de Guillermo**: ¿NR/GS Pers necesitan fallback propio y con qué códigos? (D-039) |
-| 7 | 5 divergencias chicas entre copias del mismo molde (escHtml sin escapar comillas, `fmt()` sin guard de `undefined`, 2 formatos de fecha en nombres de archivo, acentos que matchean en un control y no en su gemelo, doble escape en Brutos) | baja | nada |
+| 3 | Badge "⚠ sin asignar" ilegible en dark mode (2 hex cableados en vez de tokens) | media | nada — **movido a la Fase 2**, que rehace esa capa entera |
+| 6 | Fallback de columna sólo lo tiene Brutos (`'1003'`/`'1017'` cableados) | — | **decisión de Guillermo**: ¿NR/GS Pers necesitan fallback propio y con qué códigos? Se confirman contra un Tabulado real, no por simetría (D-039) |
 
 ### Decisiones pendientes, no técnicas (fuera del inventario de bugs pero abiertas desde antes)
 
@@ -163,8 +181,13 @@ el texto del skill para eso, ya está escrito en modo condicional.
 ## Cómo retomar
 
 1. Si no se resolvieron las decisiones de Fase 1 (toNum + clave de legajo), no arrancar ahí — pedirle
-   a Guillermo que elija entre las opciones de arriba.
-2. Si hay tiempo y no hay decisiones resueltas, el bug abierto #1 de Fase 0 (`rendVsTabu` en verde con
-   `NaN`) es indendiente de todo lo demás y es la severidad más alta que queda.
+   a Guillermo que elija entre las opciones de arriba. Es lo primero que hay que preguntarle: la Fase
+   0 ya no tiene nada accionable, así que las dos decisiones de Fase 1 son lo único que traba el
+   plan entero.
+2. Si esas dos decisiones no están, la **Fase 2** es la que se puede arrancar sin pedir nada: no
+   depende de la Fase 1 y arrastra el único bug de Fase 0 que quedó en el inventario (el badge en
+   dark mode). El Paso 0 de la Fase 4 (matar el `Promise.all` posicional de `controlsWizard.js`)
+   también es chico, aislado y no depende de nadie — y ya tiene 11 entradas, una más que cuando se
+   escribió esto.
 3. Todo lo que se cierre, actualizar `specs/auditoria-escalabilidad-2026-08.md` (bugs) o este archivo
    (fases) — son los dos documentos que existen para no perder este estado entre sesiones.

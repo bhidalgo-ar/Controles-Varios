@@ -133,7 +133,7 @@ export async function renderControlsWizard(root, clientId) {
     return;
   }
 
-  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig, savedVariacionesConfig, groupers, allControlConfigs] = await Promise.all([
+  const [savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig, savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig, savedVariacionesConfig, savedVariacionesMap, groupers, allControlConfigs] = await Promise.all([
     getControlConfig(client.code, 'brutos_tab_config'),
     getClientCatalog(client.code),
     getControlConfig(client.code, 'rendvstabu_concept_grouping'),
@@ -142,6 +142,7 @@ export async function renderControlsWizard(root, clientId) {
     getControlConfig(client.code, 'acreditaciones_config'),
     getControlConfig(client.code, 'acumuladores_config'),
     getControlConfig(client.code, 'variaciones_config'),
+    getControlConfig(client.code, 'variaciones_concept_map'),
     getGroupers(client.code),
     getControlConfigsForClient(client.code),
   ]);
@@ -194,6 +195,12 @@ export async function renderControlsWizard(root, clientId) {
     // Mapeo confirmado de concepto → columna, por archivo. Lo llena el panel
     // "Conceptos a comparar" del Paso 2 (ver variacionesConceptMap.js).
     variacionesMap:            null,
+    // Lo confirmado en corridas anteriores, que precarga ese panel. Vive en
+    // `controlConfigs` y no sólo en `state`: el state se arma de cero en cada
+    // entrada al wizard, así que antes salir y volver a entrar lo perdía y el
+    // analista reconfirmaba concepto por concepto, en los dos Tabulados, todos
+    // los meses. Al estar en `controlConfigs` viaja además en el seed (D-035).
+    variacionesMapGuardado:    savedVariacionesMap?.params || null,
     controlConfigsByControlId,
 
     originFilter:              null,       // label del chip de origen activo en Paso 1 (null = "Todos")
@@ -689,11 +696,14 @@ function renderStepControls(container, state, root) {
     if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   });
 
-  // Botón "Seleccionar todos": selecciona las variantes "Controlar" de los
-  // controles que aplican a este cliente (ignora el filtro/búsqueda activos).
+  // Botón "Seleccionar todos": selecciona la variante principal de cada control
+  // que aplica a este cliente (ignora el filtro/búsqueda activos). Qué variante
+  // es la principal lo declara el registry con `group.primary` — antes se
+  // infería de `group.mode === 'Controlar'`, que dejaba afuera a POF y a
+  // Acreditaciones y hacía que el botón no seleccionara nada (D-040).
   container.querySelector('#js-select-all-ctrls')?.addEventListener('click', () => {
     const allControlarIds = units
-      .filter(u => !u.ctrl.group || u.ctrl.group.mode === 'Controlar')
+      .filter(u => !u.ctrl.group || u.ctrl.group.primary)
       .map(u => u.ctrl.id);
     state.selectedControls = [...allControlarIds];
     state.controlFiles = {};
@@ -1118,6 +1128,14 @@ function renderStepFiles(container, state, root) {
             anterior: { ...state.variacionesMap.anterior },
             actual:   { ...state.variacionesMap.actual },
           };
+          // A IndexedDB en el momento: el `state` se descarta al salir del
+          // wizard, así que sin esto "se recuerda para la próxima corrida" no
+          // pasaba de ser un comentario.
+          saveControlConfig(state.client.code, 'variaciones_concept_map', {
+            params: state.variacionesMapGuardado,
+          }).catch(() => {
+            showToast('No se pudo guardar el mapeo de conceptos. Vas a tener que confirmarlo de nuevo la próxima corrida.', 'warning');
+          });
           renderWizardNav(root, state);
         },
       });

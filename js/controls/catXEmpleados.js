@@ -15,6 +15,7 @@
 import { showToast } from '../ui/toast.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook } from '../utils/exportData.js';
+import { periodSuffix } from '../utils/dates.js';
 import { renderVerdict, renderTiles, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 
 /**
@@ -481,7 +482,6 @@ function wireDiffTableTools(root, diffKey, rows, getLabel) {
   enhanceGrid(table, { stickyCols: 1 });
 }
 
-
 // ── Export a Excel ────────────────────────────────────────────────────────────
 
 async function exportCatXEmpleadosToXlsx(results) {
@@ -577,17 +577,6 @@ function addDistributionSheet(wb, sheetName, labelCol, rows, styleHeader, base, 
       dr.eachCell(cell => { cell.font = base; });
     }
   }
-}
-
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
 }
 
 // ── Helpers internos ──────────────────────────────────────────────────────────

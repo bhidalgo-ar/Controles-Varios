@@ -36,6 +36,31 @@ export function nextPeriod(period) {
 }
 
 /**
+ * Sufijo de fecha para nombres de archivo exportados: 'YYYYMMDD'.
+ *
+ * En hora **local**, no UTC, y a propósito: con `toISOString()` un export
+ * hecho a las 22:00 de Argentina salía fechado al día siguiente. Vivía
+ * copiado en los 9 controles, con dos formatos distintos entre ellos
+ * (8 en 'YYYYMMDD' UTC y Variaciones en 'DDMMYYYY' local).
+ */
+export function dateSuffix(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+/**
+ * Sufijo de período para nombres de archivo: '2026-05' → '052026'.
+ * Sin período, o con uno que no tenga la forma 'YYYY-MM', cae al sufijo del día.
+ */
+export function periodSuffix(period) {
+  if (!period) return dateSuffix();
+  const [year, month] = String(period).split('-');
+  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
+}
+
+/**
  * Devuelve una lista de los últimos N períodos para usar en un selector.
  * Cada elemento tiene { value: '2026-05', label: 'Mayo 2026' }
  */

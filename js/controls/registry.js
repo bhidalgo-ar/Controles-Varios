@@ -22,7 +22,12 @@
 //   description     — descripción breve
 //   tabRequired     — si necesita el Tabulado como archivo pivote
 //   additionalFiles — archivos adicionales requeridos: [{ key, label, fileType }]
-//   group           — { id, label, mode } para agrupar variantes del mismo control bajo una pill
+//   group           — { id, label, mode, primary } para agrupar variantes del mismo control bajo una pill.
+//                     `primary: true` marca la variante que "Seleccionar todos" incluye. Es una
+//                     declaración explícita y no se infiere de `mode`: el filtro anterior miraba
+//                     `mode === 'Controlar'` y dejaba afuera a POF (modes 'Sueldos'/'Conceptos') y
+//                     a Acreditaciones, así que el botón no seleccionaba nada en esos clientes.
+//                     Un grupo puede tener más de una primary (Variaciones tiene dos). Ver D-040.
 //                     Si está, se renderiza dentro del grupo. Si falta, el control es standalone.
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
@@ -172,7 +177,7 @@ export const CONTROL_REGISTRY = {
         'Ejecutá.',
       ],
     },
-    group:       { id: 'brutos', label: 'Brutos', mode: 'Controlar' },
+    group:       { id: 'brutos', label: 'Brutos', mode: 'Controlar', primary: true },
     tabRequired: true,
     additionalFiles: [
       { key: 'brutos', label: 'Reporte de Brutos', fileType: 'brutos_file' },
@@ -225,7 +230,7 @@ export const CONTROL_REGISTRY = {
         'Ejecutá.',
       ],
     },
-    group:       { id: 'gs_pers', label: 'GS Pers', mode: 'Controlar' },
+    group:       { id: 'gs_pers', label: 'GS Pers', mode: 'Controlar', primary: true },
     tabRequired: true,
     additionalFiles: [
       { key: 'gs_pers', label: 'Reporte de GS Pers', fileType: 'gs_pers_file' },
@@ -276,7 +281,7 @@ export const CONTROL_REGISTRY = {
         'Ejecutá. Las diferencias se muestran en rojo.',
       ],
     },
-    group:       { id: 'nr', label: 'Control NR', mode: 'Controlar' },
+    group:       { id: 'nr', label: 'Control NR', mode: 'Controlar', primary: true },
     tabRequired: true,
     additionalFiles: [
       { key: 'nr', label: 'Reporte de NR', fileType: 'nr_file' },
@@ -460,7 +465,7 @@ export const CONTROL_REGISTRY = {
         'Ejecutá y descargá el .xlsx desde el resultado.',
       ],
     },
-    group:       { id: 'acreditaciones', label: 'Acreditaciones', mode: 'Generar Reporte' },
+    group:       { id: 'acreditaciones', label: 'Acreditaciones', mode: 'Generar Reporte', primary: true },
     tabRequired: false,
     additionalFiles: [
       { key: 'acreditaciones', label: 'Acreditaciones (export de Axton)', fileType: 'acreditaciones_file' },
@@ -522,7 +527,7 @@ export const CONTROL_REGISTRY = {
         'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
       ],
     },
-    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Sueldos' },
+    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Sueldos', primary: true },
     tabRequired: true,
     additionalFiles: [
       // `shared: true` → si los dos controles de Variaciones están seleccionados,
@@ -554,7 +559,7 @@ export const CONTROL_REGISTRY = {
         'Usá "Imprimir / PDF" para el entregable A4 horizontal, o "Exportar" para el .xlsx.',
       ],
     },
-    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Conceptos' },
+    group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Conceptos', primary: true },
     tabRequired: true,
     additionalFiles: [
       { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true },

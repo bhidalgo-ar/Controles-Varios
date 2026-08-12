@@ -60,9 +60,9 @@ El orden importa: F1 destraba a las demás, y F5 es lo que evita que todo esto v
 
 | Fase | Qué | Estado |
 |---|---|---|
-| F0 | Bugs que dan un resultado incorrecto hoy | en curso — 7 cerrados, 7 abiertos |
-| F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | planeado |
-| F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | planeado |
+| F0 | Bugs que dan un resultado incorrecto hoy | hecho ✅ (2026-08-12) — quedan 2 abiertos a propósito: el badge en dark mode se lo lleva F2, y el fallback de NR/GS Pers espera un Tabulado real (D-039) |
+| F1 | `toNum` único + clave de legajo única (D-038) y recién ahí extraer el módulo de consolidación | planeado — **bloqueada** por dos decisiones de Willy (ver el spec de fases) |
+| F2 | Capa visual: sin hex fuera de `tokens.css`, `createResultsToolbar()`, CSS de PDF compartido | planeado — la que se puede arrancar sin decisión previa |
 | F3 | `wireTableTools()`; migrar `catXEmpleados` y `rendVsAsiento` a `renderExportMenu`/`resultBlocks`; preferencia de vista por control | planeado |
 | F4 | `fileTypes.js` con un mapa único, config declarada en el registry, matar el `Promise.all` posicional | planeado |
 | F5 | Skill `nuevo-control`: de "copiá X" a "importá X", una vez que exista el módulo de F1 | planeado |

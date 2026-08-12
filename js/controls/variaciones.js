@@ -36,7 +36,8 @@ import {
   renderResumenDetalle,
 } from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { periodToLabel } from '../utils/dates.js';
+import { formatAmount as fmtNum } from '../utils/currency.js';
+import { periodToLabel, periodSuffix } from '../utils/dates.js';
 import { clavesUnicas } from '../parsers/tabuladoHtml.js';
 
 /** Tolerancia de comparación de importes: medio centavo. */
@@ -350,10 +351,6 @@ function chequearTotalDelArchivo(meta, columna, calculado) {
 }
 
 const isDif = v => v !== null && Math.abs(v) > TOL;
-
-const fmtNum = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Variación %: sin base en el período anterior no existe, se informa null → "s/base". */
 function calcularPct(anterior, actual) {
@@ -1421,15 +1418,4 @@ function imprimirVariaciones(results, relevantes) {
   win.document.write(html);
   win.document.close();
   win.focus();
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = String(period).split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
-}
-
-function dateSuffix() {
-  const d = new Date();
-  return `${String(d.getDate()).padStart(2, '0')}${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
 }

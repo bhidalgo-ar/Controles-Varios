@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { formatAmount as fmt } from '../utils/currency.js';
+import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -123,10 +125,6 @@ const CYAN_HDR  = 'rgba(0,172,212,0.22)';
 const LILAC_BG  = 'rgba(130,80,200,0.09)';
 const LILAC_HDR = 'rgba(130,80,200,0.20)';
 
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 // Un legajo es "evaluable" si hay algún valor real de alguno de los dos
 // conceptos, en cualquiera de las dos fuentes (Brutos o Tabulado).
 function brutosHasAnyValue(r) {
@@ -195,7 +193,8 @@ export function renderBrutosResults(results, container) {
             const worst = Math.abs(r.ctrlSalBase ?? 0) >= Math.abs(r.ctrlACuFutAumen ?? 0) ? r.ctrlSalBase : r.ctrlACuFutAumen;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',
-              who: r.nombre ? esc(r.nombre) : `Legajo ${r.legajo}`,
+              // Sin `esc()`: `renderIssues` ya escapa `who` (se veía "PEREZ &amp;amp; GOMEZ").
+              who: r.nombre || `Legajo ${r.legajo}`,
               sub: `Legajo ${r.legajo}`,
               what: bits.join(' · '),
               why: 'Diferencia Tab − Brutos.',
@@ -415,7 +414,10 @@ export function renderBrutosReporteResults(results, container) {
     cols.hasPuesto    && { label: 'N_PUESTO',         key: 'puesto',      type: 'txt' },
   ].filter(Boolean);
 
-  const sinColumnas = colDefs.length <= 1;
+  // Las 3 primeras entradas de `colDefs` son incondicionales: "sin columnas
+  // configuradas" es que no haya ninguna más. Con el `<= 1` que estaba acá el
+  // aviso nunca se mostraba (gsPers.js ya tenía el umbral correcto).
+  const sinColumnas = colDefs.length <= 3;
 
   container.innerHTML = '';
 
@@ -447,7 +449,6 @@ function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumna
     return;
   }
 
-  const fmt    = v => v === null ? '—' : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtTxt = v => v === null ? '—' : esc(String(v));
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
@@ -720,16 +721,6 @@ function fmtDate(v) {
 function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
 }
 
 // Primer día hábil (lun–vie) del mes

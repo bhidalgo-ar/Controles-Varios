@@ -18,6 +18,7 @@ import { renderVerdict, renderTiles, renderIssues, renderMinorObservations, rend
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel } from '../utils/dates.js';
 
 // ── Códigos de acumulador (Nro) ───────────────────────────────────────────────
@@ -580,10 +581,6 @@ export function summarizeAcumuladoresGanancias(results) {
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────
-
-const fmtNum = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // NOTA de diseño (D-027): esta pantalla usa 3 solapas (Resumen · Fichas ·
 // Planilla) en vez de las 2 (Resumen/Detalle) de `renderResumenDetalle()` que
