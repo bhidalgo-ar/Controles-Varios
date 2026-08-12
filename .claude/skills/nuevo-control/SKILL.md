@@ -55,9 +55,15 @@ El import, `FIELD_DEFS`, `parseFile()`, `fileTypeLabel()` — y la cadena de `||
 la línea de metadata (`grep -n "fileType === 'tab_control'" js/ui/fileUpload.js`). Ese quinto es el
 que se olvida: sin él el archivo sube pero no muestra "N registros".
 
-En `FIELD_DEFS`, el legajo va `required: true` y los conceptos `required: false`: un cliente puede no
-liquidar un concepto y el control tiene que correr igual. Un tipo de archivo de formato fijo
-(`conta_file`) va con `[]`.
+En `FIELD_DEFS`, el legajo va `required: true`. Para los conceptos: **si tu control ya tiene contrato
+en `js/exports/contracts.js`** (Brutos/GS Pers/NR, ver D-041 y `specs/contrato-export.md`), no pongas
+`required` a mano — la obligatoriedad se deriva del contrato (`necessityOfKey()`), y un `required`
+puesto ahí queda ignorado en cuanto exista el contrato. Si tu control **todavía no** tiene contrato
+(el resto, hoy), `required: false` en los conceptos sigue siendo el default correcto: un cliente puede
+no liquidar un concepto y el control tiene que correr igual — no lo vuelvas `true` "para que se
+note", eso traba a cualquier cliente sin ese concepto sin ninguna vía de escape (ver el Paso 2 de
+`specs/contrato-export.md`: activar `OBLIGATORIA` sin la omisión declarada rompe la carga). Un tipo
+de archivo de formato fijo (`conta_file`) va con `[]`.
 
 ### 3 — `controlsWizard.js`
 

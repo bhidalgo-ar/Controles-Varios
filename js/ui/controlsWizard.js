@@ -20,6 +20,7 @@ import {
   getControlConfigsForClient,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
+import { necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
@@ -402,9 +403,43 @@ function renderWizardNav(root, state) {
 function nextStepHint(state) {
   switch (state.step) {
     case 0: return 'Seleccioná al menos un control para continuar';
-    case 1: return 'Completá los archivos y columnas requeridas';
+    case 1: {
+      // Si lo único que falta es una columna del Tabulado, nombrarla —
+      // "Completá los archivos y columnas requeridas" no le dice al analista
+      // adónde ir cuando ya cargó todo.
+      const hasBrutos = state.selectedControls.some(id => BRUTOS_IDS.includes(id));
+      const hasGsPers = state.selectedControls.some(id => GS_PERS_IDS.includes(id));
+      const hasNr     = state.selectedControls.some(id => NR_IDS.includes(id));
+      const pendientes = pendingTabRequirements(state.tabExtraConfig, { hasBrutos, hasGsPers, hasNr });
+      if (pendientes.length > 0) {
+        return pendientes.length === 1
+          ? `Falta la columna "${pendientes[0].label}" — o declarala ausente con ⊘`
+          : `Faltan ${pendientes.length} columnas del Tabulado — o declaralas ausentes con ⊘`;
+      }
+      return 'Completá los archivos y columnas requeridas';
+    }
     default: return '';
   }
+}
+
+/**
+ * Campos de "Columnas del Tabulado" (TAB_BRUTOS_FIELDS/TAB_GS_PERS_FIELDS/
+ * TAB_NR_*_FIELDS, más abajo en este archivo) que siguen sin resolver: la
+ * clave del contrato exige CLAVE u OBLIGATORIA, y `cfg[key]` está vacío. Un
+ * valor `OMITIDO` cuenta como resuelto — es la vía de escape para el cliente
+ * que genuinamente no tiene esa columna (D-036).
+ */
+export function pendingTabRequirements(cfg, { hasBrutos, hasGsPers, hasNr }) {
+  const fields = [
+    ...(hasBrutos ? TAB_BRUTOS_FIELDS  : []),
+    ...(hasGsPers ? TAB_GS_PERS_FIELDS : []),
+    ...(hasNr ? [...TAB_NR_INDEM_FIELDS, ...TAB_NR_OTROS_FIELDS] : []),
+  ];
+  return fields.filter(f => {
+    const necessity = necessityOfKey(f.key);
+    const bloquea = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
+    return bloquea && !cfg[f.key];
+  });
 }
 
 function canGoNext(state) {
@@ -425,14 +460,18 @@ function canGoNext(state) {
       });
       if (!allFiles) return false;
 
-      const cfg = state.tabExtraConfig;
+      // Columnas del Tabulado (Brutos/GS Pers/NR): antes una lista de 4 claves
+      // cableada a mano — sin la tercera rama para NR, sus 18 conceptos nunca
+      // tuvieron ningún gate (D-041, ver specs/contrato-export.md, Paso 2).
+      // Ahora deriva de la necesidad que el contrato de export declara para
+      // cada clave: bloquea CLAVE/OBLIGATORIA sin resolver, y "resolver"
+      // incluye declarar la omisión (OMITIDO) — sin esa vía de escape, un
+      // cliente sin alguno de los 18 conceptos no podría subir NR.
       const hasBrutos = state.selectedControls.some(id => BRUTOS_IDS.includes(id));
-      if (hasBrutos) {
-        if (!cfg.tabSalBaseColumn || !cfg.tabACuFutAumenColumn) return false;
-      }
       const hasGsPers = state.selectedControls.some(id => GS_PERS_IDS.includes(id));
-      if (hasGsPers) {
-        if (!cfg.tabGtosPersonalesColumn || !cfg.tabDtoCocheraColumn) return false;
+      const hasNrForGate = state.selectedControls.some(id => NR_IDS.includes(id));
+      if (pendingTabRequirements(state.tabExtraConfig, { hasBrutos, hasGsPers, hasNr: hasNrForGate }).length > 0) {
+        return false;
       }
 
       // Variaciones: bloquea sólo si un concepto no se resolvió en NINGUNO de
@@ -1337,6 +1376,20 @@ export function isStaleTabValue(value, tabHeaders) {
   return !!value && tabHeaders.length > 0 && !tabHeaders.includes(value);
 }
 
+/**
+ * ¿La auto-detección puede completar/reparar este campo?
+ *
+ * Sí cuando está vacío, o cuando tiene un valor obsoleto (`isStaleTabValue`).
+ * NUNCA cuando ya está declarado `OMITIDO` — es una decisión del analista, no
+ * un artefacto de una carga anterior, y si se tratara como obsoleta, la
+ * próxima auto-detección que encontrara cualquier columna parecida la
+ * pisaría en silencio, sin que el analista la haya vuelto a tocar.
+ */
+export function shouldAutoFillTabValue(actual, tabHeaders) {
+  if (esOmitido(actual)) return false;
+  return !actual || isStaleTabValue(actual, tabHeaders);
+}
+
 function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr }) {
   const tabHeaders = state.tab?.parsedRows?.length > 0
     ? Object.keys(state.tab.parsedRows[0])
@@ -1349,11 +1402,7 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
     let anyNew = false;
     for (const [k, v] of Object.entries(detected)) {
       const actual = state.tabExtraConfig[k];
-      // Repara un valor obsoleto además de completar lo que estaba vacío.
-      // Antes el guard sólo miraba "vacío", así que un valor viejo nunca se
-      // dejaba corregir por la auto-detección aunque ya no matcheara ninguna
-      // columna real de este archivo (ver `val` más abajo).
-      if (v && (!actual || isStaleTabValue(actual, tabHeaders))) {
+      if (v && shouldAutoFillTabValue(actual, tabHeaders)) {
         state.tabExtraConfig[k] = v;
         anyNew = true;
       }
@@ -1388,7 +1437,15 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
       .map(h => `<option value="${esc(h)}" ${h === selected ? 'selected' : ''}>${esc(h) || '— Sin asignar —'}</option>`)
       .join('');
 
+  // Reemplaza el panel anterior en vez de apilar uno nuevo — la función se
+  // vuelve a llamar a sí misma después de tocar el toggle ⊘, para que el
+  // badge y el estado del <select> se actualicen sin esperar al próximo
+  // re-render completo del paso (mismo problema que resolvía re-llamar a
+  // renderConceptMap en variacionesConceptMap.js).
+  container.querySelector('[data-tab-extra-panel]')?.remove();
+
   const panel = document.createElement('div');
+  panel.dataset.tabExtraPanel = '';
   panel.style.cssText = 'margin-top:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);';
   panel.innerHTML = `
     <h4 style="margin:0 0 var(--sp-1);font-size:var(--text-base);">Columnas del Tabulado — ${esc(headerTitle)}</h4>
@@ -1413,35 +1470,69 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
         // anterior" en verde — el badge afirmaba lo contrario de lo que se
         // veía en pantalla. Tratarlo como vacío hace que salga "⚠ sin
         // asignar", que es lo que hay que corregir.
-        const rawVal = state.tabExtraConfig[f.key] || '';
-        const val    = isStaleTabValue(rawVal, tabHeaders) ? '' : rawVal;
-        const level = matchLevel(val, { autoDetected, hasSavedMapping: hasSavedConfig });
-        const style = matchSelectStyle(level);
-        const badge = matchBadge(level);
+        const rawVal   = state.tabExtraConfig[f.key] || '';
+        const omitido  = esOmitido(rawVal);
+        const val      = (!omitido && isStaleTabValue(rawVal, tabHeaders)) ? '' : rawVal;
+        const level    = matchLevel(omitido ? '' : val, { autoDetected, hasSavedMapping: hasSavedConfig });
+        const style    = matchSelectStyle(level);
+        const badge    = matchBadge(level);
+        // Sólo OBLIGATORIA ofrece la vía de escape — CLAVE no admite omisión
+        // (sin esto el archivo no sirve) y OPCIONAL no bloquea, así que
+        // declararlo ausente no cambiaría nada. Hoy ningún campo de este
+        // panel es CLAVE, pero el check queda explícito para cuando lo sea.
+        const necessity  = necessityOfKey(f.key);
+        const puedeOmitir = necessity === NECESSITY.OBLIGATORIA;
+        const esBloqueante = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
         return `
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label ${f.required ? 'form-label--required' : ''}">
-              ${esc(f.label)}${badge}
+            <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">
+              ${esc(f.label)}${omitido ? ' <span style="color:var(--color-text-muted);font-size:0.8em;">⊘ declarada ausente</span>' : badge}
             </label>
-            <select class="form-select" data-tab-extra-key="${esc(f.key)}"${style ? ` style="${style}"` : ''}>
-              ${opts(val)}
-            </select>
+            <div style="display:flex;gap:var(--sp-2);align-items:center;">
+              <select class="form-select" data-tab-extra-key="${esc(f.key)}"${omitido ? ' disabled' : ''}
+                style="${style}${omitido ? 'opacity:0.6;' : ''}">
+                ${opts(omitido ? '' : val)}
+              </select>
+              ${puedeOmitir ? `
+                <button type="button" class="btn btn--sm ${omitido ? 'btn--primary' : 'btn--ghost'}"
+                  data-tab-extra-omit="${esc(f.key)}" aria-pressed="${omitido}"
+                  title="Declarar que este archivo no trae esta columna">⊘</button>
+              ` : ''}
+            </div>
+            ${omitido ? `<div class="text-muted" style="font-size:var(--text-xs);margin-top:2px;">No se resuelve — se computa como sin dato, no como cero.</div>` : ''}
           </div>
         `;
       }).join('')}
     </div>
   `;
 
+  const guardarConfig = async () => {
+    renderWizardNav(root, state);
+    // Guardar inmediatamente para no perder la config si no se ejecuta el control
+    if (Object.keys(state.tabExtraConfig).length > 0) {
+      await saveControlConfig(state.client.code, 'brutos_tab_config', { params: state.tabExtraConfig }).catch(() => {});
+    }
+  };
+
   panel.querySelectorAll('[data-tab-extra-key]').forEach(sel => {
     sel.addEventListener('change', async () => {
       const k = sel.dataset.tabExtraKey;
       if (sel.value) state.tabExtraConfig[k] = sel.value;
       else delete state.tabExtraConfig[k];
-      renderWizardNav(root, state);
-      // Guardar inmediatamente para no perder la config si no se ejecuta el control
-      if (Object.keys(state.tabExtraConfig).length > 0) {
-        await saveControlConfig(state.client.code, 'brutos_tab_config', { params: state.tabExtraConfig }).catch(() => {});
-      }
+      await guardarConfig();
+    });
+  });
+
+  panel.querySelectorAll('[data-tab-extra-omit]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const k = btn.dataset.tabExtraOmit;
+      if (esOmitido(state.tabExtraConfig[k])) delete state.tabExtraConfig[k];
+      else state.tabExtraConfig[k] = OMITIDO;
+      await guardarConfig();
+      // Re-renderiza el panel entero para que el <select> deshabilitado/
+      // habilitado y el badge "⊘ declarada ausente" se vean sin esperar al
+      // próximo re-render completo del paso.
+      renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr });
     });
   });
 

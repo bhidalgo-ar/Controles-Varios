@@ -1,11 +1,12 @@
 // contracts.js — Fuente única de qué columnas exporta cada control y de qué
 // clave de mapeo sale cada una. La obligatoriedad de un campo de ENTRADA se
-// DERIVA de estos contratos (ver necessityOfField en js/ui/fileUpload.js y
-// pendingRequirements en js/ui/controlsWizard.js) — no se declara dos veces.
+// DERIVA de estos contratos (ver blocksProgress() acá abajo, consumido por
+// js/ui/fileUpload.js, y pendingTabRequirements() en js/ui/controlsWizard.js)
+// — no se declara dos veces.
 //
-// Ver specs/contrato-export.md para el porqué y el plan completo por pasos.
-// Este archivo es el Paso 0: declara los contratos SIN cambiar comportamiento
-// todavía. `layout` recién se usa a partir del Paso 4 (writeContractSheet).
+// Ver specs/contrato-export.md para el porqué y el plan completo por pasos
+// (D-041 en DECISIONS.md). `layout` recién se usa a partir del Paso 4
+// (writeContractSheet, todavía no existe).
 
 import { NR_CONCEPTS } from '../controls/nr.js';
 
@@ -216,6 +217,27 @@ export function fieldNecessityMap() {
  */
 export function necessityOfKey(key) {
   return fieldNecessityMap().get(key)?.necessity ?? null;
+}
+
+/**
+ * Sentinel para "el analista declaró que este archivo no trae esta columna"
+ * — la resolución de la tensión con D-036 (Paso 2 de specs/contrato-export.md,
+ * mecanismo aprobado por Willy el 2026-08-12). Mismo patrón que `NO_LIQUIDADO`
+ * de `js/ui/variacionesConceptMap.js`, pero como vocabulario propio: no es lo
+ * mismo "no se liquidó este período" (variable mes a mes) que "este cliente
+ * no tiene esta columna" (una propiedad del cliente, estable).
+ *
+ * Se guarda en el mismo lugar que un nombre de columna real
+ * (`state.tabExtraConfig[key] = OMITIDO`) a propósito: así el resto del
+ * código que hace `tm[key] ? … : null` ya trata la omisión como ausencia sin
+ * ningún cambio — `row[OMITIDO]` no existe en ningún archivo real, así que
+ * cae a `null` igual que si la clave nunca se hubiera completado. Sólo el
+ * GATE y la UI necesitan distinguirlo explícitamente.
+ */
+export const OMITIDO = '__omitido__';
+
+export function esOmitido(value) {
+  return value === OMITIDO;
 }
 
 /**
