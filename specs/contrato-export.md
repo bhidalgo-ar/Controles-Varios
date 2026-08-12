@@ -1,8 +1,8 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** plan aprobado, **las 2 preguntas ya están contestadas** (Willy, 2026-08-12) — ver
-> "Lo que falta decidir" para el registro. En ejecución: Pasos 0-3 en curso; Pasos 4-6 quedan
-> desbloqueados por la respuesta a la pregunta 1, pero no arrancaron todavía en esta sesión.
+> **Estado:** **Pasos 0-3 hechos** (2026-08-12, PRs #104/#105/#106). Pasos 4-6 desbloqueados por la
+> respuesta a la pregunta 1 ("que salga vacía") — no arrancaron todavía. Ver "Ya cerrado" para el
+> detalle de cada paso, y "Cómo retomar" al final para seguir desde acá sin este contexto.
 >
 > **Origen:** auditoría del 2026-08-12 pedida por Willy — 8 buckets cubriendo los 15 controles y los
 > 10 tipos de archivo, **214 campos de mapeo relevados**, cada hallazgo verificado adversarialmente
@@ -151,17 +151,17 @@ EE x CATEG.
 
 Cada paso es mergeable por separado y deja el repo funcionando.
 
-| # | Qué | Sin decisión de Willy |
+| # | Qué | Estado |
 |---|---|---|
-| **0** | `js/exports/contracts.js` con los 6 contratos de Brutos/GS Pers/NR transcritos **literalmente** de los `colDefs` de hoy + `tests/exportContracts.test.js`. Sin cambio de comportamiento: el gap queda escrito como assert en vez de en un `.md`. | ✅ |
-| **1** | El contrato manda en la UI de carga. `fileUpload.js` deja de leer `f.required` y usa `necessityOfField()`; el submit exige sólo `clave`. Las precondiciones del parser que ningún export consume se declaran aparte en `PARSER_PRECONDITIONS`. Se borra el flag `required` de los `TAB_*` (era CSS). | ✅ |
-| **2** | **El paso que cierra el hallazgo grande.** `js/exports/omissions.js` (sobre `controlConfigs`, controlId `export_omissions`), el botón "Este archivo no la trae" con motivo obligatorio, y `canGoNext` → `pendingRequirements`. Acá **los 18 campos de NR tienen gate por primera vez**. | ✅ |
-| **3** | Deja de existir el valor obsoleto. `resolveContract` marca `stale` toda clave cuyo valor guardado no esté entre los encabezados del mes. Un solo fix para los 25 campos del panel. | ✅ |
-| **4a** | `writeContractSheet` + migrar los 3 exports "Generar Reporte" (encabezado de un nivel, conversión mecánica). | ❌ **necesita respuesta** |
-| **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color). Va aparte a propósito. | ❌ |
-| **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal` y saca del `okCount` los legajos no comparados; `computeSemaforoStatus` gana un 4º argumento; se distingue "no evaluado" de "sin diferencia" en tiles y en el export. | ✅ |
-| **6** | El resto de los exports declaran su contrato. Los que hoy no tienen CSV ni "copiar tabla" (`catXEmpleados`, `rendVsAsiento`) **lo ganan gratis** — es un ítem de la Fase 3 que se cae solo. | ❌ |
-| **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, y tachar los hotspots #3 y #4 de la auditoría. | ✅ |
+| **0** | `js/exports/contracts.js` con 6 contratos de Brutos/GS Pers/NR + `tests/exportContracts.test.js`. Sin cambio de comportamiento. | ✅ hecho (PR #104) |
+| **1** | El contrato manda en la UI de carga. `fileUpload.js` deriva de `blocksProgress()`. Sin cambio de comportamiento a propósito (sólo `CLAVE` bloquea; `OBLIGATORIA` espera al Paso 2). | ✅ hecho (PR #104) |
+| **3** | `isStaleTabValue()` — un valor obsoleto deja de pasar el gate con el badge en verde. | ✅ hecho (PR #105) |
+| **2** | **El paso que cierra el hallazgo grande.** `pendingTabRequirements()` reemplaza la lista cableada de `canGoNext`, derivando de `necessityOfKey()`. Los 18 campos de NR tienen gate por primera vez. `OMITIDO` (toggle "⊘", sin motivo de texto libre) es la vía de escape — sin ella este paso rompería NR en producción. | ✅ hecho (PR de esta rama) |
+| **4a** | `writeContractSheet` + migrar los 2 exports "Generar Reporte" con `cols.has*` (Brutos, GS Pers — NR ya emite las 18 columnas siempre, no necesita este fix) a `layout: 'fijo'` ("que salga vacía", respuesta de Willy). | Desbloqueado, no arrancado |
+| **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) al mismo `writeContractSheet`. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | Desbloqueado, no arrancado — menor prioridad que 4a |
+| **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | No arrancado |
+| **6** | El resto de los exports (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados`, `variaciones`, `acumuladores`, `acreditaciones`) declaran su contrato. | No arrancado |
+| **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
 
 **Si sólo se puede hacer una cosa:** el **Paso 2** (gate derivado + omisiones) más el **Paso 5**
 (separar "no evaluado" de "sin diferencia"). Los pasos 0-4 son andamio: si la migración se corta en el
@@ -222,9 +222,9 @@ clave está vacía), y ordenar el panel por peso. Aun así, el primer mes hay fr
 
 ---
 
-## Ya cerrado (los bugs de correctitud que salieron de esta auditoría)
+## Ya cerrado
 
-No esperan al rediseño; están arreglados con test de regresión.
+### Bugs de correctitud de la auditoría (previos al rediseño)
 
 | Qué | Dónde |
 |---|---|
@@ -232,3 +232,15 @@ No esperan al rediseño; están arreglados con test de regresión.
 | **Dos conceptos mapeados a la misma columna** — `INDEM_INTEG` se comparaba contra la columna de `SAC_INDEM_INTEG`. Es la peor forma del problema: **da un número mal, no un vacío**, así que ningún aviso de "columna sin asignar" lo agarra. | `conceptMatcher.js` · `tests/conceptMatcher.test.js` |
 | **El panel de remapeo avisaba pero no validaba** — 6 campos `required: true` vaciables en silencio, y quedaba persistido en el perfil del cliente. | `fileUpload.js` |
 | **El badge "⚠ sin asignar" no salía en el panel de remapeo** — una columna opcional vacía se veía igual que una mapeada. | `fileUpload.js` |
+
+### Pasos 0-3 del rediseño (2026-08-12)
+
+| Paso | Qué | Dónde |
+|---|---|---|
+| **0** | `EXPORT_CONTRACTS` — 6 contratos (Brutos/GS Pers/NR × 2 modos). El de NR se **deriva** de `NR_CONCEPTS` (ahora exportado desde `nr.js`), no lo duplica. `necessityOfKey()` calcula la necesidad de una clave recorriendo los contratos. | `js/exports/contracts.js` · `tests/exportContracts.test.js` |
+| — | **Riesgo encontrado comparando dos diseños en paralelo** (no un bug, una fragilidad): el mapa de necesidad es plano por clave, no por `(fileType, clave)` — hoy no hay colisión real (verificado), pero un contrato futuro con la misma clave y otra necesidad se resolvería mal. Blindado con un assert permanente, no rediseñado — el esquema completo es más código para un riesgo que hoy es cero. | `tests/exportContracts.test.js` |
+| **1** | `fileUpload.js` deriva el gate del submit de `blocksProgress()` en vez de `f.required` a mano en 2 lugares. **Sin cambio de comportamiento a propósito**: sólo bloquea fuerte en `CLAVE`. Casi bloqueaba también en `OBLIGATORIA` — eso hubiera roto la carga de cualquier NR sin los 18 conceptos completos, antes de que existiera la omisión declarada. | `fileUpload.js` |
+| **3** | `isStaleTabValue()` — un valor guardado que ya no está en los encabezados del Tabulado actual (renumeración del cliente) pasaba el gate con el `<select>` vacío y el badge en verde, afirmando lo contrario de lo que se veía. Ahora se repara si la auto-detección encuentra un reemplazo, y si no, se trata como sin asignar. | `controlsWizard.js` · `tests/staleTabConfig.test.js` |
+| **2** | **El paso que cierra el hallazgo grande.** `pendingTabRequirements()` reemplaza la lista de 4 claves cableada a mano en `canGoNext` — deriva de `necessityOfKey()`, así que un control nuevo con contrato queda gateado el día que se agrega. **Los 18 conceptos de NR tienen gate por primera vez.** La omisión declarada (`OMITIDO`, toggle "⊘" junto a cada columna `OBLIGATORIA` — mismo patrón que `NO_LIQUIDADO` de Variaciones, sin motivo de texto libre para no sumar fricción) es la vía de escape: sin ella, el gate nuevo bloquearía a todo cliente sin los 18 conceptos, que es ninguno. El hint de "Siguiente" nombra la columna que falta. | `controlsWizard.js` · `tests/tabExtraOmission.test.js` |
+
+**Precisión sobre el alcance real del Paso 2:** el gate nuevo cubre el lado **Tabulado** (`TAB_NR_*_FIELDS`, `tabExtraConfig`), que es el que la auditoría señaló como el agujero ("los 18 conceptos de NR no tienen ningún gate"). El lado **archivo NR** (`nrKey`, `FIELD_DEFS.nr_file`, validado en `fileUpload.js`) sigue en `OBLIGATORIA`-sin-bloquear del Paso 1 — activarlo ahí necesitaría la misma omisión declarada dentro del formulario de mapeo de archivo, que todavía no existe. Mismo criterio para `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers: siguen sin bloquear en la carga del archivo del reporte, sólo en el lado Tabulado (que ya bloqueaba antes, sin cambios).
