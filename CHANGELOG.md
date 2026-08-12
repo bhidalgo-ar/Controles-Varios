@@ -7,6 +7,37 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### refactor: arranque de la Fase 2 (capa visual) + Paso 0 de la Fase 4 — 2026-08-12
+
+- **`Promise.all` posicional de `controlsWizard.js` (Paso 0 de Fase 4).** Un array de 11 promesas
+  destructurado por orden no tenía ningún guard entre la lista y los nombres — desalinear una entrada
+  metía la config de un control en el `state` de otro sin ningún error. `promiseAllByKey()` (local a
+  `controlsWizard.js`) resuelve el mismo `Promise.all` pero por clave: el resultado se lee por nombre,
+  así que un error de alineación ya no es posible.
+- **El badge "⚠ sin asignar" ilegible en dark mode** (bug abierto #3 de la Fase 0) se cerró de una: la
+  copia local de `matchLevel`/`fieldStyle`/`fieldBadge` en `fileUpload.js` ya usaba tokens bien; la
+  única consumidora real (el panel "Columnas del Tabulado" de Brutos/GS Pers/NR) llamaba a la versión
+  exportada, que tenía `#EAB308`/`#B45309` cableados. Se borró la copia local y los dos hex pasaron a
+  `var(--color-warning)`/`var(--color-warning-bg)`. De paso, 4 fallbacks `var(--token, #hex)` muertos
+  (el token siempre está definido) en `helpPopover.js` y `rendVsAsiento.js` perdieron el hex.
+- **`createResultsToolbar()`** en `js/ui/tableTools.js` — el toolbar de resultados (filtro opcional +
+  buscador + exportar) estaba escrito a mano en 15 lugares y ya no era idéntico entre sí. Migrados los
+  **9 sitios que son el mismo molde**: `brutos.js` (2), `gsPers.js` (2), `nr.js` (2), `rendVsTabu.js`
+  (1), `rendXEe.js` (1), `acreditaciones.js` (1). Los otros 6 (`acreditaciones.js` el de alertas,
+  los 3 de `acumuladoresGanancias.js`, los 2 de `variaciones.js`) tienen formas genuinamente distintas
+  —export-only, sin buscador, selects bespoke— y se dejaron así: forzarlos a la misma forma hubiera
+  sido más abstracción de la que hacía falta.
+- Verificado con un test de estructura DOM ad-hoc (no queda en el repo, era sólo para confirmar el
+  refactor) que `createResultsToolbar()` produce exactamente el mismo árbol que el código a mano que
+  reemplaza, en los tres casos (sin filtro, con un filtro, con un `filterGroup` custom).
+- **Fuera de esta pasada, a propósito:** el CSS de impresión de `imprimirVariaciones()` sigue con hex
+  cableado — es un documento HTML separado sin acceso a las custom properties de la app, pensado para
+  quedar fijo en modo claro (un entregable en papel). `css/components.css` también queda sin tocar:
+  tiene hex fuera de `tokens.css`, pero es CSS que renderiza en toda la app y este entorno no tiene
+  navegador real para verificarlo — se retoma cuando se pueda mirar en los dos temas.
+- **574 asserts, 0 fallos** en `npm run test:unit` (sin tests nuevos — es un refactor de estructura, no
+  de comportamiento; la cobertura existente de cada control no cambió).
+
 ### fix: cierre de la Fase 0 de la auditoría de escalabilidad — 2026-08-12
 
 - **Rend vs Tabulado daba `NaN` y el control se pintaba en VERDE.** Es el único hallazgo de severidad alta que quedaba. El guard de la resta usaba `!== null` sobre un valor que llega por optional chaining, así que un centro de costo del Rendimiento sin contraparte en el Tabulado entregaba `undefined` y evaluaba `undefined - r` → `NaN`. El veredicto imprimía "Diferencia total de NaN" y, como `Math.abs(NaN) > 0.01` es `false`, el tile salía verde: un control roto diciendo que todo cerraba. La tabla de Detalle lo disimulaba porque filtra con `Number.isFinite`. Resuelto con `diffOrNull()` en `js/utils/currency.js` —guard `Number.isFinite` de los dos lados— usado por rendVsTabu y su gemelo rendVsAsiento. Nuevo `tests/rendVsTabuControl.test.js`: 4 de sus asserts fallan si se revierte el guard.

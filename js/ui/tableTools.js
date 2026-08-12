@@ -11,6 +11,43 @@
 const PAGE_SIZE_DEFAULT = 50;
 
 /**
+ * Monta la barra de arriba de la tabla Detalle: filtro(s) opcional(es) a la
+ * izquierda, buscador, exportar a la derecha. Es el mismo molde que estaba
+ * escrito a mano en 9 controles — algunos con un `<select>` de "sólo con
+ * diferencia/todos", otros sin filtro — y ya había empezado a divergir en el
+ * espaciado. No cubre toolbars con otra forma (sólo exportar, sin buscador;
+ * selects bespoke de orden/sentido): esos no son el mismo molde y forzarlos
+ * acá sería más abstracción de la que hace falta.
+ *
+ * @param {HTMLElement} container - dónde montar la barra
+ * @param {object} [opts]
+ * @param {HTMLElement|HTMLElement[]} [opts.left] - filtro(s) a la izquierda del buscador
+ * @returns {{ toolbar: HTMLElement, searchEl: HTMLElement, exportEl: HTMLElement }}
+ */
+export function createResultsToolbar(container, { left } = {}) {
+  const toolbar = document.createElement('div');
+  toolbar.className = 'results-toolbar';
+
+  const searchEl = document.createElement('div');
+  const exportEl = document.createElement('div');
+
+  const leftEls = left ? (Array.isArray(left) ? left : [left]) : [];
+  if (leftEls.length > 0) {
+    const leftGroup = document.createElement('div');
+    leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
+    leftEls.forEach(el => leftGroup.appendChild(el));
+    leftGroup.appendChild(searchEl);
+    toolbar.appendChild(leftGroup);
+  } else {
+    toolbar.appendChild(searchEl);
+  }
+  toolbar.appendChild(exportEl);
+  container.appendChild(toolbar);
+
+  return { toolbar, searchEl, exportEl };
+}
+
+/**
  * Pagina un <tbody> ya renderizado con TODAS las filas: muestra las primeras
  * `pageSize` y agrega una fila "Mostrar todas (N más)" al final. No cambia el
  * HTML de cada <tr> ni pide los datos de nuevo — sólo oculta con `display:none`

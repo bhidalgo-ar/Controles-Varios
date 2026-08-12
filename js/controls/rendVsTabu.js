@@ -1,7 +1,7 @@
 // rendVsTabu.js — Control 5: Rendimiento vs Tabulado (RendvsTabu)
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -423,13 +423,7 @@ function renderRendVsTabuDetalle(container, { rows, results }) {
   }).join('');
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container);
 
   if (hiddenCount > 0) {
     const note = document.createElement('p');

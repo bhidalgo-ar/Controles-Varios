@@ -121,13 +121,57 @@ nada — así que en cuanto exista, se adopta solo.
 
 ## Fase 2 — Capa visual unificada
 
-**Estado: planeada.** Es donde se cumple "un cambio visual pega en todos los controles".
+**Estado: en curso** (2026-08-12) — no depende de la Fase 1, así que se arrancó sin esperar las
+decisiones de Guillermo.
 
-- Sacar los hex hardcodeados que quedan (empezando por el bug abierto #3 de Fase 0).
-- `createResultsToolbar()` — hoy el toolbar de resultados está escrito a mano en 15 lugares.
-- CSS de PDF compartido — cada `imprimir*()` embebe el suyo propio hoy.
+- **Hex hardcodeados: cerrado.** El bug abierto #3 de Fase 0 (badge "⚠ sin asignar" en
+  `fileUpload.js`, ilegible en dark mode) tenía dos causas juntas: una copia local de
+  `matchLevel`/`fieldStyle`/`fieldBadge` que ya usaba tokens bien, y la versión exportada —única
+  consumidora real del panel "Columnas del Tabulado" de Brutos/GS Pers/NR— con `#EAB308`/`#B45309`
+  cableados. Se borró la copia local (llamaba a las funciones exportadas con la firma que ya tenían)
+  y los dos hex pasaron a `var(--color-warning)`/`var(--color-warning-bg)`. Quedaban además 4
+  fallbacks tipo `var(--token, #hex)` en `helpPopover.js` y `rendVsAsiento.js` — muertos en la
+  práctica porque el token siempre está definido en `:root`, pero seguían siendo hex fuera de
+  `tokens.css` — se les sacó el fallback.
+  **Excepción deliberada, no pendiente:** el CSS de impresión de `imprimirVariaciones()`
+  (`variaciones.js`) sigue con hex cableado. Es un documento HTML separado
+  (`window.open('', '_blank')` + `document.write`), sin acceso a las custom properties del árbol
+  principal, y su paleta tiene que quedar fija en modo claro sin importar el tema del navegador — es
+  un entregable A4 en papel para el cliente, no una pantalla de la app. Convertirlo a `var(...)`
+  sería un no-op silencioso (el token no resolvería en ese documento) o, peor, requeriría inyectar
+  los valores calculados a mano — ninguna gana nada.
+- **`createResultsToolbar()`: hecho para 9 de 15 sitios.** Vive en `js/ui/tableTools.js` (mismo
+  módulo que `initShowMorePagination`/`initSearchCombobox`, con quienes siempre corre junto).
+  Migrados: `brutos.js` (2), `gsPers.js` (2), `nr.js` (2), `rendVsTabu.js` (1), `rendXEe.js` (1),
+  `acreditaciones.js` (1, el de la lista con filtro por tipo). **Los otros 6 quedaron afuera a
+  propósito**, porque no son el mismo molde: `acreditaciones.js:788` es un header sin exportar (sólo
+  texto + buscador); los 3 de `acumuladoresGanancias.js` son export-only, un widget de tres selects
+  bespoke sin exportar, y buscador-sin-export; los 2 de `variaciones.js` son export+PDF sin buscador
+  y dos selects de sentido de variación sin buscador ni exportar. Forzarlos a la forma de
+  `createResultsToolbar()` hubiera significado un parámetro por variante para cubrir un solo caso
+  cada uno — la abstracción que `CLAUDE.md` pide no sumar. Si alguno de esos 6 vuelve a divergir
+  entre sí (no de los otros 9), ahí sí amerita su propio helper.
+- **CSS de PDF compartido: no aplica todavía.** Hoy hay **una sola** función `imprimir*()` en toda la
+  app (`imprimirVariaciones`). El ítem del roadmap original asumía que había más de una para
+  compartir — no la hay. Se retoma cuando exista un segundo PDF (ver `specs/spec-control-netos.md`
+  y `specs/spec-gross-up.md`, los dos candidatos más próximos en v3).
 
-No depende de la Fase 1. Se puede arrancar en paralelo si hace falta.
+Falta, de lo que sí es Fase 2 real — grep final del 2026-08-12 sobre `css/*.css` y todo `js/`:
+- **`js/controls/variaciones.js:995`** (heatmap "Cómo se movieron los escalones"): `const fg = t > 0.62
+  ? '#fff' : 'inherit';`. Se revisó y se deja: no es un color de UI, es una decisión de contraste
+  contra un fondo calculado con `color-mix()` que se satura progresivamente — no hay token de
+  tokens.css pensado para "texto sobre una celda de heatmap", así que no hay a qué `var()` migrarlo
+  sin inventar un token para un solo caso.
+- **`css/components.css` queda sin auditar** — tiene hex fuera de `tokens.css`: fallbacks
+  `var(--token, #hex)` en `.banner`/`.toast--*`/`.badge--warning-hover` (líneas 12, 383, 685-688,
+  posiblemente muertos igual que los de `helpPopover.js`, a confirmar) y valores literales en clases
+  (`#009ABF`/`#B71C1C` en algunos `.btn--*`, `#fff` en `.ctrl-filter`/`.ctrl-row--active`/badges). A
+  diferencia de lo ya cerrado, tocar esto es CSS que renderiza en toda la app, no un `style=""`
+  puntual en un módulo — más blast radius y ninguna forma de verificarlo visualmente desde este
+  entorno. **No se tocó a propósito.** Cuando se retome, hacerlo con la app abierta en un navegador
+  real (luz y oscuro), no a ciegas.
+- No se pudo verificar visualmente en dark mode lo que sí se cerró hoy. Pedirle a Willy que abra el
+  panel "Columnas del Tabulado" de Brutos en dark mode antes de dar el ítem por cerrado del todo.
 
 ---
 

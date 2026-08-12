@@ -452,9 +452,9 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
     return codes.map(c => {
       const name = lookupMap[c];
       if (name) {
-        return `<span style="display:inline-block;padding:2px 6px;margin:2px 4px 0 0;background:var(--color-match-exact-bg,#e6f7ec);border-radius:var(--radius-sm);font-family:monospace;font-size:var(--text-sm);"><strong>${esc(c)}</strong> · ${esc(name)}</span>`;
+        return `<span style="display:inline-block;padding:2px 6px;margin:2px 4px 0 0;background:var(--color-match-exact-bg);border-radius:var(--radius-sm);font-family:monospace;font-size:var(--text-sm);"><strong>${esc(c)}</strong> · ${esc(name)}</span>`;
       }
-      return `<span style="display:inline-block;padding:2px 6px;margin:2px 4px 0 0;background:var(--color-warning-bg,#fff4e0);border-radius:var(--radius-sm);font-family:monospace;font-size:var(--text-sm);"><strong>${esc(c)}</strong> · <em>no encontrado en CONTA</em></span>`;
+      return `<span style="display:inline-block;padding:2px 6px;margin:2px 4px 0 0;background:var(--color-warning-bg);border-radius:var(--radius-sm);font-family:monospace;font-size:var(--text-sm);"><strong>${esc(c)}</strong> · <em>no encontrado en CONTA</em></span>`;
     }).join('');
   };
 

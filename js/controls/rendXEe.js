@@ -10,7 +10,7 @@
 import { DEFAULT_CONCEPT_CONFIG } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -344,13 +344,7 @@ function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
   ).join('');
 
   // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  toolbar.appendChild(exportEl);
-  container.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(container);
 
   const tableWrap = document.createElement('div');
   tableWrap.innerHTML = `

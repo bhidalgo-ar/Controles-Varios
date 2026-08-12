@@ -17,7 +17,7 @@
 // Ver D-020 en DECISIONS.md.
 
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
+import { initShowMorePagination, initSearchCombobox, createResultsToolbar } from '../ui/tableTools.js';
 import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
@@ -554,12 +554,6 @@ export function renderAcreditacionesReporteResults(results, container) {
     const typesPresent = [...new Map(listas.map(l => [l.code, l])).values()]
       .sort((a, b) => a.order - b.order);
 
-    const toolbar = document.createElement('div');
-    toolbar.className = 'results-toolbar';
-
-    const leftGroup = document.createElement('div');
-    leftGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:flex-end;';
-
     const filterGroup = document.createElement('div');
     filterGroup.className = 'form-group';
     filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
@@ -571,14 +565,7 @@ export function renderAcreditacionesReporteResults(results, container) {
       </select>
     `;
 
-    const searchEl = document.createElement('div');
-    leftGroup.appendChild(filterGroup);
-    leftGroup.appendChild(searchEl);
-
-    const exportEl = document.createElement('div');
-    toolbar.appendChild(leftGroup);
-    toolbar.appendChild(exportEl);
-    container.appendChild(toolbar);
+    const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
 
     if (listas.length === 0) {
       const p = document.createElement('p');

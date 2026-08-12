@@ -750,42 +750,23 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
     .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Seleccioná —'}</option>`)
     .join('');
 
-  // matchLevel: calidad del match pre-completado para un campo.
-  //   'exact'  — auto-detectado en este archivo (nombre de columna idéntico encontrado)
-  //   'saved'  — viene de sesión anterior (perfil guardado, no auto-detectado)
-  //   'warn'   — había un mapping anterior pero el campo quedó vacío
-  //   'none'   — sin mapping previo
-  const matchLevel = (val) => {
-    if (autoDetected && val)              return 'exact';
-    if (!autoDetected && savedMapping && val) return 'saved';
-    if (savedMapping && !val)             return 'warn';
-    return 'none';
-  };
-
-  const fieldStyle = (level) => {
-    if (level === 'exact') return 'border-color:var(--color-match-exact);background:var(--color-match-exact-bg);';
-    if (level === 'saved') return 'border-color:var(--color-match-saved);background:var(--color-match-saved-bg);';
-    if (level === 'warn')  return 'border-color:var(--color-warning);background:var(--color-warning-bg);';
-    return '';
-  };
-
-  const fieldBadge = (level) => {
-    if (level === 'exact') return ' <span style="color:var(--color-match-exact);font-size:0.75em;font-weight:600;">✓ auto</span>';
-    if (level === 'saved') return ' <span style="color:var(--color-match-saved);font-size:0.75em;">↺ sesión anterior</span>';
-    if (level === 'warn')  return ' <span style="color:var(--color-warning);font-size:0.8em;">⚠ sin asignar</span>';
-    return '';
-  };
+  // Calidad del match pre-completado para un campo: usa las mismas
+  // `matchLevel`/`matchSelectStyle`/`matchBadge` exportadas más abajo en este
+  // módulo (antes eran una copia local que ya había divergido de la exportada
+  // en los dos hex de "warn" — ver auditoría de escalabilidad, hallazgo #3).
+  const hasSavedMapping = !!savedMapping;
+  const fieldLevel = (val) => matchLevel(val, { autoDetected, hasSavedMapping });
 
   // Campos estándar en grid horizontal
   const stdFieldsHtml = fields.length === 0 ? '' : `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);">
       ${fields.map(f => {
         const val   = savedMapping?.[f.key] || '';
-        const level = matchLevel(val);
-        const style = fieldStyle(level);
+        const level = fieldLevel(val);
+        const style = matchSelectStyle(level);
         return `
           <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label ${f.required ? 'form-label--required' : ''}">${f.label}${fieldBadge(level)}</label>
+            <label class="form-label ${f.required ? 'form-label--required' : ''}">${f.label}${matchBadge(level)}</label>
             <select class="form-select" name="${f.key}"${style ? ` style="${style}"` : ''}>
               ${opts(val)}
             </select>
@@ -799,9 +780,9 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   const valNAC = savedMapping?.nombreApellidoColumn || '';
   const valAp  = savedMapping?.apellidoColumn || '';
   const valNm  = savedMapping?.nombreColumn || '';
-  const lvlNAC = matchLevel(valNAC);
-  const lvlAp  = matchLevel(valAp);
-  const lvlNm  = matchLevel(valNm);
+  const lvlNAC = fieldLevel(valNAC);
+  const lvlAp  = fieldLevel(valAp);
+  const lvlNm  = fieldLevel(valNm);
 
   const nombreHtml = conNombre ? `
     <div class="form-group" style="margin-top:var(--sp-2);">
@@ -828,8 +809,8 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
 
       <!-- Modo: una sola columna -->
       <div id="js-nombre-junto" style="display:${savedNombreMode === 'junto' ? 'block' : 'none'};">
-        <label class="form-label">Columna con el nombre completo${fieldBadge(lvlNAC)}</label>
-        <select class="form-select" name="nombreApellidoColumn" style="max-width:360px;${fieldStyle(lvlNAC)}">
+        <label class="form-label">Columna con el nombre completo${matchBadge(lvlNAC)}</label>
+        <select class="form-select" name="nombreApellidoColumn" style="max-width:360px;${matchSelectStyle(lvlNAC)}">
           ${opts(valNAC)}
         </select>
       </div>
@@ -837,14 +818,14 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
       <!-- Modo: columnas separadas -->
       <div id="js-nombre-separado" style="display:${savedNombreMode === 'separado' ? 'block' : 'none'};">
         <div class="form-group">
-          <label class="form-label">Columna de Apellido${fieldBadge(lvlAp)}</label>
-          <select class="form-select" name="apellidoColumn" style="max-width:360px;${fieldStyle(lvlAp)}">
+          <label class="form-label">Columna de Apellido${matchBadge(lvlAp)}</label>
+          <select class="form-select" name="apellidoColumn" style="max-width:360px;${matchSelectStyle(lvlAp)}">
             ${opts(valAp)}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Columna de Nombre${fieldBadge(lvlNm)}</label>
-          <select class="form-select" name="nombreColumn" style="max-width:360px;${fieldStyle(lvlNm)}">
+          <label class="form-label">Columna de Nombre${matchBadge(lvlNm)}</label>
+          <select class="form-select" name="nombreColumn" style="max-width:360px;${matchSelectStyle(lvlNm)}">
             ${opts(valNm)}
           </select>
         </div>
@@ -1001,14 +982,14 @@ export function matchLevel(val, { autoDetected, hasSavedMapping }) {
 export function matchSelectStyle(level) {
   if (level === 'exact') return 'border-color:var(--color-match-exact);background:var(--color-match-exact-bg);';
   if (level === 'saved') return 'border-color:var(--color-match-saved);background:var(--color-match-saved-bg);';
-  if (level === 'warn')  return 'border-color:#EAB308;background:rgba(234,179,8,0.08);';
+  if (level === 'warn')  return 'border-color:var(--color-warning);background:var(--color-warning-bg);';
   return '';
 }
 
 export function matchBadge(level) {
   if (level === 'exact') return ' <span style="color:var(--color-match-exact);font-size:0.75em;font-weight:600;">✓ auto</span>';
   if (level === 'saved') return ' <span style="color:var(--color-match-saved);font-size:0.75em;">↺ sesión anterior</span>';
-  if (level === 'warn')  return ' <span style="color:#B45309;font-size:0.8em;">⚠ sin asignar</span>';
+  if (level === 'warn')  return ' <span style="color:var(--color-warning);font-size:0.8em;">⚠ sin asignar</span>';
   return '';
 }
 
