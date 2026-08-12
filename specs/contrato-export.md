@@ -1,8 +1,8 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** plan aprobado en su mecanismo central (`NO_LIQUIDADO` / omisión declarada, decidido por
-> Willy el 2026-08-12), **pendiente de una respuesta suya** antes del Paso 4 (ver "Lo que falta
-> decidir"). Los Pasos 0-3 se pueden arrancar sin esa respuesta.
+> **Estado:** plan aprobado, **las 2 preguntas ya están contestadas** (Willy, 2026-08-12) — ver
+> "Lo que falta decidir" para el registro. En ejecución: Pasos 0-3 en curso; Pasos 4-6 quedan
+> desbloqueados por la respuesta a la pregunta 1, pero no arrancaron todavía en esta sesión.
 >
 > **Origen:** auditoría del 2026-08-12 pedida por Willy — 8 buckets cubriendo los 15 controles y los
 > 10 tipos de archivo, **214 campos de mapeo relevados**, cada hallazgo verificado adversarialmente
@@ -169,25 +169,22 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 
 ---
 
-## Lo que falta decidir (Willy)
+## Decisiones (Willy, 2026-08-12)
 
-**1. ¿Qué espera el destino cuando una columna no está: que desaparezca, o que venga vacía?**
+**1. Cuando una columna no está: sale vacía, nunca desaparece.** Respuesta: **"que salga vacía"**.
+`layout: 'fijo'` es la política para **todos** los contratos, sin excepción — el encabezado sale
+siempre y la celda va en blanco. Desbloquea el Paso 4a/4b.
 
-Hoy una columna sin mapear **desaparece** del `.xlsx` (salen 10 columnas en vez de 11). Con
-`layout: 'fijo'` el encabezado sale siempre y la celda va vacía. **Cuál de las dos espera el destino no
-está documentado en ningún lado del repo.**
-
-Importa mucho: si el que recibe el archivo lo importa leyendo **por posición**, el comportamiento
-actual está corrompiendo archivos hoy. Si lee por encabezado, da igual. Esto bloquea el Paso 4 y no lo
-puedo decidir solo.
-
-**2. ¿Hay algún cliente que hoy corra sin alguna de estas columnas?** Antes de mergear el Paso 2 hay que
-verificarlo cliente por cliente, no después. El riesgo está en las claves compartidas del Tabulado
-(`apellidoNombreColumn`, `puestoColumn`), que consumen 5 controles.
+**2. `apellidoNombreColumn` / `puestoColumn` — "no lo sé, dejalo como está".** No se sube su
+necessity por encima de lo que ya tienen hoy (`OPCIONAL`, `required: false` en
+`FIELD_DEFS.tab_control`). El Paso 2 **no** las gatea, en ningún contrato: donde el `from` de una
+columna de export incluya alguna de estas dos claves, la columna queda `NECESSITY.OPCIONAL` aunque
+el resto del análisis sugiera `OBLIGATORIA`. Si en el futuro se confirma que ningún cliente corre sin
+ellas, se sube la necessity ahí — no antes.
 
 **3. `cat_empleados.idCenColumn` está en `CAT_REQUIRED_KEYS` y `required: true` pero ningún control lo
-lee.** Puede ser un resto de un control que no se construyó. Conviene confirmarlo antes de sacarlo,
-porque sacarlo cambia cuándo la auto-detección devuelve `null`.
+lee.** Sigue sin confirmar. No se toca en esta ronda — sacarlo cambia cuándo la auto-detección
+devuelve `null`, y eso hay que decidirlo con Willy mirando el efecto concreto, no de paso.
 
 ---
 

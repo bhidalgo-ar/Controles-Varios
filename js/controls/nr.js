@@ -23,7 +23,9 @@ import {
 // tabKey = clave en tabExtraConfig | nrKey = clave en mapping del archivo NR
 // group: 'indem' = Indemnizatorios (verde) | 'otros' = Otros NR (naranja)
 
-const NR_CONCEPTS = [
+// Exportado para que js/exports/contracts.js derive la lista de columnas del
+// Reporte NR de ACÁ, en vez de mantener una segunda copia de los 18 conceptos.
+export const NR_CONCEPTS = [
   { key: 'reinHomeOfice',  label: 'REIN_HOME_OFICE',  tabKey: 'tabReinHomeOficeColumn',  nrKey: 'reinHomeOficeColumn',  group: 'otros' },
   { key: 'indemPreaviso',  label: 'INDEM_PREAVISO',   tabKey: 'tabIndemPreavisoColumn',  nrKey: 'indemPreavisoColumn',  group: 'indem' },
   { key: 'sacPreaviso',    label: 'SAC_PREAVISO',     tabKey: 'tabSacPreavisoColumn',    nrKey: 'sacPreavisoColumn',    group: 'indem' },
