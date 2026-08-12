@@ -20,7 +20,8 @@ import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid } from '../ui/resultBlocks.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { periodToLabel } from '../utils/dates.js';
+import { formatAmount as fmtNum } from '../utils/currency.js';
+import { periodToLabel, periodSuffix } from '../utils/dates.js';
 
 export const DEFAULT_ACREDITACIONES_CONFIG = {
   // Cuando el archivo trae más de una Empresa, ¿las listas se parten por empresa?
@@ -1102,10 +1103,6 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-const fmtNum = v => v === null || v === undefined
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 /** 'YYYY-MM-DD' → 'DD/MM/AAAA' */
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -1163,14 +1160,4 @@ function esc(str) {
 // o caracteres especiales si el texto crudo de Axton los trae.
 function cssEsc(str) {
   return window.CSS?.escape ? CSS.escape(str) : String(str).replace(/["\\]/g, '\\$&');
-}
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
 }

@@ -514,3 +514,18 @@
 3. **Queda abierto** si NR y GS Pers deben tener fallback propio y con qué códigos. Se decide con Guillermo contra un Tabulado real, no por simetría con Brutos. Anotado en `ROADMAP.md`.
 **Alternativas descartadas:** Poner el fallback arriba del catálogo "porque es más específico" (invierte la regla del proyecto — lo que el analista confirmó manda); sacarle el `fallbackCode` a Brutos ahora para que los tres controles queden iguales (hoy tapa tabulados que traen la columna sólo con el código; sacarlo sin un reemplazo configurado los rompe); copiar `fallbackCode` a NR y GS Pers eligiendo códigos por analogía (inventar un código de concepto de un cliente es exactamente el default silencioso que el proyecto prohíbe).
 **Motivo:** Precedencia confirmada por Guillermo el 2026-08-11. Se anota porque la asimetría entre los tres controles se lee como bug y la corrección "obvia" (emparejarlos) es la equivocada.
+
+**Actualización 2026-08-12:** el punto 3 sigue abierto por decisión de Guillermo — no se agrega fallback a NR ni a GS Pers mientras no haya un Tabulado real contra el cual confirmar los códigos. Hasta entonces los dos controles piden la columna explícitamente cuando no está mapeada, que es el comportamiento correcto: un dato que no se puede resolver se informa, no se completa con 0,00. Es el único ítem de la Fase 0 que queda abierto a propósito.
+
+---
+
+## D-040 — Qué selecciona "Seleccionar todos" lo declara el registry (`group.primary`), no se infiere del `mode`
+
+**Fecha:** 2026-08-12
+**Contexto:** El botón "Seleccionar todos" del Paso 1 del wizard filtraba por `u.ctrl.group.mode === 'Controlar'` (`js/ui/controlsWizard.js`). `group.mode` es el texto de la pill que separa variantes del mismo control en la UI, y el registry ya tiene cinco valores distintos: `'Controlar'`, `'Generar Reporte'`, `'Sueldos'` y `'Conceptos'`. Resultado: en POF, cuyos dos controles son `variaciones_sueldos` y `variaciones_conceptos` (modes `'Sueldos'`/`'Conceptos'`), el botón **no seleccionaba nada**; en los clientes de Axton entraba Acumuladores Ganancias (sin grupo) pero quedaba afuera Acreditaciones. La intención ("cuál de las variantes es *el* control") estaba codificada en un string pensado para mostrarse en pantalla.
+**Decisión:**
+1. El registry declara `group.primary: true` en la variante que el botón incluye. Son `brutos`, `gs_pers` y `nr` en modo `'Controlar'`, las dos de Variaciones (el grupo tiene **dos** primary, y está bien: son dos reportes distintos, no una variante del otro) y Acreditaciones, que es la única variante de su grupo.
+2. El filtro pasa a ser `!ctrl.group || ctrl.group.primary`. Un control sin grupo no tiene variantes y entra siempre.
+3. Las variantes "Generar Reporte" de Brutos, GS Pers y NR quedan **afuera**: son el entregable, y el control gemelo que las valida ya entra. Acreditaciones sí entra aunque su `mode` sea `'Generar Reporte'`, porque es el control, no una segunda forma de uno que ya está seleccionado.
+**Alternativas descartadas:** Ampliar el filtro a todos los `mode` que hoy son controles reales (arregla los dos clientes rotos pero deja la intención atada a strings de UI: la pill se renombra y el botón cambia de comportamiento sin que nadie lo toque); seleccionar todo lo aplicable sin distinguir variantes (un click generaría entregables además de correr controles).
+**Motivo:** Decisión de Guillermo el 2026-08-12, sobre el bug abierto #2 de la auditoría de escalabilidad. Cubierto por `tests/controlsRegistryScope.test.js`, que falla si alguien agrega un grupo nuevo sin declarar cuál es su variante principal.

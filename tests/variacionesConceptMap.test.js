@@ -10,6 +10,12 @@
 
 globalThis.document = { addEventListener: () => {} };
 
+import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
+globalThis.Dexie = Dexie;
+
+const { saveControlConfig, getControlConfig } = await import('./js/db.js');
+
 const {
   conceptosDeControles,
   estadoInicial,
@@ -93,6 +99,48 @@ assert('el guardado de "actual" no se pierde ni lo pisa "anterior"',
 assert('precargar cae al fallback por código si el guardado ya no está en los headers',
   precargar(['Legajo', '1000 - Sueldo mensual'], { codigo: '1000', label: 'x' }, { '1000': 'Columna Que Ya No Existe' })
     === '1000 - Sueldo mensual');
+
+// ── El mapeo confirmado sobrevive a salir y volver a entrar al wizard ────────
+// El `state` del wizard se arma de cero en cada entrada, así que guardarlo sólo
+// ahí no lo recordaba: el analista reconfirmaba concepto por concepto, en los
+// dos Tabulados, todos los meses. Ahora va a `controlConfigs` bajo el controlId
+// 'variaciones_concept_map' — la misma tabla que viaja en el seed (D-035).
+{
+  const CODE = 'TESTPOF';
+  const gruposPersist = conceptosDeControles(['variaciones_conceptos'],
+    { conceptos: [{ codigo: '1000', label: 'Test' }] });
+
+  const confirmado = {
+    anterior: { '1000': 'Sueldo Básico Viejo' },
+    actual:   { '1000': 'Sueldo Básico Nuevo' },
+  };
+  await saveControlConfig(CODE, 'variaciones_concept_map', { params: confirmado });
+
+  // Segunda entrada al wizard: `state` nuevo, precargado desde controlConfigs.
+  const recuperado = await getControlConfig(CODE, 'variaciones_concept_map');
+  assert('el mapeo de conceptos se persiste en controlConfigs',
+    recuperado?.params != null);
+
+  const estadoTrasVolver = estadoInicial({
+    grupos: gruposPersist,
+    headersAnterior: ['Legajo', 'Sueldo Básico Viejo'],
+    headersActual:   ['Legajo', 'Sueldo Básico Nuevo'],
+    guardado: recuperado?.params || null,
+  });
+  assert('al volver a entrar al wizard, "anterior" sigue precargado',
+    estadoTrasVolver.anterior['1000'] === 'Sueldo Básico Viejo');
+  assert('al volver a entrar al wizard, "actual" sigue precargado',
+    estadoTrasVolver.actual['1000'] === 'Sueldo Básico Nuevo');
+
+  // El guard de D-035 vale igual después del round-trip por IndexedDB: los dos
+  // lados van separados y ninguno pisa al otro.
+  assert('el round-trip por IndexedDB no aplana los dos lados en un solo dict',
+    recuperado.params.anterior['1000'] !== recuperado.params.actual['1000']);
+
+  // La config es por cliente: otro cliente no hereda el mapeo.
+  const deOtroCliente = await getControlConfig('OTROPOF', 'variaciones_concept_map');
+  assert('el mapeo no se filtra a otro cliente', !deOtroCliente);
+}
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

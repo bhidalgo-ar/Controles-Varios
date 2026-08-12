@@ -12,6 +12,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { formatAmount as fmt } from '../utils/currency.js';
+import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -54,10 +56,6 @@ function normId(v) {
   const s = String(v ?? '').trim().replace(/^0+/, '');
   return s || null;
 }
-
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const THRESHOLD = 0.01;
 const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
@@ -405,16 +403,6 @@ function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
 }
 
 // ── Excel export ──────────────────────────────────────────────────────────────
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
-}
 
 async function exportRendXEeToXlsx(results) {
   await loadExcelJS();

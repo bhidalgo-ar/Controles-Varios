@@ -27,6 +27,19 @@ export function redondear(num) {
   return Math.round(num * 100) / 100;
 }
 
+/**
+ * Diferencia entre dos importes, o `null` si a alguno de los dos le falta el dato.
+ *
+ * `null` no es `0`: un lado sin dato no se compara contra nada (ver CLAUDE.md).
+ * El guard es `Number.isFinite` y no `!= null` a propósito — con `!== null` un
+ * `undefined` (típico de un optional chaining sobre un match que no existió) se
+ * colaba y devolvía `NaN`, que después `Math.abs(NaN) > 0.01` reporta como "sin
+ * diferencia" y pinta el control en verde.
+ */
+export function diffOrNull(a, b) {
+  return (Number.isFinite(a) && Number.isFinite(b)) ? a - b : null;
+}
+
 /** Formatea un número como moneda argentina: 50000.75 → "50.000,75" */
 export function formatAmount(value, decimales = 2) {
   if (value === null || value === undefined || isNaN(value)) return '—';

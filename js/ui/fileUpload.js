@@ -220,7 +220,13 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       }
     }
 
-    renderMappingForm(container, {
+    // El formulario se vuelve a mostrar a sí mismo cuando el parseo falla. Antes
+    // la rama de error reimplementaba el handler un nivel más adentro, y la
+    // copia perdía dos cosas: `autoDetected` (después de un error los campos que
+    // decían "✓ auto" pasaban a "↺ sesión anterior", informando un perfil
+    // guardado que no existe) y `autoDetect` (al cancelar y volver a subir el
+    // mismo archivo había que mapear las columnas a mano).
+    const showMappingForm = () => renderMappingForm(container, {
       headers, preview, fileType, savedMapping, autoDetected,
       fileName: file.name,
       onConfirm: async (mapping) => {
@@ -239,30 +245,13 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
           );
 
         } catch (err) {
-          renderError(container, `Error al procesar: ${err.message}`,
-            () => renderMappingForm(container, {
-              headers, preview, fileType, savedMapping, fileName: file.name,
-              onConfirm: async (m) => {
-                renderLoadingProgress(container, 'parsing');
-                try {
-                  const result = parseFile(arrayBuffer, fileType, m);
-                  await saveFileProfile(clientCode, fileType, m);
-                  const data = { ...result, mapping: m, fileName: file.name, fileType, headers, arrayBuffer, clientCode };
-                  renderAlreadyLoaded(container, data,
-                    () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
-                    onComplete);
-                } catch (e2) {
-                  renderError(container, e2.message,
-                    () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete }));
-                }
-              },
-              onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete }),
-            })
-          );
+          renderError(container, `Error al procesar: ${err.message}`, showMappingForm);
         }
       },
       onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }),
     });
+
+    showMappingForm();
   });
 }
 

@@ -3,6 +3,8 @@ import { diffStats } from './semaforo.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { initShowMorePagination, initSearchCombobox } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
+import { formatAmount as fmt, diffOrNull } from '../utils/currency.js';
+import { periodSuffix } from '../utils/dates.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle, enhanceGrid, diffCellHtml,
   mvClass, mvArrow, fmtSigned,
@@ -82,16 +84,20 @@ function normCCCode(v) {
   return s || null;
 }
 
+// Sin acentos: el nombre de CC es el camino de matching cuando el cliente no
+// mapea el código, y "Administración" tiene que matchear contra "Administracion".
+// Igual que `normCCName` de rendVsAsiento.js, su gemelo.
 function normCCName(v) {
-  return String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ') || null;
+  return String(v ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    || null;
 }
 
-const fmt = v => v === null
-  ? '—'
-  : v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 const THRESHOLD = 0.01;
-const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
+const hasDiff   = d => Number.isFinite(d) && Math.abs(d) > THRESHOLD;
 
 // Construye mapa código numérico → clave de columna a partir de los headers del Tabulado.
 // Soporta formato "1003-SUELDO" (extrae "1003") o nombre numérico exacto "1003".
@@ -230,8 +236,6 @@ export function runRendVsTabu(rendRows, tabRows, mapping) {
              || (nameKey && tabByName.get(nameKey))
              || null;
 
-    const diff = (t, r) => (t !== null && r !== null) ? t - r : null;
-
     rows.push({
       ccCode, ccName,
       rPrecio, rEstimulo, rCargas, rProvMes, rProvCcss, rTotal,
@@ -241,12 +245,12 @@ export function runRendVsTabu(rendRows, tabRows, mapping) {
       tProvMes:  tab ? tab.provMes  : null,
       tProvCcss: tab ? tab.provCcss : null,
       tTotal:    tab ? tab.total    : null,
-      dPrecio:   diff(tab?.precio,   rPrecio),
-      dEstimulo: diff(tab?.estimulo, rEstimulo),
-      dCargas:   diff(tab?.cargas,   rCargas),
-      dProvMes:  diff(tab?.provMes,  rProvMes),
-      dProvCcss: diff(tab?.provCcss, rProvCcss),
-      dTotal:    diff(tab?.total,    rTotal),
+      dPrecio:   diffOrNull(tab?.precio, rPrecio),
+      dEstimulo: diffOrNull(tab?.estimulo, rEstimulo),
+      dCargas:   diffOrNull(tab?.cargas, rCargas),
+      dProvMes:  diffOrNull(tab?.provMes, rProvMes),
+      dProvCcss: diffOrNull(tab?.provCcss, rProvCcss),
+      dTotal:    diffOrNull(tab?.total, rTotal),
       sinTabData: tab === null,
     });
   }
@@ -486,16 +490,6 @@ function renderRendVsTabuDetalle(container, { rows, results }) {
 }
 
 // ── Excel export ──────────────────────────────────────────────────────────────
-
-function dateSuffix() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-function periodSuffix(period) {
-  if (!period) return dateSuffix();
-  const [year, month] = period.split('-');
-  return (!year || !month) ? dateSuffix() : String(month).padStart(2, '0') + year;
-}
 
 async function exportRendVsTabuToXlsx(results) {
   await loadExcelJS();
