@@ -4,7 +4,8 @@ import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js'
 import { showToast } from './toast.js';
 import { mergeContaFiles } from '../parsers/contaExcel.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
-import { blocksProgress, necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
+import { blocksProgress, necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
+import { columnValuesFromMatrix, columnHintHtml } from './columnHints.js';
 import {
   fieldsFor,
   fileTypeLabel,
@@ -162,7 +163,11 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
           const result = parseFor(fileType, arrayBuffer, mapping);
           await saveFileProfile(clientCode, fileType, mapping);
 
-          const data = { ...result, mapping, fileName: file.name, fileType, headers, arrayBuffer, clientCode };
+          // `preview` viaja junto con `headers` para que el panel de remapeo
+          // pueda mostrar la muestra de valores de cada columna sin volver a
+          // parsear el workbook. Vive en memoria y no se persiste (igual que
+          // `arrayBuffer`): son filas de un archivo con datos de empleados.
+          const data = { ...result, mapping, fileName: file.name, fileType, headers, preview, arrayBuffer, clientCode };
 
           renderAlreadyLoaded(
             container,
@@ -625,6 +630,36 @@ function omitHintHtml(omitido) {
 }
 
 /**
+ * Cablea la muestra de valores: cuando el analista cambia de columna, la muestra
+ * y el aviso se rehacen para la columna nueva. Sin esto quedan mostrando los
+ * valores de la anterior, que es peor que no mostrar nada.
+ *
+ * Mismo cableado para las TRES superficies donde se elige una columna: el
+ * formulario de mapeo, el panel de remapeo y el panel "Columnas del Tabulado"
+ * del Paso 2 (que lo importa de acá, igual que ya importa
+ * `matchLevel`/`matchBadge`). Cada una pasa su propio `hintFor`, porque los
+ * valores salen de distinto lado — la vista previa del archivo que se está
+ * subiendo, o las filas ya parseadas del Tabulado.
+ *
+ * El contrato del markup es el mismo en las tres: un contenedor
+ * `data-fu-field-group="<clave>"` con un `<select>` y un `data-fu-col-hint`
+ * adentro. Un grupo al que le falte cualquiera de los dos se saltea en vez de
+ * explotar: el campo sigue funcionando, sólo se queda sin muestra.
+ *
+ * @param {HTMLElement} scope
+ * @param {(key: string, col: string) => string} hintFor
+ */
+export function wireColumnHints(scope, hintFor) {
+  scope.querySelectorAll('[data-fu-field-group]').forEach(group => {
+    const key  = group.dataset.fuFieldGroup;
+    const sel  = group.querySelector('select');
+    const hint = group.querySelector('[data-fu-col-hint]');
+    if (!sel || !hint) return;
+    sel.addEventListener('change', () => { hint.innerHTML = hintFor(key, sel.value); });
+  });
+}
+
+/**
  * Cablea los toggles ⊘ de un formulario ya renderizado. El estado vive en el
  * Set `omitted` (clave del campo declarada ausente) y el DOM se actualiza en
  * el lugar, en vez de re-renderizar el formulario entero como hace el panel
@@ -654,12 +689,17 @@ function wireOmitToggles(scope, omitted) {
       show('data-fu-omit-badge', on);
       show('data-fu-match-badge', !on);
       show('data-fu-omit-hint', on);
+      // Al declarar la columna ausente, el select queda vacío: la muestra de
+      // valores de la columna que estaba elegida antes tiene que irse con ella,
+      // o queda afirmando algo sobre una columna que ya no está seleccionada.
+      const hint = group.querySelector('[data-fu-col-hint]');
+      if (hint) hint.innerHTML = '';
     });
   });
 }
 
 function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
-  const { fileName, parseMetadata, fileType, mapping, headers, arrayBuffer, clientCode: dataClientCode } = existingData;
+  const { fileName, parseMetadata, fileType, mapping, headers, preview, arrayBuffer, clientCode: dataClientCode } = existingData;
   const warns = parseMetadata?.warnings?.length
     ? `<span class="badge badge--warning" style="margin-left:var(--sp-2);">${parseMetadata.warnings.length} aviso(s)</span>` : '';
 
@@ -683,6 +723,16 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   const omitted = canRemap
     ? new Set(fields.filter(f => esOmitido(mapping?.[f.key])).map(f => f.key))
     : new Set();
+
+  // Igual que en el formulario de mapeo: la muestra sale de la vista previa que
+  // viajó con los datos del archivo. Si no la hay (datos de otra sesión sin
+  // `preview`), `columnValuesFromMatrix` devuelve vacío y no se dibuja nada — no
+  // se inventa una muestra ni se vuelve a parsear el workbook en cada render.
+  const hintFor = (key, col) => columnHintHtml(
+    columnValuesFromMatrix(preview, headers, col),
+    typeOfKey(fileType, key),
+    { esc: escHtml },
+  );
 
   const remapHtml = canRemap ? `
     <details style="margin-top:var(--sp-1);">
@@ -712,13 +762,14 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
                   ${opts(val)}
                 </select>`;
             return `
-              <div class="form-group" style="margin-bottom:0;"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
+              <div class="form-group" style="margin-bottom:0;" data-fu-field-group="${escHtml(f.key)}"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
                 <label class="form-label ${esBloqueante ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${puedeOmitir
                   ? `<span data-fu-match-badge${omitido ? ' style="display:none;"' : ''}>${matchBadge(level)}</span>${omitBadgeHtml(omitido)}`
                   : matchBadge(level)}</label>
                 ${puedeOmitir
                   ? `<div style="display:flex;gap:var(--sp-2);align-items:center;">${selectHtml}${omitButtonHtml(f.key, omitido)}</div>${omitHintHtml(omitido)}`
                   : selectHtml}
+                <div data-fu-col-hint>${omitido ? '' : hintFor(f.key, val)}</div>
               </div>
             `;
           }).join('')}
@@ -743,6 +794,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
 
   if (canRemap) {
     wireOmitToggles(container, omitted);
+    wireColumnHints(container, hintFor);
     container.querySelector('#js-remap-apply')?.addEventListener('click', async () => {
       const btn = container.querySelector('#js-remap-apply');
       btn.disabled = true;
@@ -825,6 +877,16 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
     .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Seleccioná —'}</option>`)
     .join('');
 
+  // Muestra de valores reales de la columna elegida + aviso si su contenido no
+  // se parece a lo que el contrato espera ahí. El archivo todavía no se parseó,
+  // así que los valores salen de la vista previa (filas de array alineadas con
+  // `headers`), no de `parsedRows`.
+  const hintFor = (key, col) => columnHintHtml(
+    columnValuesFromMatrix(preview, headers, col),
+    typeOfKey(fileType, key),
+    { esc: escHtml },
+  );
+
   // Calidad del match pre-completado para un campo: usa las mismas
   // `matchLevel`/`matchSelectStyle`/`matchBadge` exportadas más abajo en este
   // módulo (antes eran una copia local que ya había divergido de la exportada
@@ -849,7 +911,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
               ${opts(val)}
             </select>`;
         return `
-          <div class="form-group" style="margin-bottom:0;"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
+          <div class="form-group" style="margin-bottom:0;" data-fu-field-group="${escHtml(f.key)}"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
             <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">${f.label}${puedeOmitir
               ? `<span data-fu-match-badge${omitido ? ' style="display:none;"' : ''}>${matchBadge(level)}</span>${omitBadgeHtml(omitido)}`
               : matchBadge(level)}</label>
@@ -857,6 +919,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
               ? `<div style="display:flex;gap:var(--sp-2);align-items:center;">${selectHtml}${omitButtonHtml(f.key, omitido)}</div>${omitHintHtml(omitido)}`
               : selectHtml}
             ${candidata ? `<div class="text-muted" style="font-size:var(--text-xs);margin-top:2px;">🤖 Este archivo trae una columna candidata («${escHtml(candidata)}») — destildá el ⊘ si el cliente empezó a liquidarla.</div>` : ''}
+            <div data-fu-col-hint>${omitido ? '' : hintFor(f.key, val)}</div>
           </div>
         `;
       }).join('')}
@@ -942,6 +1005,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   `;
 
   wireOmitToggles(container.querySelector('#js-mapping-form'), omitted);
+  wireColumnHints(container.querySelector('#js-mapping-form'), hintFor);
 
   // Toggle para mostrar/ocultar las secciones de nombre
   if (conNombre) {

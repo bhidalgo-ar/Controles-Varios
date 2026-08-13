@@ -1,6 +1,9 @@
 # Spec — Muestra de valores y aviso de tipo en la columna elegida
 
-> **Estado:** propuesta, esperando confirmación de Willy.
+> **Estado: implementada** (2026-08-13). Willy confirmó la spec y las tres decisiones de pantalla; el
+> detalle de lo que entró y su verificación está en **D-053** (`DECISIONS.md`). Lo que quedó afuera y
+> por qué está al final, en "Cómo salió".
+>
 > **Origen:** el mis-mapeo, único ítem abierto del relevamiento de escalabilidad
 > (`specs/auditoria-escalabilidad-2026-08.md`, "Lo único abierto"; ítem 2 de "Estado al 2026-08-13"
 > en `ROADMAP.md`). Son las opciones **1 y 2** de las tres que se le presentaron a Willy el
@@ -180,3 +183,33 @@ el camino. Si algo de eso parece necesario, lo anoto en `ROADMAP.md` y lo digo �
 - **La muestra no prueba que el mapeo esté bien**, igual que la omisión declarada es una firma y no una
   prueba (D-041). Hace visible lo que hoy es invisible, que es todo lo que se puede pedir sin un
   segundo archivo contra el cual cruzar.
+
+---
+
+## Cómo salió (2026-08-13)
+
+**Lo que entró, contra la condición de salida:** las cinco condiciones de la sección 4 se cumplen.
+`js/ui/columnHints.js` (módulo nuevo, hoja del árbol), `typeOfKey()` en `contracts.js`, las 3 columnas de
+fecha declarando `'date'`, las dos pantallas de carga y el panel del Paso 2 con la muestra siempre
+visible, y el bloque de avisos en la pantalla de resultados. 55 asserts nuevos en la cadena, 4 e2e en
+Chromium real, y el `.xlsx` comparado celda por celda contra `main` — idéntico. Detalle en D-053.
+
+**Dos desvíos del plan, los dos hacia menos código:**
+
+1. **El cableado quedó en un solo lugar, no en dos.** La spec preveía que cada pantalla cableara su
+   propia actualización al cambiar de columna. Al escribirlo quedó claro que era el mismo cableado tres
+   veces, así que `wireColumnHints()` vive en `fileUpload.js` (que ya exporta
+   `matchLevel`/`matchBadge` al wizard por el mismo motivo) y el panel del Paso 2 la importa. El contrato
+   de markup es uno: `data-fu-field-group="<clave>"` con un `<select>` y un `data-fu-col-hint` adentro.
+2. **`renderTabExtraConfig` se exporta**, sólo para que el fixture del e2e pueda montar el panel del
+   Paso 2 en un navegador real. Nada más la usa desde afuera, y está dicho en su comentario.
+
+**Lo que la implementación descubrió y no estaba en la spec:** la pantalla de resultados puede repetir el
+aviso de las columnas del **archivo** (el mapeo y las filas viven en `controlRunFiles`), pero **no** el de
+las columnas que se eligen en el Paso 2: `tabExtraConfig` viaja al control y no al registro del archivo,
+así que la corrida no guarda con qué columnas del Tabulado corrió. Se dejó así —no se tocó qué se
+persiste, que era un guardrail— y quedó anotado en `ROADMAP.md` con el efecto concreto para el analista.
+
+**Una línea que no se sumó por estar fuera del alcance declarado:** el skill `nuevo-control` podría decir
+que un control que declara `type` en su contrato se gana la muestra y el aviso sin escribir nada. Es
+cierto y conviene que esté, pero el skill no estaba en los guardrails de esta spec.

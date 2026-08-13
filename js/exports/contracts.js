@@ -82,8 +82,14 @@ const OTROS_BG  = 'FFFFEFE0';
  *                                 (D-039) — [] si la columna es derivada
  *                                 (se calcula, no sale de ningún archivo)
  * @property {string}   necessity  uno de NECESSITY.*
- * @property {'txt'|'num'} type    cómo se formatea (alineación + `numFmt` en
- *                                 el xlsx). Obligatorio en toda columna — un
+ * @property {'txt'|'num'|'date'} type  cómo se formatea (alineación + `numFmt`
+ *                                 en el xlsx) y, desde `typeOfKey()`, qué se
+ *                                 espera en la columna de origen. `'date'` se
+ *                                 formatea igual que `'txt'` (sólo `'num'` tiene
+ *                                 caso especial en `contractSheet.js`): existe
+ *                                 para que la pantalla pueda avisar "acá va una
+ *                                 fecha" sin que ningún módulo tenga su propia
+ *                                 lista. Obligatorio en toda columna — un
  *                                 contrato que se olvida declararlo es
  *                                 exactamente el default silencioso ("sale
  *                                 mal alineado y nada avisa") que este diseño
@@ -179,9 +185,9 @@ const brutosReporte = {
     { label: 'ID_EMPLEADO',    key: 'legajo',      from: ['empleadoColumn'], fromFile: 'tab_control',                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
     { label: 'NOMBRE',         key: 'nombre',      from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
     { label: 'APELLIDO_1',     key: 'apellido1',   from: ['tabApellido1Column'], fromFile: 'tab_control',                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
-    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'date', width: 14 },
+    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'date', width: 14 },
+    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'date', width: 14 },
     { label: 'SAL_BASE',       key: 'salBase',     from: ['tabSalBaseColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
     { label: 'A_CTA_FUT_AUMEN', key: 'aCuFutAumen', from: ['tabACuFutAumenColumn'], fromFile: 'tab_control',                necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 20 },
     { label: 'N_PUESTO',       key: 'puesto',      from: ['puestoColumn'], fromFile: 'tab_control',                         necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
@@ -220,8 +226,8 @@ const gsPersReporte = {
     { label: 'ID_EMPLEADO',       key: 'legajo',    from: ['empleadoColumn'], fromFile: 'tab_control',                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
     { label: 'NOMBRE',            key: 'nombre',    from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
     { label: 'APELLIDO_1',        key: 'apellido1', from: ['tabApellido1Column'], fromFile: 'tab_control',                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
-    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'date', width: 14 },
+    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'date', width: 14 },
     { label: 'ID_CENTRO_COSTO',   key: 'idCC',      from: ['idCCColumn'], fromFile: 'tab_control',                           necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 16 },
     { label: 'GTOS_PERSONALES',   key: 'gtos',      from: ['tabGtosPersonalesColumn'], fromFile: 'tab_control',              necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
     { label: 'DTO_COCHERA',       key: 'dto',       from: ['tabDtoCocheraColumn'], fromFile: 'tab_control',                  necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
@@ -276,9 +282,9 @@ const nrReporte = {
     { label: 'ID_EMPLEADO',     key: 'legajo',          width: 12, from: ['empleadoColumn'], fromFile: 'tab_control',  necessity: NECESSITY.CLAVE,    type: 'txt' },
     { label: 'NOMBRE',          key: 'nombre',          width: 22, from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
     { label: 'APELLIDO_1',      key: 'apellido1',       width: 22, from: ['tabApellido1Column'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_ALTA',      key: 'fecAlta',         width: 14, from: ['tabFecAltaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_BAJA',      key: 'fecBaja',         width: 14, from: ['tabFecBajaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FEC_PAGO',        key: 'fecPago',         width: 14, from: ['tabFecPagoColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_ALTA',      key: 'fecAlta',         width: 14, from: ['tabFecAltaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'date' },
+    { label: 'FECHA_BAJA',      key: 'fecBaja',         width: 14, from: ['tabFecBajaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'date' },
+    { label: 'FEC_PAGO',        key: 'fecPago',         width: 14, from: ['tabFecPagoColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'date' },
     { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    width: 16, from: ['tabIdCentroTrabColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
     { label: 'ID_CATEGORIA',    key: 'idCategoria',     width: 16, from: ['tabIdCategoriaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
     ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.tabKey, 'tab_control'), width: 16, group: c.group })),
@@ -670,6 +676,38 @@ export function fieldNecessityMap() {
  */
 export function necessityOfKey(fileType, key) {
   return fieldNecessityMap().get(scopedKey(fileType, key))?.necessity ?? null;
+}
+
+/**
+ * Qué **tipo de dato** espera la columna que consume esta clave de mapeo, o
+ * `null` si ninguna columna de ningún contrato la usa.
+ *
+ * Hermana de `necessityOfKey()` y por el mismo motivo: la respuesta se deriva de
+ * los contratos, no se escribe a mano en la pantalla que la necesita. La usa la
+ * muestra/aviso de columna (`js/ui/columnHints.js`) para decir "acá va una
+ * fecha" sin que ninguna pantalla tenga su propia lista de qué es qué.
+ *
+ * **Ojo con qué significa `type`:** describe cómo se escribe el valor en el
+ * archivo final, no qué tiene que traer la columna de origen — por eso las
+ * columnas de fecha estaban declaradas `'txt'` (pasan por `fmtDate` y salen como
+ * texto). Se alinearon a `'date'` las 3 que son fecha de verdad
+ * (FECHA_ALTA/FECHA_BAJA/FEC_PAGO): `contractSheet.js` sólo tiene caso especial
+ * para `'num'`, así que `'date'` cae en la misma rama que `'txt'` y **no cambia
+ * ninguna celda de ningún `.xlsx`** (verificado con `tests/contractSheet.test.js`
+ * y la comparación de workbook contra main).
+ *
+ * Con la misma clave en dos contratos gana el primer tipo declarado; si algún día
+ * dos contratos declaran tipos distintos para la misma clave, eso es una
+ * contradicción a resolver en el contrato y no algo que esta función deba
+ * promediar — `tests/exportContracts.test.js` lo afirma.
+ */
+export function typeOfKey(fileType, key) {
+  for (const contract of Object.values(EXPORT_CONTRACTS)) {
+    for (const col of contract.columns) {
+      if (col.fromFile === fileType && col.from.includes(key)) return col.type ?? null;
+    }
+  }
+  return null;
 }
 
 /**

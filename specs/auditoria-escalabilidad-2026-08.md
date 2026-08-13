@@ -132,9 +132,17 @@ Dos precisiones que salieron de la verificación y conviene no perder:
 
 ## Lo único abierto: el mis-mapeo (una columna apuntando a la columna equivocada)
 
-**Estado: abierto, esperando que Willy elija el alcance.** Es lo que queda del relevamiento después de
-los PR #100-#129, y no salió del inventario de bugs: estaba declarado como "lo que este diseño NO
-resuelve" en `specs/contrato-export.md`, que es justamente donde una cosa se pierde de vista.
+**Estado: las opciones 1 y 2, hechas** (2026-08-13 — D-053, `specs/muestra-y-aviso-de-columna.md`): la
+muestra de valores reales debajo de cada columna elegida, el aviso de tipo en las dos pantallas de
+mapeo, y el aviso anotado en los resultados de la corrida. **Queda abierta la opción 3** (la prioridad
+de las palabras clave de la auto-detección, punto 1 de los mecanismos de acá abajo), que va aparte a
+propósito: mueve mapeos que hoy salen bien por casualidad, y con la muestra ya visible el analista puede
+ver qué cambió. Sigue abierto también el amplificador —`fmtDate`, punto 2— con su propia decisión
+pendiente, anotada en `ROADMAP.md`.
+
+Es lo que queda del relevamiento después de los PR #100-#129, y no salió del inventario de bugs: estaba
+declarado como "lo que este diseño NO resuelve" en `specs/contrato-export.md`, que es justamente donde
+una cosa se pierde de vista.
 
 **Qué pasa, en una línea:** todo el trabajo de obligatoriedad (contrato de export, gate del Paso 2,
 toggle ⊘, Pasos 0-8) hace que una columna **vacía** grite. Una columna **equivocada** sigue pasando en
@@ -177,3 +185,9 @@ hipotético:**
 
 **Recomendado: (a) primero, (b) después, (c) al final.** Las dos primeras no cambian ningún resultado
 de un control; sólo hacen visible lo que hoy es invisible.
+
+**Cómo terminó** (2026-08-13): Willy eligió ese orden. (a) y (b) entraron juntas en un PR
+(`js/ui/columnHints.js`, `typeOfKey()` en los contratos, las dos pantallas de mapeo y el bloque de avisos
+en resultados — D-053). (c) queda para otro PR. El aviso de (b) resultó más angosto de lo que este
+documento sugería, y está escrito en la spec: sólo puede detectar lo distinguible por **forma**, así que
+"un importe donde va otro importe" no lo agarra — eso es lo que hace (a), y por eso el orden importaba.

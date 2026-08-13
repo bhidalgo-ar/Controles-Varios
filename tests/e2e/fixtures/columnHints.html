@@ -1,0 +1,85 @@
+<!doctype html><meta charset="utf-8"><title>muestra de columna</title>
+<link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/css/components.css">
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<script src="/node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<div id="host-upload"></div>
+<div id="host-paso2"></div>
+<pre id="out">—</pre>
+<script type="module">
+  // Las DOS superficies donde se elige una columna, montadas por separado: el
+  // formulario de mapeo de la pantalla de carga y el panel "Columnas del
+  // Tabulado" del Paso 2. Mismo esquema que uploadOmission.html — Dexie y
+  // SheetJS desde node_modules, así corre sin red al CDN.
+  const { initFileUploadStep } = await import('../../../js/ui/fileUpload.js');
+  const { renderTabExtraConfig } = await import('../../../js/ui/controlsWizard.js');
+  const out = document.getElementById('out');
+
+  // Datos inventados (regla del repo: nunca un export de cliente). REIN_HOME_OFICE
+  // trae importes; FORMA_PAGO trae texto — es la columna con la que se prueba el
+  // aviso, mapeándola donde va un importe.
+  const NR = [
+    ['LEGAJO', 'REIN_HOME_OFICE', 'FORMA_PAGO'],
+    ['1', '1.234,56', 'TRANSFERENCIA'],
+    ['2', '890,00',   'CHEQUE'],
+  ];
+
+  const xlsxFile = (aoa, name) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Hoja1');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  };
+
+  window.__mountUpload = () => new Promise(res => {
+    document.getElementById('host-upload').innerHTML = '';
+    initFileUploadStep(document.getElementById('host-upload'), {
+      clientCode: 'TEST', fileType: 'nr_file', existingData: null,
+      autoDetect: () => ({ legajoColumn: 'LEGAJO', reinHomeOficeColumn: 'REIN_HOME_OFICE' }),
+      onComplete: () => {},
+    });
+    setTimeout(res, 150);
+  });
+
+  window.__drop = () => new Promise(res => {
+    const dt = new DataTransfer();
+    dt.items.add(xlsxFile(NR, 'nr.xlsx'));
+    const input = document.querySelector('#host-upload input[type=file]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(res, 600);
+  });
+
+  // El panel del Paso 2 con un Tabulado ya parseado: filas indexadas por
+  // encabezado, que es como las devuelve el parser. FEC_PAGO trae fechas de
+  // verdad y FORMA_PAGO texto, para poder mapear bien y mal la misma clave.
+  const TAB_ROWS = [
+    { 'LEGAJO': '1', '1003-SUELDO': '1.500.000,00', 'FEC_PAGO': '15/03/2026', 'FORMA_PAGO': 'TRANSFERENCIA' },
+    { 'LEGAJO': '2', '1003-SUELDO': '980.000,50',   'FEC_PAGO': '15/03/2026', 'FORMA_PAGO': 'CHEQUE' },
+  ];
+
+  window.__mountPaso2 = (config) => {
+    const host = document.getElementById('host-paso2');
+    host.innerHTML = '';
+    const state = {
+      client: { code: 'TEST' },
+      tab: { parsedRows: TAB_ROWS },
+      tabExtraConfig: config || { tabSalBaseColumn: '1003-SUELDO', tabFecPagoColumn: 'FORMA_PAGO' },
+      tabExtraConfigAutoDetected: false,
+      catalog: null,
+      selectedControls: [],
+    };
+    // `root` sólo lo usa `renderWizardNav` al cambiar un select, y lo único que
+    // necesita de ahí es `#js-wizard-nav` — sin ese hueco tira
+    // "Cannot set properties of null" al primer cambio de columna. La nav no es
+    // parte de lo que se prueba acá; el hueco existe para que el panel corra
+    // como corre dentro del wizard.
+    const root = document.createElement('div');
+    root.innerHTML = '<div id="js-wizard-nav"></div>';
+    state.step = 1;
+    renderTabExtraConfig(host, state, root,
+      { hasBrutos: true, hasGsPers: false, hasNr: false });
+    window.__state = state;
+  };
+
+  out.textContent = 'listo';
+</script>

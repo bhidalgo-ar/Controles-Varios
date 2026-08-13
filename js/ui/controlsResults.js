@@ -12,6 +12,9 @@ import { formatAmount }     from '../utils/currency.js';
 import { showToast }        from './toast.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { renderResultsContextBar } from './resultsHeader.js';
+import { columnValues, checkColumnType } from './columnHints.js';
+import { typeOfKey } from '../exports/contracts.js';
+import { fileTypeLabel } from './fileTypes.js';
 
 const TIER_RANK = { error: 0, warn: 1, ok: 2, info: 3 };
 const TIER_DOT  = { error: 'error', warn: 'warn', ok: 'ok', info: 'neutral' };
@@ -51,12 +54,14 @@ export async function renderControlsResults(root, runId) {
     <div id="js-results-ctx-bar"></div>
     <div class="page-content">
       <div id="js-hero"></div>
+      <div id="js-column-warnings"></div>
       <div id="js-control-sections"></div>
     </div>
   `;
 
   const ctxBarEl   = root.querySelector('#js-results-ctx-bar');
   const heroEl     = root.querySelector('#js-hero');
+  const warningsEl = root.querySelector('#js-column-warnings');
   const sectionsEl = root.querySelector('#js-control-sections');
 
   // Cabecera 1C: barra de contexto sticky (ver js/ui/resultsHeader.js) — el
@@ -132,6 +137,8 @@ export async function renderControlsResults(root, runId) {
   const { html: heroHtml, pctOk, overallTier, hasGauge } = buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId);
   heroEl.innerHTML = heroHtml;
   if (hasGauge) animateHeroGauge(heroEl, pctOk, overallTier);
+
+  warningsEl.innerHTML = buildColumnWarningsHtml(columnWarningsOf(runFiles));
 
   mountCtxBar(overallTier === 'info' ? 'info' : overallTier, buildContextLine(controlSummaries));
 
@@ -261,6 +268,64 @@ async function getPrevTierByControlId(run, thresholdPct) {
 // ── A2 — Gauge SVG: constantes compartidas con animateHeroGauge ─────────────
 const GAUGE_R = 82;
 const GAUGE_CIRC = 2 * Math.PI * GAUGE_R;
+
+// ── Avisos de columna de la corrida ─────────────────────────────────────────
+//
+// El aviso de "esta columna no trae lo que acá va" se ve al elegirla (ver
+// js/ui/columnHints.js), pero si el analista lo pasa por alto y corre el control
+// igual, sin esto no quedaba rastro: el que revisa después no tiene forma de
+// saber que se corrió con una columna sospechosa. Decisión de Willy, 2026-08-13.
+//
+// **Se recalcula, no se guarda.** Cada archivo de la corrida ya tiene guardadas
+// sus filas y su mapeo (`controlRunFiles`), así que el aviso sale de ahí: no hay
+// una segunda copia que pueda desincronizarse del archivo con el que se corrió,
+// y no cambia el esquema de la base.
+//
+// **Límite conocido, y no es un olvido:** las columnas que se eligen en el Paso 2
+// (los 18 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN /
+// GTOS_PERSONALES / DTO_COCHERA y las 3 de fecha) NO están en el mapeo que la
+// corrida guarda — `tabExtraConfig` viaja al control pero no al registro del
+// archivo. Su aviso se ve en pantalla al elegirlas; para que se repita acá hace
+// falta que la corrida guarde el mapeo del Tabulado ya mergeado, que es una
+// decisión sobre qué se persiste y no se toma de paso (anotado en ROADMAP.md).
+
+/**
+ * Los avisos de tipo de todas las columnas mapeadas de una corrida.
+ *
+ * Sólo mira las claves cuyo valor es una columna que **existe** entre los
+ * encabezados de las filas guardadas: eso deja afuera, sin necesidad de saber
+ * nada de cada parser, tanto las omisiones declaradas (⊘) como las claves de
+ * mapeo que no son columnas (períodos, configs, filas de otro archivo).
+ */
+export function columnWarningsOf(runFiles) {
+  const out = [];
+  for (const f of (runFiles || [])) {
+    const rows = f?.parsedRows;
+    if (!Array.isArray(rows) || rows.length === 0) continue;
+    const encabezados = new Set(Object.keys(rows[0]));
+    for (const [key, col] of Object.entries(f.mapping || {})) {
+      if (typeof col !== 'string' || !encabezados.has(col)) continue;
+      const aviso = checkColumnType(columnValues(rows, col), typeOfKey(f.fileType, key));
+      if (aviso) out.push({ fileType: f.fileType, columna: col, mensaje: aviso.mensaje });
+    }
+  }
+  return out;
+}
+
+function buildColumnWarningsHtml(avisos) {
+  if (!avisos.length) return '';
+  return `
+    <div class="alert alert--warning" style="margin-bottom:var(--sp-4);">
+      <div>
+        <strong>Revisá el mapeo de ${avisos.length === 1 ? 'una columna' : `${avisos.length} columnas`}.</strong>
+        Este control se corrió igual, pero el contenido de estas columnas no se parece a lo que ahí va:
+        <ul style="margin:var(--sp-2) 0 0;padding-left:var(--sp-4);">
+          ${avisos.map(a => `<li>«${esc(a.columna)}» en ${esc(fileTypeLabel(a.fileType))} — ${esc(a.mensaje)}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
 
 // ── Hero de resultados ──────────────────────────────────────────────────────
 
