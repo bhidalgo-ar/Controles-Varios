@@ -491,18 +491,65 @@ function wireDiffTableTools(root, diffKey, rows, getLabel) {
 
 // ── Export a Excel ────────────────────────────────────────────────────────────
 
+// Migrado a `writeContractSheet` (specs/contrato-export.md, "Lo que falta para
+// migrar los writers del Paso 6" — D-047). `contracts.js` no importa nada de
+// este archivo (no hay ciclo posible), pero se usa `import()` dinámico igual
+// que el resto de los exports del Paso 6, por prolijidad.
 async function exportCatXEmpleadosToXlsx(results) {
   await loadExcelJS();
   const { byPuesto, byCC } = results;
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
+  const { writeContractSheet, numericValue } = await import('../exports/contractSheet.js');
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const HDR_BG   = 'FFE8E8E8';
-  const WARN_BG  = 'FFFFF4E5';
-  const base     = { name: 'Calibri', size: 10 };
-  const bold     = { ...base, bold: true };
+  // ── Hojas: Distribuciones (Puesto y CC) ────────────────────────────────────
+  addDistributionSheet(wb, EXPORT_CONTRACTS.cat_x_empleados_puesto, 'Puesto',          byPuesto, writeContractSheet, numericValue);
+  addDistributionSheet(wb, EXPORT_CONTRACTS.cat_x_empleados_cc,     'Centro de Costo', byCC,     writeContractSheet, numericValue);
+
+  await downloadWorkbook(wb, `EE_x_CATEG_${periodSuffix(results.period)}.xlsx`);
+}
+
+/**
+ * "Dif." y la fila de TOTAL siguen siendo fórmulas de Excel (`=B2-C2`,
+ * `SUM(...)`) — más auditables para el cliente que un valor cacheado a mano
+ * (D-047). El número de fila se deriva de la posición (1 encabezado + `i`),
+ * no de `ws.addRow` a mano, porque `writeContractSheet` es quien escribe las
+ * filas ahora.
+ */
+function addDistributionSheet(wb, contract, labelCol, rows, writeContractSheet, numericValue) {
+  const HDR_BG = 'FFE8E8E8';
+  const dataRows = rows.map((r, i) => {
+    const rn = 2 + i; // fila 1 = encabezado
+    return { key: r.key, catCount: r.catCount, tabCount: r.tabCount,
+      diff: { formula: `B${rn}-C${rn}`, result: r.diff } };
+  });
+
+  let totalRow = null;
+  if (rows.length > 0) {
+    const first = 2;
+    const last  = 1 + rows.length;
+    const tn    = 2 + rows.length;
+    totalRow = {
+      key: 'TOTAL',
+      catCount: { formula: `SUM(B${first}:B${last})`, result: rows.reduce((s, r) => s + r.catCount, 0) },
+      tabCount: { formula: `SUM(C${first}:C${last})`, result: rows.reduce((s, r) => s + r.tabCount, 0) },
+      diff:     { formula: `B${tn}-C${tn}`,           result: rows.reduce((s, r) => s + r.diff, 0) },
+    };
+  }
+
+  const ws = writeContractSheet(wb, contract, dataRows, {
+    totalRow,
+    highlightIf: r => numericValue(r.diff) !== 0,
+    highlightColor: 'FFFFF4E5',
+  });
+
+  // Detalle de diferencias debajo — no es una tabla de contrato (filas
+  // variables, sin `key` fijo), sigue armándose a mano sobre la misma hoja.
+  const base = { name: 'Calibri', size: 10 };
+  const bold = { ...base, bold: true };
   const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
   const styleHeader = (row) => {
     row.height = 20;
@@ -514,55 +561,6 @@ async function exportCatXEmpleadosToXlsx(results) {
     });
   };
 
-  // ── Hojas: Distribuciones (Puesto y CC) ────────────────────────────────────
-  addDistributionSheet(wb, 'Por Puesto',         'Puesto',          byPuesto, styleHeader, base, bold, solidFill, WARN_BG);
-  addDistributionSheet(wb, 'Por Centro de Costo', 'Centro de Costo', byCC,     styleHeader, base, bold, solidFill, WARN_BG);
-
-  await downloadWorkbook(wb, `EE_x_CATEG_${periodSuffix(results.period)}.xlsx`);
-}
-
-function addDistributionSheet(wb, sheetName, labelCol, rows, styleHeader, base, bold, solidFill, warnBg) {
-  const ws = wb.addWorksheet(sheetName);
-  ws.columns = [{ width: 32 }, { width: 14 }, { width: 14 }, { width: 10 }];
-  styleHeader(ws.addRow([labelCol, 'Rep. Categ.', 'Tabulado', 'Dif.']));
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  let lastDataRowNum = 1;
-
-  for (const r of rows) {
-    const dr = ws.addRow([r.key, r.catCount, r.tabCount, null]);
-    const rn = dr.number;
-    lastDataRowNum = rn;
-    dr.getCell(4).value = { formula: `=B${rn}-C${rn}`, result: r.diff };
-    dr.eachCell((cell, col) => {
-      cell.font = base;
-      if (col >= 2) cell.alignment = { horizontal: 'right' };
-      if (r.diff !== 0) cell.fill = solidFill(warnBg);
-    });
-    if (r.diff !== 0) {
-      dr.getCell(4).font = { ...bold, color: { argb: 'FFCC0000' } };
-    }
-  }
-
-  // Fila de total
-  if (rows.length > 0) {
-    const tr = ws.addRow(['TOTAL', null, null, null]);
-    const tNum = tr.number;
-    const dataStart = 2;
-    tr.getCell(1).font = bold;
-    tr.getCell(2).value = { formula: `=SUM(B${dataStart}:B${lastDataRowNum})`, result: rows.reduce((s, r) => s + r.catCount, 0) };
-    tr.getCell(3).value = { formula: `=SUM(C${dataStart}:C${lastDataRowNum})`, result: rows.reduce((s, r) => s + r.tabCount, 0) };
-    tr.getCell(4).value = { formula: `=B${tNum}-C${tNum}`, result: rows.reduce((s, r) => s + r.diff, 0) };
-    tr.eachCell((cell, col) => {
-      if (col >= 2) {
-        cell.font = bold;
-        cell.alignment = { horizontal: 'right' };
-        cell.border = { top: { style: 'medium', color: { argb: 'FF888888' } } };
-      }
-    });
-  }
-
-  // Detalle de diferencias debajo
   const hasDetail = rows.some(r => r.onlyInCat.length > 0 || r.onlyInTab.length > 0);
   if (!hasDetail) return;
 

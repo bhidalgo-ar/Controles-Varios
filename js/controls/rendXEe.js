@@ -24,19 +24,20 @@ import {
 // ── Definición de columnas calculadas desde el Tabulado ──────────────────────
 // Mismos colores que las categorías de Rend vs Tabulado.
 
+// Los colores `xl*` de estas categorías (y del verde de Dif) ahora viven en
+// `js/exports/contracts.js` (`rend_x_ee`), que es quien alimenta al writer —
+// acá sólo quedan los `rgba(...)` que usa la tabla HTML en pantalla.
 const CATS = [
-  { key: 'precio',   label: 'PRECIO',          hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)',  xlHdr: 'FFCCE0F5', xlBg: 'FFF0F6FD' },
-  { key: 'estimulo', label: 'ASIG. ESTÍMULO',  hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)',   xlHdr: 'FFC9EDD8', xlBg: 'FFEDF9F2' },
-  { key: 'cargas',   label: 'CARGAS SS',       hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)',    xlHdr: 'FFF5CCCC', xlBg: 'FFFCEAEA' },
-  { key: 'provMes',  label: 'PROV. MES',       hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)',  xlHdr: 'FFC7EDF9', xlBg: 'FFEAF7FD' },
-  { key: 'provCcss', label: 'PROV. CCSS MES',  hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)',   xlHdr: 'FFCCDDED', xlBg: 'FFEAF2F8' },
+  { key: 'precio',   label: 'PRECIO',          hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)' },
+  { key: 'estimulo', label: 'ASIG. ESTÍMULO',  hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)' },
+  { key: 'cargas',   label: 'CARGAS SS',       hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)' },
+  { key: 'provMes',  label: 'PROV. MES',       hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)' },
+  { key: 'provCcss', label: 'PROV. CCSS MES',  hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)' },
 ];
 
-// Verde de la columna Dif (pantalla y Excel)
+// Verde de la columna Dif (pantalla)
 const DIF_HDR   = 'rgba(0,166,81,0.28)';
 const DIF_BG    = 'rgba(0,166,81,0.12)';
-const DIF_XLHDR = 'FFA9D08E';
-const DIF_XLBG  = 'FFE2EFDA';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -377,111 +378,34 @@ function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
 
 // ── Excel export ──────────────────────────────────────────────────────────────
 
+// Migrado a `writeGroupedContractSheet` (specs/contrato-export.md, "Lo que
+// falta para migrar los writers del Paso 6" — D-047). `contracts.js` importa
+// `COLS` de `rendVsTabu.js`, del que sale `CATS` acá — mismo ciclo de módulos
+// que ese archivo documenta (D-041): `import()` dinámico, recién al exportar.
+
 async function exportRendXEeToXlsx(results) {
   await loadExcelJS();
   const { rows } = results;
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
+  const { writeGroupedContractSheet } = await import('../exports/contractSheet.js');
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Rendimiento x EE');
-
-  ws.columns = [
-    { width: 10 },  // Legajo
-    { width: 30 },  // Nombre
-    { width: 18 },  // Costo Total Reporte
-    ...CATS.map(() => ({ width: 18 })),
-    { width: 18 },  // Costo Total Calculado
-    { width: 18 },  // Dif
-  ];
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-  const numFmt = '#,##0.00';
-  const RED      = 'FFCC0000';
-  const GRAY_HDR = 'FFE0E0E0';
-  const GRAY_TOT_HDR = 'FFDCDCDC';
-  const GRAY_TOT_BG  = 'FFF2F2F2';
-
-  // ── Encabezado ─────────────────────────────────────────────────────────────
-  const hdrValues = [
-    'Legajo', 'Nombre', 'COSTO TOTAL (Reporte)',
-    ...CATS.map(c => c.label),
-    'COSTO TOTAL (Calculado)', 'Dif (Reporte − Calculado)',
-  ];
-  const hdrFills = [
-    GRAY_HDR, GRAY_HDR, GRAY_HDR,
-    ...CATS.map(c => c.xlHdr),
-    GRAY_TOT_HDR, DIF_XLHDR,
-  ];
-  const r1 = ws.addRow(hdrValues);
-  r1.height = 24;
-  hdrValues.forEach((_, i) => {
-    const cell = r1.getCell(i + 1);
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill      = solidFill(hdrFills[i]);
-    cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-
-  // ── Filas de datos ─────────────────────────────────────────────────────────
-  const dataFills = [null, null, null, ...CATS.map(c => c.xlBg), GRAY_TOT_BG, DIF_XLBG];
-
-  for (const r of rows) {
-    const values = [
-      r.legajo, r.nombre, r.repTotal,
-      ...CATS.map(c => r[c.key]),
-      r.calcTotal, r.dif,
-    ];
-    const dr = ws.addRow(values);
-
-    values.forEach((_, i) => {
-      const cell = dr.getCell(i + 1);
-      cell.font = { ...base };
-      if (i >= 2) {
-        cell.numFmt    = numFmt;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      }
-      if (dataFills[i]) cell.fill = solidFill(dataFills[i]);
-    });
-
-    // Dif en rojo si hay diferencia
-    const difCell = dr.getCell(values.length);
-    if (hasDiff(r.dif)) difCell.font = { ...bold, color: { argb: RED } };
-
-    if (r.sinTabData || r.soloEnTab) {
-      dr.eachCell(cell => { cell.font = { ...cell.font, color: { argb: 'FF999999' } }; });
-    }
-  }
-
-  // ── Fila de totales ────────────────────────────────────────────────────────
   const totals = { repTotal: 0, precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
   for (const r of rows) {
     for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0;
   }
-  const totDif = totals.repTotal - totals.calcTotal;
+  const totalRow = {
+    legajo: 'TOTAL GENERAL', nombre: '', ...totals,
+    dif: totals.repTotal - totals.calcTotal,
+  };
 
-  const totValues = [
-    'TOTAL GENERAL', '', totals.repTotal,
-    ...CATS.map(c => totals[c.key]),
-    totals.calcTotal, totDif,
-  ];
-  const tr = ws.addRow(totValues);
-  totValues.forEach((_, i) => {
-    const cell = tr.getCell(i + 1);
-    cell.font = { ...bold };
-    if (i >= 2) {
-      cell.numFmt    = numFmt;
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-    }
-    cell.fill   = solidFill(hdrFills[i]);
-    cell.border = { top: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
+  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.rend_x_ee, rows, {
+    totalRow,
+    dimIf: r => r.sinTabData || r.soloEnTab,
   });
-  if (hasDiff(totDif)) tr.getCell(totValues.length).font = { ...bold, color: { argb: RED } };
 
   await downloadWorkbook(wb, `RendXEE_${periodSuffix(results.period)}.xlsx`);
 }

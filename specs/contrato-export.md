@@ -1,8 +1,10 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** **Pasos 0-5 hechos**, incluidos 4b y el **Paso 6** (2026-08-12). Del Paso 6 quedan afuera
-> a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por qué"), y queda
-> pendiente migrar los writers de los 5 contratos nuevos. Ver "Ya cerrado" para el detalle de cada paso.
+> **Estado:** **Pasos 0-6 hechos**, incluidos 4b y el **Paso 6** (2026-08-12), y los writers del Paso 6
+> migraron el 2026-08-13 (D-047) — 4 de los 5 (Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG
+> ×2 hojas). Del Paso 6 quedan afuera a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se
+> declaran, y por qué") y, de los writers, `acreditaciones_reporte` (ver "Lo que falta para migrar los
+> writers del Paso 6" — se queda con su .xlsx a mano). Ver "Ya cerrado" para el detalle de cada paso.
 >
 > **Después del Paso 6** entraron dos contratos más, los del asiento de FINADIET (`finadiet_asiento_cc` y
 > `finadiet_asiento_gral`, D-046). No suman deuda de writer: nacieron sobre `writeContractSheet`, así que
@@ -169,7 +171,7 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **4a** | `writeContractSheet` + migrar los 2 exports "Generar Reporte" con `cols.has*` (Brutos, GS Pers — NR ya emite las 18 columnas siempre, no necesita este fix) a `layout: 'fijo'` ("que salga vacía", respuesta de Willy). | ✅ hecho — `js/exports/contractSheet.js`, `tests/contractSheet.test.js` |
 | **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) + NR Reporte al mismo mecanismo. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | ✅ hecho — `writeGroupedContractSheet()` en `js/exports/contractSheet.js` |
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
-| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. | ✅ hecho (2026-08-12) — D-045 |
+| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Lo que falta para migrar los writers del Paso 6"). | ✅ hecho (2026-08-12) — D-045; writers migrados el 2026-08-13 (4 de 5) — D-047 |
 | **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
@@ -313,17 +315,37 @@ parsers dan filas de forma fija; `variaciones` resuelve sus columnas por `variac
 que no hay ninguna necesidad de campo que se quede sin derivar. Se retoma si aparece un tercer export con
 hojas dinámicas, o si alguno de estos dos pasa a alimentarse de columnas mapeadas.
 
-#### Lo que falta para migrar los writers del Paso 6
+#### Los writers del Paso 6, migrados (D-047, 2026-08-13)
 
-Ninguno de los 5 contratos nuevos pasa todavía por `writeContractSheet`/`writeGroupedContractSheet`, y no
-es sólo trabajo mecánico — a los writers les faltan dos cosas que estos exports sí usan:
+Ninguno de los 5 contratos del Paso 6 pasaba por `writeContractSheet`/`writeGroupedContractSheet`, y no
+era sólo trabajo mecánico — a los writers les faltaban dos cosas que estos exports sí usan:
 
-1. **Fila de TOTAL.** La tienen Rend vs Tabulado, Rend x EE, EE x CATEG y acumuladores. Hoy cada uno la
-   arma a mano después de las filas de datos.
-2. **Filas atenuadas.** Rend x EE pinta en gris los legajos con `sinTabData`/`soloEnTab`; es un estilo por
-   fila que depende de los datos, y el writer sólo sabe de estilos por columna.
+1. **Fila de TOTAL.** La tienen Rend vs Tabulado, Rend x EE y EE x CATEG. Cada uno la armaba a mano
+   después de las filas de datos.
+2. **Filas atenuadas.** Rend x EE (y Rend vs Tabulado/Asiento) pintan en gris los legajos/CC sin dato de
+   un lado del cruce; es un estilo por fila que depende de los datos, y el writer sólo sabía de estilos
+   por columna.
 
-Y dos que sólo necesita una parte: **fórmulas** (EE x CATEG escribe `=B2-C2` y `SUM(...)` en vez de
-valores; acreditaciones cierra entre hojas) y **multi-hoja** (acreditaciones: CONTROL + una por
-acreditación). Migrar sin esas dos primeras sería una regresión visible en el entregable, así que el paso
-siguiente es agregarlas al writer con un test que las fije, no forzar la migración.
+Las dos entraron como `opts.totalRow` y `opts.dimIf` de `writeContractSheet`/`writeGroupedContractSheet`
+— ver el jsdoc de cada función en `js/exports/contractSheet.js` y el detalle completo en D-047
+(`DECISIONS.md`). De las dos que sólo necesitaban una parte, **fórmulas** no pidió ninguna feature nueva
+(`row[c.key]` ya viajaba tal cual a la celda; sólo hizo falta `numericValue()` para desenvolver `.result`
+donde el writer necesita el número) y **multi-hoja** terminó siendo la razón por la que Acreditaciones se
+queda afuera — ver el punto siguiente.
+
+Con eso, 4 de los 5 migraron sin forzar nada: Rend vs Tabulado, Rend vs Asiento (con
+`writeGroupedContractSheet`, headerRows:2, un grupo de color por categoría) y Rend x EE (headerRows:1,
+grupos por columna) en `js/controls/rendVsTabu.js`/`rendVsAsiento.js`/`rendXEe.js`; EE x CATEG (con
+`writeContractSheet`, `opts.highlightIf` para resaltar la fila completa de un Puesto/CC con diferencia)
+en `js/controls/catXEmpleados.js`. Los 4 contratos pasaron a declarar layout (`width`/`groups`/
+`headerRows`) en `js/exports/contracts.js` y entraron a `CON_WRITER` en `tests/exportContracts.test.js`.
+
+**`acreditaciones_reporte` se queda sin writer, a propósito.** Cada hoja de detalle (una por acreditación
+real) lleva una fila de TÍTULO **antes** del encabezado — el nombre de la lista y el total, para no bajar
+a buscarlo — y esa forma ("título + encabezado + N filas + TOTAL") no es la que describe
+`writeContractSheet` ("encabezado + N filas iguales"). Sumar un título opcional al writer para este único
+consumidor es la abstracción que CLAUDE.md pide no forzar. Además el archivo entero es multi-hoja
+calculado en runtime (CONTROL + una hoja por acreditación, el mismo problema estructural que
+`variaciones`/`acumuladores` de más arriba) y sus totales cierran con fórmulas **entre** hojas
+(`'Nombre lista'!D1`), no dentro de una sola. `js/controls/acreditaciones.js` sigue armando su `.xlsx` a
+mano, y el assert de `tests/exportContracts.test.js` sigue exigiendo que su contrato no declare layout.
