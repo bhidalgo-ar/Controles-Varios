@@ -3,7 +3,7 @@
 > **Estado:** **Pasos 0-6 cerrados.** Los 4b y 6 el 2026-08-12; los writers del Paso 6 el 2026-08-13
 > (D-047, 4 de los 5: Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG ×2 hojas), y el 5º
 > —`acreditaciones_reporte`— **cerrado como excepción permanente declarada y verificada** el 2026-08-13
-> (D-050): no migra al writer, pero su contrato dejó de ser una declaración sin quien la haga cumplir.
+> (D-051): no migra al writer, pero su contrato dejó de ser una declaración sin quien la haga cumplir.
 > Quedan sin declarar a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por
 > qué"). Ver "Ya cerrado" para el detalle de cada paso. **Del plan sólo queda el Paso 7** (D-041 y el
 > skill `nuevo-control`).
@@ -137,7 +137,7 @@ cliente y **no puede llevar información de HR**.
    mismo `columns` alimenta la tabla de pantalla y el CSV, desaparecen los `colDefs` duplicados que
    hoy cada control tiene **dos veces** (`renderGsPersReporteResults` vs `exportGsPersReporteToXlsx`,
    ya divergidos: el `width` existe sólo en el segundo).
-   **Corrección de alcance (D-050):** "nadie más hace `addRow`" no se cumple universalmente y no era
+   **Corrección de alcance (D-051):** "nadie más hace `addRow`" no se cumple universalmente y no era
    alcanzable — la forma de un entregable la elige el destinatario, no el writer, y hay hojas que no son
    "encabezado + N filas iguales" (la hoja CONTROL de Acreditaciones, la solapa ASIENTO de FINADIET).
    Lo que sí se hace cumplir: todo export con contrato está declarado en `CON_WRITER` **o** en
@@ -180,7 +180,7 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **4a** | `writeContractSheet` + migrar los 2 exports "Generar Reporte" con `cols.has*` (Brutos, GS Pers — NR ya emite las 18 columnas siempre, no necesita este fix) a `layout: 'fijo'` ("que salga vacía", respuesta de Willy). | ✅ hecho — `js/exports/contractSheet.js`, `tests/contractSheet.test.js` |
 | **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) + NR Reporte al mismo mecanismo. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | ✅ hecho — `writeGroupedContractSheet()` en `js/exports/contractSheet.js` |
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
-| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Los writers del Paso 6, migrados"). | ✅ **cerrado** — contratos el 2026-08-12 (D-045); writers el 2026-08-13: 4 migrados (D-047) y `acreditaciones_reporte` como excepción permanente declarada y verificada (D-050) |
+| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Los writers del Paso 6, migrados"). | ✅ **cerrado** — contratos el 2026-08-12 (D-045); writers el 2026-08-13: 4 migrados (D-047) y `acreditaciones_reporte` como excepción permanente declarada y verificada (D-051) |
 | **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
@@ -340,7 +340,7 @@ Las dos entraron como `opts.totalRow` y `opts.dimIf` de `writeContractSheet`/`wr
 (`DECISIONS.md`). De las dos que sólo necesitaban una parte, **fórmulas** no pidió ninguna feature nueva
 (`row[c.key]` ya viajaba tal cual a la celda; sólo hizo falta `numericValue()` para desenvolver `.result`
 donde el writer necesita el número) y **multi-hoja** quedó como la razón por la que Acreditaciones se
-queda afuera. Ojo: el relevamiento de D-050 corrigió esa lectura — ni multi-hoja ni las fórmulas entre
+queda afuera. Ojo: el relevamiento de D-051 corrigió esa lectura — ni multi-hoja ni las fórmulas entre
 hojas eran el motivo real; lo que lo deja afuera es la fila de TÍTULO y otras 5 cosas. Ver el punto
 siguiente.
 
@@ -349,10 +349,10 @@ Con eso, 4 de los 5 migraron sin forzar nada: Rend vs Tabulado, Rend vs Asiento 
 grupos por columna) en `js/controls/rendVsTabu.js`/`rendVsAsiento.js`/`rendXEe.js`; EE x CATEG (con
 `writeContractSheet`, `opts.highlightIf` para resaltar la fila completa de un Puesto/CC con diferencia)
 en `js/controls/catXEmpleados.js`. Los 4 contratos pasaron a declarar layout (`width`/`groups`/
-`headerRows`) en `js/exports/contracts.js` y entraron a `CON_WRITER` (que desde D-050 vive ahí mismo, no en el test).
+`headerRows`) en `js/exports/contracts.js` y entraron a `CON_WRITER` (que desde D-051 vive ahí mismo, no en el test).
 
 **`acreditaciones_reporte` se queda sin writer, a propósito** — cerrado el 2026-08-13 como **excepción
-permanente declarada**, no como deuda (D-050). Al ir a cerrarlo se corrigieron las dos mitades del
+permanente declarada**, no como deuda (D-051). Al ir a cerrarlo se corrigieron las dos mitades del
 planteo de D-047:
 
 - **Las fórmulas entre hojas no eran un motivo.** Viven todas en la hoja CONTROL, que no tiene contrato
@@ -383,4 +383,4 @@ El assert de "sin writer → no declara layout" sigue vigente, con el mensaje co
 diseño". **Verificación del guardrail:** el workbook de `main` y el de la rama se compararon celda por
 celda (valor, font, fill, border, numFmt, alignment, anchos, `views`, `autoFilter`, merges de las 5 hojas,
 en los dos escenarios de `splitByEmpresa`) — idénticos; y se confirmó que la comparación no pasa por
-vacuidad cambiando el alto del encabezado y viéndola fallar. Detalle completo en D-050.
+vacuidad cambiando el alto del encabezado y viéndola fallar. Detalle completo en D-051.

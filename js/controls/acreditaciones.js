@@ -27,7 +27,7 @@ import { periodToLabel, periodSuffix } from '../utils/dates.js';
 
 /**
  * Las columnas de cada hoja de detalle, en orden, tomadas del contrato — la
- * única lista de columnas de este export (D-050). No se copian acá: si alguien
+ * única lista de columnas de este export (D-051). No se copian acá: si alguien
  * suma una columna, la suma en `js/exports/contracts.js` y ahí la ataja el
  * assert de D-020 (`FINANZAS_ALLOWED_KEYS`), que es el punto.
  */
@@ -889,7 +889,7 @@ export async function exportAcreditacionesToXlsx(results) {
  * El workbook, sin descargarlo — separado de `exportAcreditacionesToXlsx` para
  * que el test de conformidad pueda inspeccionar las celdas sin DOM ni Blob
  * (`tests/exportSinWriterConformidad.test.js`). Este export es uno de los que
- * arma su `.xlsx` **a mano**, por diseño y no por deuda (D-050): la separación
+ * arma su `.xlsx` **a mano**, por diseño y no por deuda (D-051): la separación
  * es lo que hace que "a mano" siga siendo verificable contra su contrato.
  *
  * Sólo necesita `window.ExcelJS` ya cargado — llamalo después de `loadExcelJS()`.
@@ -941,7 +941,7 @@ export function buildAcreditacionesWorkbook(results) {
 
     // Las etiquetas salen del contrato, no de una copia a mano: es la mitad
     // "semántica" que sí se comparte aunque el layout de esta hoja no entre en
-    // `writeContractSheet` (D-050). Los anchos, formatos y la fila de título de
+    // `writeContractSheet` (D-051). Los anchos, formatos y la fila de título de
     // arriba son la mitad "layout", y esos sí viven acá.
     const hdrRow = ws.addRow(DETALLE_COLUMNS.map(c => c.label));
     hdrRow.height = 18;

@@ -82,7 +82,7 @@ for (const c of contracts) {
 // declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
 // no lo necesita hasta que tenga un consumidor real.
 
-// `CON_WRITER`/`SIN_WRITER_POR_DISENO` viven en `contracts.js` y no acá (D-050):
+// `CON_WRITER`/`SIN_WRITER_POR_DISENO` viven en `contracts.js` y no acá (D-051):
 // los lee también `tests/exportSinWriterConformidad.test.js`, y el motivo de una
 // excepción es una declaración sobre el export, no un detalle de este test.
 

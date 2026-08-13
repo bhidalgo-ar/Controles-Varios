@@ -1092,7 +1092,7 @@ manual del panel del Paso 2 con el Tabulado cargado: el subtítulo "Identificaci
 
 ---
 
-## D-050 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
+## D-051 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
 
 **Fecha:** 2026-08-13
 **Contexto:** Último pendiente del Paso 6 de `specs/contrato-export.md`. D-047 migró 4 de los 5 writers y
