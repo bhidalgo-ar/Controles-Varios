@@ -352,20 +352,21 @@ assert('…y desde el archivo de NR (modo Controlar)',
     huerfanas.length === 0);
 }
 
-// ── blocksProgress: Paso 1 — SIN cambio de comportamiento todavía ────────────
+// ── blocksProgress: CLAVE y OBLIGATORIA bloquean ─────────────────────────────
 //
-// Sólo CLAVE bloquea fuerte. OBLIGATORIA NO bloquea todavía aunque el contrato
-// ya la declare así: bloquearla sin la omisión declarada (Paso 2, no existe
-// aún) rompería HOY la carga de cualquier archivo de NR al que le falte un
-// concepto — y ningún cliente tiene los 18. Marcar algo OBLIGATORIA es
-// declarar la expectativa; hacerla cumplir sin salida es peor que no
-// cumplirla. Este bloque es el que evita que alguien "complete" el Paso 2 a
-// medias activando el bloqueo antes de la omisión.
+// OBLIGATORIA bloquea desde que la omisión declarada (OMITIDO, toggle ⊘)
+// existe en TODAS las superficies que validan con blocksProgress: el panel del
+// Paso 2 primero, y el formulario de mapeo y el panel de remapeo de
+// fileUpload.js después (D-041 punto 4, specs/obligatoria-gate-carga-archivo.md).
+// Bloquear sin esa salida habría roto la carga de cualquier NR al que le falte
+// un concepto — y ningún cliente tiene los 18. La salida es de quien llama:
+// OMITIDO es truthy, así que pasa el `!mapping[key]` de los gates — ver
+// tests/uploadOmission.test.js.
 
 assert('blocksProgress: CLAVE bloquea siempre, sin importar el flag legado',
   blocksProgress('brutos_file', 'legajoColumn', false) === true);
-assert('blocksProgress: OBLIGATORIA NO bloquea todavía si el flag legado es false — sin esto se rompe NR hoy',
-  blocksProgress('nr_file', 'reinHomeOficeColumn', false) === false);
+assert('blocksProgress: OBLIGATORIA bloquea aunque el flag legado sea false — la salida es el ⊘, no el gate apagado',
+  blocksProgress('nr_file', 'reinHomeOficeColumn', false) === true);
 assert('blocksProgress: OBLIGATORIA respeta el flag legado si YA bloqueaba (tabSalBaseColumn)',
   blocksProgress('tab_control', 'tabSalBaseColumn', true) === true);
 assert('blocksProgress: OPCIONAL no bloquea por sí sola (flag legado en false)',
@@ -388,15 +389,16 @@ assert('blocksProgress: una clave CLAVE en un archivo no bloquea sola en otro qu
 assert('…y ese mismo campo sigue bloqueando por su required:true',
   blocksProgress('nomina_maestra', 'legajoColumn', true) === true);
 
-// Ningún concepto NR bloquea todavía por esta vía — es la prueba negativa de
-// que Paso 1, solo, no cambia nada para NR. El día que se agregue la omisión
-// (Paso 2), estos deberían empezar a fallar acá y hay que actualizarlos junto
-// con el mecanismo nuevo, no antes.
+// TODOS los conceptos NR bloquean, de los dos lados del cruce — el punto
+// entero de D-041. Este assert afirmaba lo contrario ("ningún concepto NR
+// bloquea todavía") mientras el toggle ⊘ existía sólo en el Paso 2: se
+// invirtió junto con la activación del gate en fileUpload.js, que era la
+// última superficie sin la vía de escape.
 const { NR_CONCEPTS: nrConceptsParaGate } = await import('./js/controls/nr.js');
-assert('ningún concepto NR bloquea todavía (Paso 1 no activa el gate; eso es Paso 2)',
+assert('los 18 conceptos NR bloquean por contrato, de los dos lados (nr_file y tab_control)',
   nrConceptsParaGate.every(c =>
-    blocksProgress('nr_file', c.nrKey, false) === false
-    && blocksProgress('tab_control', c.tabKey, false) === false));
+    blocksProgress('nr_file', c.nrKey, false) === true
+    && blocksProgress('tab_control', c.tabKey, false) === true));
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

@@ -1190,3 +1190,58 @@ a cablear con una etiqueta cambiada (falla con el diff completo). `npm run test:
 **Motivo:** cierra el Paso 6 de `specs/contrato-export.md`. Willy: *"esto nos va a seguir pasando"* — de
 ahí que la excepción se diseñe como población que crece y no como caso especial: la forma de un
 entregable la elige el destinatario, no el writer.
+
+---
+
+## D-052 — El gate de OBLIGATORIA llega a la carga de archivo: el toggle ⊘ primero, el bloqueo después
+
+**Fecha:** 2026-08-13
+**Contexto:** D-041 (punto 4) dejó la regla escrita: un campo `OBLIGATORIA` no bloquea hasta que exista
+la vía de escape **en esa misma superficie** — bloquear sin la salida de "esto no lo trae" rompe la carga
+de cualquier NR al que le falte uno de los 18 conceptos, y ningún cliente los tiene todos. El toggle ⊘
+existía sólo en el panel del Paso 2 (`renderTabExtraConfig`), así que `blocksProgress()` dejaba caer
+`OBLIGATORIA` al flag legado en la pantalla de carga, con el porqué en su docstring. D-048 lo listó como
+pendiente ("no se tocó"). Spec confirmada por Willy punto por punto antes de codear:
+`specs/obligatoria-gate-carga-archivo.md` (hoy el control de NR lo usa sólo Marval, así que la omisión
+declarada por archivo cubre el caso real completo; la dirección de futuro —derivar los conceptos NR del
+catálogo del cliente— quedó en `ROADMAP.md`, no acá).
+**Decisión:**
+1. **El toggle ⊘ entra a las dos superficies de `fileUpload.js`** —formulario de mapeo y panel de
+   remapeo— con el mismo patrón visual del Paso 2, y **recién entonces** `blocksProgress()` pasa a
+   devolver `true` para `OBLIGATORIA`. Los campos que cambian de comportamiento son exactamente 22
+   (los 18 `nrKey` de NR, `salBase`/`aCuFutAumen` de Brutos, `gtos`/`dtoCochera` de GS Pers), y la lista
+   no se cablea: `tests/uploadOmission.test.js` la deriva de `FIELD_DEFS` × `necessityOfKey()` y afirma
+   que todo campo que bloquea-con-salida ofrece el toggle.
+2. **El ⊘ sólo aparece donde corresponde** (`puedeOmitirse`): `OBLIGATORIA` por contrato y sin
+   `required` legado. CLAVE no admite omisión, y un `required: true` sigue bloqueando duro — darle la
+   salida le sacaría una obligación que ya existía (piso, nunca techo, D-045).
+3. **`OMITIDO` viaja dentro de `mapping`** (`mapping[key] = OMITIDO`) y de ahí al perfil del cliente vía
+   `saveFileProfile` — la omisión es una propiedad estable del cliente, igual que en el Paso 2, y se
+   precompleta en la próxima corrida. Verificado antes de decidirlo: los parsers de NR/Brutos/GS Pers
+   sólo leen `mapping.legajoColumn`, y aguas abajo `row[OMITIDO]` no existe en ninguna fila real, así
+   que `sumColumn` da `null` (sin dato), no 0 — no se tocó ningún parser ni ningún `run()`.
+4. **Defensa contra el perfil corrupto:** un `OMITIDO` colado en un campo que no ofrece ⊘ (una CLAVE,
+   un required legado — la UI no lo escribe nunca) NO cuenta como resuelto en
+   `pendingUploadRequirements()`. Si contara, el parser recibiría una "columna" que ninguna fila trae y
+   seguiría de largo con 0 filas: el default silencioso exacto que el gate existe para cortar.
+5. **La auto-detección respeta el ⊘ pero avisa** (decisión de Willy): nunca pisa una omisión declarada
+   (misma regla que `shouldAutoFillTabValue` en el wizard), y si el archivo que se está subiendo trae
+   una columna que matchea una clave omitida, un hint junto al campo lo dice — el cliente pudo haber
+   empezado a liquidar ese concepto, y destildar el ⊘ es del analista.
+**Alternativas descartadas:** activar el bloqueo sin llevar antes el toggle (rompe la carga de todo NR
+real — es el escenario que D-041 punto 4 existe para impedir); omisión efímera por corrida en vez de
+persistida (el Paso 2 ya persiste la suya, y "este cliente no tiene esta columna" es estable);
+que la auto-detección pise el ⊘ cuando encuentra columna (rompe "es una decisión del analista");
+extraer un componente de toggle compartido con el wizard (ata dos superficies con ciclos de import
+que sólo rompen en el navegador, D-045/D-048 — el markup se imita, no se comparte).
+**Verificación:** `tests/uploadOmission.test.js` (16 asserts, en la cadena) + los dos asserts de
+`tests/exportContracts.test.js` que afirmaban el estado pre-activación, invertidos junto con el
+mecanismo (como su propio comentario pedía); `tests/tabExtraOmission.test.js` pasa sin modificarse
+(el wizard no se tocó). `tests/e2e/uploadOmission.spec.js` en Chromium real: subir un NR con 2 de los
+18 conceptos → el submit bloquea nombrando la salida → ⊘ en los 18 → pasa; el remapeo dibuja la
+omisión y destildar sin resolver vuelve a bloquear; la vuelta completa (perfil → precompletado → hint
+de candidata) y capturas en claro y oscuro. Suite e2e completa: mismos 12 fallos que la baseline
+(los que necesitan CDN, D-048), verificado corriendo la baseline con `git stash`.
+**Límite conocido (heredado de D-041, no nuevo):** la omisión declarada es una firma, no una prueba —
+un analista apurado puede declarar ausente una columna que el archivo sí trae. La mejora es que queda
+asentada, visible y fuera del verde; no que sea imposible.

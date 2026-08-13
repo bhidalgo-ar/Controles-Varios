@@ -1,0 +1,50 @@
+<!doctype html><meta charset="utf-8"><title>omision</title>
+<link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/css/components.css">
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<script src="/node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<div id="host"></div><pre id="out">—</pre>
+<script type="module">
+  const { initFileUploadStep } = await import('../../../js/ui/fileUpload.js');
+  const out = document.getElementById('out');
+  window.__completes = [];
+
+  // Datos inventados (regla del repo: nunca un export de cliente). Un NR real
+  // trae SOLO los conceptos que el cliente liquida — acá 2 de los 18: es el
+  // caso que el gate de OBLIGATORIA no puede romper (D-041 punto 4).
+  const NR = [
+    ['LEGAJO', 'REIN_HOME_OFICE', 'GRAT_EXTRAORD'],
+    ['1', 1000, 0],
+    ['2', 2000, 500],
+  ];
+
+  const xlsxFile = (aoa, name) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Hoja1');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  };
+
+  // `detecta` opcional: se pasa como autoDetect de initFileUploadStep — para
+  // el escenario "el perfil tiene ⊘ pero este archivo trae la columna".
+  window.__mount = (detecta) => new Promise(res => {
+    document.getElementById('host').innerHTML = '';
+    initFileUploadStep(document.getElementById('host'), {
+      clientCode: 'TEST', fileType: 'nr_file', existingData: null,
+      autoDetect: detecta || null,
+      onComplete: d => { window.__completes.push(d); },
+    });
+    setTimeout(res, 150);
+  });
+  window.__detectaRein = () => window.__mount(() => ({ legajoColumn: 'LEGAJO', reinHomeOficeColumn: 'REIN_HOME_OFICE' }));
+
+  window.__drop = () => new Promise(res => {
+    const dt = new DataTransfer();
+    dt.items.add(xlsxFile(NR, 'nr.xlsx'));
+    const input = document.querySelector('#host input[type=file]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(res, 600);
+  });
+
+  out.textContent = 'listo';
+</script>
