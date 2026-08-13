@@ -16,7 +16,7 @@ test('un cliente nuevo sólo ve "Cruce por Agrupadores" — el resto son control
   await page.click('#js-confirm-create');
 
   await page.locator('.home-table__row', { hasText: 'Cliente Scope E2E' }).locator('.js-run-btn').click();
-  await expect(page.locator('h3', { hasText: 'Paso 1 — Controles a ejecutar' })).toBeVisible();
+  await expect(page.locator('h3', { hasText: 'Elegí los controles a correr' })).toBeVisible();
 
   await expect(page.locator('#js-control-rows')).toContainText('Cruce por Agrupadores');
   await expect(page.locator('#js-control-rows button[data-ctrl="cat_x_empleados"]')).toHaveCount(0);

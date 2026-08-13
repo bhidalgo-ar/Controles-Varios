@@ -26,7 +26,7 @@ import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge, wireColum
 import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor } from './fileTypes.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
-import { controlAppliesToClient, filterControlsForClient, controlOrigin } from '../controls/scope.js';
+import { controlAppliesToClient, controlOrigin } from '../controls/scope.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
@@ -544,103 +544,6 @@ function canGoNext(state) {
 
 // ── Paso 0: Seleccionar controles ─────────────────────────────────────────────
 
-// Construye la sección colapsable "¿Qué hace cada control?" del paso 1.
-// Sólo describe los controles que este cliente puede ejecutar — no tiene
-// sentido explicarle a un cliente Axton cómo bajar un reporte de M4.
-// Implementa Opción C: descripción truncada a 2 líneas + botón "Ver más".
-function buildHelpSection(state) {
-  const allControls = filterControlsForClient(
-    Object.values(CONTROL_REGISTRY), state.client, state.controlConfigsByControlId
-  );
-
-  const cards = allControls
-    .filter(c => c.help)
-    .map((c, idx) => {
-      const descId = `help-desc-${idx}`;
-      const toggleId = `help-toggle-${idx}`;
-      return `
-        <div style="
-          padding: var(--sp-2) var(--sp-3);
-          border-left: 3px solid var(--color-primary);
-          background: var(--color-surface);
-          border-radius: var(--radius-sm);
-        ">
-          <p style="margin:0 0 var(--sp-1);font-weight:var(--fw-semibold);font-size:var(--text-xs);">
-            ${esc(c.label)}
-          </p>
-          <p id="${descId}" style="
-            margin:0;
-            font-size:var(--text-xs);
-            color:var(--color-wordmark);
-            line-height:1.4;
-            overflow:hidden;
-            display:-webkit-box;
-            -webkit-line-clamp:2;
-            -webkit-box-orient:vertical;
-            word-break:break-word;
-          ">
-            ${esc(c.help.what)}
-          </p>
-          <button id="${toggleId}" type="button" style="
-            background:none;
-            border:none;
-            color:var(--color-primary);
-            cursor:pointer;
-            font-size:var(--text-xs);
-            font-weight:var(--fw-semibold);
-            padding:var(--sp-1) 0 0;
-            display:none;
-          " onclick="toggleHelpDesc('${descId}', '${toggleId}')">
-            Ver más ▼
-          </button>
-        </div>
-      `;
-    }).join('');
-
-  return `
-    <details style="margin-bottom:0;">
-      <summary style="
-        cursor:pointer;
-        font-size:var(--text-sm);
-        font-weight:var(--fw-semibold);
-        color:var(--color-primary);
-        list-style:none;
-        display:flex;
-        align-items:center;
-        gap:var(--sp-2);
-        user-select:none;
-        margin-bottom:var(--sp-2);
-      ">
-        <span class="js-help-arrow">▸</span> ¿Qué hace cada control?
-      </summary>
-      <div style="
-        display:flex;
-        flex-direction:column;
-        gap:var(--sp-3);
-        margin-top:var(--sp-2);
-      ">
-        ${cards}
-      </div>
-    </details>
-  `;
-}
-
-// Toggle para expandir/contraer descripción truncada en la sección de ayuda
-function toggleHelpDesc(descId, toggleId) {
-  const desc = document.getElementById(descId);
-  const btn = document.getElementById(toggleId);
-  if (!desc || !btn) return;
-
-  const isExpanded = desc.style.webkitLineClamp === 'unset';
-  if (isExpanded) {
-    desc.style.webkitLineClamp = '2';
-    btn.textContent = 'Ver más ▼';
-  } else {
-    desc.style.webkitLineClamp = 'unset';
-    btn.textContent = 'Ver menos ▲';
-  }
-}
-
 // Lista plana de controles seleccionables para este cliente. Un control con
 // modos (Brutos, GS Pers, NR) aporta una fila por modo — el nombre de grupo
 // (`group.label`) queda como título y el modo (Controlar/Generar Reporte)
@@ -656,18 +559,45 @@ function computeSelectableUnits(state) {
     }));
 }
 
-// Chips de archivos que un control va a pedir en el Paso 2 — mismo criterio
-// que arma esa pantalla (Tabulado si tabRequired, + un chip por additionalFile).
-function unitFileChipsHtml(ctrl) {
-  const chips = [];
+// Archivos que un control va a pedir en el Paso 2 — mismo criterio que arma esa
+// pantalla (Tabulado si tabRequired, + uno por additionalFile). Devuelve la
+// lista, no HTML: la usan las badges de la card y el panel lateral, que las
+// muestra deduplicadas entre los controles elegidos.
+function unitFiles(ctrl) {
+  const files = [];
   if (ctrl.tabRequired !== false) {
-    chips.push('<span class="control-recap-pill">Tabulado</span>');
+    files.push({ label: 'Tabulado', optional: false });
   }
   for (const f of ctrl.additionalFiles) {
     // f.label ya incluye "(opcional)" en los additionalFiles que lo son (ver registry.js)
-    chips.push(`<span class="control-recap-pill control-recap-pill--muted">${esc(f.label)}</span>`);
+    files.push({ label: f.label, optional: !!f.optional });
   }
-  return chips.join('');
+  return files;
+}
+
+// Badges de archivos a la derecha de la card: los requeridos en celeste, los
+// opcionales apagados. El contenido sale del registry — acá sólo se pinta.
+function unitFileBadgesHtml(ctrl) {
+  return unitFiles(ctrl).map(f => `
+    <span class="ctrl-row__file ${f.optional ? 'ctrl-row__file--optional' : ''}">${esc(f.label)}</span>
+  `).join('');
+}
+
+// Escapa `text` y envuelve en <mark> cada tramo que coincide con la búsqueda,
+// para que el analista vea por qué una card quedó en la lista. `query` ya viene
+// en minúscula y sin espacios de borde (lo normaliza renderStepControls).
+function highlightMatch(text, query) {
+  const str = String(text ?? '');
+  if (!query) return esc(str);
+
+  const hay = str.toLowerCase();
+  let out = '';
+  let from = 0;
+  for (let at = hay.indexOf(query); at !== -1; at = hay.indexOf(query, from)) {
+    out += esc(str.slice(from, at)) + `<mark class="ctrl-mark">${esc(str.slice(at, at + query.length))}</mark>`;
+    from = at + query.length;
+  }
+  return out + esc(str.slice(from));
 }
 
 function renderStepControls(container, state, root) {
@@ -685,14 +615,17 @@ function renderStepControls(container, state, root) {
   }
 
   const query = state.controlQuery.trim().toLowerCase();
-  const visibleUnits = units.filter(u => {
-    if (state.originFilter && u.origin.label !== state.originFilter) return false;
+  // Mismo filtrado que antes, en dos pasos para poder decir cuántos esconde la
+  // búsqueda (el chip de origen no cuenta como "oculto por la búsqueda").
+  const inOriginFilter = units.filter(u => !state.originFilter || u.origin.label === state.originFilter);
+  const visibleUnits = inOriginFilter.filter(u => {
     if (query) {
       const haystack = `${u.name} ${u.mode || ''} ${u.ctrl.description}`.toLowerCase();
       if (!haystack.includes(query)) return false;
     }
     return true;
   });
+  const hiddenByQuery = inOriginFilter.length - visibleUnits.length;
 
   const filterChipsHtml = [
     `<button class="ctrl-filter ${!state.originFilter ? 'is-active' : ''}" data-origin-filter="">
@@ -708,41 +641,87 @@ function renderStepControls(container, state, root) {
     const isOn = state.selectedControls.includes(u.ctrl.id);
     return `
       <button type="button" class="ctrl-row ${isOn ? 'ctrl-row--active' : ''}"
-              data-ctrl="${esc(u.ctrl.id)}" aria-pressed="${isOn}" title="${esc(u.ctrl.description)}">
+              data-ctrl="${esc(u.ctrl.id)}" aria-pressed="${isOn}">
         <span class="ctrl-row__box" aria-hidden="true">✓</span>
         <span class="ctrl-row__main">
           <span class="ctrl-row__name">
-            ${esc(u.name)}
-            ${u.mode ? `<span class="ctrl-row__mode">${esc(u.mode)}</span>` : ''}
+            <span class="ctrl-row__label">${highlightMatch(u.name, query)}</span>
+            ${u.mode ? `<span class="ctrl-row__mode">${highlightMatch(u.mode, query)}</span>` : ''}
             <span class="origin-badge origin-badge--${u.origin.tier}">${esc(u.origin.label)}</span>
           </span>
-          <span class="ctrl-row__desc">${esc(u.ctrl.description)}</span>
+          <span class="ctrl-row__desc">${highlightMatch(u.ctrl.description, query)}</span>
         </span>
-        <span class="ctrl-row__files">${unitFileChipsHtml(u.ctrl)}</span>
+        <span class="ctrl-row__files">${unitFileBadgesHtml(u.ctrl)}</span>
       </button>`;
   }).join('');
 
+  // Estado vacío y aviso de ocultos: los dos con salida (link que borra la
+  // búsqueda) — un estado sin salida deja al analista mirando una lista vacía
+  // sin saber que el filtro es lo que la vació.
+  const emptyHtml = query
+    ? `<div class="ctrl-rows__empty">
+         Ningún control coincide con «${esc(state.controlQuery.trim())}»
+         <span class="ctrl-rows__empty-hint">
+           Revisá el nombre o <button type="button" class="ctrl-link" id="js-ctrl-search-reset-empty">borrá la búsqueda</button>
+           ${inOriginFilter.length === 1 ? 'para ver el único disponible.' : `para ver los ${inOriginFilter.length} disponibles.`}
+         </span>
+       </div>`
+    : `<div class="ctrl-rows__empty">Ningún control coincide con el filtro.</div>`;
+
+  const hiddenNoteHtml = hiddenByQuery > 0 && visibleUnits.length
+    ? `<p class="ctrl-hidden-note">
+         ${hiddenByQuery === 1 ? '1 control oculto' : `${hiddenByQuery} controles ocultos`} por la búsqueda —
+         <button type="button" class="ctrl-link" id="js-ctrl-search-reset">borrala</button>
+         para ver los ${inOriginFilter.length}.
+       </p>`
+    : '';
+
   const selectedUnits = units.filter(u => state.selectedControls.includes(u.ctrl.id));
   const asideSelectedHtml = selectedUnits.length
-    ? selectedUnits.map(u => `<span class="control-recap-pill">✓ ${esc(u.name)}${u.mode ? ' · ' + esc(u.mode) : ''}</span>`).join('')
-    : '<span class="text-sm text-muted">Ningún control seleccionado.</span>';
-  const asideFilesHtml = selectedUnits.length
-    ? (selectedUnits.map(u => unitFileChipsHtml(u.ctrl)).join('') || '<span class="text-sm text-muted">Ninguno.</span>')
+    ? `<ul class="run-list">
+         ${selectedUnits.map(u => `
+           <li class="run-list__item">${esc(u.name)}${u.mode ? ' · ' + esc(u.mode) : ''}</li>
+         `).join('')}
+       </ul>`
+    : '<p class="wizard-section-hint">Todavía nada — marcá un control de la lista para armar la corrida.</p>';
+
+  // Un mismo archivo lo piden varios controles (el Tabulado, casi todos): en el
+  // panel va una sola vez, que es lo que el analista va a cargar.
+  const asideFiles = [];
+  for (const u of selectedUnits) {
+    for (const f of unitFiles(u.ctrl)) {
+      if (!asideFiles.some(x => x.label === f.label)) asideFiles.push(f);
+    }
+  }
+  const asideFilesHtml = asideFiles.length
+    ? asideFiles.map(f => `
+        <span class="ctrl-row__file ${f.optional ? 'ctrl-row__file--optional' : ''}">${esc(f.label)}</span>
+      `).join('')
     : '<span class="text-sm text-muted">—</span>';
 
   container.innerHTML = `
-    <h3 style="margin:0 0 var(--sp-1);">Paso 1 — Controles a ejecutar</h3>
-    <p class="text-muted" style="margin:0 0 var(--sp-2);font-size:var(--text-sm);">
-      Seleccioná los controles que querés ejecutar. En el siguiente paso se pedirán los archivos necesarios.
+    <h3 class="wizard-step-title">Elegí los controles a correr</h3>
+    <p class="text-muted" style="margin:0 0 var(--sp-4);font-size:var(--text-sm);">
+      Marcá uno o más. Los archivos que necesita cada uno se cargan en el paso siguiente.
     </p>
 
     ${units.length ? `
       <div class="ctrl-toolbar">
         ${filterChipsHtml}
-        <input type="search" class="ctrl-search" id="js-ctrl-search"
-               placeholder="Buscar control…" value="${esc(state.controlQuery)}" aria-label="Buscar control">
-        <span style="margin-left:auto;display:flex;gap:var(--sp-2);">
-          <button class="btn btn--secondary btn--sm" id="js-select-all-ctrls">✓ Seleccionar todos</button>
+        <span class="ctrl-toolbar__end">
+          ${query ? `<span class="ctrl-toolbar__count">${visibleUnits.length} de ${inOriginFilter.length} controles</span>` : ''}
+          <span class="ctrl-search-box ${query ? 'is-filled' : ''}">
+            <svg class="ctrl-search-box__icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+              <line x1="10.4" y1="10.4" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></line>
+            </svg>
+            <input type="search" class="ctrl-search" id="js-ctrl-search"
+                   placeholder="Buscá un control por nombre…" value="${esc(state.controlQuery)}"
+                   aria-label="Buscá un control por nombre">
+            ${query ? `<button type="button" class="ctrl-search-box__clear" id="js-ctrl-search-clear"
+                               aria-label="Borrar la búsqueda">✕</button>` : ''}
+          </span>
+          <button class="btn btn--ghost btn--sm" id="js-select-all-ctrls">✓ Todos</button>
           <button class="btn btn--ghost btn--sm" id="js-clear-ctrls">✕ Limpiar</button>
         </span>
       </div>
@@ -750,21 +729,23 @@ function renderStepControls(container, state, root) {
       <div class="wizard-onepane" style="margin-bottom:var(--sp-3);">
         <div class="wizard-onepane__main">
           <div class="ctrl-rows" id="js-control-rows">
-            ${rowsHtml || '<div class="ctrl-rows__empty">Ningún control coincide con la búsqueda.</div>'}
+            ${rowsHtml || emptyHtml}
           </div>
+          ${hiddenNoteHtml}
         </div>
         <div class="wizard-onepane__side">
           <div>
             <span class="wizard-section-label">Vas a ejecutar (${selectedUnits.length})</span>
-            <div class="control-recap-pills">${asideSelectedHtml}</div>
+            ${asideSelectedHtml}
           </div>
           <div>
-            <span class="wizard-section-label">Archivos que te van a pedir</span>
+            <span class="wizard-section-label">Archivos que te va a pedir</span>
             <div class="control-recap-pills">${asideFilesHtml}</div>
-            <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Se cargan en el paso siguiente.</p>
+            ${asideFiles.length ? '<p class="wizard-section-hint" style="margin-top:var(--sp-2);">Se cargan en el paso siguiente.</p>' : ''}
           </div>
-          <div style="margin-top:var(--sp-5);border-top:1px solid var(--color-border);padding-top:var(--sp-4);">
-            ${buildHelpSection(state)}
+          <div class="ctrl-help">
+            <span id="js-step1-help"></span>
+            <button type="button" class="ctrl-help__label" id="js-step1-help-label">¿Qué hace cada control?</button>
           </div>
         </div>
       </div>
@@ -794,6 +775,17 @@ function renderStepControls(container, state, root) {
     const input = container.querySelector('#js-ctrl-search');
     if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   });
+
+  // Salidas de los estados de búsqueda: la ✕ del campo, el link del aviso de
+  // ocultos y el del estado vacío hacen todos lo mismo — vaciar la búsqueda.
+  const clearQuery = () => {
+    state.controlQuery = '';
+    renderStepControls(container, state, root);
+    container.querySelector('#js-ctrl-search')?.focus();
+  };
+  container.querySelector('#js-ctrl-search-clear')?.addEventListener('click', clearQuery);
+  container.querySelector('#js-ctrl-search-reset')?.addEventListener('click', clearQuery);
+  container.querySelector('#js-ctrl-search-reset-empty')?.addEventListener('click', clearQuery);
 
   // Botón "Seleccionar todos": selecciona la variante principal de cada control
   // que aplica a este cliente (ignora el filtro/búsqueda activos). Qué variante
@@ -836,17 +828,17 @@ function renderStepControls(container, state, root) {
     });
   });
 
-  // Detectar si las descripciones de ayuda están siendo truncadas y mostrar botón
-  // "Ver más" solo en esos casos
-  container.querySelectorAll('[id^="help-desc-"]').forEach(desc => {
-    setTimeout(() => {
-      const isTruncated = desc.scrollHeight > desc.clientHeight;
-      const toggleBtn = document.getElementById(desc.id.replace('help-desc-', 'help-toggle-'));
-      if (toggleBtn) {
-        toggleBtn.style.display = isTruncated ? 'block' : 'none';
-      }
-    }, 0);
-  });
+  // "¿Qué hace cada control?" — la única ayuda global de la pantalla, detrás del
+  // "?" (mismo popover que el home y resultados). El texto de al lado abre lo
+  // mismo que el botón: es el blanco grande de click.
+  const helpSlot = container.querySelector('#js-step1-help');
+  if (helpSlot) {
+    renderHelpPopover(helpSlot, CONTROL_HELP);
+    container.querySelector('#js-step1-help-label')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      helpSlot.querySelector('.help-popover__btn')?.click();
+    });
+  }
 }
 
 // ── Paso 1: Cargar todos los archivos ─────────────────────────────────────────

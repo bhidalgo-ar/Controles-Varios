@@ -57,7 +57,7 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
   // ── Volver al inicio y abrir el wizard de controles ────────────────────────
   await page.click('#js-back-btn');
   await row.locator('.js-run-btn').click();
-  await expect(page.locator('h3', { hasText: 'Paso 1 — Controles a ejecutar' })).toBeVisible();
+  await expect(page.locator('h3', { hasText: 'Elegí los controles a correr' })).toBeVisible();
 
   await page.click('#js-control-rows button[data-ctrl="agrupadores"]');
   await page.click('#js-next-btn');
