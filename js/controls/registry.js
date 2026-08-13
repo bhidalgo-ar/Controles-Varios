@@ -119,6 +119,12 @@ import {
   summarizeAcumuladoresGanancias,
 } from './acumuladoresGanancias.js';
 
+import {
+  runFinadietAsiento,
+  renderFinadietAsientoResults,
+  summarizeFinadietAsiento,
+} from './finadietAsiento.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -131,6 +137,12 @@ const MARVAL_ONLY = { scope: 'cliente', scopeMeta: { clients: ['MARVAL'] } };
 // cliente; para otro cliente los códigos son otros. Se promueve a 'sistema'
 // cuando se confirme contra un segundo cliente, igual que los de Marval (D-015).
 const POF_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POF'] } };
+
+// FINADIET. El plan de cuentas contables, los centros de costo y las categorías
+// patrimoniales del asiento son de este cliente: para otro cliente son otros. Se
+// promueve a 'sistema' cuando un segundo cliente pida el mismo asiento y la
+// tabla de cuentas ya viva entera en `controlConfigs` (mismo camino que D-015).
+const FINADIET_ONLY = { scope: 'cliente', scopeMeta: { clients: ['FINADIET'] } };
 
 export const CONTROL_REGISTRY = {
 
@@ -567,6 +579,42 @@ export const CONTROL_REGISTRY = {
     run:           runVariacionesConceptos,
     summarize:     summarizeVariacionesConceptos,
     renderResults: renderVariacionesConceptosResults,
+  },
+
+  // Tercer control de generación del proyecto, después de acreditaciones (D-021)
+  // y acumuladores (D-033): arma el asiento contable de remuneraciones de
+  // FINADIET desde el excel mensual de conceptos liquidados, sin comparar nada
+  // contra el Tabulado. Ver specs/finadiet-asiento-remuneraciones.md.
+  finadiet_asiento: {
+    id:          'finadiet_asiento',
+    label:       'Asiento de Remuneraciones',
+    ...FINADIET_ONLY,
+    appliesWhen: () => true,
+    description: 'Arma el asiento contable de remuneraciones del mes desde el excel "FINADIET CONCEPTOS" '
+      + 'de Meta4: cuentas de Resultado agrupadas por centro de costo, cuentas Patrimoniales consolidadas '
+      + 'por categoría, y el control de que el asiento cierre (Debe = Haber).',
+    help: {
+      what: 'Reemplaza el armado a mano del asiento que Payroll le manda a Contaduría de FINADIET. Cada fila '
+        + 'del excel de conceptos es un movimiento (un importe al Debe de una cuenta y al Haber de otra): el '
+        + 'control las clasifica con el plan de cuentas del cliente, le pone a cada cuenta de Resultado el '
+        + 'prefijo de su centro de costo, consolida las Patrimoniales entre todos los centros y controla que '
+        + 'Debe y Haber cierren. Una cuenta o un centro que no esté en la tabla del cliente no se clasifica '
+        + 'sola: queda afuera y se lista en los resultados.',
+      how: [
+        'Bajá de Meta4 el excel "FINADIET CONCEPTOS" del período.',
+        'Cargalo en el Paso 2 y confirmá el mapeo de columnas (importe, códigos de cuenta Debe/Haber, centro de costo).',
+        'Completá la fecha de emisión en "Cuentas contables y centros de costo", y revisá ahí la tabla de cuentas si el cliente agregó alguna.',
+        'Ejecutá, revisá que el asiento cierre y descargá el .xlsx de 3 solapas desde el resultado.',
+      ],
+    },
+    group:       { id: 'finadiet_asiento', label: 'Asiento de Remuneraciones', mode: 'Generar Reporte', primary: true },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'asiento_conceptos', label: 'Conceptos liquidados (excel "FINADIET CONCEPTOS" de Meta4)', fileType: 'asiento_conceptos_file' },
+    ],
+    run:           runFinadietAsiento,
+    summarize:     summarizeFinadietAsiento,
+    renderResults: renderFinadietAsientoResults,
   },
 
 };

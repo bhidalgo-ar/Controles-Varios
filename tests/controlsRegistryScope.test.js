@@ -33,8 +33,10 @@ const controls = Object.values(CONTROL_REGISTRY);
 // specs/reporte-variaciones-opmobility.md.
 // Se agregó "acumuladores_ganancias" (15º), segundo control sobre un archivo de
 // Axton — ver specs/control-acumuladores-ganancias.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias',
-  controls.length === 15);
+// Se agregó "finadiet_asiento" (16º), el asiento contable de remuneraciones de
+// FINADIET — ver specs/finadiet-asiento-remuneraciones.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET',
+  controls.length === 16);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

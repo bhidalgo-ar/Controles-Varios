@@ -5,12 +5,12 @@
 // — no se declara dos veces.
 //
 // Ver specs/contrato-export.md para el porqué y el plan completo por pasos
-// (D-041, D-043 y D-045 en DECISIONS.md).
+// (D-041, D-043, D-045 y D-046 en DECISIONS.md).
 //
 // Dos reglas que no se deducen leyendo:
 //   1. **El contrato es un PISO, nunca un techo** — puede agregar obligación
 //      sobre el `required` de FIELD_DEFS, nunca sacarla (ver blocksProgress()).
-//   2. Los 6 contratos migrados a un writer declaran también su layout
+//   2. Los 8 contratos migrados a un writer declaran también su layout
 //      (`width`/`groups`/`headerRows`); los del Paso 6, que todavía arman el
 //      .xlsx a mano, declaran sólo semántica. Declarar layout que nadie lee es
 //      una segunda fuente de verdad que se desincroniza en silencio, y hay un
@@ -380,7 +380,8 @@ const catDistribucion = (exportId, sheet, label, from) => ({
 });
 
 // ── Acreditaciones (Paso 6) ──────────────────────────────────────────────────
-// **El único contrato `audience: 'finanzas'`** (D-020): este .xlsx lo recibe
+// **El primer contrato `audience: 'finanzas'`** (D-020) — los otros dos son las
+// solapas planas del asiento de FINADIET, más abajo: este .xlsx lo recibe
 // Finanzas/tesorería del cliente, no el equipo de Payroll, así que lleva sólo
 // lo necesario para pagar. Que la lista de columnas esté acá y no repartida en
 // el módulo es lo que hace que D-020 se pueda verificar como assert en vez de
@@ -403,6 +404,51 @@ const acreditacionesReporte = {
   ],
 };
 
+// ── FINADIET · Asiento de Remuneraciones ──────────────────────────────────────
+//
+// Las DOS solapas planas del asiento. Son las únicas del Paso 6 que ya tienen
+// writer (`writeContractSheet`), así que declaran también su layout — el resto
+// del Paso 6 declara sólo semántica hasta que su writer las consuma. La tercera
+// solapa, ASIENTO, no tiene contrato a propósito: no es una tabla plana — lleva
+// un encabezado con mes y fecha, una fila de título por centro de costo y por
+// categoría, y un TOTAL al pie. `writeContractSheet` describe hojas de
+// "encabezado + N filas iguales", y forzar esa forma acá sería más maquinaria de
+// la que el caso necesita (el mismo criterio con el que el Paso 4b se dejó
+// separado del 4a).
+//
+// `audience: 'finanzas'`: el archivo lo recibe Contaduría de FINADIET, no el
+// equipo de Payroll. Por eso no lleva NADA de HR — ni legajo, ni nombre de
+// empleado, ni dotación (D-020). Un asiento contable se lee por cuenta y por
+// concepto de liquidación; el empleado no aparece en ningún lado, y esto es lo
+// que lo hace cumplir en el único lugar que emite las columnas.
+//
+// La fila TOTAL viaja como una fila más de `rows` (con 'TOTAL' en la columna de
+// concepto) y no como un `addRow` aparte: `writeContractSheet` es el único lugar
+// que escribe filas de un export con contrato (D-043), así que el total entra
+// por la misma puerta que el resto.
+
+const finadietAsientoColumns = () => ([
+  { label: 'Código de cuenta', key: 'cuenta',   from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 18 },
+  { label: 'Concepto',         key: 'concepto', from: ['conceptoColumn'],     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 45 },
+  { label: 'Cód. concepto',    key: 'nro',      from: ['nroConceptoColumn'],  necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+  { label: 'Suma DEBE',        key: 'debe',     from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+  { label: 'Suma HABER',       key: 'haber',    from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+]);
+
+/** Cuenta CON prefijo de centro de costo (o `100.` si es Patrimonial). */
+const finadietAsientoPorCentro = {
+  exportId: 'finadiet_asiento_cc', sheet: 'Ctas Cbles CENTRO COSTO',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: finadietAsientoColumns(),
+};
+
+/** La misma tabla con el código de cuenta limpio, sin prefijo. */
+const finadietAsientoGral = {
+  exportId: 'finadiet_asiento_gral', sheet: 'Cuentas Contables GRAL',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: finadietAsientoColumns(),
+};
+
 export const EXPORT_CONTRACTS = {
   brutos:           brutosControlar,
   brutos_reporte:   brutosReporte,
@@ -422,15 +468,33 @@ export const EXPORT_CONTRACTS = {
   // la otra.
   cat_x_empleados_cc:     catDistribucion('cat_x_empleados_cc', 'Por Centro de Costo', 'Centro de Costo', ['centroCostoColumn']),
   acreditaciones_reporte: acreditacionesReporte,
+  // Asiento de FINADIET: los dos únicos del Paso 6 que ya salen por
+  // `writeContractSheet`, así que declaran también su layout (D-046).
+  finadiet_asiento_cc:    finadietAsientoPorCentro,
+  finadiet_asiento_gral:  finadietAsientoGral,
 };
 
 /**
  * Columnas que un export `audience: 'finanzas'` puede llevar (D-020): lo
- * necesario para pagar, y nada de HR. No es una lista de deseos — es el assert
- * de `tests/exportContracts.test.js`, así que agregar acá una columna de
- * dotación/conteo/alta-baja es una decisión explícita, no un descuido.
+ * necesario para **pagar** o para **asentar**, y nada de HR. No es una lista de
+ * deseos — es el assert de `tests/exportContracts.test.js`, así que agregar acá
+ * una columna de dotación/conteo/alta-baja es una decisión explícita, no un
+ * descuido.
+ *
+ * Los dos destinos que existen hoy piden columnas distintas y ninguno pide
+ * atributos del empleado:
+ *   - pagar (Acreditaciones → tesorería): legajo, nombre, CUIT, CBU, banco,
+ *     importe y fecha.
+ *   - asentar (asiento de FINADIET → Contaduría): cuenta, concepto y los dos
+ *     lados del movimiento. Acá no aparece ni el legajo: un asiento se lee por
+ *     cuenta contable, no por empleado.
  */
-export const FINANZAS_ALLOWED_KEYS = new Set(['legajo', 'nombre', 'cuit', 'neto', 'fecha', 'banco', 'cbu']);
+export const FINANZAS_ALLOWED_KEYS = new Set([
+  // pagar
+  'legajo', 'nombre', 'cuit', 'neto', 'fecha', 'banco', 'cbu',
+  // asentar
+  'cuenta', 'concepto', 'nro', 'debe', 'haber',
+]);
 
 /**
  * Todas las claves de mapeo que alguna columna de ALGÚN contrato consume,

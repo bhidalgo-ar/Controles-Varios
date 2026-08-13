@@ -33,6 +33,7 @@ import { autoDetectGsPersMapping } from '../parsers/gsPersParser.js';
 import { autoDetectNrMapping }          from '../parsers/nrParser.js';
 import { autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
 import { autoDetectCostoTotalMapping }  from '../parsers/costoTotalParser.js';
+import { autoDetectFinadietAsientoMapping } from '../parsers/finadietAsientoParser.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
 import { DEFAULT_LEGAJO_KEY_MODE }      from '../utils/legajo.js';
@@ -42,6 +43,7 @@ import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls
 import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
 import { renderAcreditacionesConfigEditor, DEFAULT_ACREDITACIONES_CONFIG } from '../controls/acreditaciones.js';
 import { renderAcumuladoresConfigEditor, DEFAULT_ACUMULADORES_CONFIG } from '../controls/acumuladoresGanancias.js';
+import { renderFinadietAsientoConfigEditor } from '../controls/finadietAsiento.js';
 import {
   VARIACIONES_IDS,
   hayVariaciones,
@@ -91,6 +93,7 @@ const AUTO_DETECT = {
   costo_total_file:  autoDetectCostoTotalMapping,
   // El Tabulado del período anterior es el mismo archivo que el Tabulado.
   tab_prev_file:     autoDetectTabMapping,
+  asiento_conceptos_file: autoDetectFinadietAsientoMapping,
 };
 
 // IDs de controles agrupados (para validación y detección de grupos seleccionados)
@@ -99,6 +102,7 @@ const GS_PERS_IDS = ['gs_pers', 'gs_pers_reporte'];
 const NR_IDS      = ['nr', 'nr_reporte'];
 const ACREDITACIONES_IDS = ['acreditaciones_reporte'];
 const ACUMULADORES_IDS   = ['acumuladores_ganancias'];
+const FINADIET_ASIENTO_IDS = ['finadiet_asiento'];
 // VARIACIONES_IDS se importa de ./variacionesConceptMap.js — lo comparten el
 // wizard y el panel de mapeo de conceptos.
 
@@ -158,6 +162,7 @@ export async function renderControlsWizard(root, clientId) {
     savedAgrupadoresConfig:    getControlConfig(client.code, 'agrupadores_config'),
     savedAcreditacionesConfig: getControlConfig(client.code, 'acreditaciones_config'),
     savedAcumuladoresConfig:   getControlConfig(client.code, 'acumuladores_config'),
+    savedFinadietAsientoConfig: getControlConfig(client.code, 'finadiet_asiento_config'),
     savedVariacionesConfig:    getControlConfig(client.code, 'variaciones_config'),
     savedVariacionesMap:       getControlConfig(client.code, 'variaciones_concept_map'),
     groupers:                  getGroupers(client.code),
@@ -166,6 +171,7 @@ export async function renderControlsWizard(root, clientId) {
   const {
     savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig,
     savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig,
+    savedFinadietAsientoConfig,
     savedVariacionesConfig, savedVariacionesMap, groupers, allControlConfigs,
   } = loaded;
 
@@ -209,6 +215,10 @@ export async function renderControlsWizard(root, clientId) {
     acreditacionesConfig:      savedAcreditacionesConfig?.params || { ...DEFAULT_ACREDITACIONES_CONFIG },
     // Config del reporte de Acumuladores Ganancias (Axton): régimen RG4003/RG4030 + códigos de acumulador.
     acumuladoresConfig:        savedAcumuladoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_ACUMULADORES_CONFIG)),
+    // Config del asiento de FINADIET: plan de cuentas, centros de costo y fecha
+    // de emisión. Sin config guardada cae a la semilla del módulo (D-035); en
+    // cuanto el analista toque el editor, lo guardado reemplaza a la semilla.
+    finadietAsientoConfig:     savedFinadietAsientoConfig?.params || null,
     // Config del control de Variaciones (POF): qué conceptos compara cada reporte
     // y qué códigos cuentan como causa de ausencia. Sin config guardada, el
     // control cae a la semilla de variaciones.js. La UI para editar la lista
@@ -1137,6 +1147,19 @@ function renderStepFiles(container, state, root) {
       });
     }
 
+    // Cuentas contables, centros de costo y fecha de emisión del asiento de FINADIET
+    if (FINADIET_ASIENTO_IDS.includes(controlId)) {
+      const cfgWrapper = document.createElement('div');
+      cfgWrapper.style.marginBottom = 'var(--sp-3)';
+      filesArea.appendChild(cfgWrapper);
+
+      renderFinadietAsientoConfigEditor(cfgWrapper, {
+        config:        state.finadietAsientoConfig,
+        openByDefault: !state.finadietAsientoConfig?.fechaEmision,
+        onChange:      (newConfig) => { state.finadietAsientoConfig = newConfig; },
+      });
+    }
+
     // Editor de "Agrupadores y umbrales" del Cruce por Agrupadores
     if (controlId === 'agrupadores') {
       const cfgWrapper = document.createElement('div');
@@ -1781,6 +1804,9 @@ async function executeControls(state, statusEl, container, root) {
     if (state.selectedControls.some(id => ACUMULADORES_IDS.includes(id)) && state.acumuladoresConfig) {
       await saveControlConfig(state.client.code, 'acumuladores_config', { params: state.acumuladoresConfig });
     }
+    if (state.selectedControls.some(id => FINADIET_ASIENTO_IDS.includes(id)) && state.finadietAsientoConfig) {
+      await saveControlConfig(state.client.code, 'finadiet_asiento_config', { params: state.finadietAsientoConfig });
+    }
 
     // El run en sí se crea sólo si NO es quickRun
     let runId = null;
@@ -1837,6 +1863,12 @@ async function executeControls(state, statusEl, container, root) {
       }
       if (ACUMULADORES_IDS.includes(controlId)) {
         mapping.acumuladoresConfig = state.acumuladoresConfig || { ...DEFAULT_ACUMULADORES_CONFIG };
+      }
+      if (FINADIET_ASIENTO_IDS.includes(controlId)) {
+        // `null` = nunca se configuró nada: el control cae a la semilla. No se
+        // manda DEFAULT_... acá para que "sin configurar" y "configurado igual a
+        // la semilla" no se vuelvan indistinguibles.
+        mapping.finadietAsientoConfig = state.finadietAsientoConfig || null;
       }
       if (controlId === 'agrupadores') {
         const cfg           = state.agrupadoresConfig || {};

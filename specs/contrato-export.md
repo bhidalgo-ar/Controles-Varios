@@ -4,6 +4,12 @@
 > a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por qué"), y queda
 > pendiente migrar los writers de los 5 contratos nuevos. Ver "Ya cerrado" para el detalle de cada paso.
 >
+> **Después del Paso 6** entraron dos contratos más, los del asiento de FINADIET (`finadiet_asiento_cc` y
+> `finadiet_asiento_gral`, D-046). No suman deuda de writer: nacieron sobre `writeContractSheet`, así que
+> son los dos únicos exports "de una tabla plana" del Paso 6 en adelante que ya declaran también su layout.
+> Y son el segundo destino `audience: 'finanzas'`, con lo cual `FINANZAS_ALLOWED_KEYS` pasó a declarar sus
+> dos usos: pagar y asentar.
+>
 > **El Paso 6 destapó un bug vivo**, no sólo deuda: un contrato podía *apagar* un `required: true` de
 > otro tipo de archivo. Detalle en "Paso 6" abajo y en D-045.
 >

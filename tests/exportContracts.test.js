@@ -70,7 +70,12 @@ for (const c of contracts) {
 // declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
 // no lo necesita hasta que tenga un consumidor real.
 
-const CON_WRITER = ['brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte'];
+const CON_WRITER = [
+  'brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte',
+  // Las dos solapas planas del asiento de FINADIET nacieron sobre
+  // `writeContractSheet` (D-046), así que entran acá desde el primer día.
+  'finadiet_asiento_cc', 'finadiet_asiento_gral',
+];
 for (const exportId of CON_WRITER) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {
     assert(`${exportId}.${col.key}: tiene width (el writer lo necesita)`,
@@ -93,14 +98,22 @@ for (const c of contracts) {
 }
 
 // ── D-020: lo que va a Finanzas no lleva información de HR ───────────────────
-// Acreditaciones es el único `audience: 'finanzas'` (Paso 6). Su .xlsx lo
-// recibe tesorería del cliente, no Payroll, y en muchos clientes Finanzas no
-// tiene acceso a dotación/altas/bajas/atributos del empleado. Con la lista de
-// columnas declarada en el contrato, D-020 deja de ser un comentario y pasa a
-// ser esto: agregar una columna de HR a ese export rompe el test.
+// Hoy hay tres `audience: 'finanzas'`: Acreditaciones (lo recibe tesorería del
+// cliente) y las dos solapas planas del asiento de FINADIET (las recibe
+// Contaduría). En muchos clientes Finanzas no tiene acceso a
+// dotación/altas/bajas/atributos del empleado. Con la lista de columnas
+// declarada en el contrato, D-020 deja de ser un comentario y pasa a ser esto:
+// agregar una columna de HR a cualquiera de esos exports rompe el test.
+//
+// El assert es sobre `FINANZAS_ALLOWED_KEYS`, que es una allow-list: una columna
+// nueva en un export de Finanzas no pasa hasta que alguien la agregue ahí a
+// mano. No se cuenta cuántos contratos son — ese número va a seguir creciendo y
+// el conteo no prueba nada; lo que importa es que haya al menos uno para que el
+// barrido de abajo no pase por vacuidad.
 
 const finanzas = contracts.filter(c => c.audience === 'finanzas');
-assert('hay exactamente un contrato audience:\'finanzas\' (Acreditaciones)', finanzas.length === 1);
+assert('hay al menos un contrato audience:\'finanzas\' (si no, el barrido de abajo no prueba nada)',
+  finanzas.length > 0);
 for (const c of finanzas) {
   for (const col of c.columns) {
     assert(`D-020 · ${c.exportId}.${col.key}: es una columna de pago, no de HR`,
@@ -127,8 +140,9 @@ for (const c of finanzas) {
 // y eso apagaba el gate de la Columna de Puesto del Reporte de Categorías:
 // se podía subir sin ella, y EE x CATEG salteaba en silencio el chequeo de
 // discrepancias de Puesto y armaba la distribución con la columna sin resolver.
-// Recorrer los 15 fileTypes en vez de 6 claves es lo que lo agarra, y lo que va
-// a agarrar la próxima colisión cuando el Paso 6 sume más contratos.
+// Recorrer TODOS los fileTypes en vez de 6 claves elegidas a mano es lo que lo
+// agarra, y lo que va a agarrar la próxima colisión cuando entre otro contrato
+// (el asiento de FINADIET ya sumó un fileType más, D-046).
 
 const { FIELD_DEFS } = await import('./js/ui/fileUpload.js');
 
