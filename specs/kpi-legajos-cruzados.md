@@ -162,7 +162,15 @@ cuando no hay Tabulado, y descarta información que hoy el analista ve y es corr
 
 **Confirmada por el usuario:** sí (Willy, 2026-08-13)
 
-**Cabo suelto reportado, fuera de scope.** El subtítulo del hero suma el `unitsTotal` de cada control,
-así que dos controles sobre 4 empleados dicen "8 legajos verificados sin diferencias" — el mismo empleado
-contado una vez por control. Es el mismo tipo de bug en otro número y necesita una decisión de Willy sobre
-qué debería decir ahí. No se tocó.
+**Cabo suelto reportado, fuera de scope — resuelto después en el PR #135.** El subtítulo del hero sumaba
+el `unitsTotal` de cada control, así que dos controles sobre 4 empleados decían "8 legajos verificados sin
+diferencias" — el mismo empleado contado una vez por control. Willy eligió el texto el 2026-08-13
+("4 legajos verificados en 2 controles") y así quedó, fijado en `tests/heroUnitNaming.test.js`.
+
+**Lo que sigue pendiente de decisión.** Cuando **hay** diferencias, el subtítulo todavía suma: si el mismo
+empleado tiene diferencia en dos controles, dice "2 legajos con diferencia" sobre 1 empleado. Acá el
+criterio del mayor sería *peor* — si los dos controles marcan empleados distintos, el mayor (1) subestima
+y la suma (2) acierta. Como el `summary` informa cuántas unidades marcó cada control y no cuáles, ningún
+número es correcto en los dos casos. Las dos salidas honestas: cambiar el sustantivo ("2 diferencias en 2
+controles", que es exacto siempre) o que cada control exponga los legajos que marcó y contar empleados
+distintos de verdad. Es decisión de Willy, no un detalle de implementación.
