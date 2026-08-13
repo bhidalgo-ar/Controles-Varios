@@ -28,9 +28,10 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
  *   CLAVE       — sin esto el archivo no sirve (ej. ID_EMPLEADO). El parser
  *                 mismo corta con error; NO admite omisión declarada.
  *   OBLIGATORIA — el destino la espera. Bloquea el avance, pero admite
- *                 omisión declarada y visible (ver js/exports/omissions.js,
- *                 Paso 2) para el cliente que genuinamente no tiene esa
- *                 columna — es la resolución de la tensión con D-036.
+ *                 omisión declarada y visible (`OMITIDO`, acá abajo, con su
+ *                 toggle ⊘ en el panel del Paso 2 y en las dos superficies de
+ *                 carga de fileUpload.js) para el cliente que genuinamente no
+ *                 tiene esa columna — es la resolución de la tensión con D-036.
  *   OPCIONAL    — si no está, se informa en resultados y listo (D-036). No
  *                 bloquea nada.
  */
@@ -551,9 +552,10 @@ export const FINANZAS_ALLOWED_KEYS = new Set([
  * junto con la necesidad más fuerte que le exige cualquier export que la use
  * (CLAVE > OBLIGATORIA > OPCIONAL) y el/los contrato(s) que la consumen.
  *
- * Es la base de `necessityOfField()` (fileUpload.js) y `pendingRequirements()`
- * (controlsWizard.js) — un campo no se marca a mano en dos lugares: se calcula
- * recorriendo los contratos una sola vez.
+ * Es la base de `blocksProgress()` (acá abajo, consumida por los gates de
+ * fileUpload.js) y `pendingTabRequirements()` (controlsWizard.js) — un campo
+ * no se marca a mano en dos lugares: se calcula recorriendo los contratos una
+ * sola vez.
  */
 export function scopedKey(fileType, key) {
   return `${fileType}::${key}`;
@@ -586,8 +588,8 @@ export function fieldNecessityMap() {
 /**
  * Necesidad de una clave de mapeo derivada de los contratos, o `null` si
  * ninguna columna de ningún contrato la usa (el campo no alimenta ningún
- * export declarado todavía — ver Paso 6, o es una precondición del parser que
- * ningún export consume, ver PARSER_PRECONDITIONS en fileUpload.js).
+ * export declarado todavía — ver Paso 6, o es una precondición que el parser
+ * hace cumplir solo, con su propio `throw`, y ningún export consume).
  */
 export function necessityOfKey(fileType, key) {
   return fieldNecessityMap().get(scopedKey(fileType, key))?.necessity ?? null;
@@ -602,11 +604,13 @@ export function necessityOfKey(fileType, key) {
  * no tiene esta columna" (una propiedad del cliente, estable).
  *
  * Se guarda en el mismo lugar que un nombre de columna real
- * (`state.tabExtraConfig[key] = OMITIDO`) a propósito: así el resto del
- * código que hace `tm[key] ? … : null` ya trata la omisión como ausencia sin
- * ningún cambio — `row[OMITIDO]` no existe en ningún archivo real, así que
- * cae a `null` igual que si la clave nunca se hubiera completado. Sólo el
- * GATE y la UI necesitan distinguirlo explícitamente.
+ * (`state.tabExtraConfig[key] = OMITIDO` en el Paso 2; `mapping[key] = OMITIDO`
+ * en la carga de archivo, y de ahí al perfil del cliente vía `saveFileProfile`)
+ * a propósito: así el resto del código que hace `tm[key] ? … : null` ya trata
+ * la omisión como ausencia sin ningún cambio — `row[OMITIDO]` no existe en
+ * ningún archivo real, así que cae a `null` igual que si la clave nunca se
+ * hubiera completado. Sólo el GATE y la UI necesitan distinguirlo
+ * explícitamente.
  */
 export const OMITIDO = '__omitido__';
 
@@ -638,21 +642,24 @@ export function esOmitido(value) {
  * producir un gate incorrecto: cada `legacyRequired` lo aporta el `FIELD_DEFS`
  * de SU propio fileType, que sí está scopeado.
  *
- * Sobre OBLIGATORIA: sigue sin bloquear por sí sola, y es a propósito. Los 18
- * conceptos de NR son OBLIGATORIA con `legacyRequired` en `false`; si
- * OBLIGATORIA bloqueara acá, ningún archivo de NR sin las 18 columnas se podría
- * subir, y ningún cliente las tiene. Marcar algo OBLIGATORIA declara la
- * expectativa; **bloquear sin la salida de "esto no lo trae" es peor que no
- * bloquear**. Esa salida (`OMITIDO`) hoy existe sólo en el panel del Paso 2, no
- * en el formulario de mapeo de archivo — hasta que exista ahí, OBLIGATORIA cae
- * al flag legado.
+ * Sobre OBLIGATORIA: bloquea igual que CLAVE, pero la diferencia es la salida.
+ * Los 18 conceptos de NR son OBLIGATORIA y ningún cliente los tiene todos —
+ * **bloquear sin la salida de "esto no lo trae" es peor que no bloquear**, y
+ * por eso OBLIGATORIA no bloqueó acá hasta que la omisión declarada (`OMITIDO`,
+ * toggle ⊘) existió en TODAS las superficies que validan con esta función: el
+ * panel del Paso 2 primero (specs/contrato-export.md, Paso 2) y las dos
+ * superficies de fileUpload.js después (D-041 punto 4, activado el 2026-08-13
+ * — specs/obligatoria-gate-carga-archivo.md). Esta función no mira la omisión:
+ * quien llama trata `OMITIDO` como resuelto (es truthy, así que pasa el
+ * `!mapping[key]` de los gates igual que una columna real).
  *
  * @param {string} key
  * @param {boolean} [legacyRequired] — el `required` de FIELD_DEFS/TAB_*_FIELDS
  */
 export function blocksProgress(fileType, key, legacyRequired = false) {
-  if (necessityOfKey(fileType, key) === NECESSITY.CLAVE) return true;
-  // OBLIGATORIA / OPCIONAL / no contratada: el flag legado manda. Un contrato
-  // nunca desactiva un `required: true` que ya existía.
+  const necessity = necessityOfKey(fileType, key);
+  if (necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA) return true;
+  // OPCIONAL / no contratada: el flag legado manda. Un contrato nunca
+  // desactiva un `required: true` que ya existía.
   return !!legacyRequired;
 }

@@ -4,7 +4,7 @@ import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js'
 import { showToast } from './toast.js';
 import { mergeContaFiles } from '../parsers/contaExcel.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
-import { blocksProgress } from '../exports/contracts.js';
+import { blocksProgress, necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import {
   fieldsFor,
   fileTypeLabel,
@@ -128,6 +128,25 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       }
     }
 
+    // La auto-detección nunca pisa un ⊘ del perfil guardado (misma regla que
+    // `shouldAutoFillTabValue` en el wizard: la omisión es una decisión del
+    // analista, no un artefacto de una carga anterior). Pero si ESTE archivo
+    // trae una columna que matchea una clave declarada ausente —el cliente
+    // pudo haber empezado a liquidar ese concepto—, se avisa junto al campo
+    // para que el analista destilde el ⊘ si corresponde. Decisión de Willy,
+    // 2026-08-13 (specs/obligatoria-gate-carga-archivo.md).
+    let omitCandidates = null;
+    if (savedMapping && autoDetect && Object.values(savedMapping).some(esOmitido)) {
+      const detected = autoDetect(headers);
+      if (detected) {
+        omitCandidates = Object.fromEntries(
+          Object.entries(savedMapping)
+            .filter(([k, v]) => esOmitido(v) && detected[k])
+            .map(([k]) => [k, detected[k]])
+        );
+      }
+    }
+
     // El formulario se vuelve a mostrar a sí mismo cuando el parseo falla. Antes
     // la rama de error reimplementaba el handler un nivel más adentro, y la
     // copia perdía dos cosas: `autoDetected` (después de un error los campos que
@@ -135,7 +154,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
     // guardado que no existe) y `autoDetect` (al cancelar y volver a subir el
     // mismo archivo había que mapear las columnas a mano).
     const showMappingForm = () => renderMappingForm(container, {
-      headers, preview, fileType, savedMapping, autoDetected,
+      headers, preview, fileType, savedMapping, autoDetected, omitCandidates,
       fileName: file.name,
       onConfirm: async (mapping) => {
         renderLoadingProgress(container, 'parsing');
@@ -533,6 +552,112 @@ function renderError(container, msg, onRetry) {
   container.querySelector('#js-retry-btn').addEventListener('click', onRetry);
 }
 
+// ── Omisión declarada (⊘) en la carga de archivo ─────────────────────────────
+// El gate de OBLIGATORIA está activo en esta pantalla (D-041 punto 4,
+// specs/obligatoria-gate-carga-archivo.md): un campo que algún contrato de
+// export marca OBLIGATORIA bloquea el submit igual que un `required: true`, y
+// la vía de escape es el toggle ⊘ — el analista declara que este archivo no
+// trae esa columna, queda asentado en el perfil del cliente (viaja dentro de
+// `mapping` como OMITIDO, ver contracts.js) y el concepto se computa como sin
+// dato, no como cero. Mismo patrón visual que el panel "Columnas del Tabulado"
+// del Paso 2 (renderTabExtraConfig, controlsWizard.js) a propósito; no se
+// extrajo un componente compartido para no atar las dos superficies.
+
+/**
+ * ¿Este campo ofrece el toggle ⊘? Sólo OBLIGATORIA por contrato y sin
+ * `required` legado: CLAVE no admite omisión (sin eso el parser ni puede leer
+ * el archivo) y un `required: true` de la ficha sigue bloqueando duro, sin
+ * salida — dársela le sacaría una obligación que ya existía (el contrato es
+ * un piso, nunca un techo, D-045).
+ */
+export function puedeOmitirse(fileType, field) {
+  return !field.required && necessityOfKey(fileType, field.key) === NECESSITY.OBLIGATORIA;
+}
+
+/**
+ * Campos que impiden confirmar el mapeo: bloquean (por contrato o por flag
+ * legado, ver blocksProgress) y no están resueltos. `OMITIDO` cuenta como
+ * resuelto — sin esa salida, activar el bloqueo de OBLIGATORIA habría roto la
+ * carga de cualquier NR al que le falte uno de los 18 conceptos, y ningún
+ * cliente los tiene todos (D-041 punto 4).
+ *
+ * Pero sólo donde el campo la ofrece: un OMITIDO en un campo que no admite ⊘
+ * (una CLAVE, un required legado — sólo puede venir de un perfil guardado
+ * corrupto o editado a mano, la UI no lo escribe) NO cuenta como resuelto.
+ * Si contara, el parser recibiría una "columna" que ninguna fila trae y
+ * seguiría de largo con 0 filas — el default silencioso exacto que el gate
+ * existe para cortar.
+ */
+export function pendingUploadRequirements(fileType, fields, mapping) {
+  return fields.filter(f => {
+    if (!blocksProgress(fileType, f.key, f.required)) return false;
+    const val = mapping?.[f.key];
+    if (esOmitido(val)) return !puedeOmitirse(fileType, f);
+    return !val;
+  });
+}
+
+/** Texto del toast de faltantes: nombra las columnas y ofrece el ⊘ sólo si
+ * alguna de las que faltan lo admite (una CLAVE o un required legado no
+ * tienen esa salida y ofrecerla mentiría). */
+function faltantesToast(fileType, faltantes) {
+  const labels    = faltantes.map(f => f.label).join(', ');
+  const omisibles = faltantes.filter(f => puedeOmitirse(fileType, f)).length;
+  const salida = omisibles === 0 ? ''
+    : omisibles === 1 ? ' — o declarala ausente con ⊘'
+    : ' — o declaralas ausentes con ⊘';
+  return `Falta completar: ${labels}${salida}`;
+}
+
+// Los tramos del campo que cambian con el toggle — compartidos por el
+// formulario de mapeo y el panel de remapeo para que los dos rendericen la
+// omisión exactamente igual.
+function omitBadgeHtml(omitido) {
+  return `<span data-fu-omit-badge style="color:var(--color-text-muted);font-size:0.8em;${omitido ? '' : 'display:none;'}"> ⊘ declarada ausente</span>`;
+}
+function omitButtonHtml(key, omitido) {
+  return `<button type="button" class="btn btn--sm ${omitido ? 'btn--primary' : 'btn--ghost'}"
+    data-fu-omit="${escHtml(key)}" aria-pressed="${omitido}"
+    title="Declarar que este archivo no trae esta columna">⊘</button>`;
+}
+function omitHintHtml(omitido) {
+  return `<div data-fu-omit-hint class="text-muted" style="font-size:var(--text-xs);margin-top:2px;${omitido ? '' : 'display:none;'}">No se resuelve — se computa como sin dato, no como cero.</div>`;
+}
+
+/**
+ * Cablea los toggles ⊘ de un formulario ya renderizado. El estado vive en el
+ * Set `omitted` (clave del campo declarada ausente) y el DOM se actualiza en
+ * el lugar, en vez de re-renderizar el formulario entero como hace el panel
+ * del Paso 2 — acá lo que el analista ya eligió en los otros selects (y el
+ * modo de nombre) vive sólo en el DOM hasta el submit, y un re-render lo
+ * perdería.
+ */
+function wireOmitToggles(scope, omitted) {
+  scope.querySelectorAll('[data-fu-omit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key   = btn.dataset.fuOmit;
+      const group = btn.closest('[data-fu-omit-group]');
+      const on    = !omitted.has(key);
+      if (on) omitted.add(key); else omitted.delete(key);
+
+      const sel = group.querySelector('select');
+      sel.disabled = on;
+      sel.style.opacity = on ? '0.6' : '';
+      if (on) sel.value = '';
+      btn.classList.toggle('btn--primary', on);
+      btn.classList.toggle('btn--ghost', !on);
+      btn.setAttribute('aria-pressed', String(on));
+      const show = (attr, visible) => {
+        const el = group.querySelector(`[${attr}]`);
+        if (el) el.style.display = visible ? '' : 'none';
+      };
+      show('data-fu-omit-badge', on);
+      show('data-fu-match-badge', !on);
+      show('data-fu-omit-hint', on);
+    });
+  });
+}
+
 function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   const { fileName, parseMetadata, fileType, mapping, headers, arrayBuffer, clientCode: dataClientCode } = existingData;
   const warns = parseMetadata?.warnings?.length
@@ -551,6 +676,14 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
     .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Sin asignar —'}</option>`)
     .join('');
 
+  // Omisiones declaradas (⊘) del mapeo confirmado — mismo Set y mismo cableado
+  // que el formulario de mapeo inicial (ver la sección "Omisión declarada"
+  // arriba). Sin esto, un OMITIDO persistido se dibujaría como select vacío y
+  // "Aplicar cambios" lo pisaría en silencio.
+  const omitted = canRemap
+    ? new Set(fields.filter(f => esOmitido(mapping?.[f.key])).map(f => f.key))
+    : new Set();
+
   const remapHtml = canRemap ? `
     <details style="margin-top:var(--sp-1);">
       <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--color-primary);list-style:none;display:flex;align-items:center;gap:var(--sp-2);user-select:none;padding:var(--sp-1) 0;">
@@ -559,25 +692,33 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       <div style="margin-top:var(--sp-2);padding:var(--sp-3);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);">
           ${fields.map(f => {
-            const val = mapping?.[f.key] || '';
+            const omitido = omitted.has(f.key);
+            const val = omitido ? '' : (mapping?.[f.key] || '');
             // Sólo se marca el estado "sin asignar". Acá el mapeo ya está
             // confirmado, así que distinguir "✓ auto" de "↺ sesión anterior"
             // sería informar el origen del pre-completado del momento de la
             // carga — un dato ya viejo que puede mentir. Lo que sí sigue siendo
             // cierto es que la columna quedó vacía, y sin el aviso se ve igual
             // que una mapeada (mismo criterio que el panel "Columnas del
-            // Tabulado" del Paso 2).
-            const level = val ? 'none' : 'warn';
+            // Tabulado" del Paso 2). Una omitida no está vacía: está resuelta.
+            const level = (val || omitido) ? 'none' : 'warn';
             const style = matchSelectStyle(level);
             // El asterisco tiene que coincidir con lo que el gate de abajo
             // realmente exige — si no, un campo bloqueante sale sin marcar.
             const esBloqueante = blocksProgress(fileType, f.key, f.required);
-            return `
-              <div class="form-group" style="margin-bottom:0;">
-                <label class="form-label ${esBloqueante ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
-                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}" style="font-size:var(--text-sm);${style}">
+            const puedeOmitir  = puedeOmitirse(fileType, f);
+            const selectHtml = `
+                <select class="form-select" data-fu-remap-key="${escHtml(f.key)}"${omitido ? ' disabled' : ''} style="font-size:var(--text-sm);${style}${omitido ? 'opacity:0.6;' : ''}">
                   ${opts(val)}
-                </select>
+                </select>`;
+            return `
+              <div class="form-group" style="margin-bottom:0;"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
+                <label class="form-label ${esBloqueante ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${puedeOmitir
+                  ? `<span data-fu-match-badge${omitido ? ' style="display:none;"' : ''}>${matchBadge(level)}</span>${omitBadgeHtml(omitido)}`
+                  : matchBadge(level)}</label>
+                ${puedeOmitir
+                  ? `<div style="display:flex;gap:var(--sp-2);align-items:center;">${selectHtml}${omitButtonHtml(f.key, omitido)}</div>${omitHintHtml(omitido)}`
+                  : selectHtml}
               </div>
             `;
           }).join('')}
@@ -601,6 +742,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   container.querySelector('#js-replace-btn').addEventListener('click', onReplace);
 
   if (canRemap) {
+    wireOmitToggles(container, omitted);
     container.querySelector('#js-remap-apply')?.addEventListener('click', async () => {
       const btn = container.querySelector('#js-remap-apply');
       btn.disabled = true;
@@ -608,7 +750,8 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       const newMapping = {};
       container.querySelectorAll('[data-fu-remap-key]').forEach(sel => {
         const k = sel.dataset.fuRemapKey;
-        if (sel.value) newMapping[k] = sel.value;
+        if (omitted.has(k)) newMapping[k] = OMITIDO;
+        else if (sel.value) newMapping[k] = sel.value;
       });
 
       // Mismo gate que el formulario de carga inicial (ver el submit de
@@ -619,9 +762,9 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       // declarados `required: true` —puesto, ID/nombre de centro de costo,
       // departamento de Cat. Empleados, PRECIO de Rendimiento y COSTO TOTAL—
       // se podían dejar vacíos desde acá sin que nada avisara.
-      const faltantes = fields.filter(f => blocksProgress(fileType, f.key, f.required) && !newMapping[f.key]).map(f => f.label);
+      const faltantes = pendingUploadRequirements(fileType, fields, newMapping);
       if (faltantes.length) {
-        showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
+        showToast(faltantesToast(fileType, faltantes), 'warning');
         btn.disabled = false;
         btn.textContent = '✓ Aplicar cambios';
         return;
@@ -642,9 +785,16 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   }
 }
 
-function renderMappingForm(container, { headers, preview, fileType, savedMapping, autoDetected, fileName, onConfirm, onCancel }) {
+function renderMappingForm(container, { headers, preview, fileType, savedMapping, autoDetected, omitCandidates, fileName, onConfirm, onCancel }) {
   const fields    = fieldsFor(fileType);
   const conNombre = hasNameMapping(fileType);
+
+  // Omisiones declaradas (⊘): arranca de lo que traiga el perfil guardado —
+  // sin esto, un OMITIDO persistido se perdería en silencio al reconfirmar
+  // (el select no tiene option que matchee y cae a "— Seleccioná —"). Vive en
+  // este Set mientras el formulario está abierto; al confirmar viaja dentro
+  // de `mapping`.
+  const omitted = new Set(fields.filter(f => esOmitido(savedMapping?.[f.key])).map(f => f.key));
 
   // Detectar el modo de nombre guardado previamente
   let savedNombreMode = 'junto'; // 'junto' = una columna, 'separado' = dos columnas
@@ -686,16 +836,27 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   const stdFieldsHtml = fields.length === 0 ? '' : `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);">
       ${fields.map(f => {
-        const val   = savedMapping?.[f.key] || '';
+        const omitido = omitted.has(f.key);
+        const val   = omitido ? '' : (savedMapping?.[f.key] || '');
         const level = fieldLevel(val);
         const style = matchSelectStyle(level);
         const esBloqueante = blocksProgress(fileType, f.key, f.required);
-        return `
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">${f.label}${matchBadge(level)}</label>
-            <select class="form-select" name="${f.key}"${style ? ` style="${style}"` : ''}>
+        const puedeOmitir  = puedeOmitirse(fileType, f);
+        const candidata    = omitido ? omitCandidates?.[f.key] : null;
+        const selStyle     = `${style}${omitido ? 'opacity:0.6;' : ''}`;
+        const selectHtml = `
+            <select class="form-select" name="${f.key}"${omitido ? ' disabled' : ''}${selStyle ? ` style="${selStyle}"` : ''}>
               ${opts(val)}
-            </select>
+            </select>`;
+        return `
+          <div class="form-group" style="margin-bottom:0;"${puedeOmitir ? ` data-fu-omit-group="${escHtml(f.key)}"` : ''}>
+            <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">${f.label}${puedeOmitir
+              ? `<span data-fu-match-badge${omitido ? ' style="display:none;"' : ''}>${matchBadge(level)}</span>${omitBadgeHtml(omitido)}`
+              : matchBadge(level)}</label>
+            ${puedeOmitir
+              ? `<div style="display:flex;gap:var(--sp-2);align-items:center;">${selectHtml}${omitButtonHtml(f.key, omitido)}</div>${omitHintHtml(omitido)}`
+              : selectHtml}
+            ${candidata ? `<div class="text-muted" style="font-size:var(--text-xs);margin-top:2px;">🤖 Este archivo trae una columna candidata («${escHtml(candidata)}») — destildá el ⊘ si el cliente empezó a liquidarla.</div>` : ''}
           </div>
         `;
       }).join('')}
@@ -780,6 +941,8 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
     </form>
   `;
 
+  wireOmitToggles(container.querySelector('#js-mapping-form'), omitted);
+
   // Toggle para mostrar/ocultar las secciones de nombre
   if (conNombre) {
     const junto    = container.querySelector('#js-nombre-junto');
@@ -798,8 +961,11 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
     const form    = e.target;
     const mapping = {};
 
-    // Campos estándar
+    // Campos estándar. Una omisión declarada viaja como OMITIDO: cuenta como
+    // resuelta para el gate y como ausencia real (null, no cero) para el
+    // control — ver contracts.js.
     fields.forEach(f => {
+      if (omitted.has(f.key)) { mapping[f.key] = OMITIDO; return; }
       const val = form.querySelector(`[name="${f.key}"]`)?.value;
       if (val) mapping[f.key] = val;
     });
@@ -818,12 +984,13 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
       }
     }
 
-    // Validar campos requeridos — deriva de EXPORT_CONTRACTS (Paso 1 de
-    // specs/contrato-export.md) para toda clave que algún export ya consuma;
-    // cae a `f.required` para lo que todavía no está contratado.
-    const faltantes = fields.filter(f => blocksProgress(fileType, f.key, f.required) && !mapping[f.key]).map(f => f.label);
+    // Validar campos requeridos — deriva de EXPORT_CONTRACTS (CLAVE y
+    // OBLIGATORIA bloquean, ver blocksProgress) para toda clave que algún
+    // export ya consuma; cae a `f.required` para lo que todavía no está
+    // contratado. OMITIDO cuenta como resuelto.
+    const faltantes = pendingUploadRequirements(fileType, fields, mapping);
     if (faltantes.length) {
-      showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
+      showToast(faltantesToast(fileType, faltantes), 'warning');
       return;
     }
 

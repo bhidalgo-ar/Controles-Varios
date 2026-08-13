@@ -1,10 +1,12 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** **Pasos 0-6 hechos**, incluidos 4b y el **Paso 6** (2026-08-12), y los writers del Paso 6
+> **Estado:** **Pasos 0-6 y 8 hechos**, incluidos 4b y el **Paso 6** (2026-08-12), y los writers del Paso 6
 > migraron el 2026-08-13 (D-047) — 4 de los 5 (Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG
 > ×2 hojas). Del Paso 6 quedan afuera a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se
 > declaran, y por qué") y, de los writers, `acreditaciones_reporte` (ver "Lo que falta para migrar los
-> writers del Paso 6" — se queda con su .xlsx a mano). Ver "Ya cerrado" para el detalle de cada paso.
+> writers del Paso 6" — se queda con su .xlsx a mano). El **Paso 8** (2026-08-13) activó el bloqueo de
+> `OBLIGATORIA` en la carga de archivo, llevando antes el toggle ⊘ a esa superficie — con eso el gate del
+> contrato cubre los dos lados del cruce. Ver "Ya cerrado" para el detalle de cada paso.
 >
 > **Después del Paso 6** entraron dos contratos más, los del asiento de FINADIET (`finadiet_asiento_cc` y
 > `finadiet_asiento_gral`, D-046). No suman deuda de writer: nacieron sobre `writeContractSheet`, así que
@@ -173,6 +175,7 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
 | **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Lo que falta para migrar los writers del Paso 6"). | ✅ hecho (2026-08-12) — D-045; writers migrados el 2026-08-13 (4 de 5) — D-047 |
 | **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
+| **8** | **El gate de OBLIGATORIA llega a la carga de archivo.** El toggle ⊘ entra al formulario de mapeo y al panel de remapeo de `fileUpload.js`, y **recién ahí** `blocksProgress()` pasa a bloquear `OBLIGATORIA` (D-041 punto 4: un OBLIGATORIA no bloquea hasta que exista la vía de escape en esa misma superficie). Cierra el lado **archivo** que la nota de alcance del Paso 2 dejó anotado: los 18 `nrKey` de NR y `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers. La omisión persiste en el perfil del cliente y la auto-detección la respeta pero avisa si el archivo nuevo trae una columna candidata. | ✅ hecho (2026-08-13) — spec propia: `specs/obligatoria-gate-carga-archivo.md`, D-049; `fileUpload.js` · `tests/uploadOmission.test.js` · `tests/e2e/uploadOmission.spec.js` |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
 0-4a fueron el andamio necesario para que el Paso 5 tuviera un lugar honesto donde declarar el hueco
@@ -268,7 +271,7 @@ ligera. El único lever sancionado para forzar un color sin pasar por el % de di
 leyendo las 4). Un control que evaluó CERO legajos de los que tenía es, por definición, un estado de
 error — no una categoría nueva que hubiera que inventar en `semaforo.js`.
 
-**Precisión sobre el alcance real del Paso 2:** el gate nuevo cubre el lado **Tabulado** (`TAB_NR_*_FIELDS`, `tabExtraConfig`), que es el que la auditoría señaló como el agujero ("los 18 conceptos de NR no tienen ningún gate"). El lado **archivo NR** (`nrKey`, `FIELD_DEFS.nr_file`, validado en `fileUpload.js`) sigue en `OBLIGATORIA`-sin-bloquear del Paso 1 — activarlo ahí necesitaría la misma omisión declarada dentro del formulario de mapeo de archivo, que todavía no existe. Mismo criterio para `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers: siguen sin bloquear en la carga del archivo del reporte, sólo en el lado Tabulado (que ya bloqueaba antes, sin cambios).
+**Precisión sobre el alcance real del Paso 2:** el gate nuevo cubre el lado **Tabulado** (`TAB_NR_*_FIELDS`, `tabExtraConfig`), que es el que la auditoría señaló como el agujero ("los 18 conceptos de NR no tienen ningún gate"). El lado **archivo NR** (`nrKey`, `FIELD_DEFS.nr_file`, validado en `fileUpload.js`) sigue en `OBLIGATORIA`-sin-bloquear del Paso 1 — activarlo ahí necesitaría la misma omisión declarada dentro del formulario de mapeo de archivo, que todavía no existe. Mismo criterio para `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers: siguen sin bloquear en la carga del archivo del reporte, sólo en el lado Tabulado (que ya bloqueaba antes, sin cambios). **Cerrado el 2026-08-13 por el Paso 8** (ver la tabla del plan): el toggle ⊘ llegó al formulario de mapeo y al panel de remapeo, y `blocksProgress()` bloquea `OBLIGATORIA` también en la carga.
 
 ### Paso 4b (2026-08-12)
 
