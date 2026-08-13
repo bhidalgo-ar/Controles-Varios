@@ -262,9 +262,87 @@ async function getPrevTierByControlId(run, thresholdPct) {
 const GAUGE_R = 82;
 const GAUGE_CIRC = 2 * Math.PI * GAUGE_R;
 
+// ── Cómo se nombra en pantalla la unidad que verificó cada control ───────────
+// `summary.unit` es el identificador interno de lo que cuentan `unitsTotal` /
+// `unitsWithDiff` (ver la regla en CLAUDE.md); acá vive su nombre para el
+// analista. Si sumás un control con una unidad nueva, agregala también acá:
+// el hero nombra la unidad, y nombrarla mal es peor que no nombrarla — un
+// control por centro de costo mostraba "0 legajos verificados sin diferencias".
+// `fem` es el género del sustantivo, para concordar "verificado/verificada".
+const UNIT_NAMES = {
+  legajo: { one: 'legajo',          many: 'legajos',           fem: false },
+  cc:     { one: 'centro de costo', many: 'centros de costo',  fem: false },
+  cuenta: { one: 'cuenta contable', many: 'cuentas contables', fem: true  },
+  lista:  { one: 'listado',         many: 'listados',          fem: false },
+};
+
+// Corrida sin ninguna unidad medible (sólo modos "Generar Reporte"): no hay
+// unidad que nombrar, y el gauge no está midiendo nada concreto.
+const UNIT_NAMES_FALLBACK = { one: 'unidad', many: 'unidades', fem: true };
+
+function unitNames(unit) {
+  if (!unit) return UNIT_NAMES_FALLBACK;
+  // Unidad nueva sin etiqueta: mostramos el identificador crudo antes que
+  // llamarla "legajos", que es lo que hacía este hero y era falso.
+  return UNIT_NAMES[unit] || { one: String(unit), many: `${unit}s`, fem: false };
+}
+
+/** "24 centros de costo" · "1 legajo" (el nombre va escapado: entra a HTML). */
+function fmtUnitCount(n, unit) {
+  const names = unitNames(unit);
+  return `${fmtInt(n)} ${esc(n === 1 ? names.one : names.many)}`;
+}
+
+/** Participio concordado con la unidad: "verificados" / "verificada". */
+function fmtVerificado(n, unit) {
+  return `verificad${unitNames(unit).fem ? 'a' : 'o'}${n === 1 ? '' : 's'}`;
+}
+
+// ── Unidades de la corrida: agrupadas, nunca sumadas entre sí ────────────────
+// Un porcentaje que mezcle 100 legajos con 3 centros de costo no significa
+// nada, así que el gauge mide UNA unidad y la nombra. 'legajo' gana siempre que
+// haya al menos un control por legajo (es la unidad de casi toda la batería y
+// el significado que el número grande tuvo siempre); si no hay ninguno, gana la
+// unidad con más controles, a igualdad la que más unidades verificó, y a
+// igualdad el orden de esta lista. El resto de las unidades no desaparece: se
+// enumeran en el subtítulo, cada una con su propio conteo.
+const GAUGE_UNIT_ORDER = ['legajo', 'cc', 'cuenta', 'lista'];
+
+const sumUnitsTotal    = ctrls => ctrls.reduce((s, c) => s + (c.summary.unitsTotal || 0), 0);
+const sumUnitsWithDiff = ctrls => ctrls.reduce((s, c) => s + (c.summary.unitsWithDiff || 0), 0);
+
+function groupSummariesByUnit(controlSummaries) {
+  const byUnit = new Map();
+  for (const c of controlSummaries) {
+    if (!c.summary.unit || c.summary.unitsTotal == null) continue;
+    const list = byUnit.get(c.summary.unit) || [];
+    list.push(c);
+    byUnit.set(c.summary.unit, list);
+  }
+
+  const rank = unit => {
+    const i = GAUGE_UNIT_ORDER.indexOf(unit);
+    return i < 0 ? GAUGE_UNIT_ORDER.length : i;
+  };
+
+  return [...byUnit.entries()]
+    .map(([unit, ctrls]) => ({
+      unit,
+      ctrls,
+      unitsTotal:    sumUnitsTotal(ctrls),
+      unitsWithDiff: sumUnitsWithDiff(ctrls),
+    }))
+    .sort((a, b) => {
+      if (a.unit === 'legajo' || b.unit === 'legajo') return a.unit === 'legajo' ? -1 : 1;
+      if (b.ctrls.length !== a.ctrls.length) return b.ctrls.length - a.ctrls.length;
+      if (b.unitsTotal !== a.unitsTotal) return b.unitsTotal - a.unitsTotal;
+      return rank(a.unit) - rank(b.unit);
+    });
+}
+
 // ── Hero de resultados ──────────────────────────────────────────────────────
 
-function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId) {
+export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId) {
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   // "Legajos cruzados": tamaño del Tabulado de esta corrida si está disponible;
@@ -274,12 +352,15 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
   const totalLegajosCruzados = tabFile?.parseMetadata?.totalRows
     ?? legajoCtrls.reduce((max, c) => Math.max(max, c.summary.unitsTotal), 0);
 
-  // % OK del gauge — sólo entre controles cuya unidad es "legajo" (los de CC,
-  // como Rendimiento vs Tabulado/Asiento, usan otra unidad y no se mezclan acá;
-  // igual entran en la lista de la derecha y en el veredicto general).
-  const totalLegajoUnits    = legajoCtrls.reduce((sum, c) => sum + c.summary.unitsTotal, 0);
-  const totalLegajoWithDiff = legajoCtrls.reduce((sum, c) => sum + (c.summary.unitsWithDiff || 0), 0);
-  const pctOk = totalLegajoUnits > 0 ? Math.max(0, 100 - (totalLegajoWithDiff / totalLegajoUnits) * 100) : 100;
+  // % OK del gauge — una sola unidad, la que elige groupSummariesByUnit (nunca
+  // legajos sumados con centros de costo). Las demás unidades no se mezclan acá
+  // pero se enumeran en el subtítulo, y todas entran en el veredicto general.
+  const unitGroups = groupSummariesByUnit(controlSummaries);
+  const gaugeGroup = unitGroups[0] || { unit: null, unitsTotal: 0, unitsWithDiff: 0 };
+  const gaugeUnit  = gaugeGroup.unit;
+  const pctOk = gaugeGroup.unitsTotal > 0
+    ? Math.max(0, 100 - (gaugeGroup.unitsWithDiff / gaugeGroup.unitsTotal) * 100)
+    : 100;
 
   // Controles "de verificación" (excluye los modos "Generar Reporte", que no cruzan nada)
   const checkedControls = controlSummaries.filter(c => c.tier !== 'info');
@@ -325,13 +406,27 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
   if (totalChecked === 0) {
     subline = 'Esta corrida sólo incluye controles de generación de reporte (sin cruce de diferencias).';
   } else if (overallTier === 'ok') {
-    subline = `${fmtInt(totalLegajoUnits)} legajo${totalLegajoUnits === 1 ? '' : 's'} verificado${totalLegajoUnits === 1 ? '' : 's'} sin diferencias.`;
+    // Una frase por unidad verificada: "100 legajos verificados · 24 centros de
+    // costo verificados, sin diferencias". Nunca un total que las sume.
+    const unitBits = unitGroups.map(g =>
+      `${fmtUnitCount(g.unitsTotal, g.unit)} ${fmtVerificado(g.unitsTotal, g.unit)}`);
+    subline = unitBits.length === 0 ? 'Sin diferencias.'
+            : unitBits.length === 1 ? `${unitBits[0]} sin diferencias.`
+            : `${unitBits.join(' · ')}, sin diferencias.`;
   } else {
     const bits = [];
     if (errorCount > 0) bits.push(`${errorCount} control${errorCount === 1 ? '' : 'es'} en rojo`);
     if (warnCount  > 0) bits.push(`${warnCount} control${warnCount === 1 ? '' : 'es'} en amarillo`);
-    subline = `${bits.join(' y ')}.<br>${fmtInt(totalLegajoWithDiff)} legajo${totalLegajoWithDiff === 1 ? '' : 's'} con diferencia`
-      + (totalDiffAmount > 0 ? ` · dif. total <strong>$ ${formatAmount(totalDiffAmount)}</strong>` : '');
+    // Cada unidad con su propio conteo de diferencias: así el amarillo del
+    // cartel se explica aunque el gauge esté midiendo otra unidad.
+    const diffBits = unitGroups
+      .filter(g => g.unitsWithDiff > 0)
+      .map(g => `${fmtUnitCount(g.unitsWithDiff, g.unit)} con diferencia`);
+    if (totalDiffAmount > 0) {
+      diffBits.push(`dif. total <strong>$ ${formatAmount(totalDiffAmount)}</strong>`);
+    }
+    subline = `${bits.join(' y ')}.`
+      + (diffBits.length > 0 ? `<br>${diffBits.join(' · ')}` : '');
   }
 
   // ── Corrida de un solo control: banda compacta, sin gauge ──────────────────
@@ -377,7 +472,7 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
           ${gaugeSvg}
           <div class="hero-gauge__center">
             <span class="hero-gauge__pct" data-gauge-pct>${fmtPct1(pctOk)}%</span>
-            <span class="hero-gauge__label">legajos OK</span>
+            <span class="hero-gauge__label">${esc(unitNames(gaugeUnit).many)} OK</span>
           </div>
         </div>
         <div style="text-align:center;">
@@ -401,7 +496,7 @@ function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByContr
       <div class="hero-verdict__list-col">
         <div class="hero-ctrl-header">
           <span class="hero-ctrl-header__label">Controles · errores primero</span>
-          <span class="hero-ctrl-header__legend">verde 0% · amarillo ≤${thresholdPct}% · rojo &gt;${thresholdPct}% de legajos c/dif</span>
+          <span class="hero-ctrl-header__legend">verde 0% · amarillo ≤${thresholdPct}% · rojo &gt;${thresholdPct}% de ${esc(unitNames(gaugeUnit).many)} c/dif</span>
         </div>
         <div class="hero-ctrl-rows">
           ${rowsHtml}
@@ -444,15 +539,18 @@ function buildCtrlRowHtml(item, index, prevTierByControlId, reduceMotion) {
     contextText = summary.headline || 'Sin cruce de diferencias';
     linkText = 'Detalle';
   } else {
+    // El chip de conteo es angosto: para centro de costo se mantiene "CC", que
+    // es la abreviatura que ya venía. El resto usa su nombre completo.
     const isCc = summary.unit === 'cc';
-    const unitLabel = isCc ? 'CC' : (summary.unitsWithDiff === 1 ? 'legajo' : 'legajos');
+    const names = unitNames(summary.unit);
+    const unitLabel = isCc ? 'CC' : (summary.unitsWithDiff === 1 ? names.one : names.many);
     const hasDiff = summary.unitsWithDiff > 0;
 
     if (hasDiff) {
       const pct = summary.unitsTotal > 0 ? (summary.unitsWithDiff / summary.unitsTotal) * 100 : 0;
       countText = `${summary.unitsWithDiff} ${unitLabel} · ${fmtPct1(pct)}%`;
     } else {
-      countText = summary.unit === 'cc'
+      countText = isCc
         ? `${summary.unitsTotal}/${summary.unitsTotal} CC OK`
         : '0 diferencias';
     }
@@ -465,7 +563,8 @@ function buildCtrlRowHtml(item, index, prevTierByControlId, reduceMotion) {
 
     contextText = hasDiff
       ? [amountText, note].filter(Boolean).join(' · ')
-      : `${fmtInt(summary.unitsTotal)} ${summary.unit === 'cc' ? 'centros de costo' : 'legajos'} verificados`;
+      : `${fmtInt(summary.unitsTotal)} ${summary.unitsTotal === 1 ? names.one : names.many} `
+        + fmtVerificado(summary.unitsTotal, summary.unit);
 
     linkText = hasDiff ? 'Ir al detalle →' : 'Detalle';
   }
