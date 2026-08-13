@@ -65,7 +65,11 @@ test('importar el mismo seed dos veces no duplica clientes', async ({ page }, te
     await fileChooser.setFiles(seedPath);
     await expect(page.locator('.modal__footer')).toBeVisible();
     await page.click('#js-confirm-ok');
-    await expect(page.locator('.toast--success')).toBeVisible();
+    // El aviso del import anterior sigue en pantalla (dura 4,5 s y las dos
+    // importaciones pasan mucho más rápido), así que se busca el de ESTA
+    // vuelta: la primera crea los 2 clientes y la segunda no crea ninguno.
+    const esperado = i === 0 ? '2 clientes nuevos' : '0 clientes nuevos';
+    await expect(page.locator('.toast--success').filter({ hasText: esperado })).toBeVisible();
   }
 
   await expect(page.locator('.home-table__row')).toHaveCount(2);
