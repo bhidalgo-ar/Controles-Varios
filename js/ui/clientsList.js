@@ -18,11 +18,14 @@ const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', i
 
 function closeAllRowMenus() {
   document.querySelectorAll('.row-menu__panel').forEach(p => p.setAttribute('hidden', ''));
+  document.getElementById('js-data-menu-btn')?.setAttribute('aria-expanded', 'false');
 }
 
-// Cierra cualquier menú "⋯" abierto al clickear afuera. Se registra una sola
-// vez a nivel módulo (el módulo sólo se evalúa una vez por carga de página).
+// Cierra cualquier menú abierto ("⋯" de una fila o "Datos ▾") al clickear
+// afuera o con Escape. Se registra una sola vez a nivel módulo (el módulo sólo
+// se evalúa una vez por carga de página).
 document.addEventListener('click', closeAllRowMenus);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllRowMenus(); });
 
 // El panel usa position:fixed calculado desde el botón (en vez de depender
 // de position:absolute contra un ancestro) porque la tabla vive dentro de un
@@ -43,11 +46,6 @@ function positionRowMenuPanel(btn, panel) {
 export async function renderClientsList(root) {
   const state = { period: currentPeriod() };
 
-  // El inicio no tiene contexto de cliente ni pasos: la barra queda con la
-  // identidad y el selector de tema, nada más. El selector de mes y el menú
-  // "Datos ▾" se mudan a sus slots cuando se rediseñe esta pantalla.
-  setHeader();
-
   root.innerHTML = `
     <div class="page-content">
       <div class="page-actions">
@@ -56,20 +54,9 @@ export async function renderClientsList(root) {
           <span id="js-control-help"></span>
           <span id="js-seed-version" style="font-size:12px;color:var(--t3);margin-left:var(--sp-3);"></span>
         </div>
-        <div class="page-actions__buttons" style="align-items:center;">
-          <div class="month-selector">
-            <button type="button" class="month-selector__arrow" id="js-month-prev" aria-label="Mes anterior">‹</button>
-            <span class="month-selector__label" id="js-month-label"></span>
-            <button type="button" class="month-selector__arrow" id="js-month-next" aria-label="Mes siguiente">›</button>
-          </div>
-          <button class="btn btn--ghost btn--pill" id="js-seed-import-btn" title="Importa la cartera de clientes desde un archivo de seed">📥 Importar cartera</button>
-          <input type="file" accept="application/json" id="js-seed-file-input" hidden>
-          <button class="btn btn--ghost btn--pill" id="js-backup-export-btn" title="Descarga un archivo con todos los clientes, sesiones y corridas guardadas en este navegador">⬇ Respaldo</button>
-          <button class="btn btn--ghost btn--pill" id="js-backup-import-btn" title="Reemplaza todos los datos de este navegador por los de un archivo de respaldo">⬆ Restaurar</button>
-          <input type="file" accept="application/json" id="js-backup-file-input" hidden>
-          <button class="btn btn--primary btn--pill" id="js-new-client-btn">+ Nuevo cliente</button>
-        </div>
       </div>
+      <input type="file" accept="application/json" id="js-seed-file-input" hidden>
+      <input type="file" accept="application/json" id="js-backup-file-input" hidden>
       <div id="js-clients-container">
         <div class="skeleton-cards">
           ${[0,1,2].map(() => `
@@ -85,13 +72,29 @@ export async function renderClientsList(root) {
     </div>
   `;
 
-  root.querySelector('#js-new-client-btn').addEventListener('click', () => showCreateModal(root, state));
-  root.querySelector('#js-month-prev').addEventListener('click', () => changeMonth(root, state, previousPeriod));
-  root.querySelector('#js-month-next').addEventListener('click', () => changeMonth(root, state, nextPeriod));
-  root.querySelector('#js-backup-export-btn').addEventListener('click', handleBackupExport);
-  root.querySelector('#js-backup-import-btn').addEventListener('click', () => root.querySelector('#js-backup-file-input').click());
+  // El período y las acciones de la pantalla viven en la barra superior: el mes
+  // como contexto (es lo que decide qué muestra la tabla), "Datos ▾" plegado
+  // porque son acciones raras (regla 2) y "+ Nuevo cliente" como secundaria.
+  // Los ids y los handlers son los mismos de siempre — sólo cambian de lugar.
+  const monthSelector = buildMonthSelector();
+  const dataMenu = buildDataMenu();
+  setHeader({
+    context: monthSelector,
+    tools: dataMenu,
+    primary: {
+      label: '+ Nuevo cliente',
+      variant: 'secondary',
+      id: 'js-new-client-btn',
+      onClick: () => showCreateModal(root, state),
+    },
+  });
+
+  monthSelector.querySelector('#js-month-prev').addEventListener('click', () => changeMonth(root, state, previousPeriod));
+  monthSelector.querySelector('#js-month-next').addEventListener('click', () => changeMonth(root, state, nextPeriod));
+  dataMenu.querySelector('#js-backup-export-btn').addEventListener('click', handleBackupExport);
+  dataMenu.querySelector('#js-backup-import-btn').addEventListener('click', () => root.querySelector('#js-backup-file-input').click());
+  dataMenu.querySelector('#js-seed-import-btn').addEventListener('click', () => root.querySelector('#js-seed-file-input').click());
   root.querySelector('#js-backup-file-input').addEventListener('change', (e) => handleBackupImport(e, root, state));
-  root.querySelector('#js-seed-import-btn').addEventListener('click', () => root.querySelector('#js-seed-file-input').click());
   root.querySelector('#js-seed-file-input').addEventListener('change', (e) => handleSeedFileChosen(e, root, state));
   renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
 
@@ -104,6 +107,52 @@ export async function renderClientsList(root) {
   // existe a propósito, así que esto no hace nada la mayoría de las veces).
   const autoSeed = await tryAutoLoadSeed();
   if (autoSeed) await handleSeedFile(autoSeed, root, state);
+}
+
+// El selector de mes y el menú "Datos ▾" se cuelgan de la barra superior, así
+// que se arman como elementos sueltos (no salen del innerHTML de la pantalla).
+function buildMonthSelector() {
+  const el = document.createElement('div');
+  el.className = 'month-selector';
+  el.innerHTML = `
+    <button type="button" class="month-selector__arrow" id="js-month-prev" aria-label="Mes anterior">‹</button>
+    <span class="month-selector__label" id="js-month-label"></span>
+    <button type="button" class="month-selector__arrow" id="js-month-next" aria-label="Mes siguiente">›</button>
+  `;
+  return el;
+}
+
+// Importar cartera / Respaldo / Restaurar: se usan de vez en cuando y ninguna
+// es la acción de la pantalla, así que van plegadas en un menú. Reusa el panel
+// de los menús "⋯" de cada fila, incluido el cierre al clickear afuera.
+function buildDataMenu() {
+  const el = document.createElement('div');
+  el.className = 'row-menu';
+  el.innerHTML = `
+    <button type="button" class="btn btn--ghost btn--sm btn--pill" id="js-data-menu-btn"
+            aria-haspopup="true" aria-expanded="false">Datos ▾</button>
+    <div class="row-menu__panel" hidden>
+      <button class="row-menu__item" id="js-seed-import-btn" title="Importa la cartera de clientes desde un archivo de seed">📥 Importar cartera</button>
+      <button class="row-menu__item" id="js-backup-export-btn" title="Descarga un archivo con todos los clientes, sesiones y corridas guardadas en este navegador">⬇ Respaldo</button>
+      <button class="row-menu__item" id="js-backup-import-btn" title="Reemplaza todos los datos de este navegador por los de un archivo de respaldo">⬆ Restaurar</button>
+    </div>
+  `;
+
+  const btn = el.querySelector('#js-data-menu-btn');
+  const panel = el.querySelector('.row-menu__panel');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasHidden = panel.hasAttribute('hidden');
+    closeAllRowMenus();
+    if (wasHidden) {
+      positionRowMenuPanel(btn, panel);
+      panel.removeAttribute('hidden');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  });
+  // Elegir una opción cierra el menú: el click burbujea hasta el listener de
+  // document, así que acá no hace falta nada más.
+  return el;
 }
 
 async function updateSeedVersionLabel(root) {
@@ -121,8 +170,9 @@ async function changeMonth(root, state, stepFn) {
   await reloadList(root, state);
 }
 
+// El selector de mes vive en la barra superior, fuera de `root`.
 function updateMonthLabel(root, state) {
-  const label = root.querySelector('#js-month-label');
+  const label = document.querySelector('#js-month-label');
   if (label) label.textContent = periodToLabel(state.period);
 }
 
@@ -133,10 +183,12 @@ async function reloadList(root, state) {
     getInactiveClients().then(l => l.length),
   ]);
 
+  // Va abajo de la tabla: es una salida, no una acción de la pantalla.
   const hiddenLinkHtml = hiddenCount > 0
-    ? `<button class="btn btn--ghost btn--sm" id="js-hidden-clients-btn" style="margin-bottom:var(--sp-3);">
-         🙈 ${hiddenCount} cliente${hiddenCount === 1 ? '' : 's'} oculto${hiddenCount === 1 ? '' : 's'}
-       </button>`
+    ? `<p class="home-hidden-note">
+         🙈 ${hiddenCount} cliente${hiddenCount === 1 ? '' : 's'} oculto${hiddenCount === 1 ? '' : 's'} — nada se borró, ${hiddenCount === 1 ? 'está' : 'están'} fuera de esta lista.
+         <button type="button" class="home-hidden-note__link" id="js-hidden-clients-btn">Verlos</button>
+       </p>`
     : '';
 
   if (clients.length === 0) {
@@ -208,9 +260,8 @@ async function reloadList(root, state) {
 
   const monthName = periodToLabel(state.period).split(' ')[0];
   container.innerHTML = `
-    ${hiddenLinkHtml}
-    <div class="card" style="overflow-x:auto;">
-      <div class="home-table" style="min-width:900px;">
+    <div class="card home-table-card">
+      <div class="home-table">
         <div class="home-table__head">
           <span>Cliente</span>
           <span>Estado ${esc(monthName)}</span>
@@ -221,6 +272,7 @@ async function reloadList(root, state) {
         ${rows.map(renderClientRow).join('')}
       </div>
     </div>
+    ${hiddenLinkHtml}
   `;
 
   rows.forEach(r => attachRowEvents(container, r, root, state));

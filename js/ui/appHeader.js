@@ -22,6 +22,7 @@ const SLOT_IDS = {
   context: 'js-header-context',
   steps:   'js-header-steps',
   hint:    'js-header-hint',
+  tools:   'js-header-tools',
   primary: 'js-header-primary',
 };
 
@@ -32,16 +33,21 @@ const SLOT_IDS = {
  *
  * @param {object}   [opts]
  * @param {object}   [opts.back]    - `{ label, href }` o `{ label, onClick }` (+ `id` opcional)
- * @param {object|string} [opts.context] - `'Texto'` o `{ name, meta, tone }` — tone pinta el semáforo
+ * @param {object|string|Node} [opts.context] - `'Texto'`, `{ name, meta, tone }` (tone pinta el
+ *   semáforo) o un elemento ya armado por la pantalla (ej. el selector de mes del inicio)
  * @param {object}   [opts.steps]   - `{ labels: string[], current: number }` (0-based)
  * @param {object|string} [opts.hint] - `'Texto'` o `{ text, tone: 'muted'|'warn' }`
- * @param {object}   [opts.primary] - `{ label, href|onClick, disabled, id, title }`
+ * @param {Node|Node[]} [opts.tools] - controles secundarios de la pantalla, a la izquierda de la
+ *   primaria (ej. el menú "Datos ▾" del inicio). La pantalla los arma y les cuelga sus handlers.
+ * @param {object}   [opts.primary] - `{ label, href|onClick, disabled, id, title, variant }`
+ *   (`variant: 'secondary'` para cuando la acción de la pantalla no es la de más peso)
  */
-export function setHeader({ back, context, steps, hint, primary } = {}) {
+export function setHeader({ back, context, steps, hint, tools, primary } = {}) {
   renderBack(slot('back'), back);
   renderContext(slot('context'), context);
   renderSteps(slot('steps'), steps);
   renderHint(slot('hint'), hint);
+  renderNodes(slot('tools'), tools);
   renderPrimary(slot('primary'), primary);
 
   // El divisor separa la identidad de lo que trae la pantalla: en el inicio,
@@ -70,6 +76,9 @@ function renderBack(el, back) {
 
 function renderContext(el, context) {
   if (!el) return;
+  // Una pantalla puede traer su propio control de contexto en vez de texto: el
+  // inicio cuelga acá el selector de mes, que ya viene con sus handlers puestos.
+  if (context instanceof Node) { renderNodes(el, context); return; }
   const data = typeof context === 'string' ? { name: context } : context;
   if (!data || !data.name) { el.innerHTML = ''; return; }
   el.innerHTML = `
@@ -117,7 +126,16 @@ function renderPrimary(el, primary) {
   if (!el) return;
   el.innerHTML = '';
   if (!primary) return;
-  el.appendChild(buildButton({ ...primary, className: 'btn btn--primary btn--sm' }));
+  const variant = primary.variant === 'secondary' ? 'btn--secondary' : 'btn--primary';
+  el.appendChild(buildButton({ ...primary, className: `btn ${variant} btn--sm` }));
+}
+
+/** Cuelga elementos ya armados por la pantalla, sin tocarles nada. */
+function renderNodes(el, nodes) {
+  if (!el) return;
+  el.innerHTML = '';
+  if (!nodes) return;
+  (Array.isArray(nodes) ? nodes : [nodes]).forEach(node => { if (node) el.appendChild(node); });
 }
 
 /**

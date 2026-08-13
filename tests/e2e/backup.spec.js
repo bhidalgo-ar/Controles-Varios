@@ -19,6 +19,7 @@ test('exportar e importar el respaldo preserva los clientes', async ({ page }) =
 
   // Exportar el respaldo
   const downloadPromise = page.waitForEvent('download');
+  await page.click('#js-data-menu-btn');
   await page.click('#js-backup-export-btn');
   const download = await downloadPromise;
   const backupPath = await download.path();
@@ -40,6 +41,7 @@ test('exportar e importar el respaldo preserva los clientes', async ({ page }) =
 
   // Restaurar el respaldo
   const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.click('#js-data-menu-btn');
   await page.click('#js-backup-import-btn');
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(backupPath);
@@ -64,6 +66,7 @@ test('restaurar un archivo que no es un respaldo válido muestra un error y no b
   await writeFile(bogusPath, JSON.stringify({ hola: 'no soy un respaldo' }));
 
   const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.click('#js-data-menu-btn');
   await page.click('#js-backup-import-btn');
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(bogusPath);

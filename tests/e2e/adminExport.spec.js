@@ -37,6 +37,7 @@ function testSeed() {
 
 async function importSeedFile(page, path) {
   const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.click('#js-data-menu-btn');
   await page.click('#js-seed-import-btn');
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(path);
