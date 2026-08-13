@@ -2,157 +2,33 @@
 
 import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js';
 import { showToast } from './toast.js';
-import { detectHeaders as detectHeadersXlsx, parseNominaMaestra } from '../parsers/nominaMaestra.js';
-import { parseResumenLargo } from '../parsers/resumenLargoExcel.js';
-import { parseResumenTabulado } from '../parsers/resumenTabuladoHorizontalExcel.js';
-import { parseTabuladoControl, detectHeaders as detectHeadersTabulado } from '../parsers/tabuladoControl.js';
-import { parseCatEmpleados } from '../parsers/catEmpleados.js';
-import { parseBrutos } from '../parsers/brutosParser.js';
-import { parseGsPers } from '../parsers/gsPersParser.js';
-import { parseNr }     from '../parsers/nrParser.js';
-import { parseRendimiento } from '../parsers/rendimientoParser.js';
-import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
 import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
-import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
-import {
-  parseFinadietAsiento,
-  detectHeaders as detectHeadersFinadietAsiento,
-} from '../parsers/finadietAsientoParser.js';
-import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
-import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
 import { blocksProgress } from '../exports/contracts.js';
+import {
+  FILE_TYPES,
+  fieldsFor,
+  fileTypeLabel,
+  isFixedFormat,
+  hasNameMapping,
+  metaLineFor,
+  detectHeadersFor,
+  parseFor,
+} from './fileTypes.js';
 
-// Campos "estándar" por tipo de archivo.
-// Los campos de nombre (apellido/nombre/nombreCompleto) se manejan aparte
-// con un selector especial porque pueden venir en 1 o 2 columnas.
+// Campos "estándar" por tipo de archivo — derivados de la ficha de cada tipo
+// (`js/ui/fileTypes.js`), que es donde se declaran. Acá no se agrega nada: un
+// tipo de archivo nuevo se declara allá y aparece solo.
 //
-// Exportado sólo para `tests/exportContracts.test.js`, que deriva de acá el
-// assert de "ningún contrato debilita un `required: true` que ya existía" —
-// leerlo del original es lo único que hace que ese assert valga para los 15
-// tipos de archivo sin una segunda lista que mantener a mano.
-export const FIELD_DEFS = {
-  nomina_maestra: [
-    { key: 'legajoColumn',         label: 'Columna de Legajo',                required: true  },
-    { key: 'conceptColumnsStartAt', label: 'Primera columna de conceptos',     required: true  },
-  ],
-  resumen_largo_excel: [
-    { key: 'legajoColumnLong',  label: 'Columna de Legajo',             required: true },
-    { key: 'conceptCodeColumn', label: 'Columna de Código de concepto',  required: true },
-    { key: 'importColumn',      label: 'Columna de Importe',             required: true },
-  ],
-  resumen_tabulado_horizontal: [
-    { key: 'legajoColumn',          label: 'Columna de Legajo',           required: true  },
-    { key: 'conceptColumnsStartAt', label: 'Primera columna de conceptos', required: true  },
-  ],
-  tab_control: [
-    { key: 'empleadoColumn',        label: 'Columna de Empleado (ID)',           required: true  },
-    { key: 'apellidoNombreColumn',  label: 'Columna de Apellido y Nombre',       required: false },
-    { key: 'puestoColumn',          label: 'Columna de Puesto',                  required: false },
-    { key: 'idCCColumn',            label: 'Columna de ID Centro de Costo',      required: false },
-    { key: 'ccColumn',              label: 'Columna de Centro de Costo',         required: false },
-    { key: 'deptoColumn',           label: 'Columna de Departamento/Unidad',     required: false },
-    { key: 'cuilColumn',            label: 'Columna de CUIL',                    required: false },
-  ],
-  cat_empleados: [
-    { key: 'idEmpColumn',           label: 'Columna de ID Empleado',             required: true  },
-    { key: 'puestoColumn',          label: 'Columna de Puesto',                  required: true  },
-    { key: 'idCenColumn',           label: 'Columna de ID Centro de Costo',      required: true  },
-    { key: 'centroCostoColumn',     label: 'Columna de Centro de Costo',         required: true  },
-    { key: 'departamentoColumn',    label: 'Columna de Departamento',            required: true  },
-    { key: 'fBajaColumn',           label: 'Columna de Fecha de Baja (F. BAJA)', required: true  },
-    { key: 'fAltaColumn',           label: 'Columna de Fecha de Alta (F. ALTA)', required: false },
-    { key: 'apellidoColumn',        label: 'Columna de Apellido',                required: false },
-    { key: 'nombreColumn',          label: 'Columna de Nombre',                  required: false },
-    { key: 'cuilColumn',            label: 'Columna de CUIL',                    required: false },
-    { key: 'idPueColumn',           label: 'Columna de ID Puesto',               required: false },
-  ],
-  brutos_file: [
-    { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
-    { key: 'salBaseColumn',         label: 'Columna de SAL_BASE',                required: false },
-    { key: 'aCuFutAumenColumn',     label: 'Columna de A_CTA_FUT_AUMEN',         required: false },
-  ],
-  gs_pers_file: [
-    { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
-    { key: 'gtosPersonalesColumn',  label: 'Columna de GTOS_PERSONALES',         required: false },
-    { key: 'dtoCocheraColumn',      label: 'Columna de DTO_COCHERA',             required: false },
-  ],
-  nr_file: [
-    { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
-    { key: 'reinHomeOficeColumn',   label: 'Columna de REIN_HOME_OFICE',         required: false },
-    { key: 'indemPreavisoColumn',   label: 'Columna de INDEM_PREAVISO',          required: false },
-    { key: 'sacPreavisoColumn',     label: 'Columna de SAC_PREAVISO',            required: false },
-    { key: 'indemAntDespColumn',    label: 'Columna de INDEM_ANT_DESP',          required: false },
-    { key: 'indemAntFalleColumn',   label: 'Columna de INDEM_ANT_FALLE',         required: false },
-    { key: 'indemIntegColumn',      label: 'Columna de INDEM_INTEG',             required: false },
-    { key: 'sacIndemIntegColumn',   label: 'Columna de SAC_INDEM_INTEG',         required: false },
-    { key: 'indmMaternidadColumn',  label: 'Columna de INDM_MATERNIDAD',         required: false },
-    { key: 'vacNoGozadasColumn',    label: 'Columna de VAC_NO_GOZADAS',          required: false },
-    { key: 'vacNoGozSacColumn',     label: 'Columna de VAC_NO_GOZ_SAC',          required: false },
-    { key: 'gratVacColumn',         label: 'Columna de GRAT_VAC',                required: false },
-    { key: 'graVacnogSacColumn',    label: 'Columna de GRA_VACNOG_SAC',          required: false },
-    { key: 'indemFuerMayColumn',    label: 'Columna de INDEM_FUER_MAY',          required: false },
-    { key: 'indemEmbarazoColumn',   label: 'Columna de INDEM_EMBARAZO',          required: false },
-    { key: 'gratExtraordColumn',    label: 'Columna de GRAT_EXTRAORD',           required: false },
-    { key: 'asigPasColumn',         label: 'Columna de ASIG_PAS',               required: false },
-    { key: 'reintGuardColumn',      label: 'Columna de REINT_GUARD',             required: false },
-    { key: 'incrementoStColumn',    label: 'Columna de INCREMENTO_ST',           required: false },
-  ],
-  rend_file: [
-    { key: 'ccCodeColumn',     label: 'Columna de código CC (1ª col., sin encabezado)', required: false },
-    { key: 'ccNameColumn',     label: 'Columna de Centro de Costo',                     required: true  },
-    { key: 'precioColumn',     label: 'Columna de PRECIO',                               required: true  },
-    { key: 'estimuloColumn',   label: 'Columna de ASIG. ESTÍMULO',                      required: false },
-    { key: 'retirosColumn',    label: 'Columna de RETIROS',                              required: false },
-    { key: 'cargasColumn',     label: 'Columna de CARGAS SOCIALES',                     required: false },
-    { key: 'provMesColumn',    label: 'Columna de PROVISIÓN MES',                       required: false },
-    { key: 'provCcssColumn',   label: 'Columna de PROV. CCSS MES',                      required: false },
-    { key: 'costoTotalColumn', label: 'Columna de COSTO TOTAL',                         required: false },
-  ],
-  costo_total_file: [
-    { key: 'legajoColumn',     label: 'Columna de Legajo (ID Empleado)', required: true },
-    { key: 'costoTotalColumn', label: 'Columna de COSTO TOTAL',          required: true },
-  ],
-  // Catálogo de conceptos: formato fijo, no requiere mapping de columnas
-  concept_catalog: [],
-  // Contabilidad Desglosada (CONTA): formato fijo, encabezados constantes
-  conta_file:      [],
-  // CC x Empleado: formato fijo, encabezados constantes
-  cc_x_ee_file:    [],
-  // Acreditaciones (export contacred de Axton): formato fijo, igual en todas las
-  // cuentas de Axton. El parser resuelve las columnas por nombre y avisa cuáles
-  // faltan si el archivo no es el esperado.
-  acreditaciones_file: [],
-  // Acumuladores (export repacumuladores de Axton): formato fijo, igual en
-  // todas las cuentas de Axton. Se sube uno por mes de la ventana del SAC
-  // teórico (additionalFiles[].multi: true) — ver control acumuladores_ganancias.
-  acumuladores_file: [],
-  // Conceptos liquidados de FINADIET (excel "FINADIET CONCEPTOS" de Meta4). Las
-  // 4 primeras son requeridas: sin los dos códigos de cuenta, el importe y el
-  // centro de costo no hay asiento posible, y completarlas con nada sería
-  // exactamente el default silencioso que CLAUDE.md prohíbe. Las otras 4 son
-  // rótulos del entregable: si faltan, la celda sale vacía y se avisa.
-  asiento_conceptos_file: [
-    { key: 'cuentaDebeColumn',        label: 'Columna de Código de cuenta Debe',   required: true  },
-    { key: 'cuentaHaberColumn',       label: 'Columna de Código de cuenta Haber',  required: true  },
-    { key: 'importeColumn',           label: 'Columna de Importe',                 required: true  },
-    { key: 'centroColumn',            label: 'Columna de Centro de Costo',         required: true  },
-    { key: 'cuentaDebeNombreColumn',  label: 'Columna de Nombre de cuenta Debe',   required: false },
-    { key: 'cuentaHaberNombreColumn', label: 'Columna de Nombre de cuenta Haber',  required: false },
-    { key: 'nroConceptoColumn',       label: 'Columna de Código de concepto',      required: false },
-    { key: 'conceptoColumn',          label: 'Columna de Concepto',                required: false },
-  ],
-};
+// Se sigue exportando con este nombre para `tests/exportContracts.test.js`, que
+// deriva de acá el assert de "ningún contrato debilita un `required: true` que
+// ya existía" — leerlo del original es lo único que hace que ese assert valga
+// para los 16 tipos de archivo sin una segunda lista que mantener a mano.
+export const FIELD_DEFS = Object.fromEntries(
+  Object.entries(FILE_TYPES).map(([fileType, def]) => [fileType, def.fields])
+);
 
-// Tabulado del período anterior (control de Variaciones): es el MISMO archivo
-// que el Tabulado del período actual, sólo que de otro mes. Comparte los campos
-// de verdad en vez de declarar una copia recortada — así el perfil de columnas
-// que el cliente ya tiene guardado sirve para los dos slots.
-FIELD_DEFS.tab_prev_file = FIELD_DEFS.tab_control;
-
-// Tipos que soportan mapeo de nombre (horizontal: una fila por empleado)
-const TIPOS_CON_NOMBRE = ['nomina_maestra', 'resumen_tabulado_horizontal'];
 
 /**
  * Inicializa el paso de carga de archivo dentro de un contenedor.
@@ -213,11 +89,13 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       return;
     }
 
-    // Formatos fijos (sin mapping de columnas): catálogo y CC x Empleado
-    if (fileType === 'concept_catalog' || fileType === 'cc_x_ee_file') {
+    // Formatos fijos (sin mapping de columnas): lo declara la ficha del tipo.
+    // Ojo: NO es lo mismo que "no tiene campos" — `acreditaciones_file` no tiene
+    // ninguno y aun así pasa por la pantalla de confirmación (ver fileTypes.js).
+    if (isFixedFormat(fileType)) {
       renderLoadingProgress(container, 'parsing');
       try {
-        const result = parseFile(arrayBuffer, fileType, null);
+        const result = parseFor(fileType, arrayBuffer, null);
         const data = { ...result, mapping: {}, fileName: file.name, fileType };
         renderAlreadyLoaded(
           container,
@@ -257,7 +135,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       onConfirm: async (mapping) => {
         renderLoadingProgress(container, 'parsing');
         try {
-          const result = parseFile(arrayBuffer, fileType, mapping);
+          const result = parseFor(fileType, arrayBuffer, mapping);
           await saveFileProfile(clientCode, fileType, mapping);
 
           const data = { ...result, mapping, fileName: file.name, fileType, headers, arrayBuffer, clientCode };
@@ -655,26 +533,14 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   const warns = parseMetadata?.warnings?.length
     ? `<span class="badge badge--warning" style="margin-left:var(--sp-2);">${parseMetadata.warnings.length} aviso(s)</span>` : '';
 
-  let metaLine;
-  if (fileType === 'cat_empleados') {
-    const fil = parseMetadata?.filtradas ?? 0;
-    metaLine = `${parseMetadata?.activos ?? 0} activos de ${parseMetadata?.total ?? 0} filas`
-      + (fil > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${fil} sumatorias excluidas</span>` : '');
-  } else if (fileType === 'concept_catalog') {
-    metaLine = `${parseMetadata?.totalRows ?? 0} conceptos`
-      + (parseMetadata?.remu         ? ` · ${parseMetadata.remu} remu`               : '')
-      + (parseMetadata?.noRemu       ? ` · ${parseMetadata.noRemu} no_remu`          : '')
-      + (parseMetadata?.aporte       ? ` · ${parseMetadata.aporte} aportes`          : '')
-      + (parseMetadata?.contribucion ? ` · ${parseMetadata.contribucion} contribuciones` : '');
-  } else if (fileType === 'tab_control' || fileType === 'brutos_file' || fileType === 'gs_pers_file' || fileType === 'nr_file' || fileType === 'rend_file' || fileType === 'costo_total_file' || fileType === 'cc_x_ee_file' || fileType === 'acreditaciones_file' || fileType === 'acumuladores_file' || fileType === 'asiento_conceptos_file' || fileType === 'tab_prev_file') {
-    metaLine = `${parseMetadata?.totalRows ?? 0} registros`;
-  } else {
-    metaLine = `${parseMetadata?.uniqueLegajos ?? 0} legajos · ${parseMetadata?.detectedConcepts?.length ?? 0} conceptos`;
-  }
+  // La declara la ficha del tipo (`meta` en fileTypes.js). Antes era una cadena
+  // de 11 `||` acá: el tipo que no estaba en la lista caía al molde equivocado
+  // sin que nada avisara.
+  const metaLine = metaLineFor(fileType, parseMetadata);
 
   // Sección colapsada de mapeo de columnas (solo si el tipo tiene campos de mapping y se guardó
   // el arrayBuffer de esta sesión — permite ajustar el mapeo sin re-subir el archivo)
-  const fields = FIELD_DEFS[fileType] || [];
+  const fields = fieldsFor(fileType);
   const canRemap = fields.length > 0 && headers?.length > 0 && arrayBuffer;
   const opts = (selected = '') => ['', ...((headers) || [])]
     .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Sin asignar —'}</option>`)
@@ -757,7 +623,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       }
 
       try {
-        const result = parseFile(arrayBuffer, fileType, newMapping);
+        const result = parseFor(fileType, arrayBuffer, newMapping);
         if (dataClientCode) await saveFileProfile(dataClientCode, fileType, newMapping).catch(() => {});
         const newData = { ...existingData, ...result, mapping: newMapping };
         // Re-render: el nuevo renderAlreadyLoaded llamará a onComplete con los datos actualizados
@@ -772,8 +638,8 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
 }
 
 function renderMappingForm(container, { headers, preview, fileType, savedMapping, autoDetected, fileName, onConfirm, onCancel }) {
-  const fields   = FIELD_DEFS[fileType] || [];
-  const conNombre = TIPOS_CON_NOMBRE.includes(fileType);
+  const fields    = fieldsFor(fileType);
+  const conNombre = hasNameMapping(fileType);
 
   // Detectar el modo de nombre guardado previamente
   let savedNombreMode = 'junto'; // 'junto' = una columna, 'separado' = dos columnas
@@ -966,69 +832,6 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   container.querySelector('#js-mapping-form').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') onCancel();
   });
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// El Tabulado de algunos clientes (OPmobility / Plastic Omnium Florida) llega
-// con extensión .xls pero es HTML — necesita el detector HTML-aware de
-// tabuladoControl.js. El resto de los tipos de archivo usan el detector plano
-// de nominaMaestra.js (ver tabuladoHtml.js para el detalle del formato).
-function detectHeadersFor(fileType, arrayBuffer) {
-  if (fileType === 'tab_control' || fileType === 'tab_prev_file') {
-    return detectHeadersTabulado(arrayBuffer);
-  }
-  // El excel de conceptos de FINADIET abre con filas de título: con el detector
-  // plano, los desplegables del mapeo listarían el texto del título en vez de
-  // las columnas.
-  if (fileType === 'asiento_conceptos_file') {
-    return detectHeadersFinadietAsiento(arrayBuffer);
-  }
-  return detectHeadersXlsx(arrayBuffer);
-}
-
-function parseFile(arrayBuffer, fileType, mapping) {
-  switch (fileType) {
-    case 'nomina_maestra':              return parseNominaMaestra(arrayBuffer, mapping);
-    case 'resumen_largo_excel':         return parseResumenLargo(arrayBuffer, mapping);
-    case 'resumen_tabulado_horizontal': return parseResumenTabulado(arrayBuffer, mapping);
-    case 'tab_control':                 return parseTabuladoControl(arrayBuffer, mapping);
-    case 'tab_prev_file':               return parseTabuladoControl(arrayBuffer, mapping);
-    case 'cat_empleados':               return parseCatEmpleados(arrayBuffer, mapping);
-    case 'brutos_file':                 return parseBrutos(arrayBuffer, mapping);
-    case 'gs_pers_file':                return parseGsPers(arrayBuffer, mapping);
-    case 'nr_file':                     return parseNr(arrayBuffer, mapping);
-    case 'rend_file':                   return parseRendimiento(arrayBuffer, mapping);
-    case 'costo_total_file':            return parseCostoTotal(arrayBuffer, mapping);
-    case 'cc_x_ee_file':                return parseCcXEmpleado(arrayBuffer);
-    case 'acreditaciones_file':         return parseAcreditaciones(arrayBuffer);
-    case 'acumuladores_file':           return parseAcumuladores(arrayBuffer);
-    case 'asiento_conceptos_file':      return parseFinadietAsiento(arrayBuffer, mapping);
-    case 'concept_catalog':             return parseConceptCatalog(arrayBuffer);
-    default: throw new Error(`Tipo de archivo desconocido: "${fileType}".`);
-  }
-}
-
-function fileTypeLabel(fileType) {
-  return {
-    nomina_maestra:              'Nómina Maestra',
-    resumen_largo_excel:         'Resumen Largo Excel',
-    resumen_tabulado_horizontal: 'Resumen Tabulado Horizontal',
-    tab_control:                 'Tabulado (Controles)',
-    cat_empleados:               'Reporte de Categorías',
-    brutos_file:                 'Reporte de Brutos',
-    gs_pers_file:                'Reporte de GS Pers (Gastos Personales y Cochera)',
-    nr_file:                     'Reporte de NR (No Remunerativos)',
-    rend_file:                   'Reporte de Rendimiento',
-    costo_total_file:            'Reporte de Costo Total (por empleado)',
-    conta_file:                  'Contabilidad Desglosada',
-    cc_x_ee_file:                'CC x Empleado',
-    acreditaciones_file:         'Acreditaciones (export de Axton)',
-    acumuladores_file:           'Acumuladores (export de Axton)',
-    asiento_conceptos_file:      'Conceptos liquidados de FINADIET (Meta4)',
-    tab_prev_file:               'Tabulado del período anterior',
-    concept_catalog:             'Catálogo de Conceptos',
-  }[fileType] || fileType;
 }
 
 // ── Helpers de calidad de match para selects de columnas ─────────────────────
