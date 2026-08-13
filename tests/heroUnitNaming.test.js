@@ -135,6 +135,52 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
   assert('mixta OK: el medidor queda en 100% legajos', hero.pctOk === 100);
 }
 
+// ── 4c. Varios controles sobre los MISMOS empleados no los cuentan dos veces ──
+// Decisión de Willy (2026-08-13): "4 legajos verificados en 2 controles".
+{
+  const hero = buildHeroHtml(
+    [
+      mkCtrl('brutos', 'Brutos',   'legajo', 4, 0, 'ok'),
+      mkCtrl('nr',     'No Remun.', 'legajo', 4, 0, 'ok'),
+    ],
+    [], THRESHOLD, {},
+  );
+  assert('dos controles sobre 4 empleados: "4 legajos verificados en 2 controles"',
+    hero.html.includes('4 legajos verificados en 2 controles sin diferencias.'));
+  assert('dos controles sobre 4 empleados: NO dice "8 legajos"',
+    !hero.html.includes('8 legajo'));
+}
+
+// ── 4d. Un solo control no arrastra el "en N controles" ──────────────────────
+{
+  const hero = buildHeroHtml(
+    [
+      mkCtrl('brutos',     'Brutos',                  'legajo', 4, 0, 'ok'),
+      mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc',    24, 0, 'ok'),
+    ],
+    [], THRESHOLD, {},
+  );
+  assert('una unidad con un solo control: la frase queda sin "en 1 control"',
+    hero.html.includes('4 legajos verificados · 24 centros de costo verificados, sin diferencias.'));
+}
+
+// ── 4e. Tres controles por legajo, uno con menos empleados que los otros ─────
+// El summary informa cuántas unidades verificó cada control, no cuáles: lo más
+// que se puede afirmar es el mayor. Sumar contaría el mismo empleado 3 veces.
+{
+  const hero = buildHeroHtml(
+    [
+      mkCtrl('brutos',     'Brutos',      'legajo', 100, 0, 'ok'),
+      mkCtrl('nr',         'No Remun.',   'legajo',  40, 0, 'ok'),
+      mkCtrl('variaciones', 'Variaciones', 'legajo', 100, 0, 'ok'),
+    ],
+    [], THRESHOLD, {},
+  );
+  assert('tres controles: toma el mayor (100), no la suma (240)',
+    hero.html.includes('100 legajos verificados en 3 controles sin diferencias.')
+    && !hero.html.includes('240'));
+}
+
 // ── 5. Género y número de cada unidad ────────────────────────────────────────
 {
   const cuentas = buildHeroHtml(
