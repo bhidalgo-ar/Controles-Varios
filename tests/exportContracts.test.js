@@ -303,14 +303,6 @@ assert('…y desde el archivo de NR (modo Controlar)',
 // enteraba. Ahora se puede cruzar contra las columnas que el tipo declara.
 
 {
-  // Dos claves que `nr_reporte` consume y que NINGUNA ficha declara. No es un
-  // typo: `autoDetectTabExtraConfig` las completa sola, el Reporte NR las
-  // exporta, pero no están en el panel "Columnas del Tabulado" — así que si la
-  // auto-detección se equivoca, el analista no tiene dónde corregirlas ni cómo
-  // declararlas ausentes. Se listan acá en vez de agregarlas al panel porque
-  // agregarlas cambia lo que se ve en pantalla, y eso es una decisión de Willy.
-  const SIN_CAMPO_EN_LA_FICHA = new Set(['tabIdCentroTrabColumn', 'tabIdCategoriaColumn']);
-
   const huerfanas = [];
   let cruzadas = 0;
   for (const c of contracts) {
@@ -319,7 +311,6 @@ assert('…y desde el archivo de NR (modo Controlar)',
         cruzadas++;
         assert(`${c.exportId}.${col.key}: declara de qué archivo sale`,
           typeof col.fromFile === 'string' && FILE_TYPES[col.fromFile] !== undefined);
-        if (SIN_CAMPO_EN_LA_FICHA.has(key)) continue;
         if (!columnasDe(col.fromFile).some(f => f.key === key)) {
           huerfanas.push(`${c.exportId}.${col.key} → ${col.fromFile}.${key}`);
         }
@@ -329,8 +320,6 @@ assert('…y desde el archivo de NR (modo Controlar)',
   assert('el barrido cruzó claves de verdad (si no, pasa por vacuidad)', cruzadas >= 60);
   assert(`toda clave de un contrato existe en la ficha de su archivo${huerfanas.length ? ': ' + huerfanas.join(', ') : ''}`,
     huerfanas.length === 0);
-  assert('las 2 conocidas sin campo en el panel siguen siendo 2 (si aparece una tercera, mirarla)',
-    SIN_CAMPO_EN_LA_FICHA.size === 2);
 }
 
 // ── blocksProgress: Paso 1 — SIN cambio de comportamiento todavía ────────────
