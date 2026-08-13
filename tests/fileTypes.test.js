@@ -19,6 +19,7 @@ globalThis.Dexie = Dexie;
 const {
   FILE_TYPES, fieldsFor, fileTypeLabel, isFixedFormat, hasNameMapping,
   metaLineFor, detectHeadersFor, parseFor, flowFor, dropLabelFor, dropHintFor,
+  autoDetectFor,
 } = await import('./js/ui/fileTypes.js');
 
 let ok = 0, fail = 0;
@@ -42,6 +43,11 @@ for (const [fileType, def] of entries) {
   assert(`${fileType}: declara detectHeaders`, typeof def.detectHeaders === 'function');
   assert(`${fileType}: declara meta`, typeof def.meta === 'function');
   assert(`${fileType}: fields es un array`, Array.isArray(def.fields));
+  // `autoDetect` se declara SIEMPRE, aunque sea `null`. Dejarlo sin declarar lo
+  // vuelve `undefined`, indistinguible de haberlo olvidado, y el analista mapea
+  // a mano un archivo que la app sabía leer sola.
+  assert(`${fileType}: declara autoDetect explícitamente (función o null)`,
+    def.autoDetect === null || typeof def.autoDetect === 'function');
 
   for (const f of def.fields) {
     assert(`${fileType}.${f.key}: tiene key`, typeof f.key === 'string' && f.key.length > 0);
@@ -117,6 +123,57 @@ for (const fileType of pedidosPorControles) {
 // muestra para que se vea.
 const huerfanos = entries.map(([ft]) => ft).filter(ft => !pedidosPorControles.has(ft));
 console.log(`  (tipos declarados que ningún control pide hoy: ${huerfanos.join(', ') || 'ninguno'})`);
+
+// ── La auto-detección de columnas ────────────────────────────────────────────
+// Antes era un mapa `AUTO_DETECT` en controlsWizard.js, ocho imports más arriba.
+// Un tipo que se olvidara de entrar ahí no rompía: simplemente el analista
+// mapeaba a mano todas las columnas de un archivo que la app sabía leer sola.
+
+const conAutoDetect = entries.filter(([, d]) => d.autoDetect).map(([ft]) => ft);
+assert(`hay tipos con auto-detección (${conAutoDetect.length})`, conAutoDetect.length >= 8);
+for (const ft of ['tab_control', 'cat_empleados', 'brutos_file', 'gs_pers_file',
+                  'nr_file', 'rend_file', 'costo_total_file', 'asiento_conceptos_file']) {
+  assert(`${ft}: propone columnas solo`, typeof autoDetectFor(ft) === 'function');
+}
+assert('el Tabulado anterior usa la misma auto-detección que el Tabulado (es el mismo archivo)',
+  autoDetectFor('tab_prev_file') === autoDetectFor('tab_control'));
+assert('un tipo sin auto-detección devuelve null, no undefined (el wizard lo distingue)',
+  autoDetectFor('acreditaciones_file') === null);
+assert('un tipo desconocido tampoco inventa una auto-detección',
+  autoDetectFor('no_existe_file') === null);
+
+// Todas aceptan `(headers, catalogRows)`; las que no usan el catálogo ignoran el
+// segundo argumento. Es lo que deja al wizard pasarlo siempre, sin un caso
+// especial para el Tabulado (que antes se llamaba sin catálogo).
+for (const ft of conAutoDetect) {
+  assert(`${ft}: su auto-detección tolera que le pasen el catálogo`, (() => {
+    try { autoDetectFor(ft)([], []); return true; } catch { return false; }
+  })());
+}
+
+// ── Qué archivos declaran hueco propio y redibujo del paso ───────────────────
+// Eran tres `if` con controlId/fileType cableados en el wizard. Este assert fija
+// exactamente cuáles son, así que sumar o sacar uno es una decisión visible.
+
+const specsDeclarados = [];
+for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
+  for (const f of (ctrl.additionalFiles || [])) {
+    if (f.slot || f.rerenderOnLoad) specsDeclarados.push(`${controlId}.${f.key}`);
+    if (f.slot) assert(`${controlId}.${f.key}: slot es un selector`, typeof f.slot === 'string' && f.slot.startsWith('#'));
+    if (f.rerenderOnLoad) assert(`${controlId}.${f.key}: rerenderOnLoad es booleano`, f.rerenderOnLoad === true);
+  }
+}
+assert(`redibujan el paso o tienen hueco propio exactamente los 3 de siempre (hoy: ${specsDeclarados.sort().join(', ')})`,
+  specsDeclarados.sort().join(', ') === 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
+
+// El hueco del Tabulado anterior es el que existe en el layout de Variaciones.
+// Si alguien renombra el id en el HTML y no acá, el archivo cae a la lista de
+// abajo sin romperse — o sea, en silencio. Por eso se fija el valor.
+for (const ctrl of Object.values(CONTROL_REGISTRY)) {
+  const prev = (ctrl.additionalFiles || []).find(f => f.fileType === 'tab_prev_file');
+  if (prev) assert(`${ctrl.id}: el Tabulado anterior apunta a su hueco de la grilla`,
+    prev.slot === '#js-var-prev-upload');
+}
 
 // ── Las líneas de metadata ───────────────────────────────────────────────────
 // Antes eran una cadena de 11 `||`: el tipo que no figuraba caía al molde de
