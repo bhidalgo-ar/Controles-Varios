@@ -967,3 +967,98 @@ ciclo de módulos de D-041/D-045 (`rendVsTabu.js`/`rendXEe.js` ahora hacen `impo
 `contracts.js`, que a su vez importa `COLS` de `rendVsTabu.js`).
 **Motivo:** Paso 6 de `specs/contrato-export.md`, "Lo que falta para migrar los writers" — cierra el punto
 7 pendiente de la Fase F4 del ROADMAP salvo por `fileTypes.js`.
+
+---
+
+## D-048 — Fase 4: registro declarativo de archivos y controles, y el fin del mapa de necesidad plano
+
+**Fecha:** 2026-08-13
+**Contexto:** Agregar un tipo de archivo tocaba **19 puntos** repartidos entre `js/ui/fileUpload.js` y
+`js/ui/controlsWizard.js` (el plan decía ~12; contarlos uno por uno dio 19), y un control con
+configuración propia sumaba **7 más**, todos en el wizard. Ninguno de los 26 tenía guard: olvidarse de
+uno no rompe nada visible — el archivo sube igual y algo queda mal en silencio. El síntoma clásico era
+una cadena de 11 `||` que armaba la línea de metadata: el tipo que no figuraba ahí caía al molde de
+otro ("N legajos · N conceptos" en vez de "N registros") sin que nada avisara.
+
+**Decisión:** la fase entró en **7 PRs mergeables por separado**, cada uno con cero cambio de
+comportamiento visible y verificado contra la baseline:
+
+1. **`js/ui/fileTypes.js`** — una ficha por tipo de archivo (`label`, `fields`, `parse`,
+   `detectHeaders`, `autoDetect`, `meta`, `nameMapping`, `fixedFormat`, `flow`, `aliasOf`). Se llevó
+   12 de los 19 puntos; `fileUpload.js` quedó 197 líneas más corto.
+2. **Los dos flujos multi-archivo** (CONTA, Acumuladores) entran a la ficha con `flow`, en vez de dos
+   `if (fileType === '…')` al principio de `initFileUploadStep`.
+3. **El wizard deriva de la ficha:** `AUTO_DETECT` y sus 8 imports desaparecen; el hueco propio del
+   Tabulado anterior y los dos redibujos del paso pasan a `fileSpec.slot` / `fileSpec.rerenderOnLoad`
+   en el registry. Los dos redibujos eran el mismo caso escrito dos veces.
+4. **Las 27 columnas del Paso 2** (`TAB_*_FIELDS` + el mapa de códigos) se mudan a
+   `FILE_TYPES.tab_control.extraFieldGroups`.
+5. **El mapa de necesidad se scopea a `(fileType, clave)`** — ver abajo.
+6. **La config por control se declara en el registry** (`config: [{ key, stateKey, default, editor,
+   mappingKey, … }]`), y el wizard deriva los cinco momentos de su ciclo de vida.
+7. Skill, documentación y el barrido de ciclos como test permanente.
+
+**Lo que cierra de fondo (el punto 5):** D-041 documentó `fieldNecessityMap()` como plano por clave y
+lo blindó con un assert "por las dudas"; D-045 lo vio dispararse con **dos colisiones legítimas**
+(`puestoColumn`: opcional en el Tabulado, `required` en el Reporte de Categorías · `costoTotalColumn`:
+opcional en Rendimiento, `required` en el Reporte de Costo Total) y las dejó **contadas** porque el
+esquema no podía representarlas. Ahora cada columna de contrato declara `fromFile`, el mapa se arma
+por `${fileType}::${key}`, y `necessityOfKey(fileType, key)` / `blocksProgress(fileType, key,
+legacyRequired)` cambian de firma. **El assert pasó de "las divergencias son exactamente 2" a "no hay
+ninguna divergencia"** — con tres asserts nuevos que impiden conseguir ese cero borrando información:
+las dos claves siguen viniendo de dos archivos distintos, y `costo_total_file.costoTotalColumn` sale
+OBLIGATORIA mientras `rend_file.costoTotalColumn` sigue OPCIONAL, que es exactamente lo que el mapa
+plano no podía expresar.
+
+**Lo que la fase rescató de quedar implícito** (estaba en el código, sin nada que dijera que era a
+propósito, y se habría perdido en el próximo refactor):
+1. **`fixedFormat` no se deriva de `fields: []`.** Cuatro tipos no declaran columnas; sólo dos se
+   parsean derecho. `acreditaciones_file` pasa igual por la pantalla de confirmación, que es lo único
+   que le muestra al analista que subió el archivo correcto.
+2. **El panel del Paso 2 y el gate de avance usan conjuntos distintos** de campos: el panel incluye
+   los 5 compartidos, el gate no. Hoy da igual (los 5 son OPCIONAL), pero el día que uno suba a
+   OBLIGATORIA importa.
+3. **`readOnly` en la config:** Rend vs Asiento lee la agrupación de conceptos pero no la edita ni la
+   guarda. Sin eso, correr sólo ese control persistiría una agrupación que su pantalla nunca mostró.
+4. **Cuándo una config viaja como `null` y cuándo no viaja.** El asiento de FINADIET la manda siempre,
+   incluso `null`, porque su `run()` distingue "nunca se configuró" de "configurado igual a la
+   semilla" (D-035).
+
+**Alternativas descartadas:** un PR monolítico (la fase es grande por tamaño, no por dificultad, y un
+solo PR de ~1000 líneas sobre la pantalla de carga no se revisa); derivar `fixedFormat` de
+`fields.length === 0` (le saca a Acreditaciones su pantalla de confirmación); poner el mapa de flujos
+multi-archivo dentro de la ficha (cierra el ciclo `fileUpload → fileTypes → fileUpload`, y los ciclos
+rompen sólo en el navegador, D-045); unificar los dos textos divergentes de la zona de drop de
+Acumuladores (es una decisión de producto, no una migración mecánica — queda declarada y fijada por un
+assert); scopear también `NO_TOCAR_TODAVIA` (subiría de necesidad a `puestoColumn` en algún archivo, y
+Willy pidió dejarla como está).
+
+**Verificación.** Cada paso, contra la baseline: `npm run test:unit` (31 archivos) y `npx playwright
+test` con Chromium real, 12 passed / 12 failed, con la lista de fallos comparada **uno a uno** — los
+12 son los que necesitan Dexie del CDN. Los pasos 4 y 6, además, por **equivalencia contra el código
+anterior** sacado de git: las 8 combinaciones de controles seleccionados dan listas de campos
+idénticas (panel y gate por separado, campo por campo con label y required), y el `mapping` que recibe
+cada `run()` sale idéntico para los 16 controles en dos escenarios (cliente sin configurar y cliente
+configurado). Tests nuevos: `tests/fileTypes.test.js` (531 asserts) y
+`tests/controlConfigRegistry.test.js` (143), los dos en la cadena.
+
+**El riesgo que este entorno no podía verificar, y cómo se cubrió.** Los ciclos de import rompen
+**sólo en el navegador** (D-045): Node los tolera y los unitarios pasan igual. Y los 12 e2e que
+levantan la app entera —los únicos que los agarrarían— no corren sin red al CDN. Se cubrió por dos
+vías nuevas: `tests/e2e/moduleGraph.spec.js`, que importa `controlsWizard.js` (el grafo más grande de
+la app) sirviendo Dexie desde `node_modules`, y `tests/moduleCycles.test.js`, un barrido estático de
+los 69 módulos de `js/` — validado inyectando un ciclo real y confirmando que lo reporta con la ruta
+exacta, porque un detector que siempre dice "todo bien" no prueba nada. Se sumó también
+`tests/e2e/multiUpload.spec.js`: las dos pantallas multi-archivo eran la única superficie de carga sin
+ninguna cobertura.
+
+**Lo que esto NO resuelve, y queda reportado:** `tabIdCentroTrabColumn` y `tabIdCategoriaColumn` las
+consume el contrato de `nr_reporte` y las completa sola la auto-detección, pero **no están en el panel
+"Columnas del Tabulado"** — si la auto-detección se equivoca, el analista no tiene dónde corregirlas ni
+cómo declararlas ausentes. Agregarlas cambia lo que se ve en pantalla, así que quedan listadas con su
+porqué en `tests/exportContracts.test.js` y la decisión es de Willy. Tampoco se tocó: migrar el writer
+que le falta al Paso 6 del contrato (`acreditaciones_reporte`), activar el bloqueo de `OBLIGATORIA` en
+el formulario de carga, ni el override de clave de legajo por corrida (D-038 punto 2).
+
+**Motivo:** Fase 4 de `specs/plan-escalabilidad-fases.md`, con la spec acordada punto por punto en
+`specs/fase-4-registro-declarativo.md` antes de escribir código.
