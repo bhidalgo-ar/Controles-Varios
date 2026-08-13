@@ -1,14 +1,30 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** **Pasos 0-6 cerrados.** Los 4b y 6 el 2026-08-12; los writers del Paso 6 el 2026-08-13
+> **Estado:** **plan terminado — los 8 pasos cerrados** (revisado contra el código el 2026-08-13, después
+> del PR #130). El **Paso 7** —lo último que figuraba como parcial— está cerrado: D-041 está escrita en
+> `DECISIONS.md`, el skill `nuevo-control` ya deriva la obligatoriedad del contrato
+> (`necessityOfKey(fileType, key)`) en vez de mandar a marcar `required` a mano, y los hotspots de
+> `specs/auditoria-escalabilidad-2026-08.md` quedaron tachados los 5.
+>
+> **Lo que sigue abierto no es de este plan:** el **mis-mapeo** (una columna mapeada a la columna
+> equivocada), que este documento ya declaraba en "Lo que este diseño NO resuelve" y que ahora tiene sus
+> opciones escritas en `specs/auditoria-escalabilidad-2026-08.md` ("Lo único abierto"). Es el ítem 2 de
+> "Estado al 2026-08-13" en `ROADMAP.md`.
+>
+> **Nota de ubicación (Fase 4, 2026-08-13):** este documento nombra `FIELD_DEFS` de `js/ui/fileUpload.js`
+> y `TAB_*_FIELDS` de `js/ui/controlsWizard.js` — las dos listas **ya no viven ahí**. La ficha de cada
+> tipo de archivo, con sus campos y las columnas del Paso 2, está en `js/ui/fileTypes.js` (`FILE_TYPES`,
+> `fieldsFor()`, `extraFieldGroupsFor()`). Los nombres se dejan como estaban en el resto del texto porque
+> describen el estado en que se hizo la auditoría; lo que hay que leer hoy es `fileTypes.js`.
+>
+> **Detalle histórico:** los Pasos 4b y 6 el 2026-08-12; los writers del Paso 6 el 2026-08-13
 > (D-047, 4 de los 5: Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG ×2 hojas), y el 5º
 > —`acreditaciones_reporte`— **cerrado como excepción permanente declarada y verificada** el 2026-08-13
 > (D-051): no migra al writer, pero su contrato dejó de ser una declaración sin quien la haga cumplir.
 > Quedan sin declarar a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por
 > qué"). El **Paso 8** (2026-08-13) activó el bloqueo de `OBLIGATORIA` en la carga
 > de archivo, llevando antes el toggle ⊘ a esa superficie — con eso el gate del contrato cubre los dos
-> lados del cruce (D-052). Ver "Ya cerrado" para el detalle de cada paso. **Del plan sólo queda el
-> Paso 7** (D-041 y el skill `nuevo-control`).
+> lados del cruce (D-052). Ver "Ya cerrado" para el detalle de cada paso.
 >
 > **Después del Paso 6** entraron dos contratos más, los del asiento de FINADIET (`finadiet_asiento_cc` y
 > `finadiet_asiento_gral`, D-046). No suman deuda de writer: nacieron sobre `writeContractSheet`, así que
@@ -183,7 +199,7 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) + NR Reporte al mismo mecanismo. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | ✅ hecho — `writeGroupedContractSheet()` en `js/exports/contractSheet.js` |
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
 | **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Los writers del Paso 6, migrados"). | ✅ **cerrado** — contratos el 2026-08-12 (D-045); writers el 2026-08-13: 4 migrados (D-047) y `acreditaciones_reporte` como excepción permanente declarada y verificada (D-051) |
-| **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
+| **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | ✅ **cerrado** — D-041 escrita; el skill deriva la obligatoriedad del contrato (`necessityOfKey(fileType, key)`) con el matiz de "un contrato suma obligación, nunca la saca" (D-045) y la advertencia de no marcar `required: true` en conceptos sin vía de escape; los 5 hotspots de `specs/auditoria-escalabilidad-2026-08.md`, tachados (2026-08-13) |
 | **8** | **El gate de OBLIGATORIA llega a la carga de archivo.** El toggle ⊘ entra al formulario de mapeo y al panel de remapeo de `fileUpload.js`, y **recién ahí** `blocksProgress()` pasa a bloquear `OBLIGATORIA` (D-041 punto 4: un OBLIGATORIA no bloquea hasta que exista la vía de escape en esa misma superficie). Cierra el lado **archivo** que la nota de alcance del Paso 2 dejó anotado: los 18 `nrKey` de NR y `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers. La omisión persiste en el perfil del cliente y la auto-detección la respeta pero avisa si el archivo nuevo trae una columna candidata. | ✅ hecho (2026-08-13) — spec propia: `specs/obligatoria-gate-carga-archivo.md`, D-052; `fileUpload.js` · `tests/uploadOmission.test.js` · `tests/e2e/uploadOmission.spec.js` |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
@@ -224,6 +240,12 @@ Está acá para que no se lea como una bala de plata.
   cualquiera de ellas. Y `fmtDate` convierte cualquier número entre 1 y 100000 en una fecha plausible.
   Declarar `type: 'date'` no es validarlo — validar que la columna elegida parsee como fecha o número
   es trabajo aparte, y hay que hacerlo igual.
+  **Actualización 2026-08-13:** es lo único que quedó abierto de todo el relevamiento, así que dejó de
+  ser una nota al pie. Los tres mecanismos están re-verificados en el código (la auto-detección que no
+  respeta la prioridad de sus palabras clave, `fmtDate` convirtiendo cualquier número entre 1 y 100.000
+  en una fecha plausible, y el `type` del contrato que nadie mira) y las tres opciones de arreglo, con
+  recomendación, están en `specs/auditoria-escalabilidad-2026-08.md`, sección "Lo único abierto". Es el
+  ítem 2 de "Estado al 2026-08-13" en `ROADMAP.md`.
 - **D-038 (clave de legajo) y `toNum()`.** Un contrato sobre la **salida** no arregla el **join** de la
   entrada: si `'007'` y `'7'` no matchean, la fila sale con la mitad del control en blanco y el
   contrato la considera perfectamente resuelta. Sigue siendo Fase 1, y sigue bloqueada por las dos

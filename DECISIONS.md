@@ -103,6 +103,8 @@
 **Alternativas descartadas:** Reescribir el historial de `main` ahora (costo alto para un dato que no es secreto en sentido estricto); borrar el archivo del working tree sin más (no saca nada del historial, da falsa sensación de resuelto).
 **Motivo:** El costo de una reescritura de historial no se justifica frente a un dato que no es secreto y que de todos modos se resuelve cuando el repo pase a privado.
 
+**Reconfirmado el 2026-08-13 (Willy).** Se le volvió a plantear como el único ítem con riesgo hacia afuera del inventario de escalabilidad. Respuesta: ya lo revisó y no hay exposición que preocupe; el repo pasa a privado y la app se hostea en otro lado más adelante, y ahí el seed real se muda. **No hay acción pendiente en el repo** — la entrada deja de figurar como decisión abierta en `specs/plan-escalabilidad-fases.md`.
+
 ---
 
 ## D-011 — Migración de `clients` a `code` es aditiva, no un reemplazo de PK en un solo paso

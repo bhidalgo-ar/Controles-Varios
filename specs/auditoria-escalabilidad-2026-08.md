@@ -7,38 +7,49 @@
 Este documento existe porque el inventario vivía sólo fuera del repo. Los hallazgos ya cerrados están
 en el `CHANGELOG.md` y en `git log`; acá queda lo que falta.
 
-**Actualización 2026-08-12 — se cerró la Fase 0.** Quedan abiertos dos ítems, los dos a propósito: el
-#3 (badge en dark mode) porque la Fase 2 rehace esa capa entera, y el #6 porque necesita datos reales
-del cliente para decidirse. El detalle de lo cerrado está más abajo.
+**Actualización 2026-08-13 — el inventario original quedó vacío.** Los 14 bugs y los 5 hotspots que
+encontró la auditoría están todos cerrados: los dos que seguían abiertos en la lista (el #3, badge en
+dark mode, y el #6, fallback de columna) se cerraron el 2026-08-12, y las 5 fases del plan
+(`specs/plan-escalabilidad-fases.md`) están las cinco cerradas. Se verificó leyendo el código el
+2026-08-13, después del PR #130 — el detalle de cada cierre está más abajo.
+
+**Lo que queda abierto de este relevamiento es un solo hallazgo, y no salió del inventario de bugs
+sino de la letra chica del rediseño**: el mis-mapeo (una columna mapeada a la columna equivocada).
+Ver la sección al final.
 
 ---
 
 ## Bugs abiertos
 
-Cada uno es una afirmación verificable: se puede escribir un assert que hoy falle.
-
-### 3. El badge "⚠ sin asignar" es ilegible en dark mode
-
-Los helpers de calidad de match están escritos dos veces en el mismo archivo. La copia local
-(`js/ui/fileUpload.js:776-788`) usa `var(--color-warning)`; la copia exportada (`:1012-1024`), única
-consumidora del panel "Columnas del Tabulado" de Brutos/GS Pers/NR, tiene `#EAB308` y `#B45309`
-cableados. Los tokens cambian en dark mode; los hex no.
-
-**Severidad:** media — el badge que tiene que gritar "esto no está mapeado" se pinta marrón oscuro
-sobre fondo casi negro.
-**Fix:** borrar las closures locales, usar los exports, y corregir esos dos hex a tokens. Entra en
-la Fase 2 (capa visual).
-
-### 6. El fallback de columna sólo lo tiene Brutos
-
-Ver **D-039**. Decidida la precedencia; queda abierto si NR y GS Pers deben tener fallback propio y
-con qué códigos — se confirma contra un Tabulado real, no por simetría. Guillermo lo dejó abierto a
-propósito el 2026-08-12: hasta que haya un Tabulado contra el cual confirmarlos, NR y GS Pers piden
-la columna explícitamente, que es el comportamiento correcto.
+Ninguno del inventario original. El hallazgo abierto es el de la última sección (mis-mapeo).
 
 ---
 
 ## Bugs cerrados
+
+### 3. El badge "⚠ sin asignar" es ilegible en dark mode — cerrado 2026-08-12 (Fase 2)
+
+Los helpers de calidad de match estaban escritos dos veces en el mismo archivo: la copia local usaba
+`var(--color-warning)` y la copia exportada —única consumidora del panel "Columnas del Tabulado" de
+Brutos/GS Pers/NR— tenía `#EAB308` y `#B45309` cableados. Los tokens cambian en dark mode; los hex no,
+así que el badge que tiene que gritar "esto no está mapeado" se pintaba marrón oscuro sobre fondo casi
+negro.
+
+Lo cerró la Fase 2: se borró la copia local (llamaba a las funciones exportadas con la firma que ya
+tenían) y los dos hex pasaron a `var(--color-warning)`/`var(--color-warning-bg)`. Detalle en
+`specs/plan-escalabilidad-fases.md`, Fase 2.
+
+### 6. El fallback de columna sólo lo tenía Brutos — cerrado 2026-08-12 (D-039/D-042)
+
+Willy trajo el Tabulado real de Marval 04-2026 y los códigos se **leyeron del archivo** en vez de
+inferirse por simetría, que es lo que D-039 prohíbe. Quedaron 14 semillas en `js/controls/tabCodes.js`,
+compartidas por Brutos, GS Pers y NR. De paso apareció que el fallback de Brutos era **letra muerta**:
+buscaba una columna llamada `'1003'` y Meta4 la exporta `'1003-SUELDO'`.
+
+Los 8 conceptos de NR que no se liquidaron ese mes siguen **sin semilla a propósito** y se piden
+explícitamente en el Paso 2 (con el toggle ⊘ como salida desde D-052). Eso no es este bug: es el
+comportamiento correcto de D-036, y para completarlos hace falta un Tabulado de un mes con
+indemnizaciones liquidadas. Anotado en `ROADMAP.md`.
 
 ### 1. `rendVsTabu` producía `NaN` y pintaba el tile en VERDE — cerrado 2026-08-12
 
@@ -94,17 +105,18 @@ consolidación por legajo), pero saca del inventario las que ya habían divergid
 
 ---
 
-## Hotspots de duplicación
+## Hotspots de duplicación — los 5 cerrados
 
-Rankeados por palanca. El detalle del plan por fases está en `ROADMAP.md`.
+Rankeados por palanca, como se relevaron. El detalle fase por fase está en
+`specs/plan-escalabilidad-fases.md`.
 
-| # | Hotspot | Radio | Fase |
-|---|---|---|---|
-| 1 | Consolidar por legajo + `sumColumn`: 4 copias, y el skill mandaba a copiarlas | 6 archivos | 1 |
-| 2 | La cascada de montaje de la tabla Detalle (toolbar + paginación + buscador + sticky + export), 13 veces | 13 sitios / 9 archivos | 3 |
-| 3 | Agregar un control toca ~12 puntos en `fileUpload.js` + `controlsWizard.js`, sin ningún guard entre ellos | 12 puntos | 4 |
-| 4 | El `.xlsx` se arma a mano en 13 funciones de 10 archivos | 10 archivos | 2-3 |
-| 5 | `toNum()` y la clave de legajo: 7 y 3 semánticas distintas para la misma operación | 11 archivos | 1 |
+| # | Hotspot | Radio | Fase | Estado |
+|---|---|---|---|---|
+| 1 | Consolidar por legajo + `sumColumn`: 4 copias, y el skill mandaba a copiarlas | 6 archivos | 1 | ✅ cerrado 2026-08-12 — `js/controls/consolidate.js`, las 4 copias borradas (D-042), y el skill manda a **importar** (Fase 5) |
+| 2 | La cascada de montaje de la tabla Detalle (toolbar + paginación + buscador + sticky + export), 13 veces | 13 sitios / 9 archivos | 3 | ✅ cerrado 2026-08-12 — `wireTableTools()` + `createResultsToolbar()` en `js/ui/tableTools.js` |
+| 3 | Agregar un control toca ~12 puntos en `fileUpload.js` + `controlsWizard.js`, sin ningún guard entre ellos | 12 puntos (medidos: **19**) | 4 | ✅ cerrado 2026-08-13 — `js/ui/fileTypes.js` (una ficha por tipo) + config por control declarada en el registry, en 7 PRs (#119-#125). Assert: `fileUpload.js` no nombra ningún tipo de archivo ni declara su propia lista de campos |
+| 4 | El `.xlsx` se arma a mano en 13 funciones de 10 archivos | 10 archivos | 2-3 | ✅ cerrado 2026-08-13 por el contrato de export (no por las Fases 2-3, como estimaba esta tabla): `writeContractSheet`/`writeGroupedContractSheet` escriben los exports con contrato, y el único que va a mano —Acreditaciones— está declarado como excepción y **verificado contra su contrato** (D-051). `variaciones`/`acumuladores` quedan afuera con motivo (D-045) |
+| 5 | `toNum()` y la clave de legajo: 7 y 3 semánticas distintas para la misma operación | 11 archivos | 1 | ✅ cerrado 2026-08-12 — `js/utils/currency.js` (`toNum`) y `js/utils/legajo.js` (`makeLegajoKey`), las 10 copias borradas (D-042) |
 
 Dos precisiones que salieron de la verificación y conviene no perder:
 
@@ -115,3 +127,53 @@ Dos precisiones que salieron de la verificación y conviene no perder:
   que distinguir el caso string-es-AR del número ya parseado por SheetJS.
 - **El `fallbackCode` de Brutos no es un default silencioso que haya que borrar** — lee una columna
   real por código cuando el analista no mapeó. Ver D-039.
+
+---
+
+## Lo único abierto: el mis-mapeo (una columna apuntando a la columna equivocada)
+
+**Estado: abierto, esperando que Willy elija el alcance.** Es lo que queda del relevamiento después de
+los PR #100-#129, y no salió del inventario de bugs: estaba declarado como "lo que este diseño NO
+resuelve" en `specs/contrato-export.md`, que es justamente donde una cosa se pierde de vista.
+
+**Qué pasa, en una línea:** todo el trabajo de obligatoriedad (contrato de export, gate del Paso 2,
+toggle ⊘, Pasos 0-8) hace que una columna **vacía** grite. Una columna **equivocada** sigue pasando en
+verde: mapeada + obligatoria = satisfecha, aunque apunte al lugar errado. Y la mandatoriedad lo
+*empeora*, porque un `required` queda satisfecho por el valor equivocado.
+
+**Los tres mecanismos verificados en el código (2026-08-13), que es lo que lo vuelve probable y no
+hipotético:**
+
+1. **La auto-detección no respeta la prioridad de sus propias palabras clave.**
+   `autoDetectTabExtraConfig` (`js/ui/controlsWizard.js:1272`) hace
+   `tabHeaders.find(h => kws.some(kw => h.includes(kw)))`: recorre los **encabezados** por fuera y las
+   palabras clave por dentro, así que gana el primer encabezado del archivo que contenga cualquiera de
+   ellas, no la palabra clave más específica. `find('fec_pago', 'fecha_pago', 'pago')` se queda con
+   `FORMA_PAGO` si viene antes que `FEC_PAGO`; `find('fecha_alta', …, 'alta')` engancha cualquier
+   encabezado con "alta" adentro. Es el mismo mecanismo del bug de `conceptMatcher` ya cerrado
+   (`INDEM_INTEG` contra la columna de `SAC_INDEM_INTEG`), en otra función.
+2. **`fmtDate` convierte cualquier número plausible en una fecha plausible.** Las copias de
+   `js/controls/gsPers.js:538`, `js/controls/nr.js:666` y `js/controls/catXEmpleados.js:621` tratan
+   todo número entre 1 y 100.000 como serial de Excel. Un importe mapeado por error en una columna de
+   fecha sale como una fecha creíble en el `.xlsx`, no como un error.
+3. **`type` se declara pero no se valida.** Los contratos ya declaran `type: 'num'` / `'date'` /
+   `'txt'` por columna (`js/exports/contracts.js`) y **nadie lo mira**: declarar el tipo no es
+   validarlo.
+
+**Cómo se corrige — tres opciones, de menor a mayor:**
+
+- **(a) Mostrar una muestra de valores reales al lado de cada columna elegida** (Paso 2 y pantalla de
+  carga). No bloquea nada, no puede equivocarse, y ataja lo que ninguna validación automática puede
+  saber: que el analista vea que en "Fecha de pago" eligió una columna de importes. Es lo más barato y
+  lo que más casos cubre.
+- **(b) Validar el contenido contra el `type` que el contrato ya declara.** Al confirmar el mapeo,
+  mirar las primeras N filas con dato de la columna elegida y avisar si no parsean como lo declarado
+  ("elegiste una columna donde 9 de 10 valores son importes, y acá va una fecha"). Aviso, no bloqueo:
+  un archivo raro no puede dejar al analista sin salida (D-036), y la salida ya existe (⊘).
+- **(c) Arreglar la prioridad de la auto-detección** — recorrer las palabras clave por fuera y los
+  encabezados por dentro, y preferir la coincidencia exacta antes que la parcial. Es un cambio chico
+  con riesgo real de mover mapeos que hoy salen bien por casualidad, así que va **después** de (a),
+  cuando el analista pueda ver qué cambió.
+
+**Recomendado: (a) primero, (b) después, (c) al final.** Las dos primeras no cambian ningún resultado
+de un control; sólo hacen visible lo que hoy es invisible.
