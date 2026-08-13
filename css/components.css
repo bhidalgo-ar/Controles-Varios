@@ -501,65 +501,10 @@
 .pagination__btn:disabled { opacity: 0.4; pointer-events: none; }
 .pagination__info { color: var(--color-wordmark); }
 
-/* ── Wizard ──────────────────────────────────────────────────── */
-.wizard-steps {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-bottom: var(--sp-8);
-  overflow-x: auto;
-  padding-bottom: var(--sp-2);
-}
-.wizard-step {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-shrink: 0;
-}
-.wizard-step__bubble {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-wordmark);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
-  flex-shrink: 0;
-  transition: all var(--transition);
-}
-.wizard-step__label {
-  font-size: var(--text-sm);
-  color: var(--color-wordmark);
-  white-space: nowrap;
-  transition: color var(--transition);
-}
-.wizard-step--active .wizard-step__bubble {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-white);
-}
-.wizard-step--active .wizard-step__label {
-  color: var(--color-primary);
-  font-weight: var(--fw-semibold);
-}
-.wizard-step--done .wizard-step__bubble {
-  background: var(--color-success);
-  border-color: var(--color-success);
-  color: var(--color-white);
-}
-.wizard-step__connector {
-  flex: 1;
-  height: 2px;
-  background: var(--color-border);
-  min-width: var(--sp-6);
-}
-.wizard-step__connector--done {
-  background: var(--color-success);
-}
+/* ── Wizard ──────────────────────────────────────────────────────
+   Los indicadores de paso (.wizard-steps) se mudaron a la barra superior con
+   el rediseño y viven en css/base.css como .header-steps: 18px en vez de 32
+   y sin tira propia arriba del contenido. */
 
 /* ── Formularios ─────────────────────────────────────────────── */
 .form-group {
@@ -1753,14 +1698,8 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   .app-header {
     padding: 0 var(--sp-4);
   }
-  .app-header__wordmark {
-    display: none;
-  }
   .page-content {
     padding: var(--sp-5) var(--sp-4);
-  }
-  .app-footer {
-    padding: var(--sp-6) var(--sp-4);
   }
   .privacy-banner {
     padding: var(--sp-3) var(--sp-4);
@@ -1772,27 +1711,24 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Cabecera 1C de resultados — barra de contexto (ver js/ui/resultsHeader.js)
-   Segunda de las dos barras sticky (la 1ª es el .app-header--compact de
-   css/base.css). Vive pegada justo debajo, por eso el `top` fijo.
+   Barra de veredicto de resultados (ver js/ui/resultsHeader.js)
+   Zona fija de .app-main, justo bajo la barra superior: no scrollea con el
+   contenido, así que no necesita `sticky`. El volver y el "Cliente · Período"
+   con su semáforo están arriba, en los slots de la barra.
    ══════════════════════════════════════════════════════════════ */
 .results-ctx-bar {
-  position: sticky;
-  top: 44px;
+  grid-row: 1;
   z-index: 99;
   background: var(--color-surface);
-  border-bottom: 3px solid var(--color-primary);
-  box-shadow: var(--shadow-md);
+  border-bottom: 1px solid var(--color-border);
   min-height: 46px;
   padding: 0 var(--sp-10);
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  flex-wrap: wrap;
   font-family: var(--font-tool);
 }
-.results-ctx-bar__name { font-size: 13px; white-space: nowrap; }
-.results-ctx-bar__verdict { font-size: 12.5px; color: var(--t2); }
+.results-ctx-bar__verdict { font-size: 12.5px; color: var(--t2); font-weight: var(--fw-semibold); }
 .results-ctx-bar__spacer { flex: 1 1 auto; }
 .results-ctx-bar__details { position: relative; }
 .results-ctx-bar__details > summary { list-style: none; cursor: pointer; }

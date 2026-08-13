@@ -24,6 +24,7 @@ import { downloadBlob } from '../utils/exportData.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { scopeLabel, controlAppliesToClient } from '../controls/scope.js';
+import { setHeader } from './appHeader.js';
 
 // La contraseña de admin **la elige Willy desde esta misma pantalla** y su hash
 // SHA-256 queda en IndexedDB (`appConfig.adminPasswordHash`), no en este archivo
@@ -68,6 +69,13 @@ async function currentPasswordHash() {
 }
 
 export async function renderAdminView(root) {
+  // Con el footer institucional dado de baja, esta pantalla se abre escribiendo
+  // la URL — el "← Inicio" de la barra es la única salida que le queda.
+  setHeader({
+    back:    { label: '← Inicio', href: '#/' },
+    context: { name: 'Modo admin' },
+  });
+
   const unlocked = sessionStorage.getItem(UNLOCK_SESSION_KEY) === '1';
   if (!unlocked) {
     await renderPasswordGate(root);

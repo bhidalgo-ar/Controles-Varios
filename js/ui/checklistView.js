@@ -9,6 +9,7 @@ import { CONTROL_REGISTRY }              from '../controls/registry.js';
 import { filterControlsForClient }       from '../controls/scope.js';
 import { periodToLabel, periodOptions }  from '../utils/dates.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { setHeader } from './appHeader.js';
 
 // Columnas del checklist: sólo "Controlar" (los de Generar Reporte no son
 // controles propiamente dichos) y sólo los que aplican a este cliente — no
@@ -99,15 +100,19 @@ export async function renderChecklist(root, clientId) {
     const periods = [...allPeriods].sort().reverse();
     const controls = checklistControls(client, controlConfigsByControlId);
 
+    // Volver, el cliente y la acción primaria van a la barra superior — el
+    // link es el mismo de siempre, sólo cambió de lugar.
+    setHeader({
+      back:    { label: '← Inicio', href: '#/' },
+      context: { name: client.name, meta: 'Estado de controles' },
+      primary: { label: '▶ Ejecutar controles', href: `#/controls/${client.id}` },
+    });
+
     root.innerHTML = `
       <div class="page-content">
         <div class="page-actions">
           <div class="page-actions__title">
-            <a href="#/" class="btn btn--ghost btn--sm">← Inicio</a>
-            <h2 style="margin:0 0 0 var(--sp-3);">${esc(client.name)} — Estado de controles</h2>
-          </div>
-          <div class="page-actions__buttons">
-            <a href="#/controls/${client.id}" class="btn btn--primary btn--sm">▶ Ejecutar controles</a>
+            <h2 style="margin:0;">Estado de controles</h2>
           </div>
         </div>
 

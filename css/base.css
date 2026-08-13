@@ -13,19 +13,19 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* La página no scrollea: scrollea cada zona por dentro (regla 1 del rediseño).
+   Es lo que garantiza que la barra superior y el botón de avance nunca se
+   vayan de pantalla, sin depender de sticky en cada pantalla. */
 body {
   font-family: var(--font);
   font-size: var(--text-base);
   color: var(--color-black);
   background-color: var(--color-bg);
   line-height: 1.55;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-main {
-  flex: 1;
 }
 
 /* ── Tipografía base ─────────────────────────────────────────── */
@@ -101,6 +101,22 @@ img { max-width: 100%; height: auto; display: block; }
   padding: 0 var(--sp-10);
 }
 
+/* ── Zonas de la app (regla 1: cada una scrollea sola) ───────────
+   `.app-main` mide exactamente lo que sobra bajo la barra: fila 1 y 2 para
+   barras fijas de la pantalla (ej. la de veredicto de resultados) y fila 3
+   para el contenido, que es la única que scrollea. `.page-content` se ancla
+   a la fila 3 aunque sea el único hijo — si cayera en una fila `auto` se
+   estiraría con su contenido y el recorte se comería lo de abajo. */
+.app-main {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: calc(100vh - var(--header-height));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-main > * { min-width: 0; }
+
 .page-content {
   padding: var(--sp-8) var(--sp-10);
   max-width: var(--max-width);
@@ -108,34 +124,43 @@ img { max-width: 100%; height: auto; display: block; }
   width: 100%;
 }
 
-/* ── Header ──────────────────────────────────────────────────── */
+.app-main > .page-content {
+  grid-row: 3;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── Barra superior única ────────────────────────────────────────
+   54px para todas las pantallas: identidad, volver, "Cliente · Período",
+   pasos del wizard, hint, primaria y selector de tema. Los huecos los llena
+   cada pantalla con setHeader() (js/ui/appHeader.js). Reemplaza al stack
+   viejo de 68px + page-actions + wizard-steps sueltos. */
 .app-header {
   position: sticky;
   top: 0;
   z-index: var(--z-header);
   background: var(--header-bg);
   color: var(--header-fg);
-  border-bottom: 3px solid var(--color-primary);
-  padding: 0 var(--sp-10);
+  border-bottom: var(--header-border-w) solid var(--celeste);
+  padding: 0 var(--sp-6);
   height: var(--header-height);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-6);
+  gap: var(--sp-3);
 }
 
 .app-header__logo {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
   text-decoration: none;
   flex-shrink: 0;
 }
 .app-header__logo:hover { text-decoration: none; }
 
 .app-header__iso {
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--color-primary);
   display: inline-flex;
@@ -143,40 +168,99 @@ img { max-width: 100%; height: auto; display: block; }
   justify-content: center;
   color: var(--color-white);
   font-weight: var(--fw-bold);
-  font-size: var(--text-lg);
-  letter-spacing: -0.5px;
+  font-size: 11px;
+  letter-spacing: -0.3px;
   flex-shrink: 0;
 }
 
 .app-header__iso-img {
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   flex-shrink: 0;
-}
-
-.app-header__wordmark {
-  color: var(--header-fg-muted);
-  font-weight: var(--fw-light);
-  font-size: var(--text-lg);
-  white-space: nowrap;
 }
 
 .app-header__app-name {
   color: var(--header-pill-fg);
   font-weight: var(--fw-semibold);
-  font-size: var(--text-md);
-  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--text-sm);
+  padding: 3px var(--sp-3);
   background: var(--header-pill-bg);
   border-radius: var(--radius-full);
   white-space: nowrap;
+  flex-shrink: 0;
 }
+
+.app-header__divider {
+  width: 1px;
+  height: 22px;
+  background: var(--header-btn-border);
+  flex-shrink: 0;
+}
+
+/* Los slots vacíos no ocupan lugar: sin contenido no dejan un hueco ni un
+   gap de más entre lo que sí está. */
+.app-header__nav:empty,
+.app-header__context:empty,
+.app-header__steps:empty,
+.app-header__hint:empty,
+.app-header__primary:empty { display: none; }
 
 .app-header__nav {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Contexto: el nombre del cliente puede ser largo — se corta con puntos
+   suspensivos antes que empujar el stepper o la primaria fuera de la barra. */
+.app-header__context {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.app-header__client {
+  font-size: 14.5px;
+  font-weight: var(--fw-bold);
+  color: var(--header-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-header__meta {
+  font-size: var(--text-sm);
+  color: var(--header-fg-muted);
+  white-space: nowrap;
+}
+
+.app-header__steps { display: flex; align-items: center; flex-shrink: 0; }
+
+.app-header__spacer { flex: 1 1 auto; }
+
+.app-header__hint,
+.app-header__primary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* La primaria de la barra es siempre pill. Y cuando todavía no está lista NO
+   desaparece: se atenúa y el hint de al lado dice qué falta (regla 2). */
+.app-header__primary .btn {
+  border-radius: var(--radius-full);
+  padding: var(--sp-2) var(--sp-5);
+  font-size: var(--text-sm);
+}
+.app-header__primary .btn--primary:disabled {
+  background: var(--primary-disabled);
+  border-color: var(--primary-disabled);
+  color: var(--color-white);
+  opacity: 1;
+  cursor: not-allowed;
+  pointer-events: auto;
 }
 
 /* Botones ghost de la barra (ej. "🏠 Inicio"): en Intenso la barra es ink, así
@@ -191,24 +275,76 @@ img { max-width: 100%; height: auto; display: block; }
   color: var(--header-fg);
 }
 
-/* ── Cabecera comprimida (pantalla de resultados, ver js/ui/resultsHeader.js) ──
-   Mismo app-header de siempre, sólo más bajo — la barra de contexto que va
-   debajo se encarga del borde celeste de 3px y la sombra. */
-.app-header--compact {
-  height: 44px;
-  border-bottom: 1px solid var(--color-border);
+/* La cabecera comprimida de la pantalla de resultados (.app-header--compact,
+   44px) ya no existe: la barra es una sola y siempre mide lo mismo. La barra
+   de veredicto pasó a ser una zona más de .app-main (ver .results-ctx-bar). */
+
+/* ── Pasos del wizard, dentro de la barra ────────────────────────
+   Antes eran una tira suelta de 32px al tope de la pantalla (.wizard-steps);
+   ahora viven en el slot de la barra, en 18px. */
+.header-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
-.app-header--compact .app-header__iso,
-.app-header--compact .app-header__iso-img {
+.header-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.header-step__bubble {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--header-btn-border);
+  color: var(--header-fg-muted);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.header-step__label {
+  font-size: 12.5px;
+  color: var(--header-fg-muted);
+  white-space: nowrap;
+}
+.header-step--active .header-step__bubble {
+  background: var(--celeste);
+  border-color: var(--celeste);
+  color: var(--color-white);
+}
+.header-step--active .header-step__label {
+  color: var(--header-fg);
+  font-weight: var(--fw-bold);
+}
+.header-step--done .header-step__bubble {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--color-white);
+}
+.header-step__connector {
   width: 26px;
-  height: 26px;
+  height: 1px;
+  background: var(--header-btn-border);
+  margin: 0 var(--sp-2);
 }
-.app-header--compact .app-header__wordmark {
-  font-size: var(--text-sm);
+.header-step__connector--done { background: var(--ok); }
+
+/* ── Hint de "qué falta" al lado de la primaria (regla 2) ──────── */
+.gate-hint {
+  font-size: 12.5px;
+  color: var(--header-fg-muted);
+  white-space: nowrap;
 }
-.app-header--compact .app-header__app-name {
-  font-size: 11.5px;
-  padding: 2px 10px;
+.gate-hint--warn {
+  color: var(--header-hint-fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-bd);
+  border-radius: var(--radius-full);
+  padding: 3px var(--sp-3);
 }
 
 /* El footer institucional se retiró de la app (rediseño Fase 1): es una

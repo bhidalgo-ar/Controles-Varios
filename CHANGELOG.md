@@ -7,6 +7,17 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: una sola barra arriba, y la pantalla deja de scrollear entera — 2026-08-13
+
+- **Segunda tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 2). Sigue siendo sólo la piel: no cambia ningún control, ningún cálculo, ningún archivo que se descarga ni cómo se navega.
+- **Las tres franjas de arriba pasan a ser una.** Antes había el logo con el nombre de la app, abajo el bloque de cada pantalla (volver + título + botones) y, en el wizard, la tira de los tres pasos: ~150px antes de que empezara lo que el analista viene a hacer. Ahora es **una sola barra de 54px** con todo lo de siempre en el mismo lugar en todas las pantallas: volver · **Cliente · Período** · los tres pasos · el aviso de qué falta · el botón principal · el selector de tema.
+- **El botón de avance ya no se pierde de vista.** La página entera dejó de scrollear: ahora scrollea sólo la zona de contenido, y la barra de arriba —con "Siguiente" adentro— queda fija. Antes, en el Paso 2 con muchos archivos, el botón vivía en una barra al pie que podía quedar tapada o fuera de pantalla.
+- **Cuando "Siguiente" todavía no se puede tocar, no desaparece:** queda atenuado y **al lado dice qué falta** ("Completá los archivos y columnas requeridas", o el nombre de la columna que falta). Es el mismo mensaje de siempre y la misma condición para habilitarlo — sólo cambió de lugar, del pie de la página al lado del botón.
+- **Los pasos se ven todo el tiempo**, en chico y dentro de la barra: el que ya pasó con un tilde verde, el actual en celeste, el que viene en gris.
+- **En resultados**, el volver y el "Cliente · Período" con su semáforo se subieron a la barra; abajo queda la línea de veredicto ("1 de 1 control en verde — sin diferencias") con "Detalles del run". El color del semáforo se sigue calculando igual.
+- **`#/admin` vuelve a tener salida:** el "← Inicio" de la barra reemplaza al link que se había ido con el pie de página.
+- **Verificado en el navegador**, las 5 pantallas (inicio, Pasos 1/2/3 y resultados, más agrupadores y el estado mensual) en los temas Sobrio e Intenso: nada queda tapado, nada se sale de la pantalla y el botón principal está siempre a la vista. Decisiones en D-054.
+
 ### feat: la app tiene tres temas y el botón 🌙 pasa a ser un selector — 2026-08-13
 
 - **Primera tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 1). Es sólo la piel: no cambia ningún control, ningún cálculo ni ninguna pantalla.

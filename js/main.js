@@ -17,7 +17,11 @@ import { renderControlsWizard } from './ui/controlsWizard.js';
 import { renderControlsResults } from './ui/controlsResults.js';
 import { renderChecklist }       from './ui/checklistView.js';
 import { renderAdminView }       from './ui/adminView.js';
-import { setCompactHeader }      from './ui/resultsHeader.js';
+import { setHeader, clearHeader } from './ui/appHeader.js';
+
+// La API de la barra superior se pide desde acá (el módulo vive en js/ui/ para
+// no armar un ciclo main → vista → main; ver appHeader.js).
+export { setHeader };
 
 const APP_VERSION = '1.0.0-alpha';
 const root = document.getElementById('js-app-root');
@@ -59,12 +63,10 @@ async function handleRoute() {
   const hash  = window.location.hash || '#/';
   const parts = hash.replace('#/', '').split('/').filter(Boolean);
 
-  updateHeaderNav(hash);
-
-  // Reset defensivo: sólo la pantalla de resultados (controlsResults.js) y el
-  // paso 3 del wizard con resultados (controlsWizard.js) piden la cabecera
-  // comprimida — cualquier otra ruta la deja como estaba.
-  setCompactHeader(false);
+  // La barra arranca vacía en cada cambio de pantalla y la llena la vista que
+  // se monta con setHeader() — así ninguna pantalla hereda el "volver" ni los
+  // pasos de la anterior si tarda en renderizar (o si falla).
+  clearHeader();
 
   try {
     if (parts.length === 0) {
@@ -100,18 +102,6 @@ async function handleRoute() {
         </div>
       </div>
     `;
-  }
-}
-
-// Muestra/oculta botones de navegación en el header según la pantalla actual
-function updateHeaderNav(hash) {
-  const nav = document.getElementById('js-header-nav');
-  if (!nav) return;
-
-  if (hash === '#/' || hash === '') {
-    nav.innerHTML = ''; // en el inicio no hay navegación extra
-  } else {
-    nav.innerHTML = `<a href="#/" class="btn btn--ghost btn--sm">🏠 Inicio</a>`;
   }
 }
 

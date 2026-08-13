@@ -46,7 +46,13 @@
 </head>
 <body>
 
-  <!-- ── Header ──────────────────────────────────────────────── -->
+  <!-- ── Barra superior única (54px) ──────────────────────────────
+       Una sola franja para toda la app: identidad H&A + volver +
+       "Cliente · Período" + los pasos del wizard + hint + acción primaria
+       + selector de tema. Los huecos marcados como slot los llena cada
+       pantalla al montar con setHeader() (ver js/ui/appHeader.js); acá
+       quedan vacíos a propósito.
+       ─────────────────────────────────────────────────────────────── -->
   <header class="app-header">
     <a href="#" class="app-header__logo" id="js-home-link" title="Ir al inicio">
       <!--
@@ -56,17 +62,32 @@
       <img
         src="https://hidalgoyasociados.com.ar/wp-content/uploads/2023/10/ha-iso.png"
         alt="Hidalgo &amp; Asociados"
-        width="44"
-        height="44"
+        width="30"
+        height="30"
         class="app-header__iso-img"
         onerror="this.outerHTML='<div class=&quot;app-header__iso&quot;>H&amp;A</div>'">
-      <span class="app-header__wordmark">Hidalgo &amp; Asociados</span>
     </a>
 
     <span class="app-header__app-name">Controles Nómina</span>
 
-    <!-- Navegación contextual — poblada por JS -->
+    <span class="app-header__divider" aria-hidden="true"></span>
+
+    <!-- slot: volver (mismo id de siempre — las pantallas siguen inyectando acá) -->
     <nav class="app-header__nav" id="js-header-nav" aria-label="Navegación principal"></nav>
+
+    <!-- slot: contexto "Cliente · Período" -->
+    <div class="app-header__context" id="js-header-context"></div>
+
+    <!-- slot: pasos del wizard -->
+    <div class="app-header__steps" id="js-header-steps"></div>
+
+    <span class="app-header__spacer"></span>
+
+    <!-- slot: hint de "qué falta" -->
+    <div class="app-header__hint" id="js-header-hint"></div>
+
+    <!-- slot: acción primaria de la pantalla -->
+    <div class="app-header__primary" id="js-header-primary"></div>
 
     <!-- Selector de tema — Sobrio (default) / Intenso / Oscuro -->
     <div class="theme-picker" id="js-theme-picker">
