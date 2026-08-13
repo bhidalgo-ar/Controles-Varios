@@ -76,6 +76,19 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(page.locator('[data-fu-omit-group="reinHomeOficeColumn"]')).toContainText('columna candidata');
   await expect(page.locator('select[name="reinHomeOficeColumn"]')).toHaveValue('');
 
+  // Caso borde: el cliente empezó a liquidar ese concepto — la columna candidata
+  // que el hint señaló de verdad está en el archivo. Destildar el ⊘ y elegirla
+  // tiene que resolver el campo (no queda pegado en omitido para siempre) sin
+  // tocar los otros 17, que siguen declarados ausentes.
+  await page.click('[data-fu-omit-group="reinHomeOficeColumn"] [data-fu-omit]');
+  await expect(page.locator('select[name="reinHomeOficeColumn"]')).toBeEnabled();
+  await page.selectOption('select[name="reinHomeOficeColumn"]', 'REIN_HOME_OFICE');
+  await page.click('#js-mapping-form button[type=submit]');
+  await expect(page.locator('#host')).toContainText('nr.xlsx');
+  const mappingResuelto = await page.evaluate(() => window.__completes.at(-1)?.mapping);
+  expect(mappingResuelto.reinHomeOficeColumn).toBe('REIN_HOME_OFICE');
+  expect(Object.values(mappingResuelto).filter(v => v === '__omitido__').length).toBe(17);
+
   expect(errores).toEqual([]);
 });
 
