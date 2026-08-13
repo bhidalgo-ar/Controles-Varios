@@ -2,8 +2,7 @@
 
 import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js';
 import { showToast } from './toast.js';
-import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
-import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
+import { mergeContaFiles } from '../parsers/contaExcel.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
 import { blocksProgress } from '../exports/contracts.js';
 import {
@@ -15,6 +14,9 @@ import {
   metaLineFor,
   detectHeadersFor,
   parseFor,
+  flowFor,
+  dropLabelFor,
+  dropHintFor,
 } from './fileTypes.js';
 
 // Campos "estándar" por tipo de archivo — derivados de la ficha de cada tipo
@@ -29,6 +31,19 @@ export const FIELD_DEFS = Object.fromEntries(
   Object.entries(FILE_TYPES).map(([fileType, def]) => [fileType, def.fields])
 );
 
+// Qué pantalla de carga le toca a cada `flow` declarado en la ficha. Las dos
+// siguen siendo funciones distintas porque hacen cosas distintas —CONTA mergea y
+// avisa filas duplicadas, Acumuladores pide un período por archivo— pero ya no
+// se eligen por nombre de archivo cableado. `'single'` no está acá: es el
+// camino normal de `initFileUploadStep`, no una pantalla aparte.
+//
+// El mapa vive de este lado y no en la ficha a propósito: si `fileTypes.js`
+// importara estas funciones, cerraría el ciclo `fileUpload → fileTypes →
+// fileUpload`, que es la clase de cosa que sólo rompe en el navegador (D-045).
+const MULTI_UPLOADS = {
+  'multi':         initContaMultiUpload,
+  'multi-periodo': initAcumuladoresMultiUpload,
+};
 
 /**
  * Inicializa el paso de carga de archivo dentro de un contenedor.
@@ -41,18 +56,21 @@ export const FIELD_DEFS = Object.fromEntries(
  *   onComplete   {function(data)} - Se llama cuando el archivo está parseado y listo
  */
 export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }) {
-  // CONTA admite subir varios archivos del mismo formato en una sola corrida
-  // (ver initContaMultiUpload) — flujo aparte del resto, que es un archivo por slot.
-  if (fileType === 'conta_file') {
-    initContaMultiUpload(container, { existingData, onComplete });
-    return;
-  }
-
-  // Acumuladores (Axton): un crudo por cada mes de la ventana del SAC teórico —
-  // mismo flujo multi-archivo que CONTA, pero cada archivo lleva además un
-  // período editable (ver initAcumuladoresMultiUpload).
-  if (fileType === 'acumuladores_file') {
-    initAcumuladoresMultiUpload(container, { existingData, onComplete });
+  // Cómo se sube este tipo lo declara su ficha, no un `if` por nombre de
+  // archivo: un tipo multi-archivo nuevo declara su `flow` y funciona sin tocar
+  // nada de acá. Un `flow` sin implementación corta con un error que lo nombra
+  // en vez de caer al flujo de un archivo por slot, que es lo que un default
+  // silencioso haría — y el analista subiría UN mes donde el control espera N.
+  const flow = flowFor(fileType);
+  if (flow !== 'single') {
+    const initMultiUpload = MULTI_UPLOADS[flow];
+    if (!initMultiUpload) {
+      renderError(container,
+        `El tipo de archivo "${fileTypeLabel(fileType)}" declara un flujo de carga que la app no sabe manejar ("${flow}").`,
+        () => {});
+      return;
+    }
+    initMultiUpload(container, { fileType, existingData, onComplete });
     return;
   }
 
@@ -167,7 +185,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
 // si dos archivos distintos comparten filas idénticas, señal de una carga
 // duplicada por error.
 
-function initContaMultiUpload(container, { existingData, onComplete }) {
+function initContaMultiUpload(container, { fileType, existingData, onComplete }) {
   let entries = existingData?.entries ? [...existingData.entries] : [];
 
   const commit = (newEntries) => {
@@ -182,7 +200,7 @@ function initContaMultiUpload(container, { existingData, onComplete }) {
       parsedRows:    merged.parsedRows,
       parseMetadata: merged.parseMetadata,
       mapping:       {},
-      fileType:      'conta_file',
+      fileType,
       fileName: entries.length === 1
         ? entries[0].fileName
         : `${entries.length} archivos · ${merged.parsedRows.length} filas`,
@@ -207,7 +225,7 @@ function initContaMultiUpload(container, { existingData, onComplete }) {
     for (const file of files) {
       try {
         const arrayBuffer = await readFileAsArrayBuffer(file);
-        const { parsedRows, parseMetadata } = parseConta(arrayBuffer);
+        const { parsedRows, parseMetadata } = parseFor(fileType, arrayBuffer);
         newEntries.push({ fileName: file.name, parsedRows, parseMetadata });
       } catch (err) {
         showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
@@ -248,7 +266,7 @@ function initContaMultiUpload(container, { existingData, onComplete }) {
       <div class="file-drop" id="js-conta-drop">
         <div class="file-drop__icon">📂</div>
         <div class="file-drop__text">
-          <strong>Contabilidad Desglosada</strong> — arrastrá uno o varios .xlsx, o hacé clic para elegir
+          <strong>${escHtml(dropLabelFor(fileType))}</strong> — arrastrá uno o varios .xlsx${escHtml(dropHintFor(fileType))}, o hacé clic para elegir
           ${entries.length ? ' (se suman a los ya cargados)' : ''}
         </div>
         <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
@@ -297,7 +315,7 @@ function initContaMultiUpload(container, { existingData, onComplete }) {
 // specs/control-acumuladores-ganancias.md). Las filas se concatenan tageadas con
 // `_period`/`_fileName`; acumuladoresGanancias.js las agrupa por período, no por
 // archivo — no le importa cuántos crudos hubo, sólo qué período tiene cada fila.
-function initAcumuladoresMultiUpload(container, { existingData, onComplete }) {
+function initAcumuladoresMultiUpload(container, { fileType, existingData, onComplete }) {
   let entries = existingData?.entries ? [...existingData.entries] : [];
 
   const commit = (newEntries) => {
@@ -310,7 +328,7 @@ function initAcumuladoresMultiUpload(container, { existingData, onComplete }) {
       parsedRows,
       parseMetadata: { totalRows: parsedRows.length, files: entries.length },
       mapping:  {},
-      fileType: 'acumuladores_file',
+      fileType,
       fileName: entries.length === 1
         ? entries[0].fileName
         : `${entries.length} archivos · ${parsedRows.length} filas`,
@@ -335,7 +353,7 @@ function initAcumuladoresMultiUpload(container, { existingData, onComplete }) {
     for (const file of files) {
       try {
         const arrayBuffer = await readFileAsArrayBuffer(file);
-        const { parsedRows, parseMetadata } = parseAcumuladores(arrayBuffer);
+        const { parsedRows, parseMetadata } = parseFor(fileType, arrayBuffer);
         newEntries.push({ fileName: file.name, period: inferPeriodFromFileName(file.name), parsedRows, parseMetadata });
       } catch (err) {
         showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
@@ -370,7 +388,7 @@ function initAcumuladoresMultiUpload(container, { existingData, onComplete }) {
       <div class="file-drop" id="js-acum-drop">
         <div class="file-drop__icon">📂</div>
         <div class="file-drop__text">
-          <strong>Acumuladores (Axton)</strong> — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir
+          <strong>${escHtml(dropLabelFor(fileType))}</strong> — arrastrá uno o varios .xlsx${escHtml(dropHintFor(fileType))}, o hacé clic para elegir
           ${entries.length ? ' (se suman a los ya cargados)' : ''}
         </div>
         <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-acum-file-input">

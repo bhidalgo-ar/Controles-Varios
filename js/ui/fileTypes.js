@@ -21,6 +21,12 @@
 //                              (una columna vs. dos) — sólo formatos con una
 //                              fila por empleado
 //   fixedFormat    {boolean}   se parsea derecho, sin formulario de mapeo
+//   flow           {string}    cómo se sube: 'single' (default, un archivo por
+//                              slot), 'multi' (N archivos que se concatenan) o
+//                              'multi-periodo' (N archivos, cada uno con su mes)
+//   dropLabel      {string}    override del texto de la zona de drop, sólo
+//                              donde ya divergía de `label` (ver acumuladores)
+//   dropHint       {string}    aclaración extra en la zona de drop
 //   aliasOf        {string}    comparte la ficha de otro tipo (ver tab_prev_file)
 //
 // **`fixedFormat` NO se deriva de `fields: []`, y es a propósito.**
@@ -242,18 +248,18 @@ export const FILE_TYPES = {
   },
 
   // Contabilidad Desglosada (CONTA): formato fijo, encabezados constantes.
-  // Admite subir varios Excel del mismo formato en una sola corrida — ese flujo
-  // todavía se elige por nombre en `fileUpload.js` (entra a la ficha en el
-  // Paso 2 de la Fase 4), así que `fixedFormat` no se usa hoy y la línea de
-  // metadata la arma el flujo multi-archivo ("N filas con CC"), no `meta`.
-  // `meta` queda en el molde de legajos/conceptos porque es el que le tocaba en
-  // la cadena de `||` anterior: acá no se elige el correcto, se preserva el que
-  // había — el correcto lo decide el Paso 2, cuando alguien lo lea de verdad.
+  // `flow: 'multi'` — se suben varios Excel del mismo formato en una sola
+  // corrida, típicamente porque se juntan varios meses en el mismo control. El
+  // flujo multi-archivo arma su propia línea por archivo ("N filas con CC") y su
+  // propio `fileName` combinado, así que `meta` no lo lee nadie: queda en el
+  // molde que le tocaba antes (ver el Paso 1) y no se le inventa uno nuevo para
+  // un consumidor que no existe.
   conta_file: {
     label: 'Contabilidad Desglosada',
     parse: parseConta,
     detectHeaders: detectHeadersXlsx,
     meta: metaLegajosConceptos,
+    flow: 'multi',
     fields: [],
   },
 
@@ -280,14 +286,25 @@ export const FILE_TYPES = {
     fields: [],
   },
 
-  // Acumuladores (export repacumuladores de Axton): formato fijo. Se sube uno
-  // por mes de la ventana del SAC teórico — mismo caso que `conta_file`: el
-  // flujo multi-archivo todavía se elige por nombre en `fileUpload.js`.
+  // Acumuladores (export repacumuladores de Axton): formato fijo. Se sube un
+  // crudo por cada mes de la ventana del SAC teórico (RG 4030: 2 meses ·
+  // RG 4003: hasta 8), y cada archivo lleva su propio período — de ahí
+  // `flow: 'multi-periodo'` y no `'multi'` a secas.
+  //
+  // `dropLabel` no es un capricho: la zona de drop ya decía "Acumuladores
+  // (Axton)" mientras la etiqueta del tipo dice "Acumuladores (export de
+  // Axton)". La divergencia es anterior a la ficha; se declara para preservarla
+  // tal cual en un paso que es cero cambio de comportamiento, no para
+  // bendecirla. Unificar los dos textos es una decisión de Willy, no un arreglo
+  // que se cuela en un refactor.
   acumuladores_file: {
     label: 'Acumuladores (export de Axton)',
+    dropLabel: 'Acumuladores (Axton)',
+    dropHint: ' (uno por mes)',
     parse: parseAcumuladores,
     detectHeaders: detectHeadersXlsx,
     meta: metaRegistros,
+    flow: 'multi-periodo',
     fields: [],
   },
 
@@ -347,6 +364,26 @@ export function fileTypeLabel(fileType) {
 /** ¿Se parsea derecho, sin formulario de mapeo? (ver la nota de arriba) */
 export function isFixedFormat(fileType) {
   return FILE_TYPES[fileType]?.fixedFormat === true;
+}
+
+/**
+ * Cómo se sube este tipo: 'single' (un archivo por slot, el caso normal),
+ * 'multi' (N archivos que se concatenan) o 'multi-periodo' (N archivos, cada
+ * uno con su mes). Un tipo sin `flow` declarado es 'single' — el default es el
+ * caso de 15 de los 17 tipos, y declararlo en cada ficha sería ruido.
+ */
+export function flowFor(fileType) {
+  return FILE_TYPES[fileType]?.flow || 'single';
+}
+
+/** Texto de la zona de drop. Cae a `label` salvo donde ya divergía. */
+export function dropLabelFor(fileType) {
+  return FILE_TYPES[fileType]?.dropLabel || fileTypeLabel(fileType);
+}
+
+/** Aclaración extra en la zona de drop ('' si no tiene). */
+export function dropHintFor(fileType) {
+  return FILE_TYPES[fileType]?.dropHint || '';
 }
 
 /** ¿Muestra el selector de apellido/nombre en una columna o en dos? */
