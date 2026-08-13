@@ -5,17 +5,21 @@
 // — no se declara dos veces.
 //
 // Ver specs/contrato-export.md para el porqué y el plan completo por pasos
-// (D-041, D-043, D-045, D-046 y D-047 en DECISIONS.md).
+// (D-041, D-043, D-045, D-046, D-047 y D-051 en DECISIONS.md).
 //
-// Dos reglas que no se deducen leyendo:
+// Tres reglas que no se deducen leyendo:
 //   1. **El contrato es un PISO, nunca un techo** — puede agregar obligación
 //      sobre el `required` de FIELD_DEFS, nunca sacarla (ver blocksProgress()).
 //   2. Los contratos migrados a un writer declaran también su layout
-//      (`width`/`groups`/`headerRows`); `acreditaciones_reporte` (el único que
-//      queda con su .xlsx a mano — D-047) declara sólo semántica. Declarar
-//      layout que nadie lee es una segunda fuente de verdad que se
+//      (`width`/`groups`/`headerRows`); los de `SIN_WRITER_POR_DISENO`
+//      (hoy sólo `acreditaciones_reporte` — D-051) declaran sólo semántica.
+//      Declarar layout que nadie lee es una segunda fuente de verdad que se
 //      desincroniza en silencio, y hay un assert en tests/exportContracts.test.js
 //      que lo impide en los dos sentidos.
+//   3. **Todo contrato está en `CON_WRITER` o en `SIN_WRITER_POR_DISENO`**, los
+//      dos declarados más abajo: no hay un tercer estado silencioso (D-051). El
+//      que va a mano se verifica igual contra su contrato, en
+//      tests/exportSinWriterConformidad.test.js.
 
 import { NR_CONCEPTS } from '../controls/nr.js';
 import { COLS } from '../controls/rendVsTabu.js';
@@ -427,21 +431,43 @@ const catDistribucion = (exportId, sheet, label, from) => ({
 // CONTROL que las lista y cierra contra el archivo de origen no se modela acá:
 // es una hoja de cierre con fórmulas entre hojas, no una tabla de datos.
 //
-// **Se queda sin writer (D-047), a propósito.** De los 5 contratos que le
-// faltaba migrar al Paso 6, este es el único que NO entra en `writeContractSheet`
-// ni con la fila de TOTAL/filas atenuadas que el writer ganó para los otros 4:
-// cada hoja de detalle no es "encabezado + N filas iguales" — lleva una fila de
-// TÍTULO **antes** del encabezado (nombre de la lista + el total, para no bajar
-// a buscarlo), y esa fila no tiene ningún lugar en el contrato. Sumar un
-// "título opcional" al writer para un solo consumidor es la abstracción que
-// CLAUDE.md pide no forzar. Además el archivo entero es multi-hoja calculado en
-// runtime (CONTROL + una por acreditación, mismo problema que `variaciones`/
-// `acumuladores` — ver "Los 2 que no se declaran, y por qué" más arriba) y sus
-// totales cierran con fórmulas ENTRE hojas (`'Nombre lista'!D1`), no dentro de
-// una. Se revisa si alguna vez el título deja de hacer falta (ej. si se cambia
-// a total al pie, como el resto) — hasta entonces sigue con su .xlsx a mano.
+// **Escribe su .xlsx a mano, por diseño y no por deuda (D-051).** Es el primer
+// habitante de `SIN_WRITER_POR_DISENO` (`tests/exportContracts.test.js`): el
+// motivo es la FORMA de la hoja, y son 6 cosas que `writeContractSheet` no
+// describe, cada una con este único consumidor —
+//   1. una fila de TÍTULO **antes** del encabezado (nombre de la lista + total,
+//      para no bajar 200 filas a buscarlo), con celdas en las columnas 1/3/4 y
+//      un `'Total'` que no es la etiqueta de ninguna columna;
+//   2. el nombre de cada hoja se calcula en la corrida (ver `sheetNaming`);
+//   3. `numFmt` por columna como string: CUIT y CBU van como TEXTO (`'@'`) —
+//      el CBU tiene 22 dígitos y ceros a la izquierda, como número Excel lo
+//      pasa a notación científica y se pierde — y Fecha va con formato de fecha
+//      sobre un serial de Excel. El writer sólo sabe apagar el formato numérico
+//      (`numFmt: false`), no fijar uno;
+//   4. una fila en blanco antes del TOTAL;
+//   5. el TOTAL sin borde superior (el del writer lo pone en las numéricas);
+//   6. `autoFilter` sobre la fila de encabezado.
+//
+// Lo que NO es un motivo, aunque D-047 lo listara como tal: las fórmulas ENTRE
+// hojas (`'Nombre lista'!D1`). Viven todas en la hoja CONTROL, que no tiene
+// contrato ni lo va a tener (bloque de título, dos layouts según
+// `splitByEmpresa`, filas de cierre). Dentro de una hoja de detalle la fórmula
+// es `SUM(D3:D<n>)`, misma hoja, y desde D-047 eso viaja tal cual en
+// `row[c.key]` sin que el writer tenga que saber nada.
+//
+// Que vaya a mano NO lo deja sin verificar, y eso es lo que cambió en D-051:
+// `tests/exportSinWriterConformidad.test.js` arma el workbook de verdad y
+// comprueba que cada hoja de detalle emita EXACTAMENTE estas columnas, en este
+// orden, y ninguna más. Sin eso, el assert de D-020 de más abajo probaba algo
+// sobre esta lista y nada sobre el archivo que se descarga.
 const acreditacionesReporte = {
-  exportId: 'acreditaciones_reporte', sheet: 'Detalle de acreditación',
+  exportId: 'acreditaciones_reporte',
+  // `sheetNaming: 'runtime'` — `sheet` describe la FORMA de la hoja, no un
+  // nombre que aparezca en el archivo: las hojas reales se llaman
+  // `01 SUELDOS 30-04`, una por acreditación. Declararlo es lo que evita que
+  // esta entrada sea la "mentira en la fuente única" que dejó afuera a
+  // `variaciones`/`acumuladores` (ver "Los 2 que no se declaran, y por qué").
+  sheet: 'Detalle de acreditación', sheetNaming: 'runtime',
   layout: LAYOUT_FIJO, audience: 'finanzas',
   columns: [
     { label: 'Legajo',             key: 'legajo', from: [], necessity: NECESSITY.CLAVE,       type: 'txt' },
@@ -522,6 +548,57 @@ export const EXPORT_CONTRACTS = {
   // `writeContractSheet`, así que declaran también su layout (D-046).
   finadiet_asiento_cc:    finadietAsientoPorCentro,
   finadiet_asiento_gral:  finadietAsientoGral,
+};
+
+// ── Cómo se escribe cada export: por el writer, o a mano por diseño (D-051) ───
+//
+// Los dos grupos **particionan** `EXPORT_CONTRACTS`: cada contrato tiene que
+// estar en exactamente uno, y `tests/exportContracts.test.js` lo hace cumplir.
+// Antes esto no era una partición — `CON_WRITER` vivía en el test y todo lo
+// demás caía en un `else` con el mensaje "sin writer **todavía**", así que un
+// contrato nuevo que se olvidara del writer pasaba el test **en silencio**,
+// indistinguible de una excepción deliberada.
+
+/**
+ * Los que salen por `writeContractSheet`/`writeGroupedContractSheet`. Estos
+ * declaran también su layout (`width`, y `groups`/`headerRows` si van agrupados)
+ * porque hay un consumidor que lo lee.
+ */
+export const CON_WRITER = [
+  // Pasos 4a y 4b
+  'brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte',
+  // Las dos solapas planas del asiento de FINADIET nacieron sobre
+  // `writeContractSheet` (D-046), así que entran acá desde el primer día.
+  'finadiet_asiento_cc', 'finadiet_asiento_gral',
+  // Los 4 del Paso 6 que entraron limpio en el writer (D-047).
+  'rend_vs_tabu', 'rend_vs_asiento', 'rend_x_ee',
+  'cat_x_empleados_puesto', 'cat_x_empleados_cc',
+];
+
+/**
+ * Los que arman su `.xlsx` **a mano, por diseño y no por deuda** — con el motivo
+ * escrito, porque "todavía no" afirmaba una intención de migrar que en estos
+ * casos no existe.
+ *
+ * **Se espera que la población crezca:** la forma de un entregable la elige el
+ * destinatario, no el writer. Para sumar uno hacen falta dos cosas, y la segunda
+ * es la que impide que "a mano" derive en "sin verificar":
+ *
+ *   1. la entrada acá, con un motivo concreto (qué capacidad falta y por qué no
+ *      vale la pena sumarla al writer para un solo consumidor);
+ *   2. su caso en `tests/exportSinWriterConformidad.test.js`, que arma el
+ *      workbook de verdad y comprueba que las hojas del contrato emitan
+ *      EXACTAMENTE sus columnas y ninguna más.
+ *
+ * Sin (2), el assert de D-020 de `FINANZAS_ALLOWED_KEYS` prueba algo sobre esta
+ * lista de columnas y **nada** sobre el archivo que se descarga.
+ */
+export const SIN_WRITER_POR_DISENO = {
+  acreditaciones_reporte:
+    'Fila de TÍTULO antes del encabezado, nombre de hoja en runtime (una por acreditación), '
+    + 'numFmt por columna (CUIT/CBU como texto, Fecha con formato de fecha), fila en blanco '
+    + 'antes del TOTAL, TOTAL sin borde superior y autoFilter. Las 6 tienen este único '
+    + 'consumidor; el detalle está en el comentario de `acreditacionesReporte` acá arriba.',
 };
 
 /**

@@ -19,7 +19,8 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
-const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress, FINANZAS_ALLOWED_KEYS } =
+const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress, FINANZAS_ALLOWED_KEYS,
+        CON_WRITER, SIN_WRITER_POR_DISENO } =
   await import('./js/exports/contracts.js');
 
 // Las columnas de entrada las declara la ficha de cada tipo de archivo
@@ -81,18 +82,10 @@ for (const c of contracts) {
 // declaran `width` en sus columnas — el resto (Paso 6, todavía sin migrar)
 // no lo necesita hasta que tenga un consumidor real.
 
-const CON_WRITER = [
-  'brutos_reporte', 'gs_pers_reporte', 'brutos', 'gs_pers', 'nr', 'nr_reporte',
-  // Las dos solapas planas del asiento de FINADIET nacieron sobre
-  // `writeContractSheet` (D-046), así que entran acá desde el primer día.
-  'finadiet_asiento_cc', 'finadiet_asiento_gral',
-  // Los 4 del Paso 6 que sí entraron limpio en el writer (D-047) — el 5º,
-  // `acreditaciones_reporte`, se queda afuera a propósito (ver el comentario en
-  // contracts.js): título antes del encabezado + multi-hoja con fórmulas entre
-  // hojas, ninguna de las dos forma que el writer describe hoy.
-  'rend_vs_tabu', 'rend_vs_asiento', 'rend_x_ee',
-  'cat_x_empleados_puesto', 'cat_x_empleados_cc',
-];
+// `CON_WRITER`/`SIN_WRITER_POR_DISENO` viven en `contracts.js` y no acá (D-051):
+// los lee también `tests/exportSinWriterConformidad.test.js`, y el motivo de una
+// excepción es una declaración sobre el export, no un detalle de este test.
+
 for (const exportId of CON_WRITER) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {
     assert(`${exportId}.${col.key}: tiene width (el writer lo necesita)`,
@@ -100,18 +93,55 @@ for (const exportId of CON_WRITER) {
   }
 }
 
-// Y al revés: los contratos del Paso 6 declaran semántica, no layout. Sus
-// writers todavía arman el .xlsx a mano, así que un `width`/`groups`/
-// `headerRows` acá no lo leería nadie — sería una segunda fuente de verdad
-// desincronizada del archivo real. Este assert es el que impide que se cuele
-// "de paso": el día que se migre uno de esos writers, entra a CON_WRITER y
-// declara su layout, en el mismo PR.
+// ── Los dos grupos PARTICIONAN los contratos ─────────────────────────────────
+// Ni uno de los dos lados puede quedar implícito: sin esto, un contrato nuevo
+// sin writer no se distingue de una excepción deliberada.
+
+for (const exportId of [...CON_WRITER, ...Object.keys(SIN_WRITER_POR_DISENO)]) {
+  assert(`${exportId}: el exportId listado existe en EXPORT_CONTRACTS`,
+    EXPORT_CONTRACTS[exportId] !== undefined);
+}
+for (const exportId of CON_WRITER) {
+  assert(`${exportId}: no está en los dos grupos a la vez`,
+    SIN_WRITER_POR_DISENO[exportId] === undefined);
+}
+for (const c of contracts) {
+  assert(`${c.exportId}: declara si pasa por el writer o si va a mano a propósito`,
+    CON_WRITER.includes(c.exportId) || SIN_WRITER_POR_DISENO[c.exportId] !== undefined);
+}
+for (const [exportId, motivo] of Object.entries(SIN_WRITER_POR_DISENO)) {
+  // Un motivo vacío o de dos palabras convierte la lista en un opt-out cómodo,
+  // que es exactamente lo que reemplazó.
+  assert(`${exportId}: la excepción trae un motivo escrito, no un flag`,
+    typeof motivo === 'string' && motivo.length >= 60);
+}
+
+// Y al revés que `width`: el que va a mano declara semántica, no layout. Un
+// `width`/`groups`/`headerRows` acá no lo leería nadie — sería una segunda
+// fuente de verdad desincronizada del archivo real (el layout de esas hojas
+// vive en su módulo, que es el que lo escribe). Este assert es el que impide
+// que se cuele "de paso": el día que uno migre, pasa a CON_WRITER y declara su
+// layout, en el mismo PR.
 for (const c of contracts) {
   if (CON_WRITER.includes(c.exportId)) continue;
   const conLayout = c.columns.filter(col =>
     col.width !== undefined || col.group !== undefined || col.diffHighlight !== undefined);
-  assert(`${c.exportId}: sin writer todavía → no declara layout (${conLayout.length} columnas lo harían)`,
+  assert(`${c.exportId}: va a mano por diseño → no declara layout (${conLayout.length} columnas lo harían)`,
     conLayout.length === 0 && c.groups === undefined && c.headerRows === undefined);
+}
+
+// `sheetNaming: 'runtime'` — `sheet` describe la FORMA de la hoja y no un
+// nombre que aparezca en el archivo (Acreditaciones: una hoja por acreditación,
+// `01 SUELDOS 30-04`). Sólo tiene sentido en los que van a mano:
+// `writeContractSheet` usa `contract.sheet` como nombre literal, así que ahí un
+// `sheetNaming:'runtime'` sería una contradicción.
+for (const c of contracts) {
+  assert(`${c.exportId}: sheetNaming es 'runtime' o no está declarado`,
+    c.sheetNaming === undefined || c.sheetNaming === 'runtime');
+  if (c.sheetNaming === 'runtime') {
+    assert(`${c.exportId}: sheetNaming:'runtime' sólo en los que van a mano (el writer usa sheet literal)`,
+      !CON_WRITER.includes(c.exportId));
+  }
 }
 
 // ── D-020: lo que va a Finanzas no lleva información de HR ───────────────────

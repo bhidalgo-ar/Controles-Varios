@@ -16,6 +16,7 @@
 // (dotación, conteos de empleados, altas/bajas). Eso vive sólo en esta pantalla.
 // Ver D-020 en DECISIONS.md.
 
+import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle } from '../ui/resultBlocks.js';
@@ -23,6 +24,14 @@ import { getViewPreference } from '../ui/viewPreference.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
+
+/**
+ * Las columnas de cada hoja de detalle, en orden, tomadas del contrato — la
+ * única lista de columnas de este export (D-051). No se copian acá: si alguien
+ * suma una columna, la suma en `js/exports/contracts.js` y ahí la ataja el
+ * assert de D-020 (`FINANZAS_ALLOWED_KEYS`), que es el punto.
+ */
+const DETALLE_COLUMNS = EXPORT_CONTRACTS.acreditaciones_reporte.columns;
 
 export const DEFAULT_ACREDITACIONES_CONFIG = {
   // Cuando el archivo trae más de una Empresa, ¿las listas se parten por empresa?
@@ -859,8 +868,8 @@ export function renderAcreditacionesConfigEditor(container, opts = {}) {
 // ── Export a Excel — el entregable del control ────────────────────────────────
 
 /**
- * Arma el .xlsx: hoja CONTROL + una hoja por lista (+ SIN ASIGNAR si queda
- * algún grupo sin fecha resuelta).
+ * Arma el .xlsx y lo descarga: hoja CONTROL + una hoja por lista (+ SIN ASIGNAR
+ * si queda algún grupo sin fecha resuelta).
  *
  * Lo que NO va acá, a propósito (D-020): conteo de empleados, bloque de
  * excepciones, alertas de integridad y cortes por banco. Este archivo lo recibe
@@ -868,11 +877,24 @@ export function renderAcreditacionesConfigEditor(container, opts = {}) {
  *
  * Se exporta (a diferencia de los export* del resto de los controles, que son
  * privados de su módulo) porque acá el .xlsx no es un anexo de la pantalla: es
- * el entregable del control, y así se puede verificar sin pasar por el DOM.
+ * el entregable del control.
  */
 export async function exportAcreditacionesToXlsx(results) {
   await loadExcelJS();
+  const wb = buildAcreditacionesWorkbook(results);
+  await downloadWorkbook(wb, `Acreditaciones_${periodSuffix(results.period)}.xlsx`);
+}
 
+/**
+ * El workbook, sin descargarlo — separado de `exportAcreditacionesToXlsx` para
+ * que el test de conformidad pueda inspeccionar las celdas sin DOM ni Blob
+ * (`tests/exportSinWriterConformidad.test.js`). Este export es uno de los que
+ * arma su `.xlsx` **a mano**, por diseño y no por deuda (D-051): la separación
+ * es lo que hace que "a mano" siga siendo verificable contra su contrato.
+ *
+ * Sólo necesita `window.ExcelJS` ya cargado — llamalo después de `loadExcelJS()`.
+ */
+export function buildAcreditacionesWorkbook(results) {
   const { listas, sinAsignar: pendingGroups, summary: s } = results;
 
   const wb = new window.ExcelJS.Workbook();
@@ -917,9 +939,13 @@ export async function exportAcreditacionesToXlsx(results) {
     titleRow.getCell(4).font   = { ...bold };
     titleRow.getCell(4).numFmt = NUM_FMT;
 
-    const hdrRow = ws.addRow(['Legajo', 'Apellido y Nombre', 'CUIT', 'Neto', 'Fecha Acreditacion', 'Banco', 'CBU']);
+    // Las etiquetas salen del contrato, no de una copia a mano: es la mitad
+    // "semántica" que sí se comparte aunque el layout de esta hoja no entre en
+    // `writeContractSheet` (D-051). Los anchos, formatos y la fila de título de
+    // arriba son la mitad "layout", y esos sí viven acá.
+    const hdrRow = ws.addRow(DETALLE_COLUMNS.map(c => c.label));
     hdrRow.height = 18;
-    for (let c = 1; c <= 7; c++) {
+    for (let c = 1; c <= DETALLE_COLUMNS.length; c++) {
       const cell = hdrRow.getCell(c);
       cell.font      = { ...bold };
       cell.fill      = solidFill(GRAY_HDR);
@@ -937,7 +963,7 @@ export async function exportAcreditacionesToXlsx(results) {
         r.banco,
         r.cbu,
       ]);
-      for (let c = 1; c <= 7; c++) dr.getCell(c).font = { ...base };
+      for (let c = 1; c <= DETALLE_COLUMNS.length; c++) dr.getCell(c).font = { ...base };
       // CUIT y CBU como texto: el CBU tiene 22 dígitos y ceros a la izquierda,
       // como número Excel lo pasa a notación científica y se pierde.
       dr.getCell(3).numFmt = '@';
@@ -956,7 +982,7 @@ export async function exportAcreditacionesToXlsx(results) {
 
     ws.views = [{ state: 'frozen', ySplit: 2 }];
     if (rows.length > 0) {
-      ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: 7 } };
+      ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: DETALLE_COLUMNS.length } };
     }
 
     return { sheetName: ws.name, totalRef: `'${ws.name}'!D1` };
@@ -1066,7 +1092,7 @@ export async function exportAcreditacionesToXlsx(results) {
 
   ctrl.views = [{ state: 'frozen', ySplit: hdrRow.number }];
 
-  await downloadWorkbook(wb, `Acreditaciones_${periodSuffix(results.period)}.xlsx`);
+  return wb;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
