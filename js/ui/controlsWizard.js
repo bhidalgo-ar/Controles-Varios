@@ -29,7 +29,8 @@ import { controlAppliesToClient, filterControlsForClient, controlOrigin } from '
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
-import { DEFAULT_LEGAJO_KEY_MODE }      from '../utils/legajo.js';
+import { DEFAULT_LEGAJO_KEY_MODE, makeLegajoKey } from '../utils/legajo.js';
+import { countUniqueLegajos }          from '../controls/consolidate.js';
 import { currentPeriod, periodOptions, previousPeriod, periodToLabel } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
 import {
@@ -1624,7 +1625,7 @@ async function executeControls(state, statusEl, container, root) {
   const quickRun = state.quickRun === true;
   const tab = state.tab;
   const nCtrl = state.selectedControls.length;
-  const totalLegajos = tab?.parseMetadata?.totalRows ?? null;
+  const totalLegajos = tabEmpleadosCount(state);
 
   const uniqueFileNames = [...new Set([tab?.fileName, ...state.selectedControls.flatMap(id => {
     const ctrl = CONTROL_REGISTRY[id];
@@ -1863,12 +1864,39 @@ async function executeControls(state, statusEl, container, root) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// ── Cuántos EMPLEADOS trae el Tabulado cargado ───────────────────────────────
+// No es `parseMetadata.totalRows`: eso son filas, y el Tabulado trae una fila
+// por liquidación, así que el legajo con la mensual y la baja del mismo mes se
+// contaba dos veces. Los textos del wizard y el KPI "Legajos cruzados" del hero
+// tienen que dar el MISMO número para el mismo archivo.
+//
+// El resultado se cachea por objeto `tab` en un WeakMap y no dentro del propio
+// objeto, porque `state.tab` se guarda tal cual en la base (`saveControlRunFile`)
+// y no queremos sumarle campos calculados. El botón se re-renderiza con cada
+// cambio de selección y el Tabulado puede traer miles de filas.
+const tabEmpleadosCache = new WeakMap();
+
+function tabEmpleadosCount(state) {
+  const tab = state.tab;
+  if (!tab) return null;
+  if (tabEmpleadosCache.has(tab)) return tabEmpleadosCache.get(tab);
+
+  const n = countUniqueLegajos(tab.parsedRows, tab.mapping?.empleadoColumn, {
+    keyFn: makeLegajoKey(state.client?.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE),
+  });
+  // Sin filas o sin columna de empleado mapeada no hay empleados que contar:
+  // devolvemos null y el texto omite el número en vez de afirmar "0 legajos".
+  const result = n > 0 ? n : null;
+  tabEmpleadosCache.set(tab, result);
+  return result;
+}
+
 // El botón de ejecutar dice exactamente qué va a pasar (cuántos controles,
 // sobre cuántos legajos) — se recalcula en vivo según la selección.
-function executeCtaLabel(state) {
+export function executeCtaLabel(state) {
   const n = state.selectedControls.length;
   const nCtrlTxt = `${n} control${n === 1 ? '' : 'es'}`;
-  const totalLegajos = state.tab?.parseMetadata?.totalRows;
+  const totalLegajos = tabEmpleadosCount(state);
   return totalLegajos
     ? `▶ Ejecutar ${nCtrlTxt} sobre ${totalLegajos.toLocaleString('es-AR')} legajos`
     : `▶ Ejecutar ${nCtrlTxt}`;

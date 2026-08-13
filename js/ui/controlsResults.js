@@ -7,6 +7,8 @@
 import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { countUniqueLegajos }  from '../controls/consolidate.js';
+import { makeLegajoKey }       from '../utils/legajo.js';
 import { periodToLabel }    from '../utils/dates.js';
 import { formatAmount }     from '../utils/currency.js';
 import { showToast }        from './toast.js';
@@ -129,7 +131,10 @@ export async function renderControlsResults(root, runId) {
   // el pulso de "esto se arregló". Sin corrida previa, no hay pulso.
   const prevTierByControlId = await getPrevTierByControlId(run, thresholdPct);
 
-  const { html: heroHtml, pctOk, overallTier, hasGauge } = buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId);
+  // El modo de clave de legajo es del CLIENTE (D-038): no viaja en tab.mapping,
+  // sale del registro que esta pantalla ya cargó.
+  const { html: heroHtml, pctOk, overallTier, hasGauge } =
+    buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId, client?.legajoKeyMode);
   heroEl.innerHTML = heroHtml;
   if (hasGauge) animateHeroGauge(heroEl, pctOk, overallTier);
 
@@ -342,15 +347,23 @@ function groupSummariesByUnit(controlSummaries) {
 
 // ── Hero de resultados ──────────────────────────────────────────────────────
 
-export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId) {
+export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId, legajoKeyMode) {
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // "Legajos cruzados": tamaño del Tabulado de esta corrida si está disponible;
-  // si no (ej. corrida sin Tabulado), el mayor unitsTotal entre controles por legajo.
+  // "Legajos cruzados": EMPLEADOS del Tabulado de esta corrida, no filas. El
+  // Tabulado trae una fila por liquidación, así que `parseMetadata.totalRows`
+  // (que sigue significando filas, y está bien que lo haga) contaba dos veces al
+  // legajo con la mensual y la baja del mismo mes. Si el Tabulado no está o no
+  // se puede contar, cae al mayor unitsTotal entre los controles por legajo —
+  // que también son empleados, así que las dos ramas miden lo mismo.
   const tabFile = runFiles.find(f => f.fileType === 'tab_control');
   const legajoCtrls = controlSummaries.filter(c => c.summary.unit === 'legajo' && c.summary.unitsTotal != null);
-  const totalLegajosCruzados = tabFile?.parseMetadata?.totalRows
-    ?? legajoCtrls.reduce((max, c) => Math.max(max, c.summary.unitsTotal), 0);
+  const empleadosTab = countUniqueLegajos(tabFile?.parsedRows, tabFile?.mapping?.empleadoColumn, {
+    keyFn: makeLegajoKey(legajoKeyMode),
+  });
+  const totalLegajosCruzados = empleadosTab > 0
+    ? empleadosTab
+    : legajoCtrls.reduce((max, c) => Math.max(max, c.summary.unitsTotal), 0);
 
   // % OK del gauge — una sola unidad, la que elige groupSummariesByUnit (nunca
   // legajos sumados con centros de costo). Las demás unidades no se mezclan acá
