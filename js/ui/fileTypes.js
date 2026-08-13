@@ -35,6 +35,10 @@
 //   dropHint       {string}    aclaración extra en la zona de drop
 //   aliasOf        {string}    comparte la ficha de otro tipo (ver tab_prev_file)
 //
+// El Tabulado declara además `extraFieldGroups` y `conceptCodeToKey`: las
+// columnas que se piden en el Paso 2 (no al subir el archivo) y sólo cuando
+// algún control seleccionado las necesita. Ver el comentario en su ficha.
+//
 // **`fixedFormat` NO se deriva de `fields: []`, y es a propósito.**
 // `acreditaciones_file` no declara ninguna columna a mapear y aun así pasa por
 // la pantalla de confirmación (vista previa + "Confirmar y procesar"), porque el
@@ -145,6 +149,91 @@ export const FILE_TYPES = {
       { key: 'deptoColumn',           label: 'Columna de Departamento/Unidad',     required: false },
       { key: 'cuilColumn',            label: 'Columna de CUIL',                    required: false },
     ],
+
+  // ── Columnas del Tabulado que piden Brutos / GS Pers / NR ──────────────────
+  //
+  // Son columnas del MISMO archivo que `fields`, pero no se piden al subirlo:
+  // se piden en el Paso 2, y sólo las que necesita algún control seleccionado —
+  // no tiene sentido pedirle los 18 conceptos de NR a quien corre sólo Brutos.
+  // Vivían en `controlsWizard.js` como cinco arrays sueltos; acá quedan junto al
+  // resto de las columnas del Tabulado, que es lo que permite verificar que cada
+  // `from` de un contrato de export apunte a un campo que existe de verdad.
+  //
+  // Cada grupo declara `requiredBy`: qué control lo pide, o `null` si va siempre.
+  // Esa distinción no es cosmética — los dos consumidores usan conjuntos
+  // distintos y así queda dicho en vez de quedar implícito:
+  //   · el PANEL muestra los grupos activos MÁS los de `requiredBy: null`
+  //   · el GATE de "no podés avanzar" mira SÓLO los grupos con `requiredBy`
+  // Hoy da igual (los 5 campos compartidos son todos OPCIONAL en los contratos,
+  // así que gatearlos sería un no-op), pero el día que uno suba a OBLIGATORIA la
+  // diferencia importa, y este paso no es donde se decide eso.
+  extraFieldGroups: [
+    { id: 'brutos', requiredBy: 'brutos', fields: [
+      { key: 'tabSalBaseColumn',     label: 'Sueldo — columna en Tabulado',          required: true },
+      { key: 'tabACuFutAumenColumn', label: 'A_CTA_FUT_AUMEN — columna en Tabulado', required: true },
+    ] },
+    { id: 'gsPers', requiredBy: 'gsPers', fields: [
+      { key: 'tabGtosPersonalesColumn', label: 'GTOS_PERSONALES — columna en Tabulado', required: true },
+      { key: 'tabDtoCocheraColumn',     label: 'DTO_COCHERA — columna en Tabulado',      required: true },
+    ] },
+    { id: 'nrIndem', requiredBy: 'nr', header: 'Indemnizatorios', fields: [
+      { key: 'tabIndemPreavisoColumn',  label: 'INDEM_PREAVISO — columna en Tabulado',  required: false },
+      { key: 'tabSacPreavisoColumn',    label: 'SAC_PREAVISO — columna en Tabulado',    required: false },
+      { key: 'tabIndemAntDespColumn',   label: 'INDEM_ANT_DESP — columna en Tabulado',  required: false },
+      { key: 'tabIndemAntFalleColumn',  label: 'INDEM_ANT_FALLE — columna en Tabulado', required: false },
+      { key: 'tabIndemIntegColumn',     label: 'INDEM_INTEG — columna en Tabulado',     required: false },
+      { key: 'tabSacIndemIntegColumn',  label: 'SAC_INDEM_INTEG — columna en Tabulado', required: false },
+      { key: 'tabIndmMaternidadColumn', label: 'INDM_MATERNIDAD — columna en Tabulado', required: false },
+      { key: 'tabVacNoGozadasColumn',   label: 'VAC_NO_GOZADAS — columna en Tabulado',  required: false },
+      { key: 'tabVacNoGozSacColumn',    label: 'VAC_NO_GOZ_SAC — columna en Tabulado',  required: false },
+      { key: 'tabGratVacColumn',        label: 'GRAT_VAC — columna en Tabulado',        required: false },
+      { key: 'tabGraVacnogSacColumn',   label: 'GRA_VACNOG_SAC — columna en Tabulado',  required: false },
+      { key: 'tabIndemFuerMayColumn',   label: 'INDEM_FUER_MAY — columna en Tabulado',  required: false },
+      { key: 'tabIndemEmbarazoColumn',  label: 'INDEM_EMBARAZO — columna en Tabulado',  required: false },
+    ] },
+    { id: 'nrOtros', requiredBy: 'nr', header: 'Otros NR', fields: [
+      { key: 'tabReinHomeOficeColumn',  label: 'REIN_HOME_OFICE — columna en Tabulado', required: false },
+      { key: 'tabGratExtraordColumn',   label: 'GRAT_EXTRAORD — columna en Tabulado',   required: false },
+      { key: 'tabAsigPasColumn',        label: 'ASIG_PAS — columna en Tabulado',        required: false },
+      { key: 'tabReintGuardColumn',     label: 'REINT_GUARD — columna en Tabulado',     required: false },
+      { key: 'tabIncrementoStColumn',   label: 'INCREMENTO_ST — columna en Tabulado',   required: false },
+    ] },
+    { id: 'shared', requiredBy: null, fields: [
+      { key: 'tabNombreColumn',      label: 'Columna NOMBRE',     required: false },
+      { key: 'tabApellido1Column',   label: 'Columna APELLIDO_1', required: false },
+      { key: 'tabFecAltaColumn',     label: 'Columna FECHA_ALTA', required: false },
+      { key: 'tabFecBajaColumn',     label: 'Columna FECHA_BAJA', required: false },
+      { key: 'tabFecPagoColumn',     label: 'Columna FEC_PAGO',   required: false },
+    ] },
+  ],
+
+  // CODIGO del catálogo → clave del tabExtraConfig. Lo usa la auto-detección
+  // del Paso 2 para resolver por código de concepto lo que el catálogo del
+  // cliente no resolvió por nombre (D-039).
+  conceptCodeToKey: {
+    'SAL_BASE':        'tabSalBaseColumn',
+    'A_CTA_FUT_AUMEN': 'tabACuFutAumenColumn',
+    'GTOS_PERSONALES': 'tabGtosPersonalesColumn',
+    'DTO_COCHERA':     'tabDtoCocheraColumn',
+    'INDEM_PREAVISO':  'tabIndemPreavisoColumn',
+    'SAC_PREAVISO':    'tabSacPreavisoColumn',
+    'INDEM_ANT_DESP':  'tabIndemAntDespColumn',
+    'INDEM_ANT_FALLE': 'tabIndemAntFalleColumn',
+    'INDEM_INTEG':     'tabIndemIntegColumn',
+    'SAC_INDEM_INTEG': 'tabSacIndemIntegColumn',
+    'INDM_MATERNIDAD': 'tabIndmMaternidadColumn',
+    'VAC_NO_GOZADAS':  'tabVacNoGozadasColumn',
+    'VAC_NO_GOZ_SAC':  'tabVacNoGozSacColumn',
+    'GRAT_VAC':        'tabGratVacColumn',
+    'GRA_VACNOG_SAC':  'tabGraVacnogSacColumn',
+    'INDEM_FUER_MAY':  'tabIndemFuerMayColumn',
+    'INDEM_EMBARAZO':  'tabIndemEmbarazoColumn',
+    'REIN_HOME_OFICE': 'tabReinHomeOficeColumn',
+    'GRAT_EXTRAORD':   'tabGratExtraordColumn',
+    'ASIG_PAS':        'tabAsigPasColumn',
+    'REINT_GUARD':     'tabReintGuardColumn',
+    'INCREMENTO_ST':   'tabIncrementoStColumn',
+  },
   },
 
   cat_empleados: {
@@ -406,6 +495,29 @@ export function flowFor(fileType) {
  */
 export function autoDetectFor(fileType) {
   return FILE_TYPES[fileType]?.autoDetect || null;
+}
+
+/**
+ * Grupos de columnas que se piden en el Paso 2, filtrados por qué controles
+ * están seleccionados.
+ *
+ * @param {string} fileType
+ * @param {Set<string>} activos  ids de `requiredBy` presentes en la corrida
+ * @param {object} [opts]
+ * @param {boolean} [opts.soloGateados]  sólo los grupos atados a un control
+ *        (excluye los `requiredBy: null`). Es lo que mira el gate de avance;
+ *        el panel los quiere todos. Ver la nota en la ficha de tab_control.
+ */
+export function extraFieldGroupsFor(fileType, activos, { soloGateados = false } = {}) {
+  const groups = FILE_TYPES[fileType]?.extraFieldGroups || [];
+  return groups.filter(g => (g.requiredBy
+    ? activos.has(g.requiredBy)
+    : !soloGateados));
+}
+
+/** CODIGO del catálogo → clave del tabExtraConfig, para la auto-detección. */
+export function conceptCodeToKeyFor(fileType) {
+  return FILE_TYPES[fileType]?.conceptCodeToKey || {};
 }
 
 /** Texto de la zona de drop. Cae a `label` salvo donde ya divergía. */

@@ -22,7 +22,7 @@ import {
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
-import { autoDetectFor } from './fileTypes.js';
+import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor } from './fileTypes.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
 import { controlAppliesToClient, filterControlsForClient, controlOrigin } from '../controls/scope.js';
@@ -414,18 +414,30 @@ function nextStepHint(state) {
 }
 
 /**
- * Campos de "Columnas del Tabulado" (TAB_BRUTOS_FIELDS/TAB_GS_PERS_FIELDS/
- * TAB_NR_*_FIELDS, más abajo en este archivo) que siguen sin resolver: la
- * clave del contrato exige CLAVE u OBLIGATORIA, y `cfg[key]` está vacío. Un
- * valor `OMITIDO` cuenta como resuelto — es la vía de escape para el cliente
- * que genuinamente no tiene esa columna (D-036).
+ * Qué grupos de columnas del Tabulado pide esta corrida, según qué controles
+ * estén seleccionados. Los ids son los `requiredBy` de la ficha.
+ */
+function activeExtraGroups({ hasBrutos, hasGsPers, hasNr }) {
+  return new Set([
+    hasBrutos && 'brutos',
+    hasGsPers && 'gsPers',
+    hasNr     && 'nr',
+  ].filter(Boolean));
+}
+
+/**
+ * Campos de "Columnas del Tabulado" (los declara la ficha de `tab_control` en
+ * js/ui/fileTypes.js) que siguen sin resolver: la clave del contrato exige
+ * CLAVE u OBLIGATORIA, y `cfg[key]` está vacío. Un valor `OMITIDO` cuenta como
+ * resuelto — es la vía de escape para el cliente que genuinamente no tiene esa
+ * columna (D-036).
+ *
+ * `soloGateados`: el gate mira sólo los grupos atados a un control, no los 5
+ * campos compartidos. Ver la nota de `extraFieldGroups` en la ficha.
  */
 export function pendingTabRequirements(cfg, { hasBrutos, hasGsPers, hasNr }) {
-  const fields = [
-    ...(hasBrutos ? TAB_BRUTOS_FIELDS  : []),
-    ...(hasGsPers ? TAB_GS_PERS_FIELDS : []),
-    ...(hasNr ? [...TAB_NR_INDEM_FIELDS, ...TAB_NR_OTROS_FIELDS] : []),
-  ];
+  const fields = extraFieldGroupsFor('tab_control', activeExtraGroups({ hasBrutos, hasGsPers, hasNr }), { soloGateados: true })
+    .flatMap(g => g.fields);
   return fields.filter(f => {
     const necessity = necessityOfKey(f.key);
     const bloquea = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
@@ -1280,74 +1292,6 @@ function renderMetadataTabulado(host, fileData) {
 
 // ── Configuración de columnas del Tabulado para Brutos / GS Pers ────────────
 
-const TAB_SHARED_FIELDS = [
-  { key: 'tabNombreColumn',      label: 'Columna NOMBRE',     required: false },
-  { key: 'tabApellido1Column',   label: 'Columna APELLIDO_1', required: false },
-  { key: 'tabFecAltaColumn',     label: 'Columna FECHA_ALTA', required: false },
-  { key: 'tabFecBajaColumn',     label: 'Columna FECHA_BAJA', required: false },
-  { key: 'tabFecPagoColumn',     label: 'Columna FEC_PAGO',   required: false },
-];
-
-const TAB_BRUTOS_FIELDS = [
-  { key: 'tabSalBaseColumn',     label: 'Sueldo — columna en Tabulado',          required: true },
-  { key: 'tabACuFutAumenColumn', label: 'A_CTA_FUT_AUMEN — columna en Tabulado', required: true },
-];
-
-const TAB_GS_PERS_FIELDS = [
-  { key: 'tabGtosPersonalesColumn', label: 'GTOS_PERSONALES — columna en Tabulado', required: true },
-  { key: 'tabDtoCocheraColumn',     label: 'DTO_COCHERA — columna en Tabulado',      required: true },
-];
-
-const TAB_NR_INDEM_FIELDS = [
-  { key: 'tabIndemPreavisoColumn',  label: 'INDEM_PREAVISO — columna en Tabulado',  required: false },
-  { key: 'tabSacPreavisoColumn',    label: 'SAC_PREAVISO — columna en Tabulado',    required: false },
-  { key: 'tabIndemAntDespColumn',   label: 'INDEM_ANT_DESP — columna en Tabulado',  required: false },
-  { key: 'tabIndemAntFalleColumn',  label: 'INDEM_ANT_FALLE — columna en Tabulado', required: false },
-  { key: 'tabIndemIntegColumn',     label: 'INDEM_INTEG — columna en Tabulado',     required: false },
-  { key: 'tabSacIndemIntegColumn',  label: 'SAC_INDEM_INTEG — columna en Tabulado', required: false },
-  { key: 'tabIndmMaternidadColumn', label: 'INDM_MATERNIDAD — columna en Tabulado', required: false },
-  { key: 'tabVacNoGozadasColumn',   label: 'VAC_NO_GOZADAS — columna en Tabulado',  required: false },
-  { key: 'tabVacNoGozSacColumn',    label: 'VAC_NO_GOZ_SAC — columna en Tabulado',  required: false },
-  { key: 'tabGratVacColumn',        label: 'GRAT_VAC — columna en Tabulado',        required: false },
-  { key: 'tabGraVacnogSacColumn',   label: 'GRA_VACNOG_SAC — columna en Tabulado',  required: false },
-  { key: 'tabIndemFuerMayColumn',   label: 'INDEM_FUER_MAY — columna en Tabulado',  required: false },
-  { key: 'tabIndemEmbarazoColumn',  label: 'INDEM_EMBARAZO — columna en Tabulado',  required: false },
-];
-
-const TAB_NR_OTROS_FIELDS = [
-  { key: 'tabReinHomeOficeColumn',  label: 'REIN_HOME_OFICE — columna en Tabulado', required: false },
-  { key: 'tabGratExtraordColumn',   label: 'GRAT_EXTRAORD — columna en Tabulado',   required: false },
-  { key: 'tabAsigPasColumn',        label: 'ASIG_PAS — columna en Tabulado',        required: false },
-  { key: 'tabReintGuardColumn',     label: 'REINT_GUARD — columna en Tabulado',     required: false },
-  { key: 'tabIncrementoStColumn',   label: 'INCREMENTO_ST — columna en Tabulado',   required: false },
-];
-
-// Mapa CODIGO del catálogo → clave del tabExtraConfig (con prefijo "tab")
-const TAB_EXTRA_CODIGO_TO_KEY = {
-  'SAL_BASE':        'tabSalBaseColumn',
-  'A_CTA_FUT_AUMEN': 'tabACuFutAumenColumn',
-  'GTOS_PERSONALES': 'tabGtosPersonalesColumn',
-  'DTO_COCHERA':     'tabDtoCocheraColumn',
-  'INDEM_PREAVISO':  'tabIndemPreavisoColumn',
-  'SAC_PREAVISO':    'tabSacPreavisoColumn',
-  'INDEM_ANT_DESP':  'tabIndemAntDespColumn',
-  'INDEM_ANT_FALLE': 'tabIndemAntFalleColumn',
-  'INDEM_INTEG':     'tabIndemIntegColumn',
-  'SAC_INDEM_INTEG': 'tabSacIndemIntegColumn',
-  'INDM_MATERNIDAD': 'tabIndmMaternidadColumn',
-  'VAC_NO_GOZADAS':  'tabVacNoGozadasColumn',
-  'VAC_NO_GOZ_SAC':  'tabVacNoGozSacColumn',
-  'GRAT_VAC':        'tabGratVacColumn',
-  'GRA_VACNOG_SAC':  'tabGraVacnogSacColumn',
-  'INDEM_FUER_MAY':  'tabIndemFuerMayColumn',
-  'INDEM_EMBARAZO':  'tabIndemEmbarazoColumn',
-  'REIN_HOME_OFICE': 'tabReinHomeOficeColumn',
-  'GRAT_EXTRAORD':   'tabGratExtraordColumn',
-  'ASIG_PAS':        'tabAsigPasColumn',
-  'REINT_GUARD':     'tabReintGuardColumn',
-  'INCREMENTO_ST':   'tabIncrementoStColumn',
-};
-
 function autoDetectTabExtraConfig(tabHeaders, catalogRows) {
   const catalog = catalogRows || CATALOGO_SEED;
   const lc = h => String(h).toLowerCase();
@@ -1358,7 +1302,7 @@ function autoDetectTabExtraConfig(tabHeaders, catalogRows) {
   const idCentroTrab = find('id_centro_trab', 'centro_trab');
   const idCategoria  = find('id_categoria', 'categoria');
 
-  const conceptMapping = buildParserMapping(tabHeaders, catalog, TAB_EXTRA_CODIGO_TO_KEY);
+  const conceptMapping = buildParserMapping(tabHeaders, catalog, conceptCodeToKeyFor('tab_control'));
 
   // Lo que el catálogo del cliente no pudo resolver por nombre, se intenta por
   // **código** de concepto (D-039): el nombre del encabezado lo renombra el
@@ -1436,17 +1380,11 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
   const hasSavedConfig = Object.values(state.tabExtraConfig).some(Boolean);
   const autoDetected   = state.tabExtraConfigAutoDetected;
 
-  const fields = [
-    ...(hasBrutos ? TAB_BRUTOS_FIELDS  : []),
-    ...(hasGsPers ? TAB_GS_PERS_FIELDS : []),
-    ...(hasNr ? [
-      { groupHeader: 'Indemnizatorios' },
-      ...TAB_NR_INDEM_FIELDS,
-      { groupHeader: 'Otros NR' },
-      ...TAB_NR_OTROS_FIELDS,
-    ] : []),
-    ...TAB_SHARED_FIELDS,
-  ];
+  // El orden y los subtítulos salen de la ficha: los grupos vienen en orden de
+  // declaración (Brutos · GS Pers · Indemnizatorios · Otros NR · compartidos) y
+  // el que trae `header` inserta su subtítulo de ancho completo.
+  const fields = extraFieldGroupsFor('tab_control', activeExtraGroups({ hasBrutos, hasGsPers, hasNr }))
+    .flatMap(g => (g.header ? [{ groupHeader: g.header }, ...g.fields] : g.fields));
 
   const parts = [
     hasBrutos && 'Brutos',
