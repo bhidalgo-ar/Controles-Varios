@@ -16,6 +16,12 @@
 //                              `blocksProgress()` usa como piso (D-041/D-045).
 //   parse          {function}  (arrayBuffer, mapping) → { parsedRows, parseMetadata, … }
 //   detectHeaders  {function}  (arrayBuffer) → { headers, preview }
+//   autoDetect     {function}  (headers, catalogRows) → mapping propuesto, o
+//                              `null` si este tipo no tiene auto-detección.
+//                              **Se declara siempre, aunque sea `null`**: sin
+//                              eso queda `undefined`, indistinguible de haberlo
+//                              olvidado, y el analista mapea a mano un archivo
+//                              que la app sabía leer sola
 //   meta           {function}  (parseMetadata) → HTML de la línea "N registros"
 //   nameMapping    {boolean}   muestra el selector especial de apellido/nombre
 //                              (una columna vs. dos) — sólo formatos con una
@@ -38,19 +44,20 @@
 import { detectHeaders as detectHeadersXlsx, parseNominaMaestra } from '../parsers/nominaMaestra.js';
 import { parseResumenLargo } from '../parsers/resumenLargoExcel.js';
 import { parseResumenTabulado } from '../parsers/resumenTabuladoHorizontalExcel.js';
-import { parseTabuladoControl, detectHeaders as detectHeadersTabulado } from '../parsers/tabuladoControl.js';
-import { parseCatEmpleados } from '../parsers/catEmpleados.js';
-import { parseBrutos } from '../parsers/brutosParser.js';
-import { parseGsPers } from '../parsers/gsPersParser.js';
-import { parseNr }     from '../parsers/nrParser.js';
-import { parseRendimiento } from '../parsers/rendimientoParser.js';
-import { parseCostoTotal }  from '../parsers/costoTotalParser.js';
+import { parseTabuladoControl, detectHeaders as detectHeadersTabulado, autoDetectTabMapping } from '../parsers/tabuladoControl.js';
+import { parseCatEmpleados, autoDetectCatMapping } from '../parsers/catEmpleados.js';
+import { parseBrutos, autoDetectBrutosMapping } from '../parsers/brutosParser.js';
+import { parseGsPers, autoDetectGsPersMapping } from '../parsers/gsPersParser.js';
+import { parseNr, autoDetectNrMapping } from '../parsers/nrParser.js';
+import { parseRendimiento, autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
+import { parseCostoTotal, autoDetectCostoTotalMapping } from '../parsers/costoTotalParser.js';
 import { parseConta } from '../parsers/contaExcel.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
 import {
   parseFinadietAsiento,
   detectHeaders as detectHeadersFinadietAsiento,
+  autoDetectFinadietAsientoMapping,
 } from '../parsers/finadietAsientoParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
@@ -85,6 +92,7 @@ export const FILE_TYPES = {
     label: 'Nómina Maestra',
     parse: parseNominaMaestra,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaLegajosConceptos,
     nameMapping: true,
     fields: [
@@ -97,6 +105,7 @@ export const FILE_TYPES = {
     label: 'Resumen Largo Excel',
     parse: parseResumenLargo,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaLegajosConceptos,
     fields: [
       { key: 'legajoColumnLong',  label: 'Columna de Legajo',             required: true },
@@ -109,6 +118,7 @@ export const FILE_TYPES = {
     label: 'Resumen Tabulado Horizontal',
     parse: parseResumenTabulado,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaLegajosConceptos,
     nameMapping: true,
     fields: [
@@ -124,6 +134,7 @@ export const FILE_TYPES = {
     label: 'Tabulado (Controles)',
     parse: parseTabuladoControl,
     detectHeaders: detectHeadersTabulado,
+    autoDetect: autoDetectTabMapping,
     meta: metaRegistros,
     fields: [
       { key: 'empleadoColumn',        label: 'Columna de Empleado (ID)',           required: true  },
@@ -140,6 +151,7 @@ export const FILE_TYPES = {
     label: 'Reporte de Categorías',
     parse: parseCatEmpleados,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectCatMapping,
     meta: metaCatEmpleados,
     fields: [
       { key: 'idEmpColumn',           label: 'Columna de ID Empleado',             required: true  },
@@ -160,6 +172,7 @@ export const FILE_TYPES = {
     label: 'Reporte de Brutos',
     parse: parseBrutos,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectBrutosMapping,
     meta: metaRegistros,
     fields: [
       { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
@@ -172,6 +185,7 @@ export const FILE_TYPES = {
     label: 'Reporte de GS Pers (Gastos Personales y Cochera)',
     parse: parseGsPers,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectGsPersMapping,
     meta: metaRegistros,
     fields: [
       { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
@@ -184,6 +198,7 @@ export const FILE_TYPES = {
     label: 'Reporte de NR (No Remunerativos)',
     parse: parseNr,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectNrMapping,
     meta: metaRegistros,
     fields: [
       { key: 'legajoColumn',          label: 'Columna de Legajo',                  required: true  },
@@ -212,6 +227,7 @@ export const FILE_TYPES = {
     label: 'Reporte de Rendimiento',
     parse: parseRendimiento,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectRendimientoMapping,
     meta: metaRegistros,
     fields: [
       { key: 'ccCodeColumn',     label: 'Columna de código CC (1ª col., sin encabezado)', required: false },
@@ -230,6 +246,7 @@ export const FILE_TYPES = {
     label: 'Reporte de Costo Total (por empleado)',
     parse: parseCostoTotal,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: autoDetectCostoTotalMapping,
     meta: metaRegistros,
     fields: [
       { key: 'legajoColumn',     label: 'Columna de Legajo (ID Empleado)', required: true },
@@ -242,6 +259,7 @@ export const FILE_TYPES = {
     label: 'Catálogo de Conceptos',
     parse: parseConceptCatalog,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaConceptCatalog,
     fixedFormat: true,
     fields: [],
@@ -258,6 +276,7 @@ export const FILE_TYPES = {
     label: 'Contabilidad Desglosada',
     parse: parseConta,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaLegajosConceptos,
     flow: 'multi',
     fields: [],
@@ -268,6 +287,7 @@ export const FILE_TYPES = {
     label: 'CC x Empleado',
     parse: parseCcXEmpleado,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaRegistros,
     fixedFormat: true,
     fields: [],
@@ -282,6 +302,7 @@ export const FILE_TYPES = {
     label: 'Acreditaciones (export de Axton)',
     parse: parseAcreditaciones,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaRegistros,
     fields: [],
   },
@@ -303,6 +324,7 @@ export const FILE_TYPES = {
     dropHint: ' (uno por mes)',
     parse: parseAcumuladores,
     detectHeaders: detectHeadersXlsx,
+    autoDetect: null,
     meta: metaRegistros,
     flow: 'multi-periodo',
     fields: [],
@@ -320,6 +342,7 @@ export const FILE_TYPES = {
     label: 'Conceptos liquidados de FINADIET (Meta4)',
     parse: parseFinadietAsiento,
     detectHeaders: detectHeadersFinadietAsiento,
+    autoDetect: autoDetectFinadietAsientoMapping,
     meta: metaRegistros,
     fields: [
       { key: 'cuentaDebeColumn',        label: 'Columna de Código de cuenta Debe',   required: true  },
@@ -374,6 +397,15 @@ export function isFixedFormat(fileType) {
  */
 export function flowFor(fileType) {
   return FILE_TYPES[fileType]?.flow || 'single';
+}
+
+/**
+ * Función de auto-detección de columnas, o `null` si este tipo no tiene.
+ * Todas aceptan `(headers, catalogRows)`; las que no usan el catálogo ignoran
+ * el segundo argumento, así que el llamador puede pasarlo siempre.
+ */
+export function autoDetectFor(fileType) {
+  return FILE_TYPES[fileType]?.autoDetect || null;
 }
 
 /** Texto de la zona de drop. Cae a `label` salvo donde ya divergía. */

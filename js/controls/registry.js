@@ -21,7 +21,21 @@
 //                     para restringirlo — ver ejemplos en ARCHITECTURE.md §4.
 //   description     — descripción breve
 //   tabRequired     — si necesita el Tabulado como archivo pivote
-//   additionalFiles — archivos adicionales requeridos: [{ key, label, fileType }]
+//   additionalFiles — archivos adicionales requeridos: [{ key, label, fileType }], más
+//                     tres opcionales por archivo:
+//                       optional        — se puede avanzar sin él
+//                       shared          — lo piden varios controles y es literalmente el
+//                                         mismo archivo: se muestra una vez y el resultado
+//                                         se espeja en todos (el Tabulado anterior)
+//                       slot            — selector CSS de un hueco propio en el layout del
+//                                         paso; si el hueco no está en pantalla, el archivo
+//                                         cae a la lista de abajo como cualquier otro
+//                       rerenderOnLoad  — al cargarse cambia lo que OTRO panel del mismo paso
+//                                         puede ofrecer, así que hay que redibujar el paso.
+//                                         Sólo se dispara con un archivo nuevo de verdad:
+//                                         renderAlreadyLoaded llama a onComplete de forma
+//                                         sincrónica al re-mostrar uno ya cargado, y sin ese
+//                                         guard el redibujo entra en bucle re-entrante.
 //   group           — { id, label, mode, primary } para agrupar variantes del mismo control bajo una pill.
 //                     `primary: true` marca la variante que "Seleccionar todos" incluye. Es una
 //                     declaración explícita y no se infiere de `mode`: el filtro anterior miraba
@@ -378,7 +392,9 @@ export const CONTROL_REGISTRY = {
     tabRequired: false,
     additionalFiles: [
       { key: 'rend',  label: 'Reporte de Rendimiento',          fileType: 'rend_file' },
-      { key: 'conta', label: 'Contabilidad Desglosada',         fileType: 'conta_file' },
+      // rerenderOnLoad: con CONTA cargada, el editor de config de abajo puede mostrar
+      // el nombre de cada cuenta y concepto al lado de su código.
+      { key: 'conta', label: 'Contabilidad Desglosada',         fileType: 'conta_file', rerenderOnLoad: true },
       { key: 'ccXEe', label: 'CC x Empleado (opcional)',         fileType: 'cc_x_ee_file', optional: true },
     ],
     run:           runRendVsAsiento,
@@ -544,7 +560,10 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       // `shared: true` → si los dos controles de Variaciones están seleccionados,
       // el wizard pide este archivo UNA sola vez y lo comparte (ver controlsWizard.js).
-      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true },
+      // slot: tiene su propio hueco en la grilla de dos columnas, arriba.
+      // rerenderOnLoad: sus encabezados son los que ofrece el panel "Conceptos a comparar".
+      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true,
+        slot: '#js-var-prev-upload', rerenderOnLoad: true },
     ],
     run:           runVariacionesSueldos,
     summarize:     summarizeVariacionesSueldos,
@@ -574,7 +593,10 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'variaciones', label: 'Variación entre períodos', mode: 'Conceptos', primary: true },
     tabRequired: true,
     additionalFiles: [
-      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true },
+      // slot: tiene su propio hueco en la grilla de dos columnas, arriba.
+      // rerenderOnLoad: sus encabezados son los que ofrece el panel "Conceptos a comparar".
+      { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true,
+        slot: '#js-var-prev-upload', rerenderOnLoad: true },
     ],
     run:           runVariacionesConceptos,
     summarize:     summarizeVariacionesConceptos,

@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>slots</title>
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<pre id="out">—</pre>
+<script type="module">
+  const out = document.getElementById('out');
+  try {
+    const ft  = await import('../../../js/ui/fileTypes.js');
+    const reg = await import('../../../js/controls/registry.js');
+    // Importar el wizard entero: es lo que arma el grafo de módulos más grande
+    // de la app y donde un ciclo se manifestaría.
+    const wz  = await import('../../../js/ui/controlsWizard.js');
+    const specs = [];
+    for (const [id, c] of Object.entries(reg.CONTROL_REGISTRY))
+      for (const f of (c.additionalFiles || []))
+        if (f.slot || f.rerenderOnLoad) specs.push(`${id}.${f.key}`);
+    out.textContent = JSON.stringify({
+      ok: true,
+      wizardCargo: typeof wz.renderControlsWizard === 'function',
+      autoDetectTabPrev: ft.autoDetectFor('tab_prev_file') === ft.autoDetectFor('tab_control'),
+      conAutoDetect: Object.keys(ft.FILE_TYPES).filter(t => ft.autoDetectFor(t)).length,
+      specs: specs.sort(),
+    });
+  } catch (e) { out.textContent = JSON.stringify({ ok: false, error: String(e), stack: String(e.stack||'') }); }
+</script>

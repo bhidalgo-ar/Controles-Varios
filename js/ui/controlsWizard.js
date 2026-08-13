@@ -22,18 +22,11 @@ import {
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
+import { autoDetectFor } from './fileTypes.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
 import { controlAppliesToClient, filterControlsForClient, controlOrigin } from '../controls/scope.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
-import { autoDetectTabMapping }    from '../parsers/tabuladoControl.js';
-import { autoDetectCatMapping }    from '../parsers/catEmpleados.js';
-import { autoDetectBrutosMapping } from '../parsers/brutosParser.js';
-import { autoDetectGsPersMapping } from '../parsers/gsPersParser.js';
-import { autoDetectNrMapping }          from '../parsers/nrParser.js';
-import { autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
-import { autoDetectCostoTotalMapping }  from '../parsers/costoTotalParser.js';
-import { autoDetectFinadietAsientoMapping } from '../parsers/finadietAsientoParser.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
 import { DEFAULT_LEGAJO_KEY_MODE }      from '../utils/legajo.js';
@@ -81,20 +74,6 @@ function clearTabSessionCache() {
   if (_tabSessionTimer) { clearTimeout(_tabSessionTimer); _tabSessionTimer = null; }
   _tabSessionCache = null;
 }
-
-// Mapa: fileType → función de auto-detección de columnas
-const AUTO_DETECT = {
-  tab_control:   autoDetectTabMapping,
-  cat_empleados: autoDetectCatMapping,
-  brutos_file:   autoDetectBrutosMapping,
-  gs_pers_file:  autoDetectGsPersMapping,
-  nr_file:           autoDetectNrMapping,
-  rend_file:         autoDetectRendimientoMapping,
-  costo_total_file:  autoDetectCostoTotalMapping,
-  // El Tabulado del período anterior es el mismo archivo que el Tabulado.
-  tab_prev_file:     autoDetectTabMapping,
-  asiento_conceptos_file: autoDetectFinadietAsientoMapping,
-};
 
 // IDs de controles agrupados (para validación y detección de grupos seleccionados)
 const BRUTOS_IDS  = ['brutos', 'brutos_reporte'];
@@ -985,7 +964,7 @@ function renderStepFiles(container, state, root) {
       clientCode:  state.client.code,
       fileType:    'tab_control',
       existingData: state.tab,
-      autoDetect:  AUTO_DETECT.tab_control,
+      autoDetect:  (headers) => autoDetectFor('tab_control')(headers, catalogRows),
       onComplete:  (data) => {
         const prev = state.tab;
         state.tab = data;
@@ -1026,15 +1005,16 @@ function renderStepFiles(container, state, root) {
         compartidosMontados.add(fileSpec.fileType);
       }
 
-      // El Tabulado del período anterior tiene su propio hueco en la grilla de
-      // 2 columnas, arriba; el resto de los archivos va en la lista de abajo.
-      const slotVariaciones = esVariaciones && fileSpec.fileType === 'tab_prev_file'
-        ? container.querySelector('#js-var-prev-upload')
-        : null;
+      // Un archivo puede declarar un hueco propio en el layout del paso
+      // (`fileSpec.slot`) — el Tabulado anterior lo hace, en la grilla de 2
+      // columnas de arriba. Si ese hueco no está en pantalla (el layout de
+      // Variaciones no se renderizó), cae a la lista de abajo como cualquier
+      // otro, que es exactamente lo que hacía el chequeo de `esVariaciones`.
+      const slotPropio = fileSpec.slot ? container.querySelector(fileSpec.slot) : null;
 
       let uploadDiv;
-      if (slotVariaciones) {
-        uploadDiv = slotVariaciones;
+      if (slotPropio) {
+        uploadDiv = slotPropio;
       } else {
         const wrapper = document.createElement('div');
         wrapper.style.marginBottom = 'var(--sp-3)';
@@ -1048,9 +1028,12 @@ function renderStepFiles(container, state, root) {
         filesArea.appendChild(wrapper);
       }
 
-      const baseDetect = AUTO_DETECT[fileSpec.fileType];
+      // Qué función propone las columnas la declara la ficha del tipo de
+      // archivo, no un mapa acá. Las que no usan el catálogo del cliente
+      // ignoran el segundo argumento, así que se pasa siempre.
+      const baseDetect  = autoDetectFor(fileSpec.fileType);
       const catalogRows = state.catalog?.rows || CATALOGO_SEED;
-      const autoDetect = baseDetect
+      const autoDetect  = baseDetect
         ? (headers) => baseDetect(headers, catalogRows)
         : null;
 
@@ -1072,18 +1055,18 @@ function renderStepFiles(container, state, root) {
             state.controlFiles[destino][fileSpec.key] = data;
           }
           renderWizardNav(root, state);
-          // CONTA recién cargado → re-renderizar el step para que el editor de
-          // rend_vs_asiento muestre los nombres de cuentas/conceptos al lado de cada código.
-          // Guard de identidad: renderAlreadyLoaded llama a onComplete de forma sincrónica
-          // al re-mostrar un archivo ya cargado. Sin este chequeo, el re-render volvería a
-          // inicializar la carga de CONTA y dispararía onComplete otra vez → bucle re-entrante
-          // que rompía/ocultaba el panel de mapeo. Solo re-renderizamos si la CONTA es nueva.
-          if (controlId === 'rend_vs_asiento' && fileSpec.key === 'conta' && prev !== data) {
-            renderStepFiles(container, state, root);
-          }
-          // El Tabulado anterior recién cargado cambia los encabezados que ofrece
-          // el panel de conceptos — hay que rearmarlo con los del archivo nuevo.
-          if (esVariaciones && fileSpec.fileType === 'tab_prev_file' && prev !== data) {
+          // Hay archivos que, al cargarse, cambian lo que OTRO panel del mismo
+          // paso puede ofrecer: CONTA le da al editor de rend_vs_asiento los
+          // nombres de cuenta y concepto, y el Tabulado anterior le da al panel
+          // de conceptos los encabezados contra los que mapear. Lo declara el
+          // registry (`rerenderOnLoad`) en vez de dos `if` por controlId acá.
+          //
+          // El guard de identidad NO es opcional: renderAlreadyLoaded llama a
+          // onComplete de forma sincrónica al re-mostrar un archivo ya cargado,
+          // así que sin `prev !== data` el redibujo vuelve a montar la carga,
+          // dispara onComplete otra vez y entra en bucle re-entrante — rompía y
+          // escondía el panel de mapeo.
+          if (fileSpec.rerenderOnLoad && prev !== data) {
             renderStepFiles(container, state, root);
           }
         },
