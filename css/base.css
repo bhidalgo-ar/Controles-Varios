@@ -113,7 +113,8 @@ img { max-width: 100%; height: auto; display: block; }
   position: sticky;
   top: 0;
   z-index: var(--z-header);
-  background: var(--color-surface);
+  background: var(--header-bg);
+  color: var(--header-fg);
   border-bottom: 3px solid var(--color-primary);
   padding: 0 var(--sp-10);
   height: var(--header-height);
@@ -155,18 +156,18 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .app-header__wordmark {
-  color: var(--color-wordmark);
+  color: var(--header-fg-muted);
   font-weight: var(--fw-light);
   font-size: var(--text-lg);
   white-space: nowrap;
 }
 
 .app-header__app-name {
-  color: var(--color-primary);
+  color: var(--header-pill-fg);
   font-weight: var(--fw-semibold);
   font-size: var(--text-md);
   padding: var(--sp-1) var(--sp-3);
-  background: var(--color-info-bg);
+  background: var(--header-pill-bg);
   border-radius: var(--radius-full);
   white-space: nowrap;
 }
@@ -176,6 +177,18 @@ img { max-width: 100%; height: auto; display: block; }
   align-items: center;
   gap: var(--sp-2);
   margin-left: auto;
+}
+
+/* Botones ghost de la barra (ej. "🏠 Inicio"): en Intenso la barra es ink, así
+   que el borde y el texto salen de los tokens del header y no de los generales
+   —si no, quedarían ilegibles sobre el navy. */
+.app-header .btn--ghost {
+  color: var(--header-fg-muted);
+  border-color: var(--header-btn-border);
+}
+.app-header .btn--ghost:hover {
+  background: var(--header-btn-hover-bg);
+  color: var(--header-fg);
 }
 
 /* ── Cabecera comprimida (pantalla de resultados, ver js/ui/resultsHeader.js) ──
@@ -198,70 +211,9 @@ img { max-width: 100%; height: auto; display: block; }
   padding: 2px 10px;
 }
 
-/* ── Footer ──────────────────────────────────────────────────── */
-.app-footer {
-  background: var(--color-surface);
-  border-top: var(--border);
-  padding: var(--sp-8) var(--sp-10);
-  color: var(--color-wordmark);
-  font-size: var(--text-sm);
-  margin-top: auto;
-}
-
-.app-footer__logo {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-5);
-}
-
-.app-footer__iso {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-white);
-  font-weight: var(--fw-bold);
-  font-size: 14px;
-  letter-spacing: -0.5px;
-  flex-shrink: 0;
-}
-
-.app-footer__wordmark {
-  color: var(--color-wordmark);
-  font-weight: var(--fw-light);
-  font-size: var(--text-lg);
-}
-
-.app-footer__offices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-6);
-}
-
-.app-footer__office-name {
-  color: var(--color-primary);
-  font-weight: var(--fw-semibold);
-  display: block;
-  margin-bottom: var(--sp-1);
-}
-
-.app-footer__legal {
-  margin-top: var(--sp-5);
-  padding-top: var(--sp-4);
-  border-top: var(--border);
-  font-size: var(--text-xs);
-}
-.app-footer__legal a {
-  color: var(--color-wordmark);
-}
-.app-footer__legal a:hover {
-  color: var(--color-primary);
-}
+/* El footer institucional se retiró de la app (rediseño Fase 1): es una
+   herramienta interna, la identidad H&A la lleva la barra superior. Los
+   materiales de marca fuera de la app siguen usando el skill hya-brand. */
 
 /* ── Pantalla de carga ───────────────────────────────────────── */
 .loading-screen {
