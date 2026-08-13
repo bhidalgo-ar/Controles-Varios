@@ -1,6 +1,7 @@
 # Spec — "Legajos cruzados" cuenta empleados, no filas del Tabulado
 
-**Estado:** pendiente de confirmación de Willy
+**Estado:** **implementada** el 2026-08-13 (`js/controls/consolidate.js`, `js/ui/controlsResults.js`,
+`js/ui/controlsWizard.js`, `tests/legajosCruzados.test.js`)
 **Fecha:** 2026-08-13
 **PR:** nuevo, contra `main` (el PR #133 de las etiquetas del hero ya está mergeado y no se puede reusar)
 
@@ -159,4 +160,9 @@ cuando no hay Tabulado, y descarta información que hoy el analista ve y es corr
 
 ---
 
-**Confirmada por el usuario:** pendiente
+**Confirmada por el usuario:** sí (Willy, 2026-08-13)
+
+**Cabo suelto reportado, fuera de scope.** El subtítulo del hero suma el `unitsTotal` de cada control,
+así que dos controles sobre 4 empleados dicen "8 legajos verificados sin diferencias" — el mismo empleado
+contado una vez por control. Es el mismo tipo de bug en otro número y necesita una decisión de Willy sobre
+qué debería decir ahí. No se tocó.
