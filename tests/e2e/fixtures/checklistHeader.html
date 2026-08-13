@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/checklistHeaderContrast.spec.js — NO es una pantalla
+     de la app. Monta buildChecklistTable()/renderDraftsSection() de
+     js/ui/checklistView.js con datos inventados, sin IndexedDB, para ver el
+     encabezado de esta pantalla en un navegador real y en los dos temas
+     (mismo motivo que tests/e2e/gridHeaderContrast.spec.js). --><html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css"><link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<script src="../../../node_modules/dexie/dist/dexie.js"></script>
+</head><body><div id="host" style="padding:16px"></div>
+<script type="module">
+import { buildChecklistTable, renderDraftsSection } from '../../../js/ui/checklistView.js';
+
+const periodMap = new Map([
+  ['2026-04', new Map([
+    ['brutos', { runId: 1, status: 'success', headline: 'OK', isDraft: false }],
+    ['nr',     { runId: 2, status: 'warning', headline: 'Hay diferencias', isDraft: false }],
+  ])],
+]);
+const controls = [{ id: 'brutos', label: 'Brutos' }, { id: 'nr', label: 'NR' }];
+const drafts = [{ id: 3, period: '2026-03', createdAt: Date.now(), selectedControls: [], notes: '' }];
+
+document.getElementById('host').innerHTML =
+  buildChecklistTable(['2026-04'], controls, periodMap) + renderDraftsSection(drafts, 'client-1');
+</script></body></html>

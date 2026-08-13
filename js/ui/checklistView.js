@@ -158,16 +158,20 @@ export async function renderChecklist(root, clientId) {
   render();
 }
 
-function buildChecklistTable(periods, controls, periodMap) {
+// Exportadas sólo para el fixture de tests/e2e/checklistHeaderContrast.spec.js —
+// son las dos tablas de esta pantalla que NO pasan por enhanceGrid() (no tienen
+// buscador/paginación), así que el fix de contraste de encabezado de #108/#110
+// (table.rb-grid thead th) no las alcanza y necesitan su propio color inline.
+export function buildChecklistTable(periods, controls, periodMap) {
   const stickyCell = `
     position:sticky;left:0;z-index:1;background:var(--color-surface);
     border-right:1px solid var(--color-border);font-weight:var(--fw-semibold);
   `;
   const headRow = `
     <tr>
-      <th style="${stickyCell}text-align:left;padding:var(--sp-2) var(--sp-3);background:var(--color-bg-subtle);">Período</th>
+      <th style="${stickyCell}text-align:left;padding:var(--sp-2) var(--sp-3);background:var(--color-bg-subtle);color:var(--color-text);">Período</th>
       ${controls.map(c => `
-        <th style="text-align:center;padding:var(--sp-2) var(--sp-3);background:var(--color-bg-subtle);min-width:130px;">
+        <th style="text-align:center;padding:var(--sp-2) var(--sp-3);background:var(--color-bg-subtle);color:var(--color-text);min-width:130px;">
           <div style="font-size:var(--text-sm);">${esc(c.label)}</div>
         </th>
       `).join('')}
@@ -221,7 +225,7 @@ function buildStatusCell(entry) {
   `;
 }
 
-function renderDraftsSection(drafts, clientId) {
+export function renderDraftsSection(drafts, clientId) {
   const rows = drafts.map(d => {
     const date = d.createdAt
       ? new Date(d.createdAt).toLocaleString('es-AR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
@@ -252,7 +256,7 @@ function renderDraftsSection(drafts, clientId) {
         <div class="card__body" style="padding:0;">
           <table class="data-table data-table--compact" style="margin:0;width:100%;">
             <thead>
-              <tr style="background:var(--color-bg-subtle);">
+              <tr style="background:var(--color-bg-subtle);color:var(--color-text);">
                 <th style="padding:var(--sp-2) var(--sp-3);text-align:left;">Período</th>
                 <th style="padding:var(--sp-2) var(--sp-3);text-align:left;">Ejecutado</th>
                 <th style="padding:var(--sp-2) var(--sp-3);text-align:left;">Controles</th>
