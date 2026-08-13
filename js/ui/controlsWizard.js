@@ -439,7 +439,7 @@ export function pendingTabRequirements(cfg, { hasBrutos, hasGsPers, hasNr }) {
   const fields = extraFieldGroupsFor('tab_control', activeExtraGroups({ hasBrutos, hasGsPers, hasNr }), { soloGateados: true })
     .flatMap(g => g.fields);
   return fields.filter(f => {
-    const necessity = necessityOfKey(f.key);
+    const necessity = necessityOfKey('tab_control', f.key);
     const bloquea = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
     return bloquea && !cfg[f.key];
   });
@@ -1441,7 +1441,7 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
         // (sin esto el archivo no sirve) y OPCIONAL no bloquea, así que
         // declararlo ausente no cambiaría nada. Hoy ningún campo de este
         // panel es CLAVE, pero el check queda explícito para cuando lo sea.
-        const necessity  = necessityOfKey(f.key);
+        const necessity  = necessityOfKey('tab_control', f.key);
         const puedeOmitir = necessity === NECESSITY.OBLIGATORIA;
         const esBloqueante = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
         return `

@@ -150,15 +150,15 @@ const brutosControlar = {
     tab:     { label: 'Valores Tabulado', headerColor: GRAY_HDR }, // sin dataColor: sin fondo en los datos
   },
   columns: [
-    { label: 'Legajo',              key: 'legajo',         width: 12, from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: 'Apellido y Nombre',   key: 'nombre',         width: 28, from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
-    { label: 'SAL_BASE',            key: 'salBase',        width: 18, from: ['salBaseColumn'],        necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'salBase' },
+    { label: 'Legajo',              key: 'legajo',         width: 12, from: ['legajoColumn'], fromFile: 'brutos_file',         necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Apellido y Nombre',   key: 'nombre',         width: 28, from: ['apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL,    type: 'txt' },
+    { label: 'SAL_BASE',            key: 'salBase',        width: 18, from: ['salBaseColumn'], fromFile: 'brutos_file',        necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'salBase' },
     { label: 'CTRL SALARIO BASE',   key: 'ctrlSalBase',    width: 22, from: [],                       necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'salBase', diffHighlight: true },
-    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    width: 20, from: ['aCuFutAumenColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'acfa' },
+    { label: 'A_CTA_FUT_AUMEN',     key: 'aCuFutAumen',    width: 20, from: ['aCuFutAumenColumn'], fromFile: 'brutos_file',    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'acfa' },
     { label: 'CTRL A_CTA_FUT_AUMEN', key: 'ctrlACuFutAumen', width: 24, from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'acfa', diffHighlight: true },
-    { label: 'Legajo (Tab)',        key: 'legajo',         width: 12, from: ['empleadoColumn'],       necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
-    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      width: 18, from: ['tabSalBaseColumn'],     necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
-    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      width: 18, from: ['tabACuFutAumenColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'Legajo (Tab)',        key: 'legajo',         width: 12, from: ['empleadoColumn'], fromFile: 'tab_control',       necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
+    { label: 'SAL_BASE (Tab)',      key: 'tabValSal',      width: 18, from: ['tabSalBaseColumn'], fromFile: 'tab_control',     necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'A_CTA_FUT (Tab)',     key: 'tabValAcu',      width: 18, from: ['tabACuFutAumenColumn'], fromFile: 'tab_control', necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
   ],
 };
 
@@ -171,15 +171,15 @@ const brutosReporte = {
   columns: [
     { label: 'FECHA_INI',      key: 'fecIni',      from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
     { label: 'FECHA_FIN',      key: 'fecFin',      from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
-    { label: 'ID_EMPLEADO',    key: 'legajo',      from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
-    { label: 'NOMBRE',         key: 'nombre',      from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
-    { label: 'APELLIDO_1',     key: 'apellido1',   from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
-    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'SAL_BASE',       key: 'salBase',     from: ['tabSalBaseColumn'],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
-    { label: 'A_CTA_FUT_AUMEN', key: 'aCuFutAumen', from: ['tabACuFutAumenColumn'],                necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 20 },
-    { label: 'N_PUESTO',       key: 'puesto',      from: ['puestoColumn'],                         necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'ID_EMPLEADO',    key: 'legajo',      from: ['empleadoColumn'], fromFile: 'tab_control',                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
+    { label: 'NOMBRE',         key: 'nombre',      from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
+    { label: 'APELLIDO_1',     key: 'apellido1',   from: ['tabApellido1Column'], fromFile: 'tab_control',                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
+    { label: 'FECHA_ALTA',     key: 'fecAlta',     from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FECHA_BAJA',     key: 'fecBaja',     from: ['tabFecBajaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FEC_PAGO',       key: 'fecPago',     from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'SAL_BASE',       key: 'salBase',     from: ['tabSalBaseColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'A_CTA_FUT_AUMEN', key: 'aCuFutAumen', from: ['tabACuFutAumenColumn'], fromFile: 'tab_control',                necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 20 },
+    { label: 'N_PUESTO',       key: 'puesto',      from: ['puestoColumn'], fromFile: 'tab_control',                         necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
   ],
 };
 
@@ -195,14 +195,14 @@ const gsPersControlar = {
     tab:  { label: 'Valores Tabulado', headerColor: GRAY_HDR },
   },
   columns: [
-    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['legajoColumn'],           necessity: NECESSITY.CLAVE,       type: 'txt' },
-    { label: 'GTOS_PERSONALES',      key: 'gtos',     width: 20, from: ['gtosPersonalesColumn'],   necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'gtos' },
+    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['legajoColumn'], fromFile: 'gs_pers_file',           necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'GTOS_PERSONALES',      key: 'gtos',     width: 20, from: ['gtosPersonalesColumn'], fromFile: 'gs_pers_file',   necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'gtos' },
     { label: 'CTRL GTOS_PERSONALES', key: 'ctrlGtos', width: 24, from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'gtos', diffHighlight: true },
-    { label: 'DTO_COCHERA',          key: 'dto',      width: 18, from: ['dtoCocheraColumn'],       necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dto' },
+    { label: 'DTO_COCHERA',          key: 'dto',      width: 18, from: ['dtoCocheraColumn'], fromFile: 'gs_pers_file',       necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dto' },
     { label: 'CTRL DTO_COCHERA',     key: 'ctrlDto',  width: 22, from: [],                         necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dto', diffHighlight: true },
-    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['empleadoColumn'],         necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
-    { label: 'GTOS_PERS (Tab)',      key: 'tabValGtos', width: 22, from: ['tabGtosPersonalesColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
-    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', width: 22, from: ['tabDtoCocheraColumn'],    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'Legajo',               key: 'legajo',   width: 12, from: ['empleadoColumn'], fromFile: 'tab_control',         necessity: NECESSITY.CLAVE,       type: 'txt', group: 'tab' },
+    { label: 'GTOS_PERS (Tab)',      key: 'tabValGtos', width: 22, from: ['tabGtosPersonalesColumn'], fromFile: 'tab_control', necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
+    { label: 'DTO_COCHERA (Tab)',    key: 'tabValDto', width: 22, from: ['tabDtoCocheraColumn'], fromFile: 'tab_control',    necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'tab' },
   ],
 };
 
@@ -212,15 +212,15 @@ const gsPersReporte = {
   columns: [
     { label: 'FECHA_INI',         key: 'fecIni',    from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
     { label: 'FECHA_FIN',         key: 'fecFin',    from: [],                                      necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 },
-    { label: 'ID_EMPLEADO',       key: 'legajo',    from: ['empleadoColumn'],                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
-    { label: 'NOMBRE',            key: 'nombre',    from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
-    { label: 'APELLIDO_1',        key: 'apellido1', from: ['tabApellido1Column'],                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
-    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'],                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
-    { label: 'ID_CENTRO_COSTO',   key: 'idCC',      from: ['idCCColumn'],                           necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 16 },
-    { label: 'GTOS_PERSONALES',   key: 'gtos',      from: ['tabGtosPersonalesColumn'],              necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
-    { label: 'DTO_COCHERA',       key: 'dto',       from: ['tabDtoCocheraColumn'],                  necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
-    { label: 'N_CENTRO_COSTO',    key: 'nCC',       from: ['ccColumn'],                             necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
+    { label: 'ID_EMPLEADO',       key: 'legajo',    from: ['empleadoColumn'], fromFile: 'tab_control',                       necessity: NECESSITY.CLAVE,       type: 'txt', width: 12 },
+    { label: 'NOMBRE',            key: 'nombre',    from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', width: 22 },
+    { label: 'APELLIDO_1',        key: 'apellido1', from: ['tabApellido1Column'], fromFile: 'tab_control',                   necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
+    { label: 'FEC_PAG',           key: 'fecPago',   from: ['tabFecPagoColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'FECHA_ALTA',        key: 'fecAlta',   from: ['tabFecAltaColumn'], fromFile: 'tab_control',                     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+    { label: 'ID_CENTRO_COSTO',   key: 'idCC',      from: ['idCCColumn'], fromFile: 'tab_control',                           necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 16 },
+    { label: 'GTOS_PERSONALES',   key: 'gtos',      from: ['tabGtosPersonalesColumn'], fromFile: 'tab_control',              necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'DTO_COCHERA',       key: 'dto',       from: ['tabDtoCocheraColumn'], fromFile: 'tab_control',                  necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'N_CENTRO_COSTO',    key: 'nCC',       from: ['ccColumn'], fromFile: 'tab_control',                             necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 22 },
   ],
 };
 
@@ -230,8 +230,8 @@ const gsPersReporte = {
 // modo: el archivo NR (`nrKey`) en modo Controlar, el Tabulado (`tabKey`) en
 // los dos modos.
 
-const nrConceptColumn = (c, key, extra = {}) => ({
-  label: c.label, key: c.key, from: [key], necessity: NECESSITY.OBLIGATORIA, type: 'num', ...extra,
+const nrConceptColumn = (c, key, fromFile, extra = {}) => ({
+  label: c.label, key: c.key, from: [key], fromFile, necessity: NECESSITY.OBLIGATORIA, type: 'num', ...extra,
 });
 
 // Grupos de color compartidos por los dos modos (Controlar y Reporte): cada
@@ -249,10 +249,10 @@ const nrControlar = {
   headerRows: 1,
   groups: NR_CONCEPT_GROUPS,
   columns: [
-    { label: 'Legajo', key: 'legajo', width: 12, from: ['legajoColumn'], necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Legajo', key: 'legajo', width: 12, from: ['legajoColumn'], fromFile: 'nr_file', necessity: NECESSITY.CLAVE,       type: 'txt' },
     { label: '# Difs', key: 'difs',   width: 10, from: [],                necessity: NECESSITY.OBLIGATORIA, type: 'num',
       diffHighlight: true, dataAlign: 'center', numFmt: false },
-    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.nrKey, { diffHighlight: true }), width: 16, group: c.group })),
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.nrKey, 'nr_file', { diffHighlight: true }), width: 16, group: c.group })),
   ],
 };
 
@@ -268,15 +268,15 @@ const nrReporte = {
   groups: NR_CONCEPT_GROUPS,
   columns: [
     { label: '', key: '__blank__', width: 4, from: [], necessity: NECESSITY.OPCIONAL, type: 'txt', spacer: true },
-    { label: 'ID_EMPLEADO',     key: 'legajo',          width: 12, from: ['empleadoColumn'],  necessity: NECESSITY.CLAVE,    type: 'txt' },
-    { label: 'NOMBRE',          key: 'nombre',          width: 22, from: ['tabNombreColumn', 'apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'APELLIDO_1',      key: 'apellido1',       width: 22, from: ['tabApellido1Column'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_ALTA',      key: 'fecAlta',         width: 14, from: ['tabFecAltaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FECHA_BAJA',      key: 'fecBaja',         width: 14, from: ['tabFecBajaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'FEC_PAGO',        key: 'fecPago',         width: 14, from: ['tabFecPagoColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    width: 16, from: ['tabIdCentroTrabColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'ID_CATEGORIA',    key: 'idCategoria',     width: 16, from: ['tabIdCategoriaColumn'],  necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.tabKey), width: 16, group: c.group })),
+    { label: 'ID_EMPLEADO',     key: 'legajo',          width: 12, from: ['empleadoColumn'], fromFile: 'tab_control',  necessity: NECESSITY.CLAVE,    type: 'txt' },
+    { label: 'NOMBRE',          key: 'nombre',          width: 22, from: ['tabNombreColumn', 'apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'APELLIDO_1',      key: 'apellido1',       width: 22, from: ['tabApellido1Column'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_ALTA',      key: 'fecAlta',         width: 14, from: ['tabFecAltaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FECHA_BAJA',      key: 'fecBaja',         width: 14, from: ['tabFecBajaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'FEC_PAGO',        key: 'fecPago',         width: 14, from: ['tabFecPagoColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CENTRO_TRAB',  key: 'idCentroTrab',    width: 16, from: ['tabIdCentroTrabColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    { label: 'ID_CATEGORIA',    key: 'idCategoria',     width: 16, from: ['tabIdCategoriaColumn'], fromFile: 'tab_control',  necessity: NECESSITY.OPCIONAL, type: 'txt' },
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.tabKey, 'tab_control'), width: 16, group: c.group })),
   ],
 };
 
@@ -327,10 +327,10 @@ const rendVsTabuControlar = {
     ...REND_CAT_GROUPS,
   },
   columns: [
-    { label: 'CC',              key: 'ccCode', width: 10, from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
-    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
+    { label: 'CC',              key: 'ccCode', width: 10, from: ['ccCodeColumn'], fromFile: 'rend_file', necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
+    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], fromFile: 'rend_file', necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
     ...COLS.flatMap(c => [
-      { label: 'Rend',            key: c.rKey, width: 18, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
+      { label: 'Rend',            key: c.rKey, width: 18, from: [REND_CAT_KEY[c.key]], fromFile: 'rend_file', necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
       // El lado Tabulado se calcula por CÓDIGO de concepto (js/controls/tabCodes.js),
       // no sale de una columna mapeada — por eso `from: []`.
       { label: 'Tab',             key: c.tKey, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key },
@@ -348,8 +348,8 @@ const rendVsAsientoControlar = {
     ...REND_CAT_GROUPS,
   },
   columns: [
-    { label: 'Código CC',       key: 'ccCode', width: 10, from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
-    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
+    { label: 'Código CC',       key: 'ccCode', width: 10, from: ['ccCodeColumn'], fromFile: 'rend_file', necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
+    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], fromFile: 'rend_file', necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
     // `rKey`/`dKey` son idénticos en los dos módulos; el del medio es el que
     // cambia (`tKey` en Rend vs Tabulado, `cKey` acá), así que se arma.
     // El sub-encabezado real del .xlsx lleva el período ("Rend abr26") — un
@@ -357,7 +357,7 @@ const rendVsAsientoControlar = {
     // 'CONTA'/'CTRL…') son el default de `writeGroupedContractSheet` (CSV,
     // pantalla) y el módulo pasa `opts.headerLabel` para el .xlsx real.
     ...COLS.flatMap(c => [
-      { label: 'Rend',             key: c.rKey,           width: 18, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
+      { label: 'Rend',             key: c.rKey,           width: 18, from: [REND_CAT_KEY[c.key]], fromFile: 'rend_file', necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
       // CONTA se clasifica por CUENTA_CONTAB / ID_CONCEPTO según `rvaConfig`,
       // no por una columna mapeada (`FIELD_DEFS.conta_file` no declara ninguna).
       { label: 'CONTA',            key: `c${cap(c.key)}`, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key },
@@ -381,9 +381,9 @@ const rendXEeControlar = {
     dif:       { headerColor: 'FFA9D08E', dataColor: 'FFE2EFDA' },
   },
   columns: [
-    { label: 'Legajo', key: 'legajo', width: 10, from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,    type: 'txt', group: 'meta' },
-    { label: 'Nombre', key: 'nombre', width: 30, from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', group: 'meta' },
-    { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', width: 18, from: ['costoTotalColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'meta' },
+    { label: 'Legajo', key: 'legajo', width: 10, from: ['legajoColumn'], fromFile: 'costo_total_file',         necessity: NECESSITY.CLAVE,    type: 'txt', group: 'meta' },
+    { label: 'Nombre', key: 'nombre', width: 30, from: ['apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', group: 'meta' },
+    { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', width: 18, from: ['costoTotalColumn'], fromFile: 'costo_total_file', necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'meta' },
     // Las 5 categorías salen del Tabulado por código de concepto, igual que en
     // Rend vs Tabulado — ninguna sale de una columna mapeada.
     ...COLS.filter(c => c.key !== 'total').map(c => ({
@@ -405,7 +405,7 @@ const rendXEeControlar = {
 const catDistribucion = (exportId, sheet, label, from) => ({
   exportId, sheet, layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label,                key: 'key',      width: 32, from,     necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label,                key: 'key',      width: 32, from,     fromFile: 'cat_empleados', necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
     // Conteos de empleados, no importes: `numFmt:false` saca el formato
     // moneda que `writeContractSheet` pone por default a toda columna `num`
     // (mismo mecanismo que usa NR para su "# Difs").
@@ -479,8 +479,8 @@ const acreditacionesReporte = {
 
 const finadietAsientoColumns = () => ([
   { label: 'Código de cuenta', key: 'cuenta',   from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 18 },
-  { label: 'Concepto',         key: 'concepto', from: ['conceptoColumn'],     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 45 },
-  { label: 'Cód. concepto',    key: 'nro',      from: ['nroConceptoColumn'],  necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
+  { label: 'Concepto',         key: 'concepto', from: ['conceptoColumn'], fromFile: 'asiento_conceptos_file',     necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 45 },
+  { label: 'Cód. concepto',    key: 'nro',      from: ['nroConceptoColumn'], fromFile: 'asiento_conceptos_file',  necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
   { label: 'Suma DEBE',        key: 'debe',     from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
   { label: 'Suma HABER',       key: 'haber',    from: [],                     necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
 ]);
@@ -555,19 +555,24 @@ export const FINANZAS_ALLOWED_KEYS = new Set([
  * (controlsWizard.js) — un campo no se marca a mano en dos lugares: se calcula
  * recorriendo los contratos una sola vez.
  */
+export function scopedKey(fileType, key) {
+  return `${fileType}::${key}`;
+}
+
 export function fieldNecessityMap() {
   const rank = { [NECESSITY.CLAVE]: 3, [NECESSITY.OBLIGATORIA]: 2, [NECESSITY.OPCIONAL]: 1 };
-  const map = new Map(); // key -> { necessity, contracts: Set<exportId> }
+  const map = new Map(); // `${fileType}::${key}` -> { fileType, key, necessity, contracts }
 
   for (const contract of Object.values(EXPORT_CONTRACTS)) {
     for (const col of contract.columns) {
-      for (const key of col.from) {
+      for (const rawKey of col.from) {
+        const key = scopedKey(col.fromFile, rawKey);
         // Las 2 claves que Willy pidió no tocar todavía: nunca suben de
         // OPCIONAL, sin importar qué necesidad tenga la columna que las usa.
-        const necessity = NO_TOCAR_TODAVIA.has(key) ? NECESSITY.OPCIONAL : col.necessity;
+        const necessity = NO_TOCAR_TODAVIA.has(rawKey) ? NECESSITY.OPCIONAL : col.necessity;
         const prev = map.get(key);
         if (!prev) {
-          map.set(key, { necessity, contracts: new Set([contract.exportId]) });
+          map.set(key, { fileType: col.fromFile, key: rawKey, necessity, contracts: new Set([contract.exportId]) });
         } else {
           prev.contracts.add(contract.exportId);
           if (rank[necessity] > rank[prev.necessity]) prev.necessity = necessity;
@@ -584,8 +589,8 @@ export function fieldNecessityMap() {
  * export declarado todavía — ver Paso 6, o es una precondición del parser que
  * ningún export consume, ver PARSER_PRECONDITIONS en fileUpload.js).
  */
-export function necessityOfKey(key) {
-  return fieldNecessityMap().get(key)?.necessity ?? null;
+export function necessityOfKey(fileType, key) {
+  return fieldNecessityMap().get(scopedKey(fileType, key))?.necessity ?? null;
 }
 
 /**
@@ -645,8 +650,8 @@ export function esOmitido(value) {
  * @param {string} key
  * @param {boolean} [legacyRequired] — el `required` de FIELD_DEFS/TAB_*_FIELDS
  */
-export function blocksProgress(key, legacyRequired = false) {
-  if (necessityOfKey(key) === NECESSITY.CLAVE) return true;
+export function blocksProgress(fileType, key, legacyRequired = false) {
+  if (necessityOfKey(fileType, key) === NECESSITY.CLAVE) return true;
   // OBLIGATORIA / OPCIONAL / no contratada: el flag legado manda. Un contrato
   // nunca desactiva un `required: true` que ya existía.
   return !!legacyRequired;

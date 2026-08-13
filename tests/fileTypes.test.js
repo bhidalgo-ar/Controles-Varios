@@ -354,17 +354,23 @@ assert('la Nómina Maestra ofrece el selector de apellido/nombre', hasNameMappin
 assert('el Resumen Tabulado Horizontal lo ofrece', hasNameMapping('resumen_tabulado_horizontal') === true);
 assert('el Tabulado NO lo ofrece (trae una fila por liquidación)', hasNameMapping('tab_control') === false);
 
-// ── fileUpload.js deriva de la ficha, no tiene su propia lista ───────────────
-// Es lo que hace que agregar un tipo toque un solo archivo. Si alguien vuelve a
-// escribir un FIELD_DEFS a mano allá, esto falla.
+// ── fileUpload.js no nombra ningún tipo de archivo ──────────────────────────
+//
+// Es el objetivo de la fase, escrito como assert: la pantalla de carga no sabe
+// que existe "nr_file". Todo lo que necesita saber de un tipo se lo pregunta a
+// la ficha. Si alguien vuelve a escribir un `if (fileType === '…')` o una lista
+// propia allá, esto falla — que es exactamente el momento en que hay que
+// frenarlo, no tres tipos de archivo después.
 
-const { FIELD_DEFS } = await import('./js/ui/fileUpload.js');
-
-assert('FIELD_DEFS tiene exactamente los mismos tipos que FILE_TYPES',
-  Object.keys(FIELD_DEFS).length === entries.length
-  && Object.keys(FIELD_DEFS).every(ft => FILE_TYPES[ft] !== undefined));
-assert('FIELD_DEFS entrega los mismos campos que la ficha, sin copiarlos',
-  Object.keys(FIELD_DEFS).every(ft => FIELD_DEFS[ft] === FILE_TYPES[ft].fields));
+{
+  const { readFileSync } = await import('fs');
+  const src = readFileSync('./js/ui/fileUpload.js', 'utf8');
+  const nombrados = Object.keys(FILE_TYPES).filter(ft => src.includes(`'${ft}'`) || src.includes(`"${ft}"`));
+  assert(`fileUpload.js no menciona ningún fileType por nombre${nombrados.length ? ': ' + nombrados.join(', ') : ''}`,
+    nombrados.length === 0);
+  assert('…y tampoco declara su propia lista de campos',
+    !/FIELD_DEFS\s*=/.test(src));
+}
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);
