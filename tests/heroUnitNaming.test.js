@@ -173,14 +173,21 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     unLegajo.html.includes('1 legajo verificado sin diferencias'));
 }
 
-// ── 6. "Legajos cruzados" no se toca ─────────────────────────────────────────
+// ── 6. "Legajos cruzados" sigue saliendo del Tabulado ────────────────────────
+// (cuántos empleados cuenta es lo que fija tests/legajosCruzados.test.js)
 {
+  const tabFile = {
+    fileType: 'tab_control',
+    mapping: { empleadoColumn: 'LEGAJO' },
+    parsedRows: [{ LEGAJO: '1' }, { LEGAJO: '2' }, { LEGAJO: '3' }],
+    parseMetadata: { totalRows: 3 },
+  };
   const hero = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 24, 0, 'ok')],
-    [{ fileType: 'tab_control', parseMetadata: { totalRows: 412 } }], THRESHOLD, {},
+    [tabFile], THRESHOLD, {},
   );
   assert('el KPI "Legajos cruzados" sigue saliendo del Tabulado',
-    hero.html.includes('412') && hero.html.includes('Legajos cruzados'));
+    hero.html.includes('>3<') && hero.html.includes('Legajos cruzados'));
 }
 
 // ── 7. Corrida sólo de generación de reporte: no inventa unidades ────────────

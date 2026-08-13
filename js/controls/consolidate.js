@@ -68,6 +68,30 @@ export function sumColumn(group, col, { toNum = defaultToNum } = {}) {
 }
 
 /**
+ * Cuántos **empleados distintos** hay en un set de filas del Tabulado.
+ *
+ * No es `rows.length`: el Tabulado trae una fila por liquidación, así que un
+ * legajo con la mensual y la baja del mismo mes cuenta una vez, no dos. El KPI
+ * "Legajos cruzados" del hero y los textos del wizard mostraban el largo crudo
+ * de `parsedRows` y salía inflado — misma regla que los cruces, esta vez en un
+ * número de pantalla.
+ *
+ * Las filas sin legajo no cuentan como un empleado más: `keyFn` devuelve `''`
+ * para una celda vacía y acá se descartan, igual que en `groupRowsByLegajo`.
+ *
+ * @returns {number} cantidad de claves de legajo distintas (0 si no hay con qué contar)
+ */
+export function countUniqueLegajos(rows, legajoColumn, { keyFn = makeLegajoKey() } = {}) {
+  if (!Array.isArray(rows) || !legajoColumn) return 0;
+  const ids = new Set();
+  for (const row of rows) {
+    const id = keyFn(row[legajoColumn]);
+    if (id) ids.add(id);
+  }
+  return ids.size;
+}
+
+/**
  * La última liquidación del grupo — de donde salen los datos de ficha del
  * empleado (nombre, centro de costo, fecha de pago), que no se suman.
  */
