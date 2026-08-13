@@ -77,19 +77,25 @@ function buildIndexes(config) {
 
 // ── Definición de columnas comparadas ────────────────────────────────────────
 
+/** 'precio' → 'Precio' — arma la clave `cPrecio` del contrato (contracts.js tiene su propia copia). */
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+// Los colores `xl*` de estas categorías ahora viven en `js/exports/contracts.js`
+// (`rend_vs_tabu`/`rend_vs_asiento` comparten los de `rendVsTabu.js`) — acá sólo
+// quedan los `rgba(...)` que usa la tabla HTML en pantalla.
 const COLS = [
   { key: 'precio',   label: 'PRECIO',         rKey: 'rPrecio',   cKey: 'cPrecio',   dKey: 'dPrecio',
-    hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)',  xlHdr: 'FFCCE0F5', xlBg: 'FFF0F6FD' },
+    hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)' },
   { key: 'estimulo', label: 'ASIG. ESTÍMULO', rKey: 'rEstimulo', cKey: 'cEstimulo', dKey: 'dEstimulo',
-    hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)',   xlHdr: 'FFC9EDD8', xlBg: 'FFEDF9F2' },
+    hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)' },
   { key: 'cargas',   label: 'CARGAS SS',      rKey: 'rCargas',   cKey: 'cCargas',   dKey: 'dCargas',
-    hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)',    xlHdr: 'FFF5CCCC', xlBg: 'FFFCEAEA' },
+    hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)' },
   { key: 'provMes',  label: 'PROV. MES',      rKey: 'rProvMes',  cKey: 'cProvMes',  dKey: 'dProvMes',
-    hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)',  xlHdr: 'FFC7EDF9', xlBg: 'FFEAF7FD' },
+    hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)' },
   { key: 'provCcss', label: 'PROV. CCSS MES', rKey: 'rProvCcss', cKey: 'cProvCcss', dKey: 'dProvCcss',
-    hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)',   xlHdr: 'FFCCDDED', xlBg: 'FFEAF2F8' },
+    hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)' },
   { key: 'total',    label: 'COSTO TOTAL',    rKey: 'rTotal',    cKey: 'cTotal',    dKey: 'dTotal',
-    hdr: 'rgba(64,64,64,0.18)',   bg: 'rgba(64,64,64,0.07)',   xlHdr: 'FFDCDCDC', xlBg: 'FFF2F2F2' },
+    hdr: 'rgba(64,64,64,0.18)',   bg: 'rgba(64,64,64,0.07)' },
 ];
 
 // Mapa categoría → label legible
@@ -1420,126 +1426,72 @@ function addDetallePorEmpleadoSheet(wb, detalle) {
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 12 } };
 }
 
+// La hoja "Resumen" migró a `writeGroupedContractSheet` (specs/contrato-export.md,
+// "Lo que faltaba para migrar los writers del Paso 6" — D-047); las otras 3
+// hojas (Desglose por CC, Detalle por empleado, CCs sólo en CONTA) no tienen
+// contrato — son cálculo dinámico, ver la nota de "Los 2 que no se declaran"
+// en contracts.js — y siguen armándose a mano, sin cambios. `contracts.js`
+// importa `COLS` de `rendVsTabu.js`; este archivo tiene su PROPIA copia local
+// de `COLS` (mismas categorías, `cKey` en vez de `tKey`) así que no hay ciclo
+// de módulos acá — pero `import()` sigue siendo dinámico por prolijidad con el
+// resto de los exports de Rendimiento (D-041).
 async function exportRendVsAsientoToXlsx(results) {
   await loadExcelJS();
   const { rows, ccsSoloEnConta, meta, period } = results;
   const detalle  = meta?.detalle || [];
   const pSuffix  = periodSuffix(period);
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
+  const { writeGroupedContractSheet } = await import('../exports/contractSheet.js');
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Resumen');
-
-  ws.columns = [
-    { width: 10 }, { width: 30 },
-    ...COLS.flatMap(() => [{ width: 18 }, { width: 18 }, { width: 18 }]),
-  ];
-
   const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
   const base    = { name: 'Calibri', size: 10 };
   const bold    = { ...base, bold: true };
   const numFmt  = '#,##0.00';
-  const RED     = 'FFCC0000';
   const GRAY_HDR = 'FFE0E0E0';
 
-  const r1 = ws.addRow(['Código CC', 'Centro de Costo', ...COLS.flatMap(c => [c.label, null, null])]);
-  r1.height = 22;
-  ws.mergeCells('A1:A2');
-  ws.mergeCells('B1:B2');
-  COLS.forEach((c, i) => {
-    const startCol = 3 + i * 3;
-    ws.mergeCells(1, startCol, 1, startCol + 2);
-    const cell = r1.getCell(startCol);
-    cell.value = c.label;
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = solidFill(c.xlHdr);
-    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-  });
-  ['A1', 'B1'].forEach(addr => {
-    const cell = ws.getCell(addr);
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = solidFill(GRAY_HDR);
-  });
-
-  const r2 = ws.addRow(['', '', ...COLS.flatMap(() => [`Rend ${pSuffix}`, `CONTA ${pSuffix}`, 'CTRL\nCONTA−Rend'])]);
-  r2.height = 28;
-  COLS.forEach((c, i) => {
-    const startCol = 3 + i * 3;
-    for (let col = startCol; col <= startCol + 2; col++) {
-      const cell = r2.getCell(col);
-      cell.font      = col === startCol + 2 ? { ...bold } : { ...base };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.fill      = solidFill(c.xlHdr);
-      cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-    }
-  });
-  r2.getCell(1).fill = solidFill(GRAY_HDR);
-  r2.getCell(2).fill = solidFill(GRAY_HDR);
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 2 }];
-
-  for (const r of rows) {
-    const dr = ws.addRow([r.ccCode, r.ccName, ...COLS.flatMap(c => [r[c.rKey], r[c.cKey], r[c.dKey]])]);
-    COLS.forEach((c, i) => {
-      const startCol = 3 + i * 3;
-      for (let col = startCol; col <= startCol + 2; col++) {
-        const cell = dr.getCell(col);
-        cell.numFmt    = numFmt;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        cell.fill      = solidFill(c.xlBg);
-        cell.font      = { ...base };
-      }
-      const dVal = r[c.dKey];
-      if (dVal !== null && Math.abs(dVal) > 0.01) {
-        dr.getCell(startCol + 2).font = { ...bold, color: { argb: RED } };
-      }
-    });
-    if (r.sinContaData) dr.eachCell(cell => { cell.font = { ...cell.font, color: { argb: 'FF999999' } }; });
-  }
-
-  // TOTAL GENERAL con fórmulas SUM (más auditable para el cliente que valores hardcoded)
+  // TOTAL GENERAL con fórmulas SUM (más auditable para el cliente que valores
+  // hardcoded) — las filas de datos van de la fila 3 (después del header de 2
+  // filas) a 2+rows.length; las columnas de cada categoría son fijas por
+  // contrato (ccCode/ccName + 3 por categoría), así que las letras se derivan
+  // del índice de columna, no de `ws.addRow` a mano.
   const totals = {};
   for (const c of COLS) { totals[c.rKey] = 0; totals[c.cKey] = 0; }
   for (const r of rows) {
     for (const c of COLS) { totals[c.rKey] += r[c.rKey] ?? 0; totals[c.cKey] += r[c.cKey] ?? 0; }
   }
-
-  // Las filas de datos van de Excel row 3 (después del header de 2 filas) a 3+rows.length-1
   const firstDataRow = 3;
   const lastDataRow  = 2 + rows.length;
   const colLetter = n => {
     let s = '', k = n;
-    while (k > 0) { const r = (k - 1) % 26; s = String.fromCharCode(65 + r) + s; k = Math.floor((k - 1) / 26); }
+    while (k > 0) { const rem = (k - 1) % 26; s = String.fromCharCode(65 + rem) + s; k = Math.floor((k - 1) / 26); }
     return s;
   };
-  const sumFormula = colN => ({ formula: `SUM(${colLetter(colN)}${firstDataRow}:${colLetter(colN)}${lastDataRow})` });
+  const sumFormula = colN => `SUM(${colLetter(colN)}${firstDataRow}:${colLetter(colN)}${lastDataRow})`;
 
-  const tr = ws.addRow(['TOTAL GENERAL', '', ...COLS.flatMap((c, i) => {
-    const startCol = 3 + i * 3;
-    const d = totals[c.cKey] - totals[c.rKey];
-    return [
-      { ...sumFormula(startCol),     result: totals[c.rKey] },
-      { ...sumFormula(startCol + 1), result: totals[c.cKey] },
-      { ...sumFormula(startCol + 2), result: d },
-    ];
-  })]);
-  tr.getCell(1).font = { ...bold };
+  const totalRow = { ccCode: 'TOTAL GENERAL', ccName: '' };
   COLS.forEach((c, i) => {
     const startCol = 3 + i * 3;
-    for (let col = startCol; col <= startCol + 2; col++) {
-      const cell = tr.getCell(col);
-      cell.numFmt    = numFmt;
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      cell.fill      = solidFill(c.xlHdr);
-      cell.font      = { ...bold };
-      cell.border    = { top: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-    }
     const d = totals[c.cKey] - totals[c.rKey];
-    if (Math.abs(d) > 0.01) tr.getCell(startCol + 2).font = { ...bold, color: { argb: RED } };
+    totalRow[c.rKey]           = { formula: sumFormula(startCol),     result: totals[c.rKey] };
+    totalRow[`c${cap(c.key)}`] = { formula: sumFormula(startCol + 1), result: totals[c.cKey] };
+    totalRow[c.dKey]           = { formula: sumFormula(startCol + 2), result: d };
+  });
+
+  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.rend_vs_asiento, rows, {
+    totalRow,
+    dimIf: r => r.sinContaData,
+    // El sub-encabezado real lleva el período ("Rend abr26") — un dato de la
+    // corrida, no del contrato (que declara sólo 'Rend'/'CONTA' como default
+    // de pantalla/CSV).
+    headerLabel: c => {
+      if (COLS.some(cc => cc.rKey === c.key)) return `Rend ${pSuffix}`;
+      if (COLS.some(cc => `c${cap(cc.key)}` === c.key)) return `CONTA ${pSuffix}`;
+      return c.label;
+    },
   });
 
   // ── Pestaña: Desglose por CC (rolled-up con subtotales por CC y categoría) ──

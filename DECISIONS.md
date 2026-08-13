@@ -902,3 +902,68 @@ fecha, filas de título por bloque y total al pie; forzarla sería más maquinar
 mismo criterio con el que el Paso 4b quedó separado del 4a).
 **Motivo:** Corrige el alcance del PR #111 antes de que entre. La lógica contable y las tablas de ese PR se
 conservan enteras (son el trabajo validado con Gaby); lo que cambia es dónde vive y de dónde saca sus datos.
+
+---
+
+## D-047 — Migrar los writers del Paso 6: al writer le faltaban fila de TOTAL y filas atenuadas
+
+**Fecha:** 2026-08-13
+**Contexto:** D-045 declaró la semántica de los 5 contratos que le faltaban al Paso 6 (Rend vs Tabulado, Rend
+vs Asiento, Rend x EE, EE x CATEG ×2 hojas, Acreditaciones) pero dejó sus writers armando el `.xlsx` a mano
+— "Lo que falta para migrar los writers del Paso 6" en `specs/contrato-export.md` documentó por qué: al
+writer (`js/exports/contractSheet.js`) le faltaban dos features que estos exports usan de verdad (fila de
+TOTAL, filas atenuadas por dato) y dos que sólo usa una parte (fórmulas de Excel, multi-hoja) — migrar sin
+las dos primeras hubiera sido una regresión visible en el entregable.
+**Decisión:**
+1. **`writeContractSheet`/`writeGroupedContractSheet` ganan `opts`.** `opts.totalRow` (mismo shape que una
+   `row`, escrito al final con negrita + borde superior en las columnas numéricas + rojo si una columna
+   `diffHighlight` supera 0.01); `opts.dimIf(row)` atenúa a gris una fila de datos completa (Rend x
+   EE/Tabulado/Asiento: legajos o CC sin dato de un lado del cruce) — se aplica DESPUÉS del resto del estilo,
+   así que el gris gana incluso sobre `diffHighlight`, igual que los 3 originales a mano; `opts.highlightIf`/
+   `opts.highlightColor` (sólo en `writeContractSheet`) resalta la fila ENTERA con un color propio (EE x
+   CATEG: naranja claro en Puesto/CC con diferencia, no sólo en la celda de la diferencia); `opts.headerLabel(col)`
+   override del texto de un sub-encabezado individual (Rend vs Asiento: "Rend abr26" lleva el período de la
+   corrida, que no es un dato del contrato).
+2. **Las fórmulas de Excel no necesitaron ninguna feature nueva.** `row[c.key]` ya viajaba tal cual a la
+   celda; un valor `{ formula, result }` (SUM(...), `=B2-C2`) lo escribe ExcelJS como fórmula sin que el
+   writer tenga que saberlo. Lo único que hacía falta era desenvolver `.result` donde el writer necesita el
+   NÚMERO (`diffHighlight`, la fila de TOTAL) — `numericValue()`, exportada porque el módulo que arma
+   `opts.highlightIf` también lo necesita (EE x CATEG compara `row.diff` contra 0, y `row.diff` puede ser la
+   fórmula).
+3. **4 de los 5 migraron limpio; Acreditaciones se queda afuera, a propósito.** Rend vs Tabulado/Asiento (con
+   `writeGroupedContractSheet`, headerRows:2, un grupo por categoría con sus colores — comparten `COLS` de
+   `rendVsTabu.js`), Rend x EE (headerRows:1) y EE x CATEG ×2 hojas (con `writeContractSheet`) entraron sin
+   forzar nada. Acreditaciones no: cada hoja de detalle lleva una fila de TÍTULO **antes** del encabezado
+   (nombre de la lista + el total, para no bajar a buscarlo) — no es "encabezado + N filas iguales", y sumar
+   un título opcional al writer para un solo consumidor es la abstracción que CLAUDE.md pide no forzar.
+   Además el archivo es multi-hoja calculado en runtime (CONTROL + una por acreditación, mismo problema que
+   `variaciones`/`acumuladores`, D-045) con fórmulas que cierran ENTRE hojas. Sigue con su `.xlsx` a mano;
+   `tests/exportContracts.test.js` seguirá exigiendo que no declare layout mientras tanto.
+4. **Un gris que no era el mismo gris.** Las 3 hojas de Rendimiento pintan "CC"/"Legajo" con `FFE0E0E0`, no
+   con el `FFE8E8E8` genérico que ya usaba el writer para las columnas sin grupo (Brutos/GS Pers no tienen
+   este problema: ahí SÍ coincide). Se resolvió con un grupo `meta` **sin `label`** — sigue sin generar merge
+   de encabezado (misma rama que ya existía para "columna suelta"), pero aporta un `headerColor` propio en
+   vez de caer al default. La fila de TOTAL usa esto para decidir si pinta fondo: sólo un grupo CON `label`
+   (una categoría real) lo hace en `headerRows:2` — así "CC"/"Centro de Costo" quedan en negrita sin fondo en
+   el TOTAL, igual que en los 3 originales a mano, mientras que en `headerRows:1` (Rend x EE) el TOTAL pinta
+   la fila entera, coherente con que su encabezado también pinta todo.
+5. **Una normalización cosmética, aceptada a propósito.** Dos diferencias sub-pixel entre los 3 originales de
+   Rendimiento desaparecieron al pasar por el mismo writer: la fila de TOTAL de Rend vs Asiento no bolseaba
+   su 2ª columna (vacía) y la de Rend vs Tabulado sí — ahora las dos lo hacen, invisible porque la celda está
+   vacía; y el borde superior de la fila TOTAL de EE x CATEG usaba un gris ligeramente más oscuro
+   (`FF888888`) que el borde genérico del writer (`FFB0B0B0`) — mismo criterio de "no es un bug, es la
+   inconsistencia de tener 3 copias a mano" que ya aplicó el Paso 4b.
+**Alternativas descartadas:** Forzar Acreditaciones al writer sumando "título opcional" + "multi-hoja" como
+parámetros — dos features para un solo consumidor, exactamente lo que CLAUDE.md pide no hacer; darle a
+`opts.dimIf` y `opts.highlightIf` un único mecanismo compartido — son visualmente opuestos (atenuar vs
+resaltar) y ningún contrato necesita los dos a la vez, así que un solo hook con un modo termina siendo más
+código para leer que dos hooks con un nombre cada uno.
+**Verificación:** `tests/contractSheet.test.js` fija el layout de los 4 contratos ANTES de tocar sus módulos
+— merges exactos, colores, fórmulas con y sin diferencia, fila de TOTAL con y sin fórmula, filas atenuadas
+ganándole a `diffHighlight` — y se corrió sin cambios después de migrar `rendVsTabu.js`/`rendVsAsiento.js`/
+`rendXEe.js`/`catXEmpleados.js` (mismo método que D-041/D-043). `tests/exportContracts.test.js`: los 4 entran
+a `CON_WRITER`, `acreditaciones_reporte` se queda afuera. `npx playwright test` completo para descartar el
+ciclo de módulos de D-041/D-045 (`rendVsTabu.js`/`rendXEe.js` ahora hacen `import()` dinámico de
+`contracts.js`, que a su vez importa `COLS` de `rendVsTabu.js`).
+**Motivo:** Paso 6 de `specs/contrato-export.md`, "Lo que falta para migrar los writers" — cierra el punto
+7 pendiente de la Fase F4 del ROADMAP salvo por `fileTypes.js`.

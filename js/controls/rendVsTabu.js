@@ -469,111 +469,23 @@ function renderRendVsTabuDetalle(container, { rows, results }) {
 }
 
 // ── Excel export ──────────────────────────────────────────────────────────────
+//
+// Migrado a `writeGroupedContractSheet` (specs/contrato-export.md, "Lo que
+// falta para migrar los writers del Paso 6" — D-047). `contracts.js` importa
+// `COLS` de ESTE archivo, así que un `import` estático de `contracts.js` acá
+// arma un ciclo que rompe sólo en el navegador (D-041): se usa `import()`
+// dinámico, recién al exportar.
 
 async function exportRendVsTabuToXlsx(results) {
   await loadExcelJS();
   const { rows } = results;
+  const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
+  const { writeGroupedContractSheet } = await import('../exports/contractSheet.js');
 
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Rend vs Tabulado');
-
-  // Anchos: CC, Nombre, luego 3 cols por categoría (Rend, Tab, CTRL)
-  ws.columns = [
-    { width: 10 }, { width: 30 },
-    ...COLS.flatMap(() => [{ width: 18 }, { width: 18 }, { width: 18 }]),
-  ];
-
-  const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
-  const base = { name: 'Calibri', size: 10 };
-  const bold = { ...base, bold: true };
-  const numFmt = '#,##0.00';
-  const RED = 'FFCC0000';
-  const GRAY_HDR = 'FFE0E0E0';
-
-  // ── Fila 1: nombres de categorías (merged) ────────────────────────────────
-  const hdr1Values = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [c.label, null, null])];
-  const r1 = ws.addRow(hdr1Values);
-  r1.height = 22;
-
-  // Merge CC y Nombre (rowspan=2 equivalente: se maneja con merge vertical)
-  ws.mergeCells('A1:A2');
-  ws.mergeCells('B1:B2');
-
-  COLS.forEach((c, i) => {
-    const startCol = 3 + i * 3;
-    const endCol   = startCol + 2;
-    ws.mergeCells(1, startCol, 1, endCol);
-    const cell = r1.getCell(startCol);
-    cell.value = c.label;
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = solidFill(c.xlHdr);
-    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  // Estilar CC y Nombre en fila 1
-  ['A1', 'B1'].forEach(addr => {
-    const cell = ws.getCell(addr);
-    cell.font      = { ...bold };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill      = solidFill(GRAY_HDR);
-    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-  });
-
-  // ── Fila 2: sub-encabezados Rend / Tab / CTRL ─────────────────────────────
-  const hdr2Values = ['', '', ...COLS.flatMap(() => ['Rend', 'Tab', 'CTRL\nTab−Rend'])];
-  const r2 = ws.addRow(hdr2Values);
-  r2.height = 28;
-
-  COLS.forEach((c, i) => {
-    const startCol = 3 + i * 3;
-    for (let col = startCol; col <= startCol + 2; col++) {
-      const cell = r2.getCell(col);
-      cell.font      = col === startCol + 2 ? { ...bold } : { ...base };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.fill      = solidFill(c.xlHdr);
-      cell.border    = { bottom: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-    }
-  });
-  r2.getCell(1).fill = solidFill(GRAY_HDR);
-  r2.getCell(2).fill = solidFill(GRAY_HDR);
-
-  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 2 }];
-
-  // ── Filas de datos ─────────────────────────────────────────────────────────
-  for (const r of rows) {
-    const values = [
-      r.ccCode, r.ccName,
-      ...COLS.flatMap(c => [r[c.rKey], r[c.tKey], r[c.dKey]]),
-    ];
-    const dr = ws.addRow(values);
-    dr.getCell(1).font = { ...base };
-    dr.getCell(2).font = { ...base };
-
-    COLS.forEach((c, i) => {
-      const startCol = 3 + i * 3;
-      for (let col = startCol; col <= startCol + 2; col++) {
-        const cell = dr.getCell(col);
-        cell.numFmt    = numFmt;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        cell.fill      = solidFill(c.xlBg);
-        cell.font      = { ...base };
-      }
-      // CTRL en rojo si hay diferencia
-      const dCell = dr.getCell(startCol + 2);
-      const dVal  = r[c.dKey];
-      if (dVal !== null && Math.abs(dVal) > 0.01) {
-        dCell.font = { ...bold, color: { argb: RED } };
-      }
-    });
-
-    if (r.sinTabData) dr.eachCell(cell => { cell.font = { ...cell.font, color: { argb: 'FF999999' } }; });
-  }
-
-  // ── Fila de totales ────────────────────────────────────────────────────────
   const totals = {};
   for (const c of COLS) { totals[c.rKey] = 0; totals[c.tKey] = 0; }
   for (const r of rows) {
@@ -582,31 +494,16 @@ async function exportRendVsTabuToXlsx(results) {
       totals[c.tKey] += r[c.tKey] ?? 0;
     }
   }
+  const totalRow = { ccCode: 'TOTAL GENERAL', ccName: '' };
+  for (const c of COLS) {
+    totalRow[c.rKey] = totals[c.rKey];
+    totalRow[c.tKey] = totals[c.tKey];
+    totalRow[c.dKey] = totals[c.tKey] - totals[c.rKey];
+  }
 
-  const totValues = [
-    'TOTAL GENERAL', '',
-    ...COLS.flatMap(c => {
-      const d = totals[c.tKey] - totals[c.rKey];
-      return [totals[c.rKey], totals[c.tKey], d];
-    }),
-  ];
-  const tr = ws.addRow(totValues);
-  tr.getCell(1).font = { ...bold };
-  tr.getCell(2).font = { ...bold };
-
-  COLS.forEach((c, i) => {
-    const startCol = 3 + i * 3;
-    for (let col = startCol; col <= startCol + 2; col++) {
-      const cell = tr.getCell(col);
-      cell.numFmt    = numFmt;
-      cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      cell.fill      = solidFill(c.xlHdr);
-      cell.font      = { ...bold };
-      cell.border    = { top: { style: 'medium', color: { argb: 'FFB0B0B0' } } };
-    }
-    const dCell = tr.getCell(startCol + 2);
-    const d = totals[c.tKey] - totals[c.rKey];
-    if (Math.abs(d) > 0.01) dCell.font = { ...bold, color: { argb: RED } };
+  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.rend_vs_tabu, rows, {
+    totalRow,
+    dimIf: r => r.sinTabData,
   });
 
   await downloadWorkbook(wb, `RendVsTabulado_${periodSuffix(results.period)}.xlsx`);

@@ -20,6 +20,16 @@ const HEADER_FILL   = 'FFE8E8E8';
 const BORDER_COLOR  = 'FFB0B0B0';
 const NUM_FMT       = '#,##0.00';
 const DEFAULT_WIDTH = 14;
+const DIFF_COLOR    = 'FFCC0000';
+
+// Un valor de celda puede ser un número plano o `{ formula, result }` (SUM(...),
+// =B2-C2 — EE x CATEG y Rend vs Asiento, más auditable para el cliente que un
+// valor cacheado a mano). ExcelJS ya sabe escribir los dos por igual porque
+// `row[c.key]` se pasa tal cual a `addRow`; lo único que necesita desenvolverse
+// acá es el NÚMERO, para decidir si `diffHighlight`/la fila de TOTAL pintan
+// rojo. Exportada porque el módulo que arma `opts.highlightIf`/`opts.dimIf`
+// necesita el mismo desenvuelto — ver `catXEmpleados.js`.
+export const numericValue = v => (v !== null && typeof v === 'object') ? v.result : v;
 
 /**
  * Escribe una hoja `contract.sheet` en `wb` con TODAS las columnas de
@@ -30,10 +40,26 @@ const DEFAULT_WIDTH = 14;
  * @param {object} wb        `new window.ExcelJS.Workbook()`
  * @param {import('./contracts.js').ExportContract} contract
  * @param {object[]} rows    filas devueltas por `run()` — se leen por `col.key`
+ * @param {object} [opts]
+ * @param {object}   [opts.totalRow]    fila de TOTAL — mismo shape que un `row`
+ *                                      (leída por `col.key`), escrita al final
+ *                                      con estilo propio (negrita, borde
+ *                                      superior en las columnas numéricas,
+ *                                      rojo si una columna `diffHighlight`
+ *                                      supera 0.01). Sin esto, no hay fila de
+ *                                      TOTAL — no todos los exports la llevan.
+ * @param {function} [opts.highlightIf] `(row) => boolean` — si da `true`, esa
+ *                                      fila de datos (nunca el TOTAL) se pinta
+ *                                      entera con `opts.highlightColor` (ej.
+ *                                      EE x CATEG resalta la fila completa de
+ *                                      un Puesto/CC con diferencia, no sólo la
+ *                                      celda de la diferencia).
+ * @param {string}   [opts.highlightColor] ARGB del fondo de `highlightIf`.
  * @returns {object} la worksheet creada, por si el llamador necesita algo más
- *                    (ej. una hoja adicional en el mismo workbook)
+ *                    (ej. una hoja adicional en el mismo workbook, o seguir
+ *                    agregando filas a mano después del TOTAL)
  */
-export function writeContractSheet(wb, contract, rows) {
+export function writeContractSheet(wb, contract, rows, opts = {}) {
   const ws = wb.addWorksheet(contract.sheet);
   ws.columns = contract.columns.map(c => ({ width: c.width || DEFAULT_WIDTH }));
 
@@ -48,17 +74,42 @@ export function writeContractSheet(wb, contract, rows) {
 
   ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
 
-  for (const row of rows) {
-    const dr = ws.addRow(contract.columns.map(c => row[c.key] ?? null));
-    contract.columns.forEach((c, i) => {
-      const cell = dr.getCell(i + 1);
-      cell.font = { name: 'Calibri', size: 10 };
-      if (c.type === 'num') {
-        cell.numFmt    = NUM_FMT;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-      } else {
-        cell.alignment = { vertical: 'middle' };
+  const styleDataCell = (cell, c, rawValue, { bold = false } = {}) => {
+    cell.font = { name: 'Calibri', size: 10, bold };
+    if (c.type === 'num') {
+      if (c.numFmt !== false) cell.numFmt = NUM_FMT;
+      cell.alignment = { horizontal: c.dataAlign || 'right', vertical: 'middle' };
+    } else if (c.dataAlign) {
+      cell.alignment = { horizontal: c.dataAlign, vertical: 'middle' };
+    } else {
+      cell.alignment = { vertical: 'middle' };
+    }
+    if (c.diffHighlight) {
+      const num = numericValue(rawValue);
+      if (num !== null && num !== undefined && Math.abs(num) > 0.01) {
+        cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: DIFF_COLOR } };
       }
+    }
+  };
+
+  for (const row of rows) {
+    const values = contract.columns.map(c => row[c.key] ?? null);
+    const dr = ws.addRow(values);
+    contract.columns.forEach((c, i) => styleDataCell(dr.getCell(i + 1), c, values[i]));
+
+    if (opts.highlightIf && opts.highlightIf(row) && opts.highlightColor) {
+      const fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opts.highlightColor } };
+      dr.eachCell(cell => { cell.fill = fill; });
+    }
+  }
+
+  if (opts.totalRow) {
+    const values = contract.columns.map(c => opts.totalRow[c.key] ?? null);
+    const tr = ws.addRow(values);
+    contract.columns.forEach((c, i) => {
+      const cell = tr.getCell(i + 1);
+      styleDataCell(cell, c, values[i], { bold: true });
+      if (c.type === 'num') cell.border = { top: { style: 'medium', color: { argb: BORDER_COLOR } } };
     });
   }
 
@@ -87,16 +138,39 @@ export function contractColDefs(contract) {
 // no tienen grupos ni columnas de diferencia, y agregarles esta maquinaria
 // sería más parámetros de los que necesitan.
 
-const DIFF_COLOR = 'FFCC0000';
-
 /**
  * @param {object} wb
  * @param {import('./contracts.js').ExportContract} contract - con `groups`
  *   y, opcionalmente, `headerRows: 2` (default 1)
  * @param {object[]} rows
+ * @param {object} [opts]
+ * @param {object}   [opts.totalRow]  fila de TOTAL, mismo shape que un `row` —
+ *                                    ver el jsdoc de `writeContractSheet`. En
+ *                                    `headerRows:1` toma el fondo de grupo (o
+ *                                    el gris por default) igual que el
+ *                                    encabezado; en `headerRows:2` sólo las
+ *                                    columnas agrupadas llevan fondo — las
+ *                                    sueltas (ej. "CC"/"Centro de Costo") van
+ *                                    en negrita sin fondo, igual que las 3
+ *                                    hojas de Rendimiento de las que sale esto.
+ * @param {function} [opts.dimIf]    `(row) => boolean` — atenúa esa fila de
+ *                                    datos a gris (Rend x EE/Rend vs Tabulado/
+ *                                    Rend vs Asiento: legajos o CC sin dato de
+ *                                    un lado del cruce). Se aplica DESPUÉS del
+ *                                    resto del estilo de la fila (incluido
+ *                                    `diffHighlight`), así que gana el gris —
+ *                                    mismo orden que los 3 originales a mano.
+ * @param {function} [opts.headerLabel] `(col) => string` — texto del
+ *                                    encabezado individual de una columna
+ *                                    (fila 2 en `headerRows:2`, la única fila
+ *                                    en `headerRows:1`), en vez de `col.label`.
+ *                                    Sólo lo necesita Rend vs Asiento, cuyo
+ *                                    sub-encabezado lleva el período ("Rend
+ *                                    abr26") — un dato de la corrida, no del
+ *                                    contrato. Default: `col.label`.
  * @returns {object} la worksheet creada
  */
-export function writeGroupedContractSheet(wb, contract, rows) {
+export function writeGroupedContractSheet(wb, contract, rows, opts = {}) {
   const ws = wb.addWorksheet(contract.sheet);
   const cols = contract.columns;
   const groups = contract.groups || {};
@@ -107,6 +181,7 @@ export function writeGroupedContractSheet(wb, contract, rows) {
   const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
   const base = { name: 'Calibri', size: 10 };
   const bold = { ...base, bold: true };
+  const labelOf = c => (opts.headerLabel ? opts.headerLabel(c) : c.label);
 
   // Encabezado de grupo (fila agrupada, o la única fila cuando headerRows:1):
   // borde fino, sin wrapText — mismo molde que `styleGrp` en los 3 originales.
@@ -156,7 +231,7 @@ export function writeGroupedContractSheet(wb, contract, rows) {
     for (const { start, end, group } of runs) {
       if (group?.label) {
         r1Values[start] = group.label;
-        for (let k = start; k < end; k++) r2Values[k] = cols[k].label;
+        for (let k = start; k < end; k++) r2Values[k] = labelOf(cols[k]);
       } else {
         r1Values[start] = cols[start].label;
       }
@@ -183,7 +258,7 @@ export function writeGroupedContractSheet(wb, contract, rows) {
     // Una sola fila: cada columna lleva su propio color de grupo (si tiene),
     // sin merges. La columna "vacía" (label === '') queda sin estilo, igual
     // que en NR Reporte (columna A separadora, heredada del layout Meta4).
-    const hdr = ws.addRow(cols.map(c => c.label));
+    const hdr = ws.addRow(cols.map(c => labelOf(c)));
     hdr.height = 20;
     cols.forEach((c, idx) => {
       if (c.label === '') return;
@@ -194,23 +269,53 @@ export function writeGroupedContractSheet(wb, contract, rows) {
   }
 
   const numFmt = '#,##0.00';
+
+  const styleDataCell = (cell, c, rawValue, group) => {
+    if (group?.dataColor) cell.fill = solidFill(group.dataColor);
+    if (c.type === 'num' && c.numFmt !== false) cell.numFmt = numFmt;
+    if (c.type === 'num' || c.dataAlign) {
+      cell.alignment = { horizontal: c.dataAlign || 'right', vertical: 'middle' };
+    }
+    const num = numericValue(rawValue);
+    const flagged = c.diffHighlight && num !== null && num !== undefined && Math.abs(num) > 0.01;
+    cell.font = flagged ? { ...bold, color: { argb: DIFF_COLOR } } : { ...base };
+  };
+
   for (const row of rows) {
     const values = cols.map(c => row[c.key] ?? null);
     const dr = ws.addRow(values);
     cols.forEach((c, idx) => {
       if (c.label === '') return; // columna separadora: sin estilo, igual que el original
-      const cell = dr.getCell(idx + 1);
+      styleDataCell(dr.getCell(idx + 1), c, values[idx], c.group ? groups[c.group] : null);
+    });
+
+    // `dimIf` (legajos/CC sin dato de un lado del cruce) va DESPUÉS del resto
+    // del estilo — el gris gana incluso sobre `diffHighlight`, igual que los 3
+    // originales a mano (`if (r.sinTabData) dr.eachCell(...)`).
+    if (opts.dimIf && opts.dimIf(row)) {
+      dr.eachCell(cell => { cell.font = { ...cell.font, color: { argb: 'FF999999' } }; });
+    }
+  }
+
+  if (opts.totalRow) {
+    const values = cols.map(c => opts.totalRow[c.key] ?? null);
+    const tr = ws.addRow(values);
+    cols.forEach((c, idx) => {
+      if (c.label === '' && c.spacer) return;
+      const cell = tr.getCell(idx + 1);
       const g = c.group ? groups[c.group] : null;
-      if (g?.dataColor) cell.fill = solidFill(g.dataColor);
-
-      if (c.type === 'num' && c.numFmt !== false) cell.numFmt = numFmt;
-      if (c.type === 'num' || c.dataAlign) {
-        cell.alignment = { horizontal: c.dataAlign || 'right', vertical: 'middle' };
+      styleDataCell(cell, c, values[idx], g);
+      cell.font = { ...cell.font, bold: true };
+      // headerRows:1 (ej. Rend x EE) pinta TODA la fila de TOTAL, agrupada o
+      // no — igual que su encabezado. headerRows:2 (ej. Rend vs Tabulado) sólo
+      // pinta las columnas de un grupo CON label (una categoría real); las
+      // sueltas o con un grupo "sólo color" (`meta`, sin label — CC/Centro de
+      // Costo) quedan en negrita sin fondo, igual que en los 3 originales a mano.
+      const fillColor = headerRows === 1 ? (g?.headerColor || HEADER_FILL) : (g?.label ? g.headerColor : null);
+      if (fillColor) {
+        cell.fill   = solidFill(fillColor);
+        cell.border = { top: { style: 'medium', color: { argb: BORDER_COLOR } } };
       }
-
-      const v = values[idx];
-      const flagged = c.diffHighlight && v !== null && Math.abs(v) > 0.01;
-      cell.font = flagged ? { ...bold, color: { argb: DIFF_COLOR } } : { ...base };
     });
   }
 

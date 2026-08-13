@@ -10,7 +10,7 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-const { writeContractSheet, writeGroupedContractSheet, contractColDefs } = await import('./js/exports/contractSheet.js');
+const { writeContractSheet, writeGroupedContractSheet, contractColDefs, numericValue } = await import('./js/exports/contractSheet.js');
 const { EXPORT_CONTRACTS } = await import('./js/exports/contracts.js');
 
 let ok = 0, fail = 0;
@@ -270,6 +270,213 @@ assert('NR Reporte: la columna spacer (A) sigue sin ningún estilo con el contra
 // a propósito: probar que `writeGroupedContractSheet` no lee `necessity` en absoluto
 // (es de `blocksProgress`, no del layout del xlsx) — si esto rompiera, sería una
 // señal de que el writer empezó a mezclar las dos responsabilidades.
+
+// ── Fila de TOTAL + filas atenuadas (migración de los writers del Paso 6) ───
+//
+// Estos asserts fijan el layout EXACTO que hoy arman a mano
+// `rendVsTabu.js`/`rendVsAsiento.js`/`rendXEe.js`/`catXEmpleados.js`, ANTES de
+// migrarlos — mismo método que el Paso 4b (specs/contrato-export.md, "Lo que
+// falta para migrar los writers del Paso 6"). Se corren contra `writeContractSheet`/
+// `writeGroupedContractSheet` con `opts.totalRow`/`opts.dimIf`/`opts.highlightIf`/
+// `opts.headerLabel` — las 4 features que le faltaban al writer. Migrar cada
+// control es, después de esto, hacer que arme las mismas `rows`/`opts` y llame
+// al writer en vez de a `ws.addRow` a mano; estos asserts no se tocan.
+
+// ── Rend vs Tabulado ─────────────────────────────────────────────────────────
+
+{
+  const contract = EXPORT_CONTRACTS.rend_vs_tabu;
+  const rvtRows = [
+    { ccCode: '1', ccName: 'CC Uno',
+      rPrecio: 100, tPrecio: 100, dPrecio: 0,
+      rEstimulo: 0, tEstimulo: 0, dEstimulo: 0,
+      rCargas: 0, tCargas: 0, dCargas: 0,
+      rProvMes: 0, tProvMes: 0, dProvMes: 0,
+      rProvCcss: 0, tProvCcss: 0, dProvCcss: 0,
+      rTotal: 100, tTotal: 100, dTotal: 0,
+      sinTabData: false },
+    { ccCode: '2', ccName: 'CC Dos',
+      rPrecio: 50, tPrecio: null, dPrecio: null,
+      rEstimulo: 0, tEstimulo: null, dEstimulo: null,
+      rCargas: 0, tCargas: null, dCargas: null,
+      rProvMes: 0, tProvMes: null, dProvMes: null,
+      rProvCcss: 0, tProvCcss: null, dProvCcss: null,
+      rTotal: 50, tTotal: null, dTotal: null,
+      sinTabData: true },
+    { ccCode: '3', ccName: 'CC Tres',
+      rPrecio: 200, tPrecio: 150, dPrecio: -50,
+      rEstimulo: 0, tEstimulo: 0, dEstimulo: 0,
+      rCargas: 0, tCargas: 0, dCargas: 0,
+      rProvMes: 0, tProvMes: 0, dProvMes: 0,
+      rProvCcss: 0, tProvCcss: 0, dProvCcss: 0,
+      rTotal: 200, tTotal: 150, dTotal: -50,
+      sinTabData: false },
+  ];
+  const totalRow = {
+    ccCode: 'TOTAL GENERAL', ccName: '',
+    rPrecio: 350, tPrecio: 250, dPrecio: -100,
+    rEstimulo: 0, tEstimulo: 0, dEstimulo: 0,
+    rCargas: 0, tCargas: 0, dCargas: 0,
+    rProvMes: 0, tProvMes: 0, dProvMes: 0,
+    rProvCcss: 0, tProvCcss: 0, dProvCcss: 0,
+    rTotal: 350, tTotal: 250, dTotal: -100,
+  };
+  const ws = writeGroupedContractSheet(new FakeWorkbook(), contract, rvtRows, {
+    totalRow, dimIf: r => r.sinTabData,
+  });
+
+  assert('Rend vs Tabulado: 2 filas de encabezado + 3 de datos + 1 de TOTAL',
+    ws.rows.length === 6);
+  assert('Rend vs Tabulado: A1:A2 (CC) y B1:B2 (Centro de Costo)',
+    hasMerge(ws, 1, 1, 2, 1) && hasMerge(ws, 1, 2, 2, 2));
+  assert('Rend vs Tabulado: C1:E1 (PRECIO), F1:H1 (ASIG. ESTÍMULO), R1:T1 (COSTO TOTAL)',
+    hasMerge(ws, 1, 3, 1, 5) && hasMerge(ws, 1, 6, 1, 8) && hasMerge(ws, 1, 18, 1, 20));
+  assert('Rend vs Tabulado: exactamente 8 merges (2 sueltas + 6 categorías)',
+    ws.merges.length === 8);
+  assert('Rend vs Tabulado: CC/Centro de Costo llevan el gris propio de Rendimiento (FFE0E0E0), no el genérico',
+    ws.rows[0].cells[0].fill.fgColor.argb === 'FFE0E0E0' && ws.rows[0].cells[1].fill.fgColor.argb === 'FFE0E0E0');
+  assert('Rend vs Tabulado: PRECIO se pinta con su color (fila 1 y 2)',
+    ws.rows[0].cells[2].fill.fgColor.argb === 'FFCCE0F5' && ws.rows[1].cells[2].fill.fgColor.argb === 'FFCCE0F5');
+  assert('Rend vs Tabulado: sub-encabezados de PRECIO son Rend/Tab/CTRL (sin período — es un dato de contrato, no de corrida)',
+    ws.rows[1].cells[2].value === 'Rend' && ws.rows[1].cells[3].value === 'Tab' && ws.rows[1].cells[4].value === 'CTRL\nTab−Rend');
+  assert('Rend vs Tabulado: el sub-encabezado CTRL sale en negrita aunque ningún dato tenga diferencia',
+    ws.rows[1].cells[4].font.bold === true);
+
+  const [hdr1, hdr2, r1, r2, r3, tot] = ws.rows;
+  assert('Rend vs Tabulado: fila sin diferencia (CC Uno) — CTRL de PRECIO en fuente base',
+    r1.cells[4].font.color === undefined);
+  assert('Rend vs Tabulado: fila con diferencia (CC Tres) — CTRL de PRECIO en negrita y rojo',
+    r3.cells[4].font.bold === true && r3.cells[4].font.color.argb === 'FFCC0000');
+  assert('Rend vs Tabulado: fila sinTabData (CC Dos) queda atenuada en TODAS sus celdas, incluidas CC/Nombre',
+    r2.cells[0].font.color.argb === 'FF999999' && r2.cells[2].font.color.argb === 'FF999999');
+  assert('Rend vs Tabulado: dimIf gana sobre diffHighlight (si una fila atenuada tuviera diferencia, igual sale gris)',
+    r2.cells[4].font.color.argb === 'FF999999');
+
+  assert('Rend vs Tabulado: TOTAL — CC/Centro de Costo en negrita, SIN fondo (igual que el original a mano)',
+    tot.cells[0].font.bold === true && tot.cells[0].fill === null && tot.cells[1].fill === null);
+  assert('Rend vs Tabulado: TOTAL — PRECIO lleva el fondo de su categoría',
+    tot.cells[2].fill.fgColor.argb === 'FFCCE0F5' && tot.cells[3].fill.fgColor.argb === 'FFCCE0F5');
+  assert('Rend vs Tabulado: TOTAL — CTRL de PRECIO en rojo (dif = -100)',
+    tot.cells[4].font.bold === true && tot.cells[4].font.color.argb === 'FFCC0000');
+  assert('Rend vs Tabulado: TOTAL — CTRL de ASIG. ESTÍMULO sin diferencia, no rojo',
+    tot.cells[7].font.color === undefined);
+  assert('Rend vs Tabulado: TOTAL — valores numéricos correctos (CC Uno+Dos+Tres)',
+    tot.cells[2].value === 350 && tot.cells[3].value === 250);
+}
+
+// ── Rend vs Asiento — sub-encabezado con período vía opts.headerLabel ───────
+
+{
+  const contract = EXPORT_CONTRACTS.rend_vs_asiento;
+  const row = {
+    ccCode: '1', ccName: 'CC Uno',
+    rPrecio: 100, cPrecio: 80, dPrecio: -20,
+    rEstimulo: 0, cEstimulo: 0, dEstimulo: 0,
+    rCargas: 0, cCargas: 0, dCargas: 0,
+    rProvMes: 0, cProvMes: 0, dProvMes: 0,
+    rProvCcss: 0, cProvCcss: 0, dProvCcss: 0,
+    rTotal: 100, cTotal: 80, dTotal: -20,
+  };
+  // TOTAL con fórmulas SUM (más auditable que un valor cacheado — igual que hoy).
+  const totalRow = {
+    ccCode: 'TOTAL GENERAL', ccName: '',
+    rPrecio: { formula: 'SUM(C3:C3)', result: 100 },
+    cPrecio: { formula: 'SUM(D3:D3)', result: 80 },
+    dPrecio: { formula: 'D4-C4', result: -20 },
+  };
+  const ws = writeGroupedContractSheet(new FakeWorkbook(), contract, [row], {
+    totalRow,
+    headerLabel: c => (c.key === 'rPrecio' ? 'Rend abr26' : c.key === 'cPrecio' ? 'CONTA abr26' : c.label),
+  });
+
+  assert('Rend vs Asiento: el sub-encabezado de PRECIO lleva el período (dato de la corrida, no del contrato)',
+    ws.rows[1].cells[2].value === 'Rend abr26' && ws.rows[1].cells[3].value === 'CONTA abr26');
+  assert('Rend vs Asiento: una columna sin override cae al label del contrato',
+    ws.rows[1].cells[4].value === 'CTRL\nCONTA−Rend');
+  assert('Rend vs Asiento: TOTAL con fórmula — se escribe el objeto {formula,result} tal cual, no el número pelado',
+    ws.rows[3].cells[2].value.formula === 'SUM(C3:C3)' && ws.rows[3].cells[2].value.result === 100);
+  assert('Rend vs Asiento: TOTAL — diffHighlight desenvuelve `.result` de la fórmula para decidir el rojo',
+    ws.rows[3].cells[4].font.bold === true && ws.rows[3].cells[4].font.color.argb === 'FFCC0000');
+}
+
+// ── Rend x EE — headerRows:1, TOTAL sin fórmulas, dim por sinTabData/soloEnTab ─
+
+{
+  const contract = EXPORT_CONTRACTS.rend_x_ee;
+  const rows = [
+    { legajo: '1', nombre: 'Perez', repTotal: 1000, precio: 800, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+      calcTotal: 800, dif: 200, sinTabData: false, soloEnTab: false },
+    { legajo: '2', nombre: 'Gomez', repTotal: null, precio: 500, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+      calcTotal: 500, dif: null, sinTabData: false, soloEnTab: true },
+  ];
+  const totalRow = {
+    legajo: 'TOTAL GENERAL', nombre: '', repTotal: 1000, precio: 1300, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    calcTotal: 1300, dif: -300,
+  };
+  const ws = writeGroupedContractSheet(new FakeWorkbook(), contract, rows, {
+    totalRow, dimIf: r => r.sinTabData || r.soloEnTab,
+  });
+
+  assert('Rend x EE: headerRows:1 — cero merges', ws.merges.length === 0);
+  assert('Rend x EE: 1 encabezado + 2 datos + 1 TOTAL = 4 filas', ws.rows.length === 4);
+  assert('Rend x EE: Legajo/Nombre/COSTO TOTAL (Reporte) comparten el gris "meta"',
+    ws.rows[0].cells[0].fill.fgColor.argb === 'FFE0E0E0' &&
+    ws.rows[0].cells[2].fill.fgColor.argb === 'FFE0E0E0');
+  assert('Rend x EE: PRECIO lleva su color de categoría en el encabezado',
+    ws.rows[0].cells[3].fill.fgColor.argb === 'FFCCE0F5');
+  assert('Rend x EE: Dif lleva el verde propio (no el de ninguna categoría)',
+    ws.rows[0].cells[9].fill.fgColor.argb === 'FFA9D08E');
+  assert('Rend x EE: fila soloEnTab (Gomez) queda atenuada, incluido Legajo',
+    ws.rows[2].cells[0].font.color.argb === 'FF999999');
+  assert('Rend x EE: TOTAL — headerRows:1 pinta TODA la fila, incluidas Legajo/Nombre (igual que el encabezado)',
+    ws.rows[3].cells[0].fill.fgColor.argb === 'FFE0E0E0' && ws.rows[3].cells[0].font.bold === true);
+  assert('Rend x EE: TOTAL — Dif en rojo (dif = -300)',
+    ws.rows[3].cells[9].font.bold === true && ws.rows[3].cells[9].font.color.argb === 'FFCC0000');
+  assert('Rend x EE: TOTAL — valores planos, sin fórmula (a diferencia de Rend vs Asiento/EE x CATEG)',
+    ws.rows[3].cells[9].value === -300);
+}
+
+// ── EE x CATEG — writeContractSheet con fórmulas + resaltado de fila completa ─
+
+{
+  const contract = EXPORT_CONTRACTS.cat_x_empleados_puesto;
+  // Igual que catXEmpleados.js hoy: el "Dif." de cada fila y el TOTAL son
+  // fórmulas de Excel (`=B{n}-C{n}`, `=SUM(...)`), no valores cacheados —
+  // el módulo las arma con el número de fila real (2=primera fila de datos).
+  const rows = [
+    { key: 'Administrativo', catCount: 10, tabCount: 10, diff: { formula: 'B2-C2', result: 0 } },
+    { key: 'Operario',       catCount: 8,  tabCount: 6,  diff: { formula: 'B3-C3', result: 2 } },
+  ];
+  const totalRow = {
+    key: 'TOTAL',
+    catCount: { formula: 'SUM(B2:B3)', result: 18 },
+    tabCount: { formula: 'SUM(C2:C3)', result: 16 },
+    diff:     { formula: 'B4-C4', result: 2 },
+  };
+  const ws = writeContractSheet(new FakeWorkbook(), contract, rows, {
+    totalRow,
+    highlightIf: r => numericValue(r.diff) !== 0,
+    highlightColor: 'FFFFF4E5',
+  });
+
+  assert('EE x CATEG: 1 encabezado + 2 datos + 1 TOTAL = 4 filas', ws.rows.length === 4);
+  assert('EE x CATEG: catCount/tabCount/Dif. no llevan formato moneda (son conteos)',
+    ws.rows[1].cells[1].numFmt === null && ws.rows[2].cells[3].numFmt === null);
+  assert('EE x CATEG: fila sin diferencia (Administrativo) no se resalta',
+    ws.rows[1].cells[0].fill === null);
+  assert('EE x CATEG: fila con diferencia (Operario) se resalta ENTERA, incluida la columna de Puesto',
+    ws.rows[2].cells[0].fill.fgColor.argb === 'FFFFF4E5' && ws.rows[2].cells[3].fill.fgColor.argb === 'FFFFF4E5');
+  assert('EE x CATEG: la celda "Dif." de una fila con diferencia sale en negrita y roja',
+    ws.rows[2].cells[3].font.bold === true && ws.rows[2].cells[3].font.color.argb === 'FFCC0000');
+  assert('EE x CATEG: el valor de la celda es el objeto fórmula tal cual (ExcelJS lo escribe como fórmula)',
+    ws.rows[2].cells[3].value.formula === 'B3-C3' && ws.rows[2].cells[3].value.result === 2);
+  assert('EE x CATEG: TOTAL — negrita, sin fondo de resaltado (highlightIf no aplica al TOTAL)',
+    ws.rows[3].cells[0].font.bold === true && ws.rows[3].cells[0].fill === null);
+  assert('EE x CATEG: TOTAL — catCount/tabCount con borde superior (numéricas)',
+    ws.rows[3].cells[1].border.top.style === 'medium');
+  assert('EE x CATEG: TOTAL — Dif. en rojo (2 !== 0) con la fórmula del TOTAL',
+    ws.rows[3].cells[3].font.color.argb === 'FFCC0000' && ws.rows[3].cells[3].value.formula === 'B4-C4');
+}
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

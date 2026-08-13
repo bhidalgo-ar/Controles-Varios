@@ -75,6 +75,12 @@ const CON_WRITER = [
   // Las dos solapas planas del asiento de FINADIET nacieron sobre
   // `writeContractSheet` (D-046), así que entran acá desde el primer día.
   'finadiet_asiento_cc', 'finadiet_asiento_gral',
+  // Los 4 del Paso 6 que sí entraron limpio en el writer (D-047) — el 5º,
+  // `acreditaciones_reporte`, se queda afuera a propósito (ver el comentario en
+  // contracts.js): título antes del encabezado + multi-hoja con fórmulas entre
+  // hojas, ninguna de las dos forma que el writer describe hoy.
+  'rend_vs_tabu', 'rend_vs_asiento', 'rend_x_ee',
+  'cat_x_empleados_puesto', 'cat_x_empleados_cc',
 ];
 for (const exportId of CON_WRITER) {
   for (const col of EXPORT_CONTRACTS[exportId].columns) {

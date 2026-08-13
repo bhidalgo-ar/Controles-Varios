@@ -5,16 +5,17 @@
 // — no se declara dos veces.
 //
 // Ver specs/contrato-export.md para el porqué y el plan completo por pasos
-// (D-041, D-043, D-045 y D-046 en DECISIONS.md).
+// (D-041, D-043, D-045, D-046 y D-047 en DECISIONS.md).
 //
 // Dos reglas que no se deducen leyendo:
 //   1. **El contrato es un PISO, nunca un techo** — puede agregar obligación
 //      sobre el `required` de FIELD_DEFS, nunca sacarla (ver blocksProgress()).
-//   2. Los 8 contratos migrados a un writer declaran también su layout
-//      (`width`/`groups`/`headerRows`); los del Paso 6, que todavía arman el
-//      .xlsx a mano, declaran sólo semántica. Declarar layout que nadie lee es
-//      una segunda fuente de verdad que se desincroniza en silencio, y hay un
-//      assert en tests/exportContracts.test.js que lo impide en los dos sentidos.
+//   2. Los contratos migrados a un writer declaran también su layout
+//      (`width`/`groups`/`headerRows`); `acreditaciones_reporte` (el único que
+//      queda con su .xlsx a mano — D-047) declara sólo semántica. Declarar
+//      layout que nadie lee es una segunda fuente de verdad que se
+//      desincroniza en silencio, y hay un assert en tests/exportContracts.test.js
+//      que lo impide en los dos sentidos.
 
 import { NR_CONCEPTS } from '../controls/nr.js';
 import { COLS } from '../controls/rendVsTabu.js';
@@ -304,26 +305,36 @@ const REND_CAT_KEY = {
 const rendCatNecessity = key =>
   key === 'precio' ? NECESSITY.OBLIGATORIA : NECESSITY.OPCIONAL;
 
-// Los 5 contratos del Paso 6 declaran SEMÁNTICA (qué columna sale de qué clave
-// de mapeo y cuánto pesa), no layout — nada de `width`/`groups`/`headerRows`/
-// `diffHighlight`. Sus writers todavía arman el .xlsx a mano, así que un
-// `width` acá no lo leería nadie: sería una segunda fuente de verdad que se
-// desincroniza del archivo real sin que nada avise, justo lo que el contrato
-// existe para evitar. El layout se declara cuando el writer lo consuma — ver
-// specs/contrato-export.md, "Lo que falta para migrar los writers del Paso 6".
+// Rend vs Tabulado/Asiento/x EE migraron a `writeGroupedContractSheet` (ver
+// "Lo que falta para migrar los writers del Paso 6" en specs/contrato-export.md
+// — la fila de TOTAL y las filas atenuadas que les faltaban al writer ya están).
+// Las 3 comparten las mismas 6 categorías (label + colores) de `COLS`, así que
+// el grupo de cada categoría se arma una sola vez acá.
+const REND_CAT_GROUPS = Object.fromEntries(
+  COLS.map(c => [c.key, { label: c.label, headerColor: c.xlHdr, dataColor: c.xlBg }]),
+);
 
 /** Rend vs Tabulado: CC + 3 columnas por categoría (Rend · Tab · CTRL). */
 const rendVsTabuControlar = {
   exportId: 'rend_vs_tabu', sheet: 'Rend vs Tabulado', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 2,
+  groups: {
+    // `meta` no tiene `label`: no se mergea nada en la fila 1 (CC/Centro de
+    // Costo ya se mergean solos, verticalmente, por no tener grupo-con-label)
+    // — sólo aporta el gris propio de Rendimiento (distinto del gris genérico
+    // de `contractSheet.js`) para esas dos columnas.
+    meta: { headerColor: 'FFE0E0E0' },
+    ...REND_CAT_GROUPS,
+  },
   columns: [
-    { label: 'CC',              key: 'ccCode', from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
-    { label: 'Centro de Costo', key: 'ccName', from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'CC',              key: 'ccCode', width: 10, from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
+    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
     ...COLS.flatMap(c => [
-      { label: `${c.label} · Rend`, key: c.rKey, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num' },
+      { label: 'Rend',            key: c.rKey, width: 18, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
       // El lado Tabulado se calcula por CÓDIGO de concepto (js/controls/tabCodes.js),
       // no sale de una columna mapeada — por eso `from: []`.
-      { label: `${c.label} · Tab`,  key: c.tKey, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-      { label: `${c.label} · CTRL`, key: c.dKey, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+      { label: 'Tab',             key: c.tKey, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key },
+      { label: 'CTRL\nTab−Rend',  key: c.dKey, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key, diffHighlight: true },
     ]),
   ],
 };
@@ -331,17 +342,26 @@ const rendVsTabuControlar = {
 /** Rend vs Asiento: mismo molde, pero el 2º lado es CONTA (Contabilidad Desglosada). */
 const rendVsAsientoControlar = {
   exportId: 'rend_vs_asiento', sheet: 'Resumen', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 2,
+  groups: {
+    meta: { headerColor: 'FFE0E0E0' },
+    ...REND_CAT_GROUPS,
+  },
   columns: [
-    { label: 'Código CC',       key: 'ccCode', from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt' },
-    { label: 'Centro de Costo', key: 'ccName', from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'Código CC',       key: 'ccCode', width: 10, from: ['ccCodeColumn'], necessity: NECESSITY.OPCIONAL,    type: 'txt', group: 'meta' },
+    { label: 'Centro de Costo', key: 'ccName', width: 30, from: ['ccNameColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'txt', group: 'meta' },
     // `rKey`/`dKey` son idénticos en los dos módulos; el del medio es el que
     // cambia (`tKey` en Rend vs Tabulado, `cKey` acá), así que se arma.
+    // El sub-encabezado real del .xlsx lleva el período ("Rend abr26") — un
+    // dato de la corrida, no del contrato — así que estos labels ('Rend'/
+    // 'CONTA'/'CTRL…') son el default de `writeGroupedContractSheet` (CSV,
+    // pantalla) y el módulo pasa `opts.headerLabel` para el .xlsx real.
     ...COLS.flatMap(c => [
-      { label: `${c.label} · Rend`,  key: c.rKey,           from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num' },
+      { label: 'Rend',             key: c.rKey,           width: 18, from: [REND_CAT_KEY[c.key]], necessity: rendCatNecessity(c.key), type: 'num', group: c.key },
       // CONTA se clasifica por CUENTA_CONTAB / ID_CONCEPTO según `rvaConfig`,
       // no por una columna mapeada (`FIELD_DEFS.conta_file` no declara ninguna).
-      { label: `${c.label} · CONTA`, key: `c${cap(c.key)}`, from: [],                    necessity: NECESSITY.OBLIGATORIA,   type: 'num' },
-      { label: `${c.label} · CTRL`,  key: c.dKey,           from: [],                    necessity: NECESSITY.OBLIGATORIA,   type: 'num' },
+      { label: 'CONTA',            key: `c${cap(c.key)}`, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key },
+      { label: 'CTRL\nCONTA−Rend', key: c.dKey,           width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key, diffHighlight: true },
     ]),
   ],
 };
@@ -349,33 +369,49 @@ const rendVsAsientoControlar = {
 /** Rend x EE: una fila por legajo — Costo Total del reporte vs. el calculado del Tabulado. */
 const rendXEeControlar = {
   exportId: 'rend_x_ee', sheet: 'Rendimiento x EE', layout: LAYOUT_FIJO, audience: 'payroll',
+  headerRows: 1,
+  groups: {
+    meta:      { headerColor: 'FFE0E0E0' },                      // Legajo / Nombre / COSTO TOTAL (Reporte): sin fondo de dato
+    precio:    REND_CAT_GROUPS.precio,
+    estimulo:  REND_CAT_GROUPS.estimulo,
+    cargas:    REND_CAT_GROUPS.cargas,
+    provMes:   REND_CAT_GROUPS.provMes,
+    provCcss:  REND_CAT_GROUPS.provCcss,
+    calcTotal: { headerColor: 'FFDCDCDC', dataColor: 'FFF2F2F2' },
+    dif:       { headerColor: 'FFA9D08E', dataColor: 'FFE2EFDA' },
+  },
   columns: [
-    { label: 'Legajo', key: 'legajo', from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,    type: 'txt' },
-    { label: 'Nombre', key: 'nombre', from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt' },
-    { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', from: ['costoTotalColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'Legajo', key: 'legajo', width: 10, from: ['legajoColumn'],         necessity: NECESSITY.CLAVE,    type: 'txt', group: 'meta' },
+    { label: 'Nombre', key: 'nombre', width: 30, from: ['apellidoNombreColumn'], necessity: NECESSITY.OPCIONAL, type: 'txt', group: 'meta' },
+    { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', width: 18, from: ['costoTotalColumn'], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'meta' },
     // Las 5 categorías salen del Tabulado por código de concepto, igual que en
     // Rend vs Tabulado — ninguna sale de una columna mapeada.
     ...COLS.filter(c => c.key !== 'total').map(c => ({
-      label: c.label, key: c.key, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num',
+      label: c.label, key: c.key, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key,
     })),
-    { label: 'COSTO TOTAL (Calculado)',   key: 'calcTotal', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'Dif (Reporte − Calculado)', key: 'dif',       from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'COSTO TOTAL (Calculado)',   key: 'calcTotal', width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'calcTotal' },
+    { label: 'Dif (Reporte − Calculado)', key: 'dif',       width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dif', diffHighlight: true },
   ],
 };
 
 // ── EE x CATEG (Paso 6) ──────────────────────────────────────────────────────
 // Dos hojas con el MISMO molde de 4 columnas; lo único que cambia es por qué
 // campo agrupa (y de qué par de claves sale ese campo: una del Reporte de
-// Categorías y otra del Tabulado).
+// Categorías y otra del Tabulado). Migrado a `writeContractSheet` — el "Dif."
+// y la fila TOTAL siguen siendo fórmulas (`=B2-C2`/`SUM(...)`, más auditable
+// para el cliente que un valor cacheado a mano): el módulo las arma con el
+// número de fila real y se las pasa al writer como `{ formula, result }`, que
+// viaja tal cual a la celda igual que cualquier otro valor.
 const catDistribucion = (exportId, sheet, label, from) => ({
   exportId, sheet, layout: LAYOUT_FIJO, audience: 'payroll',
   columns: [
-    { label,                key: 'key',      from,     necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
-    // Conteos de empleados, no importes (por eso el writer no les pone formato
-    // de moneda) — `type:'num'` igual, que es lo que declara el contrato.
-    { label: 'Rep. Categ.', key: 'catCount', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'Tabulado',    key: 'tabCount', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
-    { label: 'Dif.',        key: 'diff',     from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label,                key: 'key',      width: 32, from,     necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    // Conteos de empleados, no importes: `numFmt:false` saca el formato
+    // moneda que `writeContractSheet` pone por default a toda columna `num`
+    // (mismo mecanismo que usa NR para su "# Difs").
+    { label: 'Rep. Categ.', key: 'catCount', width: 14, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', numFmt: false },
+    { label: 'Tabulado',    key: 'tabCount', width: 14, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', numFmt: false },
+    { label: 'Dif.',        key: 'diff',     width: 10, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', numFmt: false, diffHighlight: true },
   ],
 });
 
@@ -390,6 +426,20 @@ const catDistribucion = (exportId, sheet, label, from) => ({
 // Es el layout de cada hoja de detalle (una por acreditación real). La hoja
 // CONTROL que las lista y cierra contra el archivo de origen no se modela acá:
 // es una hoja de cierre con fórmulas entre hojas, no una tabla de datos.
+//
+// **Se queda sin writer (D-047), a propósito.** De los 5 contratos que le
+// faltaba migrar al Paso 6, este es el único que NO entra en `writeContractSheet`
+// ni con la fila de TOTAL/filas atenuadas que el writer ganó para los otros 4:
+// cada hoja de detalle no es "encabezado + N filas iguales" — lleva una fila de
+// TÍTULO **antes** del encabezado (nombre de la lista + el total, para no bajar
+// a buscarlo), y esa fila no tiene ningún lugar en el contrato. Sumar un
+// "título opcional" al writer para un solo consumidor es la abstracción que
+// CLAUDE.md pide no forzar. Además el archivo entero es multi-hoja calculado en
+// runtime (CONTROL + una por acreditación, mismo problema que `variaciones`/
+// `acumuladores` — ver "Los 2 que no se declaran, y por qué" más arriba) y sus
+// totales cierran con fórmulas ENTRE hojas (`'Nombre lista'!D1`), no dentro de
+// una. Se revisa si alguna vez el título deja de hacer falta (ej. si se cambia
+// a total al pie, como el resto) — hasta entonces sigue con su .xlsx a mano.
 const acreditacionesReporte = {
   exportId: 'acreditaciones_reporte', sheet: 'Detalle de acreditación',
   layout: LAYOUT_FIJO, audience: 'finanzas',
@@ -406,9 +456,9 @@ const acreditacionesReporte = {
 
 // ── FINADIET · Asiento de Remuneraciones ──────────────────────────────────────
 //
-// Las DOS solapas planas del asiento. Son las únicas del Paso 6 que ya tienen
-// writer (`writeContractSheet`), así que declaran también su layout — el resto
-// del Paso 6 declara sólo semántica hasta que su writer las consuma. La tercera
+// Las DOS solapas planas del asiento, sobre `writeContractSheet` desde que
+// entraron (D-046) — mismo writer al que se migraron los otros 4 del Paso 6
+// (D-047). La tercera
 // solapa, ASIENTO, no tiene contrato a propósito: no es una tabla plana — lleva
 // un encabezado con mes y fecha, una fila de título por centro de costo y por
 // categoría, y un TOTAL al pie. `writeContractSheet` describe hojas de
