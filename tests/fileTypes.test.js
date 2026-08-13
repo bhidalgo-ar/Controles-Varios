@@ -185,8 +185,8 @@ const TODOS = new Set(['brutos', 'gsPers', 'nr']);
 const gruposDe = (activos, opts) => extraFieldGroupsFor('tab_control', activos, opts);
 const camposDe = (activos, opts) => gruposDe(activos, opts).flatMap(g => g.fields);
 
-assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 5);
-assert('son 27 columnas en total', camposDe(TODOS).length === 27);
+assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 6);
+assert('son 29 columnas en total', camposDe(TODOS).length === 29);
 assert('el Tabulado anterior las comparte por referencia (es el mismo archivo)',
   FILE_TYPES.tab_prev_file.extraFieldGroups === FILE_TYPES.tab_control.extraFieldGroups);
 
@@ -211,8 +211,8 @@ assert('ninguna choca con una columna que se pide al subir el archivo',
 // Sólo lo que pide el control seleccionado, más los compartidos.
 assert('con sólo Brutos: sus 2 columnas + las 5 compartidas',
   camposDe(new Set(['brutos'])).length === 7);
-assert('con sólo NR: sus 18 conceptos + las 5 compartidas',
-  camposDe(new Set(['nr'])).length === 23);
+assert('con sólo NR: sus 18 conceptos + ID_CENTRO_TRAB/ID_CATEGORIA + las 5 compartidas',
+  camposDe(new Set(['nr'])).length === 25);
 assert('sin ningún control: sólo las 5 compartidas',
   camposDe(new Set()).length === 5);
 
@@ -222,7 +222,7 @@ assert('sin ningún control: sólo las 5 compartidas',
 // diferencia importa — y este assert es el que la mantiene explícita en vez de
 // que dependa de un `...TAB_SHARED_FIELDS` que alguien mueve de lugar.
 assert('el gate NO mira las columnas compartidas',
-  camposDe(TODOS, { soloGateados: true }).length === 22);
+  camposDe(TODOS, { soloGateados: true }).length === 24);
 assert('…y el panel SÍ (los 5 de diferencia son exactamente los compartidos)',
   camposDe(TODOS).length - camposDe(TODOS, { soloGateados: true }).length === 5);
 assert('sin ningún control seleccionado el gate no pide nada',
@@ -230,9 +230,9 @@ assert('sin ningún control seleccionado el gate no pide nada',
 
 // El orden es el de declaración: es lo que dibuja el panel de arriba a abajo.
 assert('los grupos salen en el orden en que se muestran',
-  gruposDe(TODOS).map(g => g.id).join(',') === 'brutos,gsPers,nrIndem,nrOtros,shared');
-assert('sólo los dos grupos de NR llevan subtítulo',
-  gruposDe(TODOS).filter(g => g.header).map(g => g.header).join(' · ') === 'Indemnizatorios · Otros NR');
+  gruposDe(TODOS).map(g => g.id).join(',') === 'brutos,gsPers,nrIndem,nrOtros,nrIdent,shared');
+assert('sólo los tres grupos de NR llevan subtítulo',
+  gruposDe(TODOS).filter(g => g.header).map(g => g.header).join(' · ') === 'Indemnizatorios · Otros NR · Identificación NR');
 
 // El mapa de códigos: es lo que resuelve por código lo que el catálogo del
 // cliente no resolvió por nombre (D-039).
@@ -315,32 +315,28 @@ assert('un tipo sin flow declarado es "single" (el default de 15 de los 17)',
 assert('los dos flujos multi NO son el mismo',
   flowFor('conta_file') !== flowFor('acumuladores_file'));
 
-// ── Los textos de la zona de drop, preservados al pie de la letra ────────────
-// La zona de drop de Acumuladores decía "Acumuladores (Axton)" mientras la
-// etiqueta del tipo dice "Acumuladores (export de Axton)". La divergencia es
-// anterior a la ficha. Derivar el texto de `label` la habría "arreglado" en un
-// paso que es cero cambio de comportamiento, así que se declara tal cual y se
-// fija acá — el día que Willy decida unificarlas, este assert es el que avisa
-// que el texto de pantalla cambia.
+// ── Los textos de la zona de drop ────────────────────────────────────────────
+// Hasta D-048 la zona de drop de Acumuladores decía "Acumuladores (Axton)"
+// mientras la etiqueta del tipo decía "Acumuladores (export de Axton)" — una
+// divergencia anterior a la ficha, preservada a propósito en un paso de cero
+// cambio de comportamiento. D-050 las unificó sacando el `dropLabel` de la
+// ficha: ahora cae al mismo fallback que ya usaba CONTA.
 
-assert('la zona de drop de Acumuladores conserva su texto histórico',
-  dropLabelFor('acumuladores_file') === 'Acumuladores (Axton)');
-assert('…que NO es el mismo que la etiqueta del tipo (la divergencia sigue viva)',
-  dropLabelFor('acumuladores_file') !== fileTypeLabel('acumuladores_file'));
+assert('la zona de drop de Acumuladores ya no diverge de la etiqueta del tipo',
+  dropLabelFor('acumuladores_file') === fileTypeLabel('acumuladores_file'));
 assert('Acumuladores aclara que va uno por mes',
   dropHintFor('acumuladores_file') === ' (uno por mes)');
-assert('CONTA no diverge: su zona de drop usa la etiqueta del tipo',
+assert('CONTA tampoco diverge: su zona de drop usa la etiqueta del tipo',
   dropLabelFor('conta_file') === 'Contabilidad Desglosada'
   && dropLabelFor('conta_file') === fileTypeLabel('conta_file'));
 assert('CONTA no lleva aclaración extra', dropHintFor('conta_file') === '');
 
-// Las dos líneas completas, armadas igual que en la pantalla — es la forma de
-// afirmar "no cambió ni un carácter" sin abrir el navegador.
+// Las dos líneas completas, armadas igual que en la pantalla.
 const lineaDrop = ft => `${dropLabelFor(ft)} — arrastrá uno o varios .xlsx${dropHintFor(ft)}, o hacé clic para elegir`;
 assert('la línea de CONTA sale idéntica a la de antes de la ficha',
   lineaDrop('conta_file') === 'Contabilidad Desglosada — arrastrá uno o varios .xlsx, o hacé clic para elegir');
-assert('la línea de Acumuladores sale idéntica a la de antes de la ficha',
-  lineaDrop('acumuladores_file') === 'Acumuladores (Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
+assert('la línea de Acumuladores usa la etiqueta larga del tipo',
+  lineaDrop('acumuladores_file') === 'Acumuladores (export de Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
 
 // Un tipo desconocido no inventa un flujo multi: cae a 'single', que es el
 // camino que sí sabe avisar que el tipo no existe (parseFor tira el error).

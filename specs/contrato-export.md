@@ -1,12 +1,14 @@
 # Contrato de export — fuente única de la obligatoriedad de columnas
 
-> **Estado:** **Pasos 0-6 y 8 hechos**, incluidos 4b y el **Paso 6** (2026-08-12), y los writers del Paso 6
-> migraron el 2026-08-13 (D-047) — 4 de los 5 (Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG
-> ×2 hojas). Del Paso 6 quedan afuera a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se
-> declaran, y por qué") y, de los writers, `acreditaciones_reporte` (ver "Lo que falta para migrar los
-> writers del Paso 6" — se queda con su .xlsx a mano). El **Paso 8** (2026-08-13) activó el bloqueo de
-> `OBLIGATORIA` en la carga de archivo, llevando antes el toggle ⊘ a esa superficie — con eso el gate del
-> contrato cubre los dos lados del cruce. Ver "Ya cerrado" para el detalle de cada paso.
+> **Estado:** **Pasos 0-6 cerrados.** Los 4b y 6 el 2026-08-12; los writers del Paso 6 el 2026-08-13
+> (D-047, 4 de los 5: Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG ×2 hojas), y el 5º
+> —`acreditaciones_reporte`— **cerrado como excepción permanente declarada y verificada** el 2026-08-13
+> (D-051): no migra al writer, pero su contrato dejó de ser una declaración sin quien la haga cumplir.
+> Quedan sin declarar a propósito `variaciones` y `acumuladores` (ver "Los 2 que no se declaran, y por
+> qué"). El **Paso 8** (2026-08-13) activó el bloqueo de `OBLIGATORIA` en la carga
+> de archivo, llevando antes el toggle ⊘ a esa superficie — con eso el gate del contrato cubre los dos
+> lados del cruce (D-052). Ver "Ya cerrado" para el detalle de cada paso. **Del plan sólo queda el
+> Paso 7** (D-041 y el skill `nuevo-control`).
 >
 > **Después del Paso 6** entraron dos contratos más, los del asiento de FINADIET (`finadiet_asiento_cc` y
 > `finadiet_asiento_gral`, D-046). No suman deuda de writer: nacieron sobre `writeContractSheet`, así que
@@ -137,6 +139,13 @@ cliente y **no puede llevar información de HR**.
    mismo `columns` alimenta la tabla de pantalla y el CSV, desaparecen los `colDefs` duplicados que
    hoy cada control tiene **dos veces** (`renderGsPersReporteResults` vs `exportGsPersReporteToXlsx`,
    ya divergidos: el `width` existe sólo en el segundo).
+   **Corrección de alcance (D-051):** "nadie más hace `addRow`" no se cumple universalmente y no era
+   alcanzable — la forma de un entregable la elige el destinatario, no el writer, y hay hojas que no son
+   "encabezado + N filas iguales" (la hoja CONTROL de Acreditaciones, la solapa ASIENTO de FINADIET).
+   Lo que sí se hace cumplir: todo export con contrato está declarado en `CON_WRITER` **o** en
+   `SIN_WRITER_POR_DISENO` con su motivo, y el que va a mano se verifica contra su contrato en
+   `tests/exportSinWriterConformidad.test.js` — la garantía pasa de estructural a estructural-o-asertada,
+   sin un tercer estado silencioso.
 2. **Runtime: el gate deriva, no enumera.** `canGoNext` pasa de dos `if (hasBrutos)/(hasGsPers)`
    cableados a una línea: `if (pendingRequirements(...).length > 0) return false`. Un control nuevo
    queda gateado **el día que se agrega**, sin tocar `canGoNext`. El mismo cálculo alimenta el panel
@@ -173,9 +182,9 @@ Cada paso es mergeable por separado y deja el repo funcionando.
 | **4a** | `writeContractSheet` + migrar los 2 exports "Generar Reporte" con `cols.has*` (Brutos, GS Pers — NR ya emite las 18 columnas siempre, no necesita este fix) a `layout: 'fijo'` ("que salga vacía", respuesta de Willy). | ✅ hecho — `js/exports/contractSheet.js`, `tests/contractSheet.test.js` |
 | **4b** | Migrar los 3 exports "Controlar" (encabezado de dos niveles con merges y bandas de color) + NR Reporte al mismo mecanismo. Van aparte porque hoy **ya son** `layout:'fijo'` por construcción — es sólo des-duplicación, no un fix de comportamiento. | ✅ hecho — `writeGroupedContractSheet()` en `js/exports/contractSheet.js` |
 | **5** | **Resultados dejan de mentir.** `summarize()` cuenta `unitsEvaluated` aparte de `unitsTotal`; se distingue "no evaluado" de "sin diferencia" en tiles y export. Cierra `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` del lado archivo (ver nota de alcance del Paso 2 arriba). | ✅ hecho — `js/controls/brutos.js`/`gsPers.js`, `tests/brutosControl.test.js`, `tests/gsPersControl.test.js`, `tests/e2e/brutosGsPersEvaluados.spec.js` |
-| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Lo que falta para migrar los writers del Paso 6"). | ✅ hecho (2026-08-12) — D-045; writers migrados el 2026-08-13 (4 de 5) — D-047 |
+| **6** | El resto de los exports declaran su contrato. **5 de 7 declarados** (`rendVsTabu`, `rendVsAsiento`, `rendXEe`, `catXEmpleados` ×2 hojas, `acreditaciones`); `variaciones` y `acumuladores` quedan afuera a propósito (generan un CONJUNTO de hojas calculado en runtime, que `ExportContract` no modela). Destapó un bug vivo de gate — ver abajo. Migrar los writers de esos 5 quedó como paso aparte (ver "Los writers del Paso 6, migrados"). | ✅ **cerrado** — contratos el 2026-08-12 (D-045); writers el 2026-08-13: 4 migrados (D-047) y `acreditaciones_reporte` como excepción permanente declarada y verificada (D-051) |
 | **7** | D-041 en `DECISIONS.md`, actualizar el skill `nuevo-control`, tachar los hotspots de la auditoría. | Parcial — este documento; falta D-041 y el skill |
-| **8** | **El gate de OBLIGATORIA llega a la carga de archivo.** El toggle ⊘ entra al formulario de mapeo y al panel de remapeo de `fileUpload.js`, y **recién ahí** `blocksProgress()` pasa a bloquear `OBLIGATORIA` (D-041 punto 4: un OBLIGATORIA no bloquea hasta que exista la vía de escape en esa misma superficie). Cierra el lado **archivo** que la nota de alcance del Paso 2 dejó anotado: los 18 `nrKey` de NR y `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers. La omisión persiste en el perfil del cliente y la auto-detección la respeta pero avisa si el archivo nuevo trae una columna candidata. | ✅ hecho (2026-08-13) — spec propia: `specs/obligatoria-gate-carga-archivo.md`, D-049; `fileUpload.js` · `tests/uploadOmission.test.js` · `tests/e2e/uploadOmission.spec.js` |
+| **8** | **El gate de OBLIGATORIA llega a la carga de archivo.** El toggle ⊘ entra al formulario de mapeo y al panel de remapeo de `fileUpload.js`, y **recién ahí** `blocksProgress()` pasa a bloquear `OBLIGATORIA` (D-041 punto 4: un OBLIGATORIA no bloquea hasta que exista la vía de escape en esa misma superficie). Cierra el lado **archivo** que la nota de alcance del Paso 2 dejó anotado: los 18 `nrKey` de NR y `salBaseColumn`/`aCuFutAumenColumn`/`gtosPersonalesColumn`/`dtoCocheraColumn` de Brutos/GS Pers. La omisión persiste en el perfil del cliente y la auto-detección la respeta pero avisa si el archivo nuevo trae una columna candidata. | ✅ hecho (2026-08-13) — spec propia: `specs/obligatoria-gate-carga-archivo.md`, D-052; `fileUpload.js` · `tests/uploadOmission.test.js` · `tests/e2e/uploadOmission.spec.js` |
 
 **Si sólo se podía hacer una cosa, era el Paso 2 + el Paso 5** — los dos ya están hechos. Los pasos
 0-4a fueron el andamio necesario para que el Paso 5 tuviera un lugar honesto donde declarar el hueco
@@ -333,22 +342,48 @@ Las dos entraron como `opts.totalRow` y `opts.dimIf` de `writeContractSheet`/`wr
 — ver el jsdoc de cada función en `js/exports/contractSheet.js` y el detalle completo en D-047
 (`DECISIONS.md`). De las dos que sólo necesitaban una parte, **fórmulas** no pidió ninguna feature nueva
 (`row[c.key]` ya viajaba tal cual a la celda; sólo hizo falta `numericValue()` para desenvolver `.result`
-donde el writer necesita el número) y **multi-hoja** terminó siendo la razón por la que Acreditaciones se
-queda afuera — ver el punto siguiente.
+donde el writer necesita el número) y **multi-hoja** quedó como la razón por la que Acreditaciones se
+queda afuera. Ojo: el relevamiento de D-051 corrigió esa lectura — ni multi-hoja ni las fórmulas entre
+hojas eran el motivo real; lo que lo deja afuera es la fila de TÍTULO y otras 5 cosas. Ver el punto
+siguiente.
 
 Con eso, 4 de los 5 migraron sin forzar nada: Rend vs Tabulado, Rend vs Asiento (con
 `writeGroupedContractSheet`, headerRows:2, un grupo de color por categoría) y Rend x EE (headerRows:1,
 grupos por columna) en `js/controls/rendVsTabu.js`/`rendVsAsiento.js`/`rendXEe.js`; EE x CATEG (con
 `writeContractSheet`, `opts.highlightIf` para resaltar la fila completa de un Puesto/CC con diferencia)
 en `js/controls/catXEmpleados.js`. Los 4 contratos pasaron a declarar layout (`width`/`groups`/
-`headerRows`) en `js/exports/contracts.js` y entraron a `CON_WRITER` en `tests/exportContracts.test.js`.
+`headerRows`) en `js/exports/contracts.js` y entraron a `CON_WRITER` (que desde D-051 vive ahí mismo, no en el test).
 
-**`acreditaciones_reporte` se queda sin writer, a propósito.** Cada hoja de detalle (una por acreditación
-real) lleva una fila de TÍTULO **antes** del encabezado — el nombre de la lista y el total, para no bajar
-a buscarlo — y esa forma ("título + encabezado + N filas + TOTAL") no es la que describe
-`writeContractSheet` ("encabezado + N filas iguales"). Sumar un título opcional al writer para este único
-consumidor es la abstracción que CLAUDE.md pide no forzar. Además el archivo entero es multi-hoja
-calculado en runtime (CONTROL + una hoja por acreditación, el mismo problema estructural que
-`variaciones`/`acumuladores` de más arriba) y sus totales cierran con fórmulas **entre** hojas
-(`'Nombre lista'!D1`), no dentro de una sola. `js/controls/acreditaciones.js` sigue armando su `.xlsx` a
-mano, y el assert de `tests/exportContracts.test.js` sigue exigiendo que su contrato no declare layout.
+**`acreditaciones_reporte` se queda sin writer, a propósito** — cerrado el 2026-08-13 como **excepción
+permanente declarada**, no como deuda (D-051). Al ir a cerrarlo se corrigieron las dos mitades del
+planteo de D-047:
+
+- **Las fórmulas entre hojas no eran un motivo.** Viven todas en la hoja CONTROL, que no tiene contrato
+  ni lo va a tener. Dentro de una hoja de detalle la fórmula es `SUM(D3:D<n>)`, misma hoja, y desde
+  D-047 eso viaja tal cual en `row[c.key]`.
+- **No faltaban 2 capacidades, faltaban 6**, cada una con este único consumidor: fila de TÍTULO (celdas
+  en las columnas 1/3/4 y un `'Total'` que no es etiqueta de ninguna columna), nombre de hoja en runtime,
+  `numFmt` por columna como **string** (CUIT/CBU como texto, Fecha con formato de fecha sobre un serial),
+  fila en blanco antes del TOTAL, TOTAL sin borde superior, `autoFilter`. Hoy `numFmt` sólo se puede
+  apagar, no fijar: sin eso la fecha sale como `46142`, así que "migrar aceptando diferencias cosméticas"
+  no era una opción.
+
+**Y el hallazgo que decidió la opción, que no era ninguno de los dos:** el contrato tenía un solo
+consumidor vivo, el assert de D-020. Nada verificaba que el `.xlsx` emitiera esas 7 columnas y sólo esas,
+así que `FINANZAS_ALLOWED_KEYS` probaba algo sobre la lista y **nada sobre el archivo que se descarga**.
+Una columna de dotación o de fecha de alta agregada a mano en el módulo salía a Finanzas del cliente con
+el test en verde. Eso es lo que se cerró:
+
+| Qué | Dónde |
+|---|---|
+| **`CON_WRITER` + `SIN_WRITER_POR_DISENO` particionan los contratos**, con motivo obligatorio por entrada (≥60 caracteres, para que no sea un opt-out cómodo). Antes no era una partición: `CON_WRITER` vivía en el test y el resto caía en un `else` con el mensaje "sin writer **todavía**", así que un contrato nuevo que se olvidara del writer **pasaba en silencio**, indistinguible de una excepción deliberada. Las dos listas viven en `contracts.js` porque las leen dos tests y porque el motivo es una declaración sobre el export, no un detalle de un test. | `js/exports/contracts.js` · `tests/exportContracts.test.js` |
+| **El test de conformidad**: arma el workbook de verdad y verifica que cada hoja de detalle emita exactamente las columnas del contrato, en orden, y que **ninguna fila escriba más allá de la última columna declarada** — el assert que ataja lo que a D-020 se le escapaba. Escrito para una población que crece: sumar una excepción exige su caso, y un assert lo verifica. | `tests/exportSinWriterConformidad.test.js` (en la cadena `test:unit`) |
+| **El encabezado sale del contrato**, no de una copia a mano. La línea queda limpia: el contrato declara la **semántica** (qué columnas y en qué orden), el módulo el **layout** (anchos, formatos, título). | `js/controls/acreditaciones.js` |
+| **`sheetNaming: 'runtime'`** — `sheet: 'Detalle de acreditación'` era un nombre que nunca aparece en el archivo (las hojas reales son `01 A 02-07`, una por acreditación): la misma "mentira en la fuente única" que dejó afuera a `variaciones`/`acumuladores`. Un assert impide combinarlo con `CON_WRITER`, que usa `contract.sheet` literal. | `js/exports/contracts.js` |
+| **`buildAcreditacionesWorkbook()`** separada de la descarga (puro movimiento de código), para inspeccionar celdas sin DOM ni Blob — completa la intención que el jsdoc ya declaraba y que la descarga contradecía. | `js/controls/acreditaciones.js` |
+
+El assert de "sin writer → no declara layout" sigue vigente, con el mensaje corregido de "todavía" a "por
+diseño". **Verificación del guardrail:** el workbook de `main` y el de la rama se compararon celda por
+celda (valor, font, fill, border, numFmt, alignment, anchos, `views`, `autoFilter`, merges de las 5 hojas,
+en los dos escenarios de `splitByEmpresa`) — idénticos; y se confirmó que la comparación no pasa por
+vacuidad cambiando el alto del encabezado y viéndola fallar. Detalle completo en D-051.

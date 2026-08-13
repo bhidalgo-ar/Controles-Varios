@@ -1,6 +1,6 @@
 # Gate de OBLIGATORIA en la carga de archivo — toggle ⊘ en fileUpload.js
 
-> **Estado:** **implementada el 2026-08-13** (D-049; confirmada por Willy el mismo día, antes de codear).
+> **Estado:** **implementada el 2026-08-13** (D-052; confirmada por Willy el mismo día, antes de codear).
 > Cierra el pendiente que D-041 (punto 4) dejó declarado y D-048 listó como "no se tocó":
 > activar el bloqueo de `OBLIGATORIA` en el formulario de carga, llevando antes la omisión
 > declarada (`OMITIDO`, toggle ⊘) a esa superficie. Es el mismo movimiento que el Paso 2 de

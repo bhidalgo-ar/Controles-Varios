@@ -1065,7 +1065,135 @@ el formulario de carga, ni el override de clave de legajo por corrida (D-038 pun
 
 ---
 
-## D-049 — El gate de OBLIGATORIA llega a la carga de archivo: el toggle ⊘ primero, el bloqueo después
+## D-049 — `tabIdCentroTrabColumn` / `tabIdCategoriaColumn` entran al panel del Paso 2
+
+**Fecha:** 2026-08-13
+**Contexto:** D-048 dejó reportado, para que lo decida Willy, que estas dos columnas las consume el
+contrato de `nr_reporte` y las completa sola `autoDetectTabExtraConfig`, pero no estaban en el panel
+"Columnas del Tabulado" — si la auto-detección se equivocaba, el analista no tenía dónde corregirlas
+ni cómo declararlas ausentes. `tests/exportContracts.test.js` las llevaba en un `Set`
+(`SIN_CAMPO_EN_LA_FICHA`) como excepción explícita al guard de que todo `from` de un contrato existe en
+la ficha de su archivo.
+**Decisión:** agregarlas como grupo propio de `FILE_TYPES.tab_control.extraFieldGroups`
+(`js/ui/fileTypes.js`) — `nrIdent`, con `header: 'Identificación NR'`, en vez de meterlas en `shared`:
+a diferencia de las 5 columnas compartidas (nombre, apellido, tres fechas), a estas sólo las lee
+`nr_reporte` — ni Brutos ni GS Pers las tocan — así que van con `requiredBy: 'nr'` como `nrIndem` y
+`nrOtros`, no con `requiredBy: null`. Las dos quedan `required: false` en la ficha, consistente con la
+`NECESSITY.OPCIONAL` que ya tenían en el contrato — así que `pendingTabRequirements()` (el gate de
+"no podés avanzar") sigue sin bloquear por ellas, exactamente como antes. Se sacó la excepción de
+`tests/exportContracts.test.js`: ahora cruzan como cualquier otra columna contra la ficha.
+**Alternativas descartadas:** dejarlas en `shared` (mezclaría en el subtítulo compartido dos columnas
+que sólo NR usa, y el día que alguna suba a OBLIGATORIA el gate las aplicaría también a Brutos/GS Pers,
+que es lo que la nota de `extraFieldGroups` en la ficha advierte que hay que evitar).
+**Verificación.** `npm run test:unit` completo (los conteos de `tests/fileTypes.test.js` que dependían
+del total de grupos/columnas de `tab_control` se actualizaron: 5→6 grupos, 27→29 columnas). Screenshot
+manual del panel del Paso 2 con el Tabulado cargado: el subtítulo "Identificación NR" aparece entre
+"Otros NR" y las 5 compartidas, con las dos columnas auto-detectadas contra un Tabulado de prueba.
+
+---
+
+## D-050 — Se unifica el texto de la zona de drop de Acumuladores con la etiqueta del tipo
+
+**Fecha:** 2026-08-13
+**Contexto:** D-048 encontró que la zona de drop de Acumuladores decía "Acumuladores (Axton)"
+(`dropLabel` en la ficha) mientras la etiqueta del tipo (`label`, la que ven las demás pantallas) decía
+"Acumuladores (export de Axton)" — divergencia anterior a la ficha, preservada a propósito en un paso
+de cero cambio de comportamiento y fijada con un assert que avisaba el día que alguien la tocara
+(`tests/fileTypes.test.js`). Quedó para que lo decidiera Willy.
+**Decisión:** unificar en "Acumuladores (export de Axton)" — se sacó el `dropLabel` de la ficha
+(`js/ui/fileTypes.js`) en vez de cambiar `label`, así que `dropLabelFor('acumuladores_file')` cae al
+mismo fallback (`fileTypeLabel`) que ya usaba CONTA, sin necesidad de un override. `dropHint`
+(" (uno por mes)") no cambia — no era parte de la divergencia.
+**Alternativas descartadas:** quedarse con "Acumuladores (Axton)" cambiando `label` — hubiera tocado
+la etiqueta que usan también el chip de "archivos que este control pide" (Paso 1) y cualquier otra
+pantalla que lea `fileTypeLabel`, más superficie para un cambio que sólo pedía unificar la zona de
+drop.
+**Verificación.** `npm run test:unit` (los asserts que fijaban la divergencia en
+`tests/fileTypes.test.js` pasan a afirmar que ya no diverge) y `npx playwright test
+tests/e2e/multiUpload.spec.js` (2 passed) con el texto esperado actualizado.
+
+---
+
+## D-051 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
+
+**Fecha:** 2026-08-13
+**Contexto:** Último pendiente del Paso 6 de `specs/contrato-export.md`. D-047 migró 4 de los 5 writers y
+dejó `acreditaciones_reporte` afuera con dos motivos: título antes del encabezado, y multi-hoja con
+fórmulas entre hojas. Al ir a cerrarlo, el relevamiento celda por celda contra `writeContractSheet`
+corrigió las dos mitades del planteo:
+
+1. **Las fórmulas entre hojas no son un motivo.** Viven todas en la hoja CONTROL, que no tiene contrato
+   ni lo va a tener (bloque de título, dos layouts según `splitByEmpresa`, filas de cierre). Dentro de
+   una hoja de detalle la fórmula es `SUM(D3:D<n>)`, misma hoja, y desde D-047 eso viaja tal cual en
+   `row[c.key]` sin que el writer tenga que saber nada.
+2. **No faltan 2 capacidades, faltan 6**, cada una con este único consumidor: la fila de TÍTULO (celdas
+   en las columnas 1/3/4 y un `'Total'` que no es la etiqueta de ninguna columna), el nombre de hoja en
+   runtime, `numFmt` por columna como **string** (CUIT/CBU como texto — el CBU tiene 22 dígitos y ceros
+   a la izquierda, como número Excel lo pasa a notación científica y se pierde; y Fecha con formato de
+   fecha sobre un serial), la fila en blanco antes del TOTAL, el TOTAL sin borde superior, y
+   `autoFilter`. Hoy `numFmt` sólo se puede **apagar** (`numFmt: false`), no fijar: sin esa capacidad la
+   fecha saldría como `46142` — o sea que "migrar y aceptar diferencias cosméticas" no era una opción.
+
+**Y el hallazgo que decidió la opción**, que no era ninguno de los dos anteriores: el contrato tenía **un
+solo consumidor vivo**, el assert de D-020. Nada verificaba que el `.xlsx` emitiera esas 7 columnas y
+sólo esas, así que `FINANZAS_ALLOWED_KEYS` probaba algo sobre la lista de columnas y **nada sobre el
+archivo que se descarga**: una columna de fecha de alta o de dotación agregada a mano en el módulo salía
+a Finanzas del cliente con los 1291 asserts en verde. El riesgo real no era el layout duplicado.
+
+**Decisión (Willy, 2026-08-13):** el writer **no** gana las capacidades. `acreditaciones_reporte` queda
+declarado como excepción permanente, y la excepción se paga con verificación:
+
+1. **`CON_WRITER` y `SIN_WRITER_POR_DISENO` particionan `EXPORT_CONTRACTS`**, y viven en
+   `js/exports/contracts.js` (no en el test: los leen dos tests, y el motivo de una excepción es una
+   declaración sobre el export). Antes esto no era una partición — `CON_WRITER` vivía en el test y todo
+   lo demás caía en un `else` con el mensaje "sin writer **todavía**", así que **un contrato nuevo que se
+   olvidara del writer pasaba el test en silencio**, indistinguible de una excepción deliberada. Y
+   "todavía" afirmaba una intención de migrar que en este caso no existe. El motivo es texto obligatorio
+   (≥60 caracteres), para que la lista no se vuelva un opt-out cómodo.
+2. **`tests/exportSinWriterConformidad.test.js`** arma el workbook de verdad —con el fake de ExcelJS, el
+   mismo enfoque de `contractSheet.test.js`— y verifica que cada hoja de detalle emita exactamente las
+   columnas del contrato, en orden, y que **ninguna fila escriba más allá de la última columna
+   declarada**. Ese segundo assert es el que ataja lo que a D-020 se le escapaba. Está escrito para una
+   población que crece: sumar una excepción exige su caso acá, y otro assert verifica que toda entrada de
+   `SIN_WRITER_POR_DISENO` lo tenga.
+3. **El encabezado sale del contrato** (`DETALLE_COLUMNS`), no de una copia a mano. Queda una línea
+   limpia: el contrato declara la **semántica** (qué columnas y en qué orden), el módulo el **layout**
+   (anchos, formatos, título) — que es la misma línea que ya usaban los contratos del Paso 6.
+4. **`sheetNaming: 'runtime'`.** `sheet: 'Detalle de acreditación'` era un nombre que **nunca aparece en
+   el archivo** (las hojas reales se llaman `01 A 02-07`, una por acreditación): exactamente la "mentira
+   en la fuente única" que D-045 usó para dejar afuera a `variaciones`/`acumuladores`. Declararlo lo
+   vuelve honesto, y un assert impide combinarlo con `CON_WRITER` (el writer usa `contract.sheet` literal).
+5. **`buildAcreditacionesWorkbook()`** separada de `exportAcreditacionesToXlsx()` — puro movimiento de
+   código — para poder inspeccionar las celdas sin DOM ni Blob. Completa la intención que el jsdoc del
+   módulo ya declaraba ("así se puede verificar sin pasar por el DOM") y que la descarga contradecía.
+
+**Alternativas descartadas:** sumarle las 6 capacidades al writer y migrar. Se descartó por tres razones,
+en orden de peso: (a) 5 de las 6 tendrían un único consumidor, la abstracción que CLAUDE.md pide no
+forzar; (b) hay que reescribir el archivo que recibe Finanzas del cliente y **no había ninguna cobertura
+sobre sus bytes** para comparar contra qué; (c) **no compra la garantía**: la hoja CONTROL sigue a mano
+bajo cualquier opción, así que "ningún export se escribe a mano" tampoco se cumple después del trabajo.
+También se descartó la variante "migrar aceptando diferencias cosméticas" (precedente de D-047 punto 5):
+acá una de las diferencias sería la fecha saliendo como número serial, que no es cosmética.
+
+**Verificación.** El guardrail era que el archivo no cambiara: se comparó **celda por celda** el workbook
+de `main` (con sólo el split mecánico aplicado, para poder llamarlo) contra el de esta rama, en los dos
+escenarios de `splitByEmpresa`, volcando valor + font + fill + border + numFmt + alignment + anchos +
+`views` + `autoFilter` + merges de las 5 hojas: **idénticos** (~49k caracteres de volcado). Y se confirmó
+que la comparación no pasa por vacuidad cambiando el alto del encabezado de 18 a 20 y viéndola fallar en
+la línea exacta. El test nuevo se validó con las dos regresiones que dice atajar: una 8ª columna en el
+`addRow` de las filas de detalle (falla con "2 fila(s) escriben hasta 8 valores") y el encabezado vuelto
+a cablear con una etiqueta cambiada (falla con el diff completo). `npm run test:unit`: 32 archivos, 0 ✗.
+`tests/moduleCycles.test.js` en verde con el `import` estático nuevo de `contracts.js` en
+`acreditaciones.js` — el gotcha de D-041/D-045, que acá no aplica porque `contracts.js` no importa
+`acreditaciones.js`.
+
+**Motivo:** cierra el Paso 6 de `specs/contrato-export.md`. Willy: *"esto nos va a seguir pasando"* — de
+ahí que la excepción se diseñe como población que crece y no como caso especial: la forma de un
+entregable la elige el destinatario, no el writer.
+
+---
+
+## D-052 — El gate de OBLIGATORIA llega a la carga de archivo: el toggle ⊘ primero, el bloqueo después
 
 **Fecha:** 2026-08-13
 **Contexto:** D-041 (punto 4) dejó la regla escrita: un campo `OBLIGATORIA` no bloquea hasta que exista
