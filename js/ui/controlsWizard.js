@@ -32,11 +32,6 @@ import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
 import { DEFAULT_LEGAJO_KEY_MODE }      from '../utils/legajo.js';
 import { currentPeriod, periodOptions, previousPeriod, periodToLabel } from '../utils/dates.js';
 import { renderConceptGroupingEditor }     from './rendVsTabuConceptEditor.js';
-import { renderRendVsAsientoConfigEditor, DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
-import { renderAgrupadoresConfigEditor, DEFAULT_AGRUPADORES_CONFIG } from '../controls/agrupadores.js';
-import { renderAcreditacionesConfigEditor, DEFAULT_ACREDITACIONES_CONFIG } from '../controls/acreditaciones.js';
-import { renderAcumuladoresConfigEditor, DEFAULT_ACUMULADORES_CONFIG } from '../controls/acumuladoresGanancias.js';
-import { renderFinadietAsientoConfigEditor } from '../controls/finadietAsiento.js';
 import {
   VARIACIONES_IDS,
   hayVariaciones,
@@ -79,9 +74,6 @@ function clearTabSessionCache() {
 const BRUTOS_IDS  = ['brutos', 'brutos_reporte'];
 const GS_PERS_IDS = ['gs_pers', 'gs_pers_reporte'];
 const NR_IDS      = ['nr', 'nr_reporte'];
-const ACREDITACIONES_IDS = ['acreditaciones_reporte'];
-const ACUMULADORES_IDS   = ['acumuladores_ganancias'];
-const FINADIET_ASIENTO_IDS = ['finadiet_asiento'];
 // VARIACIONES_IDS se importa de ./variacionesConceptMap.js — lo comparten el
 // wizard y el panel de mapeo de conceptos.
 
@@ -103,7 +95,10 @@ function metadataDeTabulado(fileData) {
   };
 }
 
-// Controles que usan la agrupación de conceptos de Rend vs Tabulado
+// Quiénes muestran el editor de agrupación de conceptos. No sale de la
+// declaración de config porque Rend vs Asiento también la declara —pero
+// `readOnly`, para leerla sin editarla— y este panel es sólo de los dos que sí
+// la editan.
 const REND_GROUPING_IDS = ['rend_vs_tabu', 'rend_x_ee'];
 
 // Resuelve un objeto de promesas por clave — el mismo `Promise.all` que hoy,
@@ -114,6 +109,54 @@ async function promiseAllByKey(promisesByKey) {
   const keys = Object.keys(promisesByKey);
   const values = await Promise.all(keys.map(k => promisesByKey[k]));
   return Object.fromEntries(keys.map((k, i) => [k, values[i]]));
+}
+
+
+// ── Config por control, declarada en el registry ─────────────────────────────
+// Cada control declara su `config` (ver el encabezado de registry.js) y de ahí
+// salen los cinco momentos de su ciclo de vida: cargar, inicializar el state,
+// mostrar el editor, guardar y viajar a `run()`. Antes cada config estaba
+// cableada en esos cinco lugares más el import y una constante de ids, sin nada
+// que ligara los siete: agregar una y olvidarse del `mapping` daba un control
+// corriendo con su default sin que nada avisara.
+
+/** Todas las configs declaradas, deduplicadas por `key`. */
+function allDeclaredConfigs() {
+  const porClave = new Map();
+  for (const ctrl of Object.values(CONTROL_REGISTRY)) {
+    for (const cfg of (ctrl.config || [])) {
+      if (!porClave.has(cfg.key)) porClave.set(cfg.key, cfg);
+    }
+  }
+  return [...porClave.values()];
+}
+
+/** Las configs que declaran los controles seleccionados, deduplicadas. */
+function selectedConfigs(state, { soloEditables = false } = {}) {
+  const vistas = new Set();
+  const out = [];
+  for (const controlId of state.selectedControls) {
+    for (const cfg of (CONTROL_REGISTRY[controlId]?.config || [])) {
+      if (soloEditables && cfg.readOnly) continue;
+      if (vistas.has(cfg.key)) continue;
+      vistas.add(cfg.key);
+      out.push(cfg);
+    }
+  }
+  return out;
+}
+
+/**
+ * ¿Vale la pena persistir este valor?
+ *
+ * Un objeto vacío no: es "el analista no configuró nada", y guardarlo le crea al
+ * cliente una config que dice lo mismo que no tenerla. Es lo que hacía el
+ * chequeo `Object.keys(state.tabExtraConfig).length > 0` — el único de los siete
+ * bloques que lo tenía, porque es el único cuyo default es `{}`.
+ */
+function valeGuardar(value) {
+  if (!value) return false;
+  return typeof value !== 'object' || Object.keys(value).length > 0;
 }
 
 export async function renderControlsWizard(root, clientId) {
@@ -133,26 +176,22 @@ export async function renderControlsWizard(root, clientId) {
   // destructurado por orden no tiene ningún guard entre la lista y los nombres
   // — desalinear una entrada mete la config de un control en el state de otro
   // sin ningún error (Fase 4, Paso 0 del plan de escalabilidad).
+  // Las 9 configs declaradas se cargan siempre, no sólo las de los controles
+  // seleccionados: el Paso 0 todavía no eligió nada cuando esto corre.
+  const declaradas = allDeclaredConfigs();
   const loaded = await promiseAllByKey({
-    savedBrutosConfig:         getControlConfig(client.code, 'brutos_tab_config'),
-    savedCatalog:              getClientCatalog(client.code),
-    savedRendGrouping:         getControlConfig(client.code, 'rendvstabu_concept_grouping'),
-    savedRvaConfig:            getControlConfig(client.code, 'rva_config'),
-    savedAgrupadoresConfig:    getControlConfig(client.code, 'agrupadores_config'),
-    savedAcreditacionesConfig: getControlConfig(client.code, 'acreditaciones_config'),
-    savedAcumuladoresConfig:   getControlConfig(client.code, 'acumuladores_config'),
-    savedFinadietAsientoConfig: getControlConfig(client.code, 'finadiet_asiento_config'),
-    savedVariacionesConfig:    getControlConfig(client.code, 'variaciones_config'),
-    savedVariacionesMap:       getControlConfig(client.code, 'variaciones_concept_map'),
-    groupers:                  getGroupers(client.code),
-    allControlConfigs:         getControlConfigsForClient(client.code),
+    savedCatalog:      getClientCatalog(client.code),
+    groupers:          getGroupers(client.code),
+    allControlConfigs: getControlConfigsForClient(client.code),
+    ...Object.fromEntries(declaradas.map(cfg => [cfg.key, getControlConfig(client.code, cfg.key)])),
   });
-  const {
-    savedBrutosConfig, savedCatalog, savedRendGrouping, savedRvaConfig,
-    savedAgrupadoresConfig, savedAcreditacionesConfig, savedAcumuladoresConfig,
-    savedFinadietAsientoConfig,
-    savedVariacionesConfig, savedVariacionesMap, groupers, allControlConfigs,
-  } = loaded;
+  const { savedCatalog, groupers, allControlConfigs } = loaded;
+
+  // `||` y no `??`, igual que antes: una config guardada como `null` cae al
+  // default en vez de quedar en null.
+  const configState = Object.fromEntries(
+    declaradas.map(cfg => [cfg.stateKey, loaded[cfg.key]?.params || cfg.default()])
+  );
 
   // controlConfigs por controlId — se usa para resolver qué controles aplican a
   // este cliente: un `forzado_activo`/`forzado_no_aplica` cargado desde #/admin
@@ -179,30 +218,22 @@ export async function renderControlsWizard(root, clientId) {
     // tabExtraConfig: columnas adicionales del Tabulado para Brutos y GS Pers
     // (se persiste en controlConfigs bajo controlId 'brutos_tab_config' —
     // compartida entre Brutos/GS Pers/NR por compatibilidad histórica).
-    tabExtraConfig:            savedBrutosConfig?.params || {},
     tabExtraConfigAutoDetected: false,
-    rendVsTabuGrouping:        savedRendGrouping?.params || null,
     // Config del Control 6 (Rendimiento vs Asiento): clasificación CUENTA_CONTAB,
     // conceptos PROV CCSS y redirects de CC. Editable por el usuario en el paso Archivos.
-    rvaConfig:                 savedRvaConfig?.params || JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
     // Agrupadores del cliente + config de "Cruce por Agrupadores" (selección + umbrales,
     // ver agrupadores.js). Se cargan siempre (no sólo si el control está seleccionado),
     // mismo criterio que rvaConfig arriba.
     groupers:                  groupers || [],
-    agrupadoresConfig:         savedAgrupadoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
     // Config del reporte de Acreditaciones (Axton): corte por empresa.
-    acreditacionesConfig:      savedAcreditacionesConfig?.params || { ...DEFAULT_ACREDITACIONES_CONFIG },
     // Config del reporte de Acumuladores Ganancias (Axton): régimen RG4003/RG4030 + códigos de acumulador.
-    acumuladoresConfig:        savedAcumuladoresConfig?.params || JSON.parse(JSON.stringify(DEFAULT_ACUMULADORES_CONFIG)),
     // Config del asiento de FINADIET: plan de cuentas, centros de costo y fecha
     // de emisión. Sin config guardada cae a la semilla del módulo (D-035); en
     // cuanto el analista toque el editor, lo guardado reemplaza a la semilla.
-    finadietAsientoConfig:     savedFinadietAsientoConfig?.params || null,
     // Config del control de Variaciones (POF): qué conceptos compara cada reporte
     // y qué códigos cuentan como causa de ausencia. Sin config guardada, el
     // control cae a la semilla de variaciones.js. La UI para editar la lista
     // todavía no existe — ver ROADMAP.md.
-    variacionesConfig:         savedVariacionesConfig?.params || null,
     // Mapeo confirmado de concepto → columna, por archivo. Lo llena el panel
     // "Conceptos a comparar" del Paso 2 (ver variacionesConceptMap.js).
     variacionesMap:            null,
@@ -211,8 +242,10 @@ export async function renderControlsWizard(root, clientId) {
     // entrada al wizard, así que antes salir y volver a entrar lo perdía y el
     // analista reconfirmaba concepto por concepto, en los dos Tabulados, todos
     // los meses. Al estar en `controlConfigs` viaja además en el seed (D-035).
-    variacionesMapGuardado:    savedVariacionesMap?.params || null,
     controlConfigsByControlId,
+
+    // Las 9 configs declaradas por los controles (ver registry.js)
+    ...configState,
 
     originFilter:              null,       // label del chip de origen activo en Paso 1 (null = "Todos")
     controlQuery:              '',         // texto del buscador de controles en Paso 1
@@ -1088,85 +1121,26 @@ function renderStepFiles(container, state, root) {
     // El panel de conceptos de Variaciones se monta una sola vez, fuera del loop
     // (lo comparten los dos controles). Ver más abajo.
 
-    // Editor de configuración de Rendimiento vs Asiento (visible junto a sus archivos)
-    if (controlId === 'rend_vs_asiento') {
-      const mapWrapper = document.createElement('div');
-      mapWrapper.style.marginBottom = 'var(--sp-3)';
-      filesArea.appendChild(mapWrapper);
-
-      // Construir lookups a partir del CONTA si está cargado
-      const contaData = state.controlFiles[controlId]?.conta;
-      const accountNames = {};
-      const conceptNames = {};
-      for (const r of (contaData?.parsedRows || [])) {
-        const cc = String(r.cuenta_contab || '').trim();
-        const cn = String(r.n_cuenta_contable || '').trim();
-        if (cc && cn && !accountNames[cc]) accountNames[cc] = cn;
-        const co = String(r.id_concepto || '').trim();
-        const nl = String(r.nombre_largo || '').trim();
-        if (co && nl && !conceptNames[co]) conceptNames[co] = nl;
-      }
-
-      renderRendVsAsientoConfigEditor(mapWrapper, {
-        config:       state.rvaConfig,
-        accountNames,
-        conceptNames,
-        openByDefault: true,
-        onChange:     (newConfig) => { state.rvaConfig = newConfig; },
-      });
-    }
-
-    // Opciones del reporte de Acreditaciones (corte por empresa)
-    if (ACREDITACIONES_IDS.includes(controlId)) {
+    // Editores de config del control, declarados en el registry. Eran cinco
+    // bloques idénticos salvo por el nombre de la función y el del state.
+    for (const cfg of (ctrl.config || [])) {
+      if (!cfg.editor) continue;
       const cfgWrapper = document.createElement('div');
       cfgWrapper.style.marginBottom = 'var(--sp-3)';
       filesArea.appendChild(cfgWrapper);
 
-      renderAcreditacionesConfigEditor(cfgWrapper, {
-        config:        state.acreditacionesConfig,
-        openByDefault: false,
-        onChange:      (newConfig) => { state.acreditacionesConfig = newConfig; },
-      });
-    }
-
-    // Opciones del reporte de Acumuladores Ganancias (régimen + códigos de acumulador)
-    if (ACUMULADORES_IDS.includes(controlId)) {
-      const cfgWrapper = document.createElement('div');
-      cfgWrapper.style.marginBottom = 'var(--sp-3)';
-      filesArea.appendChild(cfgWrapper);
-
-      renderAcumuladoresConfigEditor(cfgWrapper, {
-        config:        state.acumuladoresConfig,
-        openByDefault: true,
-        onChange:      (newConfig) => { state.acumuladoresConfig = newConfig; },
-      });
-    }
-
-    // Cuentas contables, centros de costo y fecha de emisión del asiento de FINADIET
-    if (FINADIET_ASIENTO_IDS.includes(controlId)) {
-      const cfgWrapper = document.createElement('div');
-      cfgWrapper.style.marginBottom = 'var(--sp-3)';
-      filesArea.appendChild(cfgWrapper);
-
-      renderFinadietAsientoConfigEditor(cfgWrapper, {
-        config:        state.finadietAsientoConfig,
-        openByDefault: !state.finadietAsientoConfig?.fechaEmision,
-        onChange:      (newConfig) => { state.finadietAsientoConfig = newConfig; },
-      });
-    }
-
-    // Editor de "Agrupadores y umbrales" del Cruce por Agrupadores
-    if (controlId === 'agrupadores') {
-      const cfgWrapper = document.createElement('div');
-      cfgWrapper.style.marginBottom = 'var(--sp-3)';
-      filesArea.appendChild(cfgWrapper);
-
-      renderAgrupadoresConfigEditor(cfgWrapper, {
-        config:        state.agrupadoresConfig,
-        groupers:      state.groupers,
-        clientId:      state.clientId,
-        openByDefault: true,
-        onChange:      (newConfig) => { state.agrupadoresConfig = newConfig; renderWizardNav(root, state); },
+      cfg.editor(cfgWrapper, {
+        config:        state[cfg.stateKey],
+        openByDefault: typeof cfg.openByDefault === 'function'
+          ? cfg.openByDefault(state)
+          : !!cfg.openByDefault,
+        ...(cfg.editorProps ? cfg.editorProps(state) : {}),
+        onChange: (newConfig) => {
+          state[cfg.stateKey] = newConfig;
+          // Sólo el de Agrupadores cambia si se puede avanzar (elige qué
+          // agrupadores entran, y se exige al menos uno).
+          if (cfg.affectsNav) renderWizardNav(root, state);
+        },
       });
     }
   }
@@ -1704,29 +1678,14 @@ async function executeControls(state, statusEl, container, root) {
     // ── Paso 1 · Leyendo archivos ────────────────────────────────────────────
     // Las preferencias del usuario (mapeos de columnas) se guardan siempre,
     // sean borrador o quick — son configuración que el usuario reusa.
-    const needsTabExtra = state.selectedControls.some(id =>
-      BRUTOS_IDS.includes(id) || GS_PERS_IDS.includes(id) || NR_IDS.includes(id)
-    );
-    if (needsTabExtra && Object.keys(state.tabExtraConfig).length > 0) {
-      await saveControlConfig(state.client.code, 'brutos_tab_config', { params: state.tabExtraConfig });
-    }
-    if (state.selectedControls.some(id => REND_GROUPING_IDS.includes(id)) && state.rendVsTabuGrouping) {
-      await saveControlConfig(state.client.code, 'rendvstabu_concept_grouping', { params: state.rendVsTabuGrouping });
-    }
-    if (state.selectedControls.includes('rend_vs_asiento') && state.rvaConfig) {
-      await saveControlConfig(state.client.code, 'rva_config', { params: state.rvaConfig });
-    }
-    if (state.selectedControls.includes('agrupadores') && state.agrupadoresConfig) {
-      await saveControlConfig(state.client.code, 'agrupadores_config', { params: state.agrupadoresConfig });
-    }
-    if (state.selectedControls.some(id => ACREDITACIONES_IDS.includes(id)) && state.acreditacionesConfig) {
-      await saveControlConfig(state.client.code, 'acreditaciones_config', { params: state.acreditacionesConfig });
-    }
-    if (state.selectedControls.some(id => ACUMULADORES_IDS.includes(id)) && state.acumuladoresConfig) {
-      await saveControlConfig(state.client.code, 'acumuladores_config', { params: state.acumuladoresConfig });
-    }
-    if (state.selectedControls.some(id => FINADIET_ASIENTO_IDS.includes(id)) && state.finadietAsientoConfig) {
-      await saveControlConfig(state.client.code, 'finadiet_asiento_config', { params: state.finadietAsientoConfig });
+    // Se guarda lo que declaró algún control seleccionado, salvo lo `readOnly`
+    // (la agrupación de conceptos vista desde Rend vs Asiento, y las dos de
+    // Variaciones, que guarda su propio panel al confirmar).
+    for (const cfg of selectedConfigs(state, { soloEditables: true })) {
+      const value = state[cfg.stateKey];
+      if (valeGuardar(value)) {
+        await saveControlConfig(state.client.code, cfg.key, { params: value });
+      }
     }
 
     // El run en sí se crea sólo si NO es quickRun
@@ -1773,23 +1732,22 @@ async function executeControls(state, statusEl, container, root) {
         // distintos por lado, el control informa faltantes que no faltan.
         legajoKeyMode: state.client?.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE,
       };
-      if ((REND_GROUPING_IDS.includes(controlId) || controlId === 'rend_vs_asiento') && state.rendVsTabuGrouping) {
-        mapping.conceptGrouping = state.rendVsTabuGrouping;
-      }
-      if (controlId === 'rend_vs_asiento' && state.rvaConfig) {
-        mapping.rvaConfig = state.rvaConfig;
-      }
-      if (ACREDITACIONES_IDS.includes(controlId)) {
-        mapping.acreditacionesConfig = state.acreditacionesConfig || { ...DEFAULT_ACREDITACIONES_CONFIG };
-      }
-      if (ACUMULADORES_IDS.includes(controlId)) {
-        mapping.acumuladoresConfig = state.acumuladoresConfig || { ...DEFAULT_ACUMULADORES_CONFIG };
-      }
-      if (FINADIET_ASIENTO_IDS.includes(controlId)) {
-        // `null` = nunca se configuró nada: el control cae a la semilla. No se
-        // manda DEFAULT_... acá para que "sin configurar" y "configurado igual a
-        // la semilla" no se vuelvan indistinguibles.
-        mapping.finadietAsientoConfig = state.finadietAsientoConfig || null;
+      // Lo que cada control declaró que necesita ver en `run()`. Una config sin
+      // `mappingKey` no viaja: es la que se arma a mano más abajo (el merge de
+      // `mapping.tab`, el compuesto de Variaciones).
+      for (const cfg of (ctrl.config || [])) {
+        if (!cfg.mappingKey) continue;
+        // Con `mappingValue` la config viaja SIEMPRE, incluso como `null` — es
+        // el caso del asiento de FINADIET, donde `null` significa "nunca se
+        // configuró" y el `run()` lo distingue de una config igual a la semilla
+        // (D-035). Sin `mappingValue`, viaja sólo si tiene valor: es el caso de
+        // la agrupación de conceptos y de rvaConfig, que sin configurar no le
+        // dicen nada al control.
+        if (cfg.mappingValue) {
+          mapping[cfg.mappingKey] = cfg.mappingValue(state);
+        } else if (state[cfg.stateKey]) {
+          mapping[cfg.mappingKey] = state[cfg.stateKey];
+        }
       }
       if (controlId === 'agrupadores') {
         const cfg           = state.agrupadoresConfig || {};
@@ -1801,9 +1759,10 @@ async function executeControls(state, statusEl, container, root) {
           const concepts = await getGrouperConcepts(g.id);
           grouperConceptsMap[g.id] = concepts.map(c => c.conceptCode);
         }
+        // `agrupadoresConfig` ya lo puso el loop de arriba desde la declaración;
+        // acá sólo quedan los dos que hay que ir a buscar a la base.
         mapping.grouperDefs        = grouperDefs;
         mapping.grouperConceptsMap = grouperConceptsMap;
-        mapping.agrupadoresConfig  = cfg;
       }
       for (const fileSpec of ctrl.additionalFiles) {
         const fileData = state.controlFiles[controlId]?.[fileSpec.key];

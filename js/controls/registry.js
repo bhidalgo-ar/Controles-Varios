@@ -43,6 +43,31 @@
 //                     a Acreditaciones, así que el botón no seleccionaba nada en esos clientes.
 //                     Un grupo puede tener más de una primary (Variaciones tiene dos). Ver D-040.
 //                     Si está, se renderiza dentro del grupo. Si falta, el control es standalone.
+//   config          — configuración propia del control, guardada por cliente en
+//                     `controlConfigs` (D-035). Es un ARRAY: un control puede tener
+//                     más de una (Variaciones tiene dos), y varios controles pueden
+//                     declarar la MISMA (Brutos/GS Pers/NR comparten las columnas del
+//                     Tabulado). Antes cada una estaba cableada en 7 lugares de
+//                     controlsWizard.js —import, carga, state, constante de ids,
+//                     editor, guardado y `mapping`— sin nada que ligara los siete.
+//                     Campos:
+//                       key           — clave en `controlConfigs`
+//                       stateKey      — dónde vive en el state del wizard
+//                       default()     — valor cuando el cliente no configuró nada.
+//                                       Devuelve una copia nueva, no una referencia
+//                                       compartida: el editor la muta en el lugar.
+//                       editor        — render del panel del Paso 2, si tiene uno
+//                       editorProps(state) — opts extra del editor (lo que necesita
+//                                       del resto del state)
+//                       openByDefault — booleano o (state) => booleano
+//                       mappingKey    — cómo la ve `run()`. Sin esto no viaja al
+//                                       control (el caso de las que se arman a mano,
+//                                       como el merge de `mapping.tab`)
+//                       mappingValue(state) — override del valor que viaja
+//                       readOnly      — la lee pero no la guarda. Es el caso de
+//                                       rend_vs_asiento con la agrupación de
+//                                       conceptos: la usa, pero quien la edita y la
+//                                       persiste son Rend vs Tabulado y Rend x EE.
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
@@ -98,6 +123,8 @@ import {
   runRendVsAsiento,
   renderRendVsAsientoResults,
   summarizeRendVsAsiento,
+  renderRendVsAsientoConfigEditor,
+  DEFAULT_RVA_CONFIG,
 } from './rendVsAsiento.js';
 
 import {
@@ -110,6 +137,8 @@ import {
   runAgrupadores,
   renderAgrupadoresResults,
   summarizeAgrupadores,
+  renderAgrupadoresConfigEditor,
+  DEFAULT_AGRUPADORES_CONFIG,
 } from './agrupadores.js';
 
 import {
@@ -125,18 +154,23 @@ import {
   runAcreditacionesReporte,
   renderAcreditacionesReporteResults,
   summarizeAcreditacionesReporte,
+  renderAcreditacionesConfigEditor,
+  DEFAULT_ACREDITACIONES_CONFIG,
 } from './acreditaciones.js';
 
 import {
   runAcumuladoresGanancias,
   renderAcumuladoresResults,
   summarizeAcumuladoresGanancias,
+  renderAcumuladoresConfigEditor,
+  DEFAULT_ACUMULADORES_CONFIG,
 } from './acumuladoresGanancias.js';
 
 import {
   runFinadietAsiento,
   renderFinadietAsientoResults,
   summarizeFinadietAsiento,
+  renderFinadietAsientoConfigEditor,
 } from './finadietAsiento.js';
 
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
@@ -208,6 +242,11 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'brutos', label: 'Reporte de Brutos', fileType: 'brutos_file' },
     ],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runBrutos,
     summarize:     summarizeBrutos,
     renderResults: renderBrutosResults,
@@ -233,6 +272,11 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'brutos', label: 'Brutos', mode: 'Generar Reporte' },
     tabRequired: true,
     additionalFiles: [],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runBrutosReporte,
     summarize:     summarizeBrutosReporte,
     renderResults: renderBrutosReporteResults,
@@ -261,6 +305,11 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'gs_pers', label: 'Reporte de GS Pers', fileType: 'gs_pers_file' },
     ],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runGsPers,
     summarize:     summarizeGsPers,
     renderResults: renderGsPersResults,
@@ -284,6 +333,11 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'gs_pers', label: 'GS Pers', mode: 'Generar Reporte' },
     tabRequired: true,
     additionalFiles: [],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runGsPersReporte,
     summarize:     summarizeGsPersReporte,
     renderResults: renderGsPersReporteResults,
@@ -312,6 +366,11 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'nr', label: 'Reporte de NR', fileType: 'nr_file' },
     ],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runNr,
     summarize:     summarizeNr,
     renderResults: renderNrResults,
@@ -337,6 +396,11 @@ export const CONTROL_REGISTRY = {
     group:       { id: 'nr', label: 'Control NR', mode: 'Generar Reporte' },
     tabRequired: true,
     additionalFiles: [],
+    // Columnas del Tabulado que piden Brutos, GS Pers y NR. La comparten los 6
+    // controles (clave histórica 'brutos_tab_config'), su panel es bespoke
+    // (renderTabExtraConfig) y no viaja como `mappingKey` porque se mergea
+    // dentro de `mapping.tab` junto al mapeo del propio archivo.
+    config: [{ key: 'brutos_tab_config', stateKey: 'tabExtraConfig', default: () => ({}) }],
     run:           runNrReporte,
     summarize:     summarizeNrReporte,
     renderResults: renderNrReporteResults,
@@ -364,6 +428,10 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'rend', label: 'Reporte de Rendimiento', fileType: 'rend_file' },
     ],
+    // Agrupación de conceptos de Rendimiento. La comparten Rend vs Tabulado y
+    // Rend x EE, que son quienes la editan y la guardan; Rend vs Asiento la lee.
+    config: [{ key: 'rendvstabu_concept_grouping', stateKey: 'rendVsTabuGrouping',
+               default: () => null, mappingKey: 'conceptGrouping' }],
     run:           runRendVsTabu,
     summarize:     summarizeRendVsTabu,
     renderResults: renderRendVsTabuResults,
@@ -397,6 +465,32 @@ export const CONTROL_REGISTRY = {
       { key: 'conta', label: 'Contabilidad Desglosada',         fileType: 'conta_file', rerenderOnLoad: true },
       { key: 'ccXEe', label: 'CC x Empleado (opcional)',         fileType: 'cc_x_ee_file', optional: true },
     ],
+    config: [
+      // Lee la agrupación de conceptos pero no la edita ni la guarda: de eso se
+      // encargan Rend vs Tabulado y Rend x EE. Sin `readOnly`, correr sólo este
+      // control persistiría una agrupación que su pantalla nunca mostró.
+      { key: 'rendvstabu_concept_grouping', stateKey: 'rendVsTabuGrouping',
+        default: () => null, mappingKey: 'conceptGrouping', readOnly: true },
+      { key: 'rva_config', stateKey: 'rvaConfig', mappingKey: 'rvaConfig',
+        default: () => JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
+        editor: renderRendVsAsientoConfigEditor,
+        openByDefault: true,
+        // Con la CONTA cargada, el editor muestra el nombre de cada cuenta y
+        // concepto al lado de su código.
+        editorProps: (state) => {
+          const accountNames = {}, conceptNames = {};
+          for (const r of (state.controlFiles?.rend_vs_asiento?.conta?.parsedRows || [])) {
+            const cc = String(r.cuenta_contab || '').trim();
+            const cn = String(r.n_cuenta_contable || '').trim();
+            if (cc && cn && !accountNames[cc]) accountNames[cc] = cn;
+            const co = String(r.id_concepto || '').trim();
+            const nl = String(r.nombre_largo || '').trim();
+            if (co && nl && !conceptNames[co]) conceptNames[co] = nl;
+          }
+          return { accountNames, conceptNames };
+        },
+      },
+    ],
     run:           runRendVsAsiento,
     summarize:     summarizeRendVsAsiento,
     renderResults: renderRendVsAsientoResults,
@@ -425,6 +519,10 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'costoTotal', label: 'Reporte de Costo Total (por empleado)', fileType: 'costo_total_file' },
     ],
+    // Agrupación de conceptos de Rendimiento. La comparten Rend vs Tabulado y
+    // Rend x EE, que son quienes la editan y la guardan; Rend vs Asiento la lee.
+    config: [{ key: 'rendvstabu_concept_grouping', stateKey: 'rendVsTabuGrouping',
+               default: () => null, mappingKey: 'conceptGrouping' }],
     run:           runRendXEe,
     summarize:     summarizeRendXEe,
     renderResults: renderRendXEeResults,
@@ -463,6 +561,17 @@ export const CONTROL_REGISTRY = {
       { key: 'resumenLargo',    label: 'Resumen — Formato Largo (opcional)',                fileType: 'resumen_largo_excel', optional: true },
       { key: 'resumenTabulado', label: 'Resumen — Formato Tabulado Horizontal (opcional)',  fileType: 'resumen_tabulado_horizontal', optional: true },
     ],
+    config: [{ key: 'agrupadores_config', stateKey: 'agrupadoresConfig',
+               mappingKey: 'agrupadoresConfig',
+               default: () => JSON.parse(JSON.stringify(DEFAULT_AGRUPADORES_CONFIG)),
+               mappingValue: (state) => state.agrupadoresConfig || {},
+               editor: renderAgrupadoresConfigEditor,
+               openByDefault: true,
+               // El editor cambia qué agrupadores entran, y eso decide si se
+               // puede avanzar — por eso su onChange redibuja la nav (lo hace el
+               // wizard al ver `affectsNav`).
+               affectsNav: true,
+               editorProps: (state) => ({ groupers: state.groupers, clientId: state.clientId }) }],
     run:           runAgrupadores,
     summarize:     summarizeAgrupadores,
     renderResults: renderAgrupadoresResults,
@@ -498,6 +607,12 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'acreditaciones', label: 'Acreditaciones (export de Axton)', fileType: 'acreditaciones_file' },
     ],
+    config: [{ key: 'acreditaciones_config', stateKey: 'acreditacionesConfig',
+               mappingKey: 'acreditacionesConfig',
+               default: () => ({ ...DEFAULT_ACREDITACIONES_CONFIG }),
+               mappingValue: (state) => state.acreditacionesConfig || { ...DEFAULT_ACREDITACIONES_CONFIG },
+               editor: renderAcreditacionesConfigEditor,
+               openByDefault: false }],
     run:           runAcreditacionesReporte,
     summarize:     summarizeAcreditacionesReporte,
     renderResults: renderAcreditacionesReporteResults,
@@ -530,6 +645,12 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'acumuladores', label: 'Acumuladores (export repacumuladores de Axton) — uno por mes', fileType: 'acumuladores_file' },
     ],
+    config: [{ key: 'acumuladores_config', stateKey: 'acumuladoresConfig',
+               mappingKey: 'acumuladoresConfig',
+               default: () => JSON.parse(JSON.stringify(DEFAULT_ACUMULADORES_CONFIG)),
+               mappingValue: (state) => state.acumuladoresConfig || { ...DEFAULT_ACUMULADORES_CONFIG },
+               editor: renderAcumuladoresConfigEditor,
+               openByDefault: true }],
     run:           runAcumuladoresGanancias,
     summarize:     summarizeAcumuladoresGanancias,
     renderResults: renderAcumuladoresResults,
@@ -565,6 +686,17 @@ export const CONTROL_REGISTRY = {
       { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true,
         slot: '#js-var-prev-upload', rerenderOnLoad: true },
     ],
+    // Dos configs: la lista de conceptos a comparar (sin editor todavía) y el
+    // mapeo concepto → columna que confirma el analista. Ninguna viaja por
+    // `mappingKey`: las dos se arman dentro de `mapping.variaciones`.
+    // Las dos van `readOnly`: `variaciones_config` todavía no tiene editor (se
+    // edita a mano en la base), y el mapeo de conceptos lo guarda su propio
+    // panel en el momento en que el analista confirma — no al ejecutar. Sin
+    // esto, ejecutar escribiría de nuevo lo mismo por una segunda vía.
+    config: [
+      { key: 'variaciones_config',      stateKey: 'variacionesConfig',      default: () => null, readOnly: true },
+      { key: 'variaciones_concept_map', stateKey: 'variacionesMapGuardado', default: () => null, readOnly: true },
+    ],
     run:           runVariacionesSueldos,
     summarize:     summarizeVariacionesSueldos,
     renderResults: renderVariacionesSueldosResults,
@@ -597,6 +729,17 @@ export const CONTROL_REGISTRY = {
       // rerenderOnLoad: sus encabezados son los que ofrece el panel "Conceptos a comparar".
       { key: 'tab_prev', label: 'Tabulado del período anterior', fileType: 'tab_prev_file', optional: false, shared: true,
         slot: '#js-var-prev-upload', rerenderOnLoad: true },
+    ],
+    // Dos configs: la lista de conceptos a comparar (sin editor todavía) y el
+    // mapeo concepto → columna que confirma el analista. Ninguna viaja por
+    // `mappingKey`: las dos se arman dentro de `mapping.variaciones`.
+    // Las dos van `readOnly`: `variaciones_config` todavía no tiene editor (se
+    // edita a mano en la base), y el mapeo de conceptos lo guarda su propio
+    // panel en el momento en que el analista confirma — no al ejecutar. Sin
+    // esto, ejecutar escribiría de nuevo lo mismo por una segunda vía.
+    config: [
+      { key: 'variaciones_config',      stateKey: 'variacionesConfig',      default: () => null, readOnly: true },
+      { key: 'variaciones_concept_map', stateKey: 'variacionesMapGuardado', default: () => null, readOnly: true },
     ],
     run:           runVariacionesConceptos,
     summarize:     summarizeVariacionesConceptos,
@@ -634,6 +777,16 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       { key: 'asiento_conceptos', label: 'Conceptos liquidados (excel "FINADIET CONCEPTOS" de Meta4)', fileType: 'asiento_conceptos_file' },
     ],
+    config: [{ key: 'finadiet_asiento_config', stateKey: 'finadietAsientoConfig',
+               mappingKey: 'finadietAsientoConfig',
+               // `null` = nunca se configuró nada: el control cae a su semilla. No
+               // se manda el DEFAULT para que "sin configurar" y "configurado igual
+               // a la semilla" no se vuelvan indistinguibles (D-035). Y viaja
+               // explícitamente como `null`, no ausente: el `run()` distingue.
+               default: () => null,
+               mappingValue: (state) => state.finadietAsientoConfig || null,
+               editor: renderFinadietAsientoConfigEditor,
+               openByDefault: (state) => !state.finadietAsientoConfig?.fechaEmision }],
     run:           runFinadietAsiento,
     summarize:     summarizeFinadietAsiento,
     renderResults: renderFinadietAsientoResults,
