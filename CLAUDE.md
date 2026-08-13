@@ -10,6 +10,11 @@ Owner: Willy (Guillermo), único dueño del repo. Los usuarios son los analistas
 
 ## Cómo trabajar con Willy
 
+**Willy no es programador.** Las explicaciones, los resúmenes de lo hecho y sobre todo las preguntas
+sobre decisiones tienen que estar en lenguaje llano, sin tecnicismos: describí el efecto que ve el
+analista en la pantalla o en el archivo, no la implementación. Si una decisión necesita su input,
+planteá las opciones como "qué va a pasar cuando..." y no como alternativas técnicas.
+
 Español argentino, directo, sin sobre-formatear. Si el pedido tiene ambigüedad sobre un archivo de
 cliente —qué encabezados trae, contra qué se cruza, qué concepto es cuál— pará y preguntá: eso no se
 adivina, y un control construido sobre una suposición se descubre recién cuando ya salió al cliente.
