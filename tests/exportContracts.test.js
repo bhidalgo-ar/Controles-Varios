@@ -19,8 +19,8 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
-const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress, FINANZAS_ALLOWED_KEYS,
-        CON_WRITER, SIN_WRITER_POR_DISENO } =
+const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, typeOfKey, blocksProgress,
+        FINANZAS_ALLOWED_KEYS, CON_WRITER, SIN_WRITER_POR_DISENO } =
   await import('./js/exports/contracts.js');
 
 // Las columnas de entrada las declara la ficha de cada tipo de archivo
@@ -72,10 +72,52 @@ for (const c of contracts) {
     // olvida declararlo, `writeContractSheet` no tiene con qué alinear la
     // celda, y sale mal sin que nada avise (exactamente el default silencioso
     // que este diseño existe para evitar).
-    assert(`${c.exportId}.${col.key}: type es 'txt' o 'num'`,
-      col.type === 'txt' || col.type === 'num');
+    assert(`${c.exportId}.${col.key}: type es 'txt', 'num' o 'date'`,
+      col.type === 'txt' || col.type === 'num' || col.type === 'date');
   }
 }
+
+// ── `type` como fuente del aviso de columna (`typeOfKey`) ────────────────────
+// `type` describe cómo se escribe el valor en el archivo final, y desde
+// `typeOfKey()` también qué se espera en la columna de ORIGEN — las dos lecturas
+// tienen que coincidir o el aviso de `js/ui/columnHints.js` afirma cualquier cosa.
+// Por eso las 3 columnas que son fecha de verdad declaran `'date'` y no `'txt'`:
+// pasan por `fmtDate` y salen como texto, que es lo que las tenía declaradas mal.
+
+for (const key of ['tabFecAltaColumn', 'tabFecBajaColumn', 'tabFecPagoColumn']) {
+  assert(`typeOfKey('tab_control', '${key}') es 'date'`,
+    typeOfKey('tab_control', key) === 'date');
+}
+
+// Un `type` distinto para la misma clave en dos contratos es una contradicción a
+// resolver en el contrato, no algo que `typeOfKey()` deba promediar: gana el
+// primero y el aviso saldría mal en el resto. Se afirma que no pasa.
+{
+  const tipoPorClave = new Map(); // `${fileType}::${key}` -> { type, exportId }
+  const divergentes = [];
+  for (const c of Object.values(EXPORT_CONTRACTS)) {
+    for (const col of c.columns) {
+      for (const k of col.from) {
+        const sk = `${col.fromFile}::${k}`;
+        const prev = tipoPorClave.get(sk);
+        if (!prev) tipoPorClave.set(sk, { type: col.type, exportId: c.exportId });
+        else if (prev.type !== col.type) {
+          divergentes.push(`${sk}: '${prev.type}' en ${prev.exportId} vs '${col.type}' en ${c.exportId}`);
+        }
+      }
+    }
+  }
+  assert(`ninguna clave declara dos type distintos${divergentes.length ? ': ' + divergentes.join(' · ') : ''}`,
+    divergentes.length === 0);
+}
+
+// `typeOfKey` devuelve `null` —no un default— para una clave que ningún contrato
+// consume: sin esto, `columnHints.js` avisaría sobre columnas de las que no sabe
+// nada, que es la forma más rápida de volver el aviso ruido y que se ignore.
+assert('typeOfKey de una clave que ningún contrato usa devuelve null',
+  typeOfKey('tab_control', 'columnaQueNoExisteEnNingunContrato') === null);
+assert('typeOfKey mira el fileType, no sólo la clave',
+  typeOfKey('nr_file', 'tabFecPagoColumn') === null);
 
 // ── `width` — sólo donde hay un consumidor real (Pasos 4a y 4b) ──────────────
 // Los 6 contratos migrados a `writeContractSheet`/`writeGroupedContractSheet`

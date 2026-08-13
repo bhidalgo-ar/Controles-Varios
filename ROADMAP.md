@@ -107,7 +107,7 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 | # | Qué | Por qué primero / qué lo traba |
 |---|---|---|
 | 1 | **Asiento de FINADIET contra el archivo real, y que Gaby lo compare contra un mes ya cerrado** (3.9) | Es el control más nuevo y el único que nunca se verificó contra un resultado armado a mano. Riesgo de "número mal pero coherente", que es el que no detecta nadie. **Pendiente de prueba** (Willy, 2026-08-13) — depende de pedir el archivo, no de programar |
-| 2 | **Que se vea qué columna eligió el analista, y avisar si el contenido no es del tipo esperado** (el mis-mapeo) | Es el agujero que queda después de los 8 pasos del contrato: una columna vacía ahora grita, una columna **equivocada** sigue pasando en verde. Las tres opciones, con el mecanismo verificado en el código, en `specs/auditoria-escalabilidad-2026-08.md` ("Lo único abierto"). Falta que Willy elija el alcance |
+| 2 | **Que se vea qué columna eligió el analista, y avisar si el contenido no es del tipo esperado** (el mis-mapeo) | **Opciones 1 y 2 hechas** (2026-08-13): la muestra de valores reales debajo de cada columna elegida y el aviso de tipo, en las dos pantallas, más el aviso anotado en los resultados de la corrida. Ver `specs/muestra-y-aviso-de-columna.md` y D-053. **Queda la opción 3** — arreglar la prioridad de las palabras clave de la auto-detección (`autoDetectTabExtraConfig` recorre los encabezados por fuera y las palabras por dentro, así que gana el primer encabezado del archivo que contenga cualquiera). Va aparte a propósito: mueve mapeos que hoy salen bien por casualidad, y con la muestra ya visible el analista puede ver qué cambió |
 | 3 | **Los 8 conceptos de NR sin semilla de código** | Trabajo chico, bloqueado sólo por un archivo: hace falta un Tabulado de un mes con indemnizaciones liquidadas. No se inventan por analogía (D-039). **Pendiente de prueba** (Willy, 2026-08-13). Mientras tanto se piden en el Paso 2, con el toggle ⊘ como salida — que es el comportamiento correcto |
 | 4 | **Los códigos de Rend vs Tabulado, a `tabCodes.js`** | Consistencia, no corrección: los ~56 códigos de `DEFAULT_CONCEPT_CONFIG` (`js/controls/rendVsTabu.js`) **sí** son semilla y **sí** se pueden editar por cliente desde el Paso 2 (`js/ui/rendVsTabuConceptEditor.js`, guardados en `controlConfigs`), así que una renumeración del cliente no necesita un commit. Lo único desalineado es que esa lista no vive junto a las otras semillas |
 | 5 | **Lo que espera un caso real, y no por olvido** | Override de clave de legajo por corrida (F1 · D-038 punto 2); NR derivado del catálogo del cliente en vez de los 18 cableados (recién es requisito cuando un 2º cliente pida NR); las pantallas que le faltan a Variaciones (editor de conceptos y de ausencias, reuso de la corrida anterior, concepto `1000` sin validar). Los tres necesitan un archivo o un cliente concreto: decidirlos en el aire sale mal |
@@ -154,6 +154,26 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 - **Variación entre períodos — reuso de la corrida anterior.** Volver a resolver el período anterior desde IndexedDB para subir un solo archivo por mes. Requiere primero **cerrar con el cliente la regla de qué quincena compara contra cuál** (los dos tabulados de muestra comparan 2ª de marzo contra 2ª de abril, pero el documento base dice que los jornales van contra la quincena inmediata anterior y los mensuales contra el mes anterior), y que el histórico del cliente guarde la quincena y no sólo el mes. Se sacó en D-035 justamente porque adivinarlo armaba comparaciones mal sin avisar.
 - **Variación entre períodos — concepto `1000` (mensuales) sin validar.** No aparece en ninguno de los tabulados de muestra. La lógica está y suma sola cuando exista, pero nunca corrió contra datos reales.
 - **Variación entre períodos — promoción a control de sistema.** Con los códigos fuera del código fuente, lo único específico de `POF` que queda es la semilla de la config. Cuando haya un segundo cliente con el mismo reporte, evaluar pasar el scope de `cliente` a `sistema`, igual que se hizo con los de Marval (D-015).
+- **Las fechas: `fmtDate` convierte cualquier número en una fecha creíble.** Willy pidió el 2026-08-13
+  dejarlo anotado como trabajo a futuro, y es importante. Las tres copias
+  (`js/controls/gsPers.js`, `js/controls/nr.js`, `js/controls/catXEmpleados.js`) tratan **todo** número
+  entre 1 y 100.000 como fecha de Excel: un importe que quedó mapeado en una columna de fecha sale como
+  una fecha plausible en el `.xlsx` que recibe el cliente, y nadie lo detecta. Es el amplificador del
+  mis-mapeo, no el mis-mapeo en sí: el aviso de columna (D-053) avisa **antes**, en pantalla, pero si el
+  analista lo pasa por alto el archivo igual sale con una fecha inventada.
+  **Por qué no entró con D-053:** cambiar ese rango cambia lo que sale en el entregable de tres controles
+  (una celda que hoy dice "15/03/2026" podría pasar a decir "1234"), así que necesita su propia decisión
+  de Willy sobre qué mostrar cuando el número no es una fecha creíble — vacío, el número crudo, o un
+  aviso en la fila. Lo que sí quedó hecho: el rango angosto y correcto (1970-2100) ya está escrito y
+  probado en `js/ui/columnHints.js`, así que cuando se decida, el criterio no hay que volver a pensarlo.
+- **Que la corrida guarde con qué columnas del Tabulado corrió.** Salió al implementar D-053: el aviso de
+  columna se recalcula de lo que la corrida guarda (`controlRunFiles`: filas + mapeo por archivo), y ahí
+  está el mapeo del **archivo** pero no las columnas que se eligen en el **Paso 2** (`tabExtraConfig`:
+  los 18 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN / GTOS_PERSONALES / DTO_COCHERA y las
+  3 de fecha) — viajan al control pero no al registro del archivo. Efecto para el analista: el aviso de
+  esas columnas se ve al elegirlas, pero no se repite en la pantalla de resultados. Arreglarlo es guardar
+  el mapeo del Tabulado ya mergeado en la corrida; es chico, pero es una decisión sobre qué se persiste
+  (y de paso deja la corrida auto-descriptiva: hoy no queda registro de con qué columnas se corrió).
 - **Los 8 conceptos NR sin semilla de código** — verificado en el código el 2026-08-13: siguen siendo
   exactamente estos 8, y los otros 10 los resuelve sola la app. `INDEM_ANT_FALLE`, `INDM_MATERNIDAD`,
   `GRAT_VAC`, `GRA_VACNOG_SAC`, `INDEM_FUER_MAY`, `INDEM_EMBARAZO`, `ASIG_PAS` e `INCREMENTO_ST` no

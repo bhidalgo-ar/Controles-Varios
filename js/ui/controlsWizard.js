@@ -20,8 +20,9 @@ import {
   getControlConfigsForClient,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
-import { necessityOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
-import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge } from './fileUpload.js';
+import { necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
+import { columnValues, columnHintHtml } from './columnHints.js';
+import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge, wireColumnHints } from './fileUpload.js';
 import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor } from './fileTypes.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
@@ -1332,7 +1333,11 @@ export function shouldAutoFillTabValue(actual, tabHeaders) {
   return !actual || isStaleTabValue(actual, tabHeaders);
 }
 
-function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr }) {
+// Exportada para el fixture de `tests/e2e/columnHints.spec.js`: el panel es una
+// de las dos superficies donde se elige una columna, y la muestra de valores hay
+// que verla montada en un navegador real (el unit no puede). Nada más la usa
+// desde afuera — el wizard la llama desde el paso 2, unas líneas más arriba.
+export function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr }) {
   const tabHeaders = state.tab?.parsedRows?.length > 0
     ? Object.keys(state.tab.parsedRows[0])
     : [];
@@ -1373,6 +1378,18 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
     ['', ...tabHeaders]
       .map(h => `<option value="${esc(h)}" ${h === selected ? 'selected' : ''}>${esc(h) || '— Sin asignar —'}</option>`)
       .join('');
+
+  // La muestra de valores reales de la columna elegida, más el aviso si su
+  // contenido no se parece a lo que el contrato espera ahí. El tipo sale de
+  // `typeOfKey()` y no de una lista propia de este panel — es el mismo criterio
+  // que ya usa `necessityOfKey()` unas líneas más abajo. Sin Tabulado cargado
+  // devuelve '' solo, porque no hay valores de dónde sacar la muestra.
+  const hintFor = (key, col) =>
+    columnHintHtml(
+      columnValues(state.tab?.parsedRows, col),
+      typeOfKey('tab_control', key),
+      { esc },
+    );
 
   // Reemplaza el panel anterior en vez de apilar uno nuevo — la función se
   // vuelve a llamar a sí misma después de tocar el toggle ⊘, para que el
@@ -1421,7 +1438,7 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
         const puedeOmitir = necessity === NECESSITY.OBLIGATORIA;
         const esBloqueante = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
         return `
-          <div class="form-group" style="margin-bottom:0;">
+          <div class="form-group" style="margin-bottom:0;" data-fu-field-group="${esc(f.key)}">
             <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">
               ${esc(f.label)}${omitido ? ' <span style="color:var(--color-text-muted);font-size:0.8em;">⊘ declarada ausente</span>' : badge}
             </label>
@@ -1437,6 +1454,7 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
               ` : ''}
             </div>
             ${omitido ? `<div class="text-muted" style="font-size:var(--text-xs);margin-top:2px;">No se resuelve — se computa como sin dato, no como cero.</div>` : ''}
+            <div data-fu-col-hint>${omitido ? '' : hintFor(f.key, val)}</div>
           </div>
         `;
       }).join('')}
@@ -1459,6 +1477,11 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
       await guardarConfig();
     });
   });
+
+  // La muestra de valores se rehace al cambiar de columna. Es el mismo helper
+  // de las dos superficies de carga (`fileUpload.js`), con el mismo contrato de
+  // markup — así el cableado vive en un solo lugar y no en tres.
+  wireColumnHints(panel, hintFor);
 
   panel.querySelectorAll('[data-tab-extra-omit]').forEach(btn => {
     btn.addEventListener('click', async () => {

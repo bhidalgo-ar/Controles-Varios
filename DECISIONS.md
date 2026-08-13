@@ -1247,3 +1247,82 @@ de candidata) y capturas en claro y oscuro. Suite e2e completa: mismos 12 fallos
 **Límite conocido (heredado de D-041, no nuevo):** la omisión declarada es una firma, no una prueba —
 un analista apurado puede declarar ausente una columna que el archivo sí trae. La mejora es que queda
 asentada, visible y fuera del verde; no que sea imposible.
+
+---
+
+## D-053 — La muestra de valores de la columna elegida, y el aviso cuando su contenido no es lo que ahí va
+
+**Fecha:** 2026-08-13
+**Contexto:** Después de los PR #100-#129 quedó abierto un solo hallazgo del relevamiento de
+escalabilidad, y no salía del inventario de bugs sino de la letra chica de `specs/contrato-export.md`
+("lo que este diseño NO resuelve"): el **mis-mapeo**. Los 8 pasos del contrato de export lograron que una
+columna **vacía** grite —gate, badge "⚠ sin asignar", toggle ⊘—, pero una columna **equivocada** sigue
+pasando en verde: mapeada + obligatoria = satisfecha, aunque apunte al lugar errado. Y la mandatoriedad
+lo *empeora*, porque un `required` queda satisfecho por el valor equivocado. Tres mecanismos verificados
+en el código lo vuelven probable y no teórico: `autoDetectTabExtraConfig` recorre los encabezados por
+fuera y las palabras clave por dentro (gana el primer encabezado que contenga cualquiera, no la palabra
+más específica); las 3 copias de `fmtDate` convierten todo número entre 1 y 100.000 en una fecha
+plausible; y el `type` que los contratos declaran no lo mira nadie.
+
+Se le presentaron a Willy tres opciones y eligió el orden: **(1) muestra de valores → (2) aviso de tipo
+→ (3) prioridad de la auto-detección**, esta última en otro PR. Spec previa acordada antes de codear:
+`specs/muestra-y-aviso-de-columna.md`.
+
+**Decisión:**
+
+1. **La muestra va siempre visible**, dos valores reales debajo de cada columna elegida
+   (`ej.: 15/03/2026 · 28/03/2026`). El caso más común es que el analista **no toque nada**, porque la app
+   propone el mapeo sola: una muestra que aparece sólo al abrir el desplegable no la ve nadie. Se dibuja
+   en las **dos** superficies donde se elige una columna (formulario de mapeo y panel de remapeo de
+   `fileUpload.js`, y panel "Columnas del Tabulado" del Paso 2) y se rehace al cambiar de columna — si
+   no, queda afirmando algo sobre la columna anterior, que es peor que no mostrar nada.
+2. **El aviso avisa, no traba.** Un archivo raro del cliente no puede dejar al analista sin trabajar
+   (D-036), y la salida declarada (⊘) es para "no viene", no para "está mal".
+3. **Y queda anotado en la pantalla de resultados** de la corrida, para que el que revisa después vea que
+   se corrió con una columna sospechosa. **Se recalcula, no se guarda**: sale de las filas y el mapeo que
+   cada archivo de la corrida ya tiene guardados, así no hay una segunda copia que se desincronice del
+   archivo con el que se corrió, y no cambia el esquema de la base.
+4. **El criterio es conservador a propósito:** avisa sólo si **ninguno** de los valores mirados (hasta 20
+   con dato) se parece al tipo esperado, y con menos de 2 valores no afirma nada. Un aviso que salta de
+   más se ignora a la tercera vez y deja de proteger — el mismo riesgo de fatiga que `contrato-export.md`
+   anota para las omisiones declaradas.
+5. **`typeOfKey(fileType, key)` deriva el tipo esperado de los contratos**, hermana de `necessityOfKey()`
+   y por el mismo motivo: ninguna pantalla tiene su propia lista de qué es qué. Y las 3 columnas que son
+   fecha de verdad (`FECHA_ALTA`/`FECHA_BAJA`/`FEC_PAGO`) pasan a declarar `type: 'date'` en vez de
+   `'txt'`. **`type` describía cómo se escribe el valor en el archivo final, no qué tiene que traer la
+   columna de origen** — por eso estaban declaradas texto (pasan por `fmtDate` y salen como texto), y por
+   eso el aviso no podía decir "acá va una fecha". Sin este alineamiento, la opción 2 no cubría el caso
+   que la motivó.
+
+**Alternativas descartadas:** mostrar la muestra sólo al abrir el desplegable o al pasar el mouse (no la
+ve el que no toca nada, que es el caso común); trabar hasta confirmar (rompe D-036 y convierte el ⊘ en
+"aceptar cualquier cosa"); guardar la lista de avisos con la corrida (una segunda copia que puede
+desincronizarse del archivo, sin ganar nada: los datos para recalcularla ya están); sumar la copia número
+29 de `esc` en el módulo nuevo o crear `js/utils/html.js` de paso (el escapador viaja como parámetro,
+mismo patrón de `consolidate.js`, que es lo que D-042 aprendió a hacer bien); arreglar `fmtDate` en el
+mismo PR (cambia el entregable de tres controles — queda anotado en `ROADMAP.md` con la decisión que
+necesita).
+
+**Motivo:** el mis-mapeo es el caso peor y el más silencioso —**da un número mal, no un vacío**, así que
+ningún aviso de "columna sin asignar" lo agarra— y la única defensa que no depende de adivinar es que el
+analista **vea** qué eligió. Por eso la muestra va primero y el aviso segundo: el aviso sólo puede
+detectar lo que es distinguible por forma, y "un importe donde va otro importe" no lo es.
+
+**Verificación:** `tests/columnHints.test.js` (55 asserts, en la cadena de `package.json`), con cada
+propiedad crítica validada al revés — revertir `type: 'date'`, aflojar el criterio conservador a 1 valor,
+o sacar el escapado hacen fallar asserts específicos (probado). `tests/exportContracts.test.js` sube a
+1296 asserts con tres nuevos: los 3 `type: 'date'`, que ninguna clave declare dos tipos distintos, y que
+`typeOfKey` devuelva `null` (no un default) para una clave que ningún contrato consume.
+`tests/e2e/columnHints.spec.js` en Chromium real, 4 tests: la muestra aparece sin tocar nada y se rehace
+al cambiar de columna, el ⊘ se la lleva, el panel del Paso 2 la muestra igual, y el aviso se lee en los
+dos temas. **El `.xlsx` no cambia:** los 4 contratos con writer se escribieron celda por celda (valor,
+fuente, relleno, bordes, `numFmt`, alineación, anchos, merges) con `type: 'date'` y con `'txt'` — salida
+idéntica, y la comparación se validó cambiando un `type` que sí importa y viéndola diferir. Suite e2e
+completa: los mismos 12 fallos que la baseline (los que necesitan CDN, D-048), verificado corriendo
+`origin/main` en un worktree limpio.
+
+**Límite conocido, escrito en la spec y en el módulo:** el aviso deja pasar lo que es indistinguible por
+forma (un importe donde va otro importe; una fecha donde va un número, porque un serial de Excel *es* un
+número). Eso lo ataja la muestra visible, no el aviso — y es la razón del orden. Y las columnas del
+Paso 2 no se repiten en la pantalla de resultados porque la corrida no guarda ese mapeo (anotado en
+`ROADMAP.md` como la decisión que falta).

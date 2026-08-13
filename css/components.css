@@ -611,6 +611,24 @@
   margin-top: var(--sp-1);
 }
 
+/* Muestra de valores reales de la columna elegida, y el aviso de que su
+   contenido no se parece a lo que ahí va (js/ui/columnHints.js). Va debajo del
+   <select>, en las dos pantallas donde se elige una columna — la de carga del
+   archivo y el panel "Columnas del Tabulado" del Paso 2. Chico y siempre
+   visible: con 27 columnas en el panel de NR, algo más grande empuja el resto
+   fuera de pantalla, y algo que hay que ir a buscar no lo ve nadie. */
+.col-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.col-hint--warn {
+  color: var(--color-warning);
+  font-weight: var(--fw-semibold);
+}
+
 /* ── File upload ─────────────────────────────────────────────── */
 .file-drop {
   border: 1px dashed var(--color-border);
