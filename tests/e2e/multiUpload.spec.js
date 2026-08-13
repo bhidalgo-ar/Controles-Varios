@@ -5,8 +5,9 @@
 // red. Este fixture sirve las dos librerías desde `node_modules` y monta
 // `initFileUploadStep` solo, así que corre en cualquier lado — y ejercita lo que
 // el Paso 2 rewireó: que el flujo salga del `flow` declarado en la ficha y no de
-// un `if` por nombre de archivo, y que los textos de la zona de drop queden
-// EXACTAMENTE como estaban.
+// un `if` por nombre de archivo, y que los textos de la zona de drop salgan de
+// `dropLabelFor`/`dropHintFor` (D-050: Acumuladores ya no tiene un `dropLabel`
+// propio, cae al mismo fallback que CONTA).
 //
 // Datos inventados, como manda el repo: legajos '1'/'2', Perez/Gomez.
 
@@ -38,7 +39,7 @@ test('Acumuladores: pantalla propia, con período por archivo', async ({ page })
   await page.evaluate(() => window.__mount('acumuladores_file'));
 
   expect(await page.evaluate(() => window.__dropText()))
-    .toBe('Acumuladores (Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
+    .toBe('Acumuladores (export de Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
 
   await page.evaluate(() => window.__drop('acumuladores_file', ['repacumuladores.20260428.101010.xlsx']));
   const d = await page.evaluate(() => window.__completes.at(-1));

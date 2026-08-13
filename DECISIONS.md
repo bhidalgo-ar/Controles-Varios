@@ -1092,6 +1092,28 @@ manual del panel del Paso 2 con el Tabulado cargado: el subtítulo "Identificaci
 
 ---
 
+## D-050 — Se unifica el texto de la zona de drop de Acumuladores con la etiqueta del tipo
+
+**Fecha:** 2026-08-13
+**Contexto:** D-048 encontró que la zona de drop de Acumuladores decía "Acumuladores (Axton)"
+(`dropLabel` en la ficha) mientras la etiqueta del tipo (`label`, la que ven las demás pantallas) decía
+"Acumuladores (export de Axton)" — divergencia anterior a la ficha, preservada a propósito en un paso
+de cero cambio de comportamiento y fijada con un assert que avisaba el día que alguien la tocara
+(`tests/fileTypes.test.js`). Quedó para que lo decidiera Willy.
+**Decisión:** unificar en "Acumuladores (export de Axton)" — se sacó el `dropLabel` de la ficha
+(`js/ui/fileTypes.js`) en vez de cambiar `label`, así que `dropLabelFor('acumuladores_file')` cae al
+mismo fallback (`fileTypeLabel`) que ya usaba CONTA, sin necesidad de un override. `dropHint`
+(" (uno por mes)") no cambia — no era parte de la divergencia.
+**Alternativas descartadas:** quedarse con "Acumuladores (Axton)" cambiando `label` — hubiera tocado
+la etiqueta que usan también el chip de "archivos que este control pide" (Paso 1) y cualquier otra
+pantalla que lea `fileTypeLabel`, más superficie para un cambio que sólo pedía unificar la zona de
+drop.
+**Verificación.** `npm run test:unit` (los asserts que fijaban la divergencia en
+`tests/fileTypes.test.js` pasan a afirmar que ya no diverge) y `npx playwright test
+tests/e2e/multiUpload.spec.js` (2 passed) con el texto esperado actualizado.
+
+---
+
 ## D-051 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
 
 **Fecha:** 2026-08-13

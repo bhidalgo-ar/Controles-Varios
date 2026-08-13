@@ -315,32 +315,28 @@ assert('un tipo sin flow declarado es "single" (el default de 15 de los 17)',
 assert('los dos flujos multi NO son el mismo',
   flowFor('conta_file') !== flowFor('acumuladores_file'));
 
-// ── Los textos de la zona de drop, preservados al pie de la letra ────────────
-// La zona de drop de Acumuladores decía "Acumuladores (Axton)" mientras la
-// etiqueta del tipo dice "Acumuladores (export de Axton)". La divergencia es
-// anterior a la ficha. Derivar el texto de `label` la habría "arreglado" en un
-// paso que es cero cambio de comportamiento, así que se declara tal cual y se
-// fija acá — el día que Willy decida unificarlas, este assert es el que avisa
-// que el texto de pantalla cambia.
+// ── Los textos de la zona de drop ────────────────────────────────────────────
+// Hasta D-048 la zona de drop de Acumuladores decía "Acumuladores (Axton)"
+// mientras la etiqueta del tipo decía "Acumuladores (export de Axton)" — una
+// divergencia anterior a la ficha, preservada a propósito en un paso de cero
+// cambio de comportamiento. D-050 las unificó sacando el `dropLabel` de la
+// ficha: ahora cae al mismo fallback que ya usaba CONTA.
 
-assert('la zona de drop de Acumuladores conserva su texto histórico',
-  dropLabelFor('acumuladores_file') === 'Acumuladores (Axton)');
-assert('…que NO es el mismo que la etiqueta del tipo (la divergencia sigue viva)',
-  dropLabelFor('acumuladores_file') !== fileTypeLabel('acumuladores_file'));
+assert('la zona de drop de Acumuladores ya no diverge de la etiqueta del tipo',
+  dropLabelFor('acumuladores_file') === fileTypeLabel('acumuladores_file'));
 assert('Acumuladores aclara que va uno por mes',
   dropHintFor('acumuladores_file') === ' (uno por mes)');
-assert('CONTA no diverge: su zona de drop usa la etiqueta del tipo',
+assert('CONTA tampoco diverge: su zona de drop usa la etiqueta del tipo',
   dropLabelFor('conta_file') === 'Contabilidad Desglosada'
   && dropLabelFor('conta_file') === fileTypeLabel('conta_file'));
 assert('CONTA no lleva aclaración extra', dropHintFor('conta_file') === '');
 
-// Las dos líneas completas, armadas igual que en la pantalla — es la forma de
-// afirmar "no cambió ni un carácter" sin abrir el navegador.
+// Las dos líneas completas, armadas igual que en la pantalla.
 const lineaDrop = ft => `${dropLabelFor(ft)} — arrastrá uno o varios .xlsx${dropHintFor(ft)}, o hacé clic para elegir`;
 assert('la línea de CONTA sale idéntica a la de antes de la ficha',
   lineaDrop('conta_file') === 'Contabilidad Desglosada — arrastrá uno o varios .xlsx, o hacé clic para elegir');
-assert('la línea de Acumuladores sale idéntica a la de antes de la ficha',
-  lineaDrop('acumuladores_file') === 'Acumuladores (Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
+assert('la línea de Acumuladores usa la etiqueta larga del tipo',
+  lineaDrop('acumuladores_file') === 'Acumuladores (export de Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
 
 // Un tipo desconocido no inventa un flujo multi: cae a 'single', que es el
 // camino que sí sabe avisar que el tipo no existe (parseFor tira el error).
