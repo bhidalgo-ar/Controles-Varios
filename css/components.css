@@ -1514,7 +1514,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 /* ── Wizard — casilleros de archivo + panel lateral (pantalla 1e) ─ */
 .wizard-onepane {
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 300px;
   gap: 0;
   font-family: var(--font-tool);
   margin: 0 calc(var(--sp-5) * -1);
@@ -1588,48 +1588,130 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 .ctrl-filter.is-active { background: var(--celeste); border-color: var(--celeste); color: var(--color-white); }
 .ctrl-filter.is-active b { color: rgba(255, 255, 255, .75); }
 
+.ctrl-toolbar__end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); }
+.ctrl-toolbar__count {
+  font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Campo de búsqueda: lupa fija a la izquierda y ✕ para borrarla cuando tiene
+   texto — la salida del estado "filtrado" tiene que estar en el propio campo. */
+.ctrl-search-box {
+  position: relative; display: inline-flex; align-items: center;
+  background: var(--color-surface); border: 1px solid var(--line);
+  border-radius: var(--radius-full); padding: 0 12px; transition: all .22s cubic-bezier(.4, 0, .2, 1);
+}
+.ctrl-search-box:focus-within { border-color: var(--celeste); box-shadow: 0 0 0 3px rgba(0, 172, 212, .12); }
+.ctrl-search-box.is-filled { border-color: var(--celeste); }
+.ctrl-search-box__icon { color: var(--t3); flex-shrink: 0; }
 .ctrl-search {
   font-family: var(--font-tool); font-size: 13px;
-  background: var(--color-surface); color: var(--ink);
-  border: 1px solid var(--line); border-radius: var(--radius-full);
-  padding: 6px 14px; width: 200px; min-width: 140px;
+  background: transparent; color: var(--ink); border: none;
+  padding: 6px 8px; width: 210px; min-width: 130px;
 }
 .ctrl-search::placeholder { color: var(--t3); }
-.ctrl-search:focus-visible { outline: 3px solid var(--celeste); outline-offset: 1px; }
+.ctrl-search:focus { outline: none; }
+.ctrl-search::-webkit-search-cancel-button { display: none; }
+.ctrl-search-box__clear {
+  appearance: none; background: none; border: none; cursor: pointer; flex-shrink: 0;
+  color: var(--t3); font-size: 12px; line-height: 1; padding: 2px 0 2px var(--sp-1);
+  font-family: var(--font-tool);
+}
+.ctrl-search-box__clear:hover { color: var(--ink); }
 
-.ctrl-rows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-family: var(--font-tool); }
+/* Coincidencia de la búsqueda dentro del nombre y la descripción */
+.ctrl-mark { background: var(--celeste-dim); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* Cards de control: una por control, separadas — la seleccionada se reconoce
+   por borde celeste + tinte, no sólo por el checkbox. */
+.ctrl-rows { display: flex; flex-direction: column; gap: var(--sp-2); font-family: var(--font-tool); }
 .ctrl-row {
   display: grid; grid-template-columns: 20px minmax(0, 1fr) auto;
-  gap: var(--sp-3); align-items: center; width: 100%;
-  padding: 10px 14px; text-align: left; cursor: pointer;
-  background: var(--color-surface); border: none; border-bottom: 1px solid var(--line-soft);
-  font-family: var(--font-tool); transition: background .12s;
+  gap: var(--sp-3); align-items: start; width: 100%;
+  padding: 13px 15px; text-align: left; cursor: pointer;
+  background: var(--color-surface); border: 1px solid var(--line); border-radius: 12px;
+  font-family: var(--font-tool); transition: all .22s cubic-bezier(.4, 0, .2, 1);
 }
-.ctrl-rows .ctrl-row:last-child { border-bottom: none; }
-.ctrl-row:hover { background: var(--celeste-dim); }
-.ctrl-row:focus-visible { outline: 3px solid var(--celeste); outline-offset: -3px; }
-.ctrl-row--active { background: var(--celeste-dim); }
+.ctrl-row:hover { border-color: var(--celeste-border); box-shadow: var(--sh-tool); transform: translateY(-1px); }
+.ctrl-row:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
+.ctrl-row--active { border-color: var(--celeste); border-width: 2px; padding: 12px 14px; background: var(--celeste-dim); }
 .ctrl-row__box {
-  width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0;
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; margin-top: 1px;
   border: 1.5px solid var(--line); background: var(--color-surface);
   display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 700;
 }
 .ctrl-row--active .ctrl-row__box { background: var(--celeste); border-color: var(--celeste); color: var(--color-white); }
 .ctrl-row__main { min-width: 0; }
 .ctrl-row__name { font-size: 13.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+/* El nombre va en su propio span: si el <mark> de la búsqueda queda como hijo
+   directo del flex, el gap le abre un hueco en medio de la palabra. */
+.ctrl-row__label { display: inline; }
 .ctrl-row__mode {
   font-size: 10.5px; font-weight: 600; color: var(--t2);
   border: 1px solid var(--line); border-radius: 5px; padding: 0 5px;
 }
-.ctrl-row__desc {
-  display: block; font-size: 12px; color: var(--t3); margin-top: 2px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.ctrl-row__name .origin-badge { text-transform: uppercase; }
+/* Descripción completa, sin truncar: es lo que dice qué cruza el control. */
+.ctrl-row__desc { display: block; font-size: 12px; color: var(--t2); margin-top: 3px; line-height: 1.45; }
+.ctrl-row__files {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  max-width: 240px; flex-shrink: 0;
 }
-.ctrl-row__files { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 260px; }
+/* La badge no trunca: "(opcional)" al final del label es justamente lo que el
+   analista necesita leer, así que el texto largo envuelve dentro de la pill. */
+.ctrl-row__file {
+  border: 1px solid var(--celeste-border); background: var(--celeste-dim); color: var(--celeste-deeper);
+  border-radius: 14px; padding: 3px 11px; font-size: 11.5px; font-weight: 700;
+  max-width: 100%; text-align: right; line-height: 1.35;
+}
+.ctrl-row__file--optional { border-color: var(--line); background: transparent; color: var(--t3); font-weight: 600; }
+
 .ctrl-rows__empty {
-  padding: var(--sp-6); text-align: center; font-size: 13px; color: var(--t3);
-  font-style: italic; font-family: var(--font-tool);
+  padding: var(--sp-6); text-align: center; font-size: 13px; color: var(--t2);
+  font-family: var(--font-tool); border: 1px dashed var(--line); border-radius: 12px;
 }
+.ctrl-rows__empty-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--t3); }
+.ctrl-hidden-note {
+  margin: var(--sp-2) 0 0; padding: 10px var(--sp-4); text-align: center;
+  border: 1px dashed var(--line); border-radius: 12px;
+  font-size: 12px; color: var(--t3); font-family: var(--font-tool);
+}
+.ctrl-link {
+  appearance: none; background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: inherit; font-weight: 700; color: var(--celeste-deeper);
+}
+.ctrl-link:hover { text-decoration: underline; }
+
+/* Panel lateral del Paso 1: lo que se va a ejecutar y la ayuda global */
+.run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.run-list__item {
+  position: relative; padding-left: 14px; font-size: 12.5px; color: var(--t1); line-height: 1.35;
+}
+.run-list__item::before {
+  content: ''; position: absolute; left: 0; top: 6px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--celeste);
+}
+/* Título de paso del wizard: ink, no celeste — el celeste queda para la
+   acción primaria y los labels de sección (ver el handoff del rediseño). */
+.wizard-step-title {
+  margin: 0 0 var(--sp-1); font-family: var(--font-tool);
+  font-size: 19px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em;
+}
+
+/* Los archivos del panel lateral se leen mejor alineados a la izquierda:
+   son una lista, no badges colgadas del borde de una card. */
+.wizard-onepane__side .ctrl-row__file { text-align: left; }
+
+.ctrl-help {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-4); border-top: 1px solid var(--color-border); padding-top: var(--sp-4);
+}
+.ctrl-help .help-popover { margin-left: 0; }
+.ctrl-help .help-popover__panel { left: 0; right: auto; width: 270px; }
+.ctrl-help__label {
+  appearance: none; background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+  font-family: var(--font-tool); font-size: 13px; font-weight: 700; color: var(--celeste-deeper);
+}
+.ctrl-help__label:hover { text-decoration: underline; }
 
 /* Badge de origen — deliberadamente separado del semáforo de diferencias
    (ok/warn/error, ver hero-ctrl-row): sólo dos variantes visuales, el texto
