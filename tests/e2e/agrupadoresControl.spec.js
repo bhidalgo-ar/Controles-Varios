@@ -61,10 +61,12 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
 
   await page.click('#js-control-rows button[data-ctrl="agrupadores"]');
   await page.click('#js-next-btn');
-  await expect(page.locator('h3', { hasText: 'Paso 2 — Archivos' })).toBeVisible();
+  await expect(page.locator('h3', { hasText: 'Cargá los archivos del control' })).toBeVisible();
 
   // ── Cargar Nómina Maestra ───────────────────────────────────────────────────
-  const nominaSection = page.locator('h4', { hasText: 'Nómina Maestra' }).locator('..');
+  // Cada archivo es un casillero de la grilla de arriba, y se reconoce por el
+  // nombre del tipo que muestra adentro — antes lo anunciaba un <h4> aparte.
+  const nominaSection = page.locator('.dz-grid__slot').filter({ hasText: 'Nómina Maestra' });
   await nominaSection.locator('input[type="file"]').setInputFiles({
     name: 'nomina.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -76,7 +78,7 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
   await expect(nominaSection).toContainText('nomina.xlsx');
 
   // ── Cargar Resumen (formato Largo) ─────────────────────────────────────────
-  const resumenSection = page.locator('h4', { hasText: 'Resumen — Formato Largo' }).locator('..');
+  const resumenSection = page.locator('.dz-grid__slot').filter({ hasText: 'Resumen Largo Excel' });
   await resumenSection.locator('input[type="file"]').setInputFiles({
     name: 'resumen.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

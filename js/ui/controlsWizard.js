@@ -14,6 +14,7 @@ import {
   saveControlConfig,
   getClientCatalog,
   saveClientCatalog,
+  deleteClientCatalog,
   getConfig,
   getGroupers,
   getGrouperConcepts,
@@ -22,8 +23,9 @@ import {
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { columnValues, columnHintHtml } from './columnHints.js';
-import { initFileUploadStep, matchLevel, matchSelectStyle, matchBadge, wireColumnHints } from './fileUpload.js';
-import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor } from './fileTypes.js';
+import { initFileUploadStep, matchLevel, matchSelectStyle, wireColumnHints } from './fileUpload.js';
+import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor, fileTypeLabel, flowFor } from './fileTypes.js';
+import { tabFieldParts, necessityHelp, fieldBadgeHtml } from './fieldHelp.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
 import { controlAppliesToClient, controlOrigin } from '../controls/scope.js';
@@ -433,23 +435,131 @@ function nextStepHint(state) {
   switch (state.step) {
     case 0: return 'Seleccioná al menos un control para continuar';
     case 1: {
-      // Si lo único que falta es una columna del Tabulado, nombrarla —
-      // "Completá los archivos y columnas requeridas" no le dice al analista
-      // adónde ir cuando ya cargó todo.
-      const hasBrutos = state.selectedControls.some(id => BRUTOS_IDS.includes(id));
-      const hasGsPers = state.selectedControls.some(id => GS_PERS_IDS.includes(id));
-      const hasNr     = state.selectedControls.some(id => NR_IDS.includes(id));
-      const pendientes = pendingTabRequirements(state.tabExtraConfig, { hasBrutos, hasGsPers, hasNr });
-      if (pendientes.length > 0) {
-        return pendientes.length === 1
-          ? `Falta la columna "${pendientes[0].label}" — o declarala ausente con ⊘`
-          : `Faltan ${pendientes.length} columnas del Tabulado — o declaralas ausentes con ⊘`;
-      }
-      return 'Completá los archivos y columnas requeridas';
+      // Compacto y al lado de la primaria atenuada (regla 2): "Falta: 1 archivo
+      // · 1 columna". Cuál archivo y cuál columna lo dice el checklist del panel
+      // lateral, que sale de la MISMA lista — en la barra no entra el detalle y
+      // un hint largo empuja a la primaria fuera de lugar.
+      const { faltan } = step2Checklist(state);
+      const partes = [
+        faltan.archivo  && `${faltan.archivo} ${faltan.archivo === 1 ? 'archivo' : 'archivos'}`,
+        faltan.columna  && `${faltan.columna} ${faltan.columna === 1 ? 'columna' : 'columnas'}`,
+        faltan.concepto && `${faltan.concepto} ${faltan.concepto === 1 ? 'concepto' : 'conceptos'}`,
+      ].filter(Boolean);
+      return partes.length
+        ? `Falta: ${partes.join(' · ')}`
+        : 'Completá los archivos y columnas requeridas';
     }
     default: return '';
   }
 }
+
+/**
+ * Qué le falta a la corrida para poder ejecutarse, como lista.
+ *
+ * La consumen las dos superficies que lo cuentan —el checklist "Para ejecutar
+ * te falta" del panel lateral y el hint de la barra superior— justamente para
+ * que no puedan decir cosas distintas.
+ *
+ * **No decide nada:** quien habilita "Siguiente →" sigue siendo `canGoNext`, y
+ * esta lista es su espejo en palabras. Si alguna vez discrepan, la que manda es
+ * `canGoNext`.
+ *
+ * @returns {{ items: Array, faltan: { archivo: number, columna: number, concepto: number } }}
+ */
+function step2Checklist(state) {
+  const items  = [];
+  const faltan = { archivo: 0, columna: 0, concepto: 0 };
+  const push = (item) => {
+    items.push(item);
+    if (item.tone !== 'done') faltan[item.kind]++;
+  };
+
+  const anyTabRequired = state.selectedControls.some(id => CONTROL_REGISTRY[id]?.tabRequired !== false);
+  if (anyTabRequired) {
+    push({
+      kind: 'archivo',
+      tone: state.tab ? 'done' : 'pending',
+      label: state.tab ? 'Tabulado cargado' : 'Tabulado',
+    });
+  }
+
+  // Un archivo `shared` lo piden varios controles pero se carga una sola vez:
+  // en la lista va una sola vez, igual que en la pantalla.
+  const vistos = new Set();
+  for (const controlId of state.selectedControls) {
+    const ctrl = CONTROL_REGISTRY[controlId];
+    if (!ctrl) continue;
+
+    // Agrupadores pide "uno de los dos formatos de Resumen" (ver canGoNext): los
+    // dos están declarados `optional` pero juntos no lo son, así que van como un
+    // solo renglón y no bajan a la zona de lo opcional.
+    if (CONTROLES_CON_OPCIONAL_GATEADO.includes(controlId)) {
+      const files = state.controlFiles[controlId] || {};
+      const listo = !!(files.resumenLargo || files.resumenTabulado);
+      push({
+        kind:  'archivo',
+        tone:  listo ? 'done' : 'pending',
+        label: listo ? 'Resumen cargado' : 'Resumen (Largo o Tabulado)',
+      });
+    }
+
+    for (const fileSpec of ctrl.additionalFiles) {
+      if (fileSpec.optional) continue;
+      const clave = fileSpec.shared ? `shared:${fileSpec.fileType}` : `${controlId}:${fileSpec.key}`;
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+
+      const cargado = state.controlFiles[controlId]?.[fileSpec.key] != null;
+      const nombre  = fileTypeLabel(fileSpec.fileType);
+      push({
+        kind:  'archivo',
+        tone:  cargado ? 'done' : 'pending',
+        label: cargado ? `${nombre} cargado` : nombre,
+      });
+    }
+  }
+
+  const pendientes = pendingTabRequirements(state.tabExtraConfig, {
+    hasBrutos: state.selectedControls.some(id => BRUTOS_IDS.includes(id)),
+    hasGsPers: state.selectedControls.some(id => GS_PERS_IDS.includes(id)),
+    hasNr:     state.selectedControls.some(id => NR_IDS.includes(id)),
+  });
+  if (pendientes.length > 0) {
+    items.push({
+      kind:  'columna',
+      tone:  'warn',
+      label: pendientes.length === 1 ? '1 columna sin asignar' : `${pendientes.length} columnas sin asignar`,
+      // El nombre en criollo, que es el que se lee en la grilla de campos.
+      detail: pendientes.map(f => tabFieldParts(f.key, { fallbackLabel: f.label }).name).join(' · '),
+    });
+    faltan.columna += pendientes.length;
+  }
+
+  // Sin mapeo todavía no hay nada que contar: el mapeo se arma recién cuando
+  // están los dos Tabulados, y esos ya están en la lista como archivos.
+  if (hayVariaciones(state.selectedControls) && state.variacionesMap) {
+    const grupos = conceptosDeControles(state.selectedControls, state.variacionesConfig);
+    const sinResolver = sinResolverEnNinguno(grupos, state.variacionesMap);
+    if (sinResolver.length > 0) {
+      items.push({
+        kind:  'concepto',
+        tone:  'warn',
+        label: sinResolver.length === 1
+          ? '1 concepto sin resolver en ningún Tabulado'
+          : `${sinResolver.length} conceptos sin resolver en ningún Tabulado`,
+      });
+      faltan.concepto += sinResolver.length;
+    }
+  }
+
+  return { items, faltan };
+}
+
+// Controles cuyos archivos `optional` no son opcionales entre sí: el gate exige
+// al menos uno (ver el caso de Agrupadores en `canGoNext`). Sus casilleros se
+// quedan arriba, con los obligatorios — mandarlos a la zona de lo opcional
+// diría que se pueden saltear, que es lo contrario de lo que pasa.
+const CONTROLES_CON_OPCIONAL_GATEADO = ['agrupadores'];
 
 /**
  * Qué grupos de columnas del Tabulado pide esta corrida, según qué controles
@@ -854,11 +964,34 @@ function buildWizardSidebarHtml(state) {
     ? selectedLabels.map(l => `<span class="control-recap-pill">✓ ${esc(l)}</span>`).join('')
     : '<span class="text-sm text-muted">Ningún control seleccionado.</span>';
 
+  // "Para ejecutar te falta": el detalle de lo que el hint de la barra resume en
+  // "Falta: 1 archivo · 1 columna". Sale de la misma lista, así los dos no
+  // pueden decir cosas distintas. Cuando no falta nada, lo dice.
+  const { items } = step2Checklist(state);
+  const marcas = { done: '✓', pending: '○', warn: '⚠' };
+  const checklistHtml = items.length
+    ? `<div class="side-checklist">
+         ${items.map(i => `
+           <div class="side-checklist__item side-checklist__item--${esc(i.tone)}">
+             <span class="side-checklist__mark" aria-hidden="true">${marcas[i.tone] || '○'}</span>
+             <span>
+               ${esc(i.label)}
+               ${i.detail ? `<span class="side-checklist__detail">${esc(i.detail)}</span>` : ''}
+             </span>
+           </div>`).join('')}
+       </div>`
+    : '<p class="wizard-section-hint" style="margin:0;">Estos controles no piden archivos.</p>';
+  const todoListo = items.every(i => i.tone === 'done');
+
   return `
     <div>
-      <span class="wizard-section-label">Controles a ejecutar</span>
+      <span class="wizard-section-label">${selectedLabels.length === 1 ? 'Control a ejecutar' : 'Controles a ejecutar'}</span>
       <div class="control-recap-pills">${pillsHtml}</div>
       <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Elegidos en el paso anterior — usá "← Anterior" para cambiarlos.</p>
+    </div>
+    <div>
+      <span class="wizard-section-label">${todoListo ? 'Todo listo para ejecutar' : 'Para ejecutar te falta'}</span>
+      ${checklistHtml}
     </div>
     <div>
       <span class="wizard-section-label">Umbrales</span>
@@ -881,15 +1014,68 @@ function buildWizardSidebarHtml(state) {
   `;
 }
 
+/**
+ * Qué se pierde si un archivo opcional no se carga. Es lo que reemplaza al
+ * "(opcional)" de antes: el analista no tiene por qué saber qué le aporta un
+ * archivo que nunca cargó, y "opcional" no se lo dice.
+ *
+ * Un tipo que no esté acá cae a la frase genérica — que sigue siendo verdad,
+ * sólo que menos útil. Inventarle un detalle sería peor.
+ */
+const DEFAULT_SIN_ARCHIVO = {
+  cc_x_ee_file: 'Sin él, el centro de costo de cada empleado sale del asiento contable.',
+};
+
+/**
+ * El renglón dashed de un archivo opcional, al final de la pantalla (regla 4).
+ * Devuelve el hueco donde montar la carga: oculto hasta que lo pidan si el
+ * archivo no está, visible si ya se cargó.
+ */
+function mountOptionalRow(zona, fileSpec, { cargado }) {
+  if (!zona) return document.createElement('div');
+
+  // Ya cargado: manda el casillero verde, sin la chapa de "opcional" encima.
+  if (cargado) {
+    const host = document.createElement('div');
+    host.style.marginTop = 'var(--sp-3)';
+    zona.appendChild(host);
+    return host;
+  }
+
+  const row = document.createElement('div');
+  row.className = 'optional-row';
+  row.innerHTML = `
+    <span class="optional-row__icon" aria-hidden="true">▤</span>
+    <span class="optional-row__title">${esc(fileTypeLabel(fileSpec.fileType))}</span>
+    <span class="optional-row__tag">opcional</span>
+    <span class="optional-row__default">
+      ${esc(DEFAULT_SIN_ARCHIVO[fileSpec.fileType] || 'El control corre igual sin este archivo.')}
+    </span>
+    <button type="button" class="ctrl-link" data-optional-open>Cargarlo (.xlsx)</button>
+    <div class="optional-row__host" data-optional-host hidden></div>
+  `;
+  zona.appendChild(row);
+
+  const host  = row.querySelector('[data-optional-host]');
+  const abrir = row.querySelector('[data-optional-open]');
+  abrir.addEventListener('click', () => {
+    host.hidden = false;
+    abrir.hidden = true;
+  });
+  return host;
+}
+
 function renderStepFiles(container, state, root) {
   const anyTabRequired = state.selectedControls.some(
     id => CONTROL_REGISTRY[id]?.tabRequired !== false
   );
 
+  // El default, dicho (regla 5): "(opcional)" no le dice al analista qué va a
+  // pasar si no lo carga, y lo que va a pasar es que se usa el estándar.
   const catMeta = state.catalog?.parseMetadata;
   const catSummary = state.catalog
-    ? `✅ <strong>${esc(state.catalog.fileName)}</strong> — ${catMeta?.totalRows ?? 0} conceptos cargados`
-    : `📂 Sin catálogo cargado — se usará el catálogo estándar (${CATALOGO_SEED.length} conceptos).`;
+    ? `<span class="optional-row__file">${esc(state.catalog.fileName)}</span> — ${catMeta?.totalRows ?? 0} conceptos propios.`
+    : `Usando el estándar (${CATALOGO_SEED.length} conceptos).`;
 
   // Variaciones compara dos Tabulados: los dos slots van lado a lado, siempre
   // anterior → actual, y el Catálogo de Conceptos no aplica (sirve para
@@ -898,40 +1084,20 @@ function renderStepFiles(container, state, root) {
   const esVariaciones = hayVariaciones(state.selectedControls);
   const mostrarCatalogo = anyTabRequired && !esVariaciones;
 
+  // Obligatorio arriba, opcional abajo (regla 4): los casilleros de los archivos
+  // que la corrida necesita abren la pantalla en grilla de 2 columnas, y el
+  // Catálogo de Conceptos —que tiene un default y casi nunca se toca— baja a un
+  // renglón dashed al final, con su default dicho en palabras.
   container.innerHTML = `
-    <h3 style="margin:0 0 var(--sp-1);">Paso 2 — Archivos</h3>
+    <h3 class="wizard-step-title">Cargá los archivos del control</h3>
     <p class="text-muted" style="margin:0 0 var(--sp-4);font-size:var(--text-sm);">
       ${esVariaciones
         ? 'Cargá los dos Tabulados. El período y la quincena de cada uno salen del propio archivo.'
-        : 'Cargá los archivos necesarios para los controles seleccionados.'}
+        : 'Se reconocen por la sigla en el nombre — si no la trae, te avisa y podés usarlo igual.'}
     </p>
 
     <div class="wizard-onepane">
       <div class="wizard-onepane__files">
-        ${mostrarCatalogo ? `
-          <details style="margin-bottom:var(--sp-3);" ${state.catalog ? '' : 'open'}>
-            <summary style="
-              cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);
-              color:var(--color-primary);list-style:none;display:flex;align-items:center;
-              gap:var(--sp-2);user-select:none;margin-bottom:var(--sp-1);
-            ">
-              <span>▸</span> Catálogo de Conceptos (opcional)
-            </summary>
-            <div style="margin-top:var(--sp-2);padding:var(--sp-3);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);">
-              <p class="text-sm text-muted" style="margin:0 0 var(--sp-2);">
-                El catálogo define qué columnas del Tabulado corresponden a cada concepto. Si no cargás uno, se usa el catálogo estándar.
-              </p>
-              <div id="js-catalog-status" style="margin-bottom:var(--sp-2);">
-                <div class="alert ${state.catalog ? 'alert--success' : 'alert--info'}" style="margin:0;padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
-                  ${catSummary}
-                </div>
-              </div>
-              <div id="js-catalog-upload" style="${state.catalog ? 'display:none' : ''}"></div>
-              ${state.catalog ? `<button class="btn btn--ghost btn--sm" id="js-catalog-replace">↺ Reemplazar catálogo</button>` : ''}
-            </div>
-          </details>
-        ` : ''}
-
         ${esVariaciones ? `
           <div class="varfiles">
             <div class="varfiles__slot">
@@ -945,14 +1111,32 @@ function renderStepFiles(container, state, root) {
               <div id="js-var-act-meta"></div>
             </div>
           </div>
+          <div class="dz-grid" id="js-file-dropzones"></div>
           <div id="js-tab-analysis"></div>
           <div id="js-var-conceptmap" style="margin-bottom:var(--sp-3);"></div>
-        ` : (anyTabRequired ? `
-          <div id="js-tab-upload"></div>
+        ` : `
+          <div class="dz-grid" id="js-file-dropzones">
+            ${anyTabRequired ? '<div class="dz-grid__slot" id="js-tab-upload"></div>' : ''}
+          </div>
           <div id="js-tab-analysis"></div>
-        ` : '')}
+        `}
 
         <div id="js-control-files"></div>
+
+        <div id="js-optional-files"></div>
+        ${mostrarCatalogo ? `
+          <div class="optional-row" id="js-catalog-row">
+            <span class="optional-row__icon" aria-hidden="true">▤</span>
+            <span class="optional-row__title">Catálogo de conceptos</span>
+            <span class="optional-row__tag">opcional</span>
+            <span class="optional-row__default" id="js-catalog-status">${catSummary}</span>
+            ${state.catalog
+              ? `<button type="button" class="ctrl-link" id="js-catalog-open">Cambiarlo</button>
+                 <button type="button" class="ctrl-link" id="js-catalog-replace">Volver al estándar (${CATALOGO_SEED.length})</button>`
+              : `<button type="button" class="ctrl-link" id="js-catalog-open">Subir uno propio (.xlsx)</button>`}
+            <div class="optional-row__host" id="js-catalog-upload" hidden></div>
+          </div>
+        ` : ''}
       </div>
       <div class="wizard-onepane__side">
         ${buildWizardSidebarHtml(state)}
@@ -966,7 +1150,12 @@ function renderStepFiles(container, state, root) {
     const analysisEl      = container.querySelector('#js-tab-analysis');
     const catalogRows     = state.catalog?.rows || CATALOGO_SEED;
 
-    if (catalogUploadEl) {
+    // El renglón opcional no monta la zona de carga hasta que se la piden: el
+    // caso normal es no tocarlo, y una zona de drop abierta ahí abajo compite
+    // con los casilleros de arriba, que son los que hay que cargar.
+    const abrirCatalogo = () => {
+      catalogUploadEl.hidden = false;
+      container.querySelector('#js-catalog-open')?.remove();
       initFileUploadStep(catalogUploadEl, {
         clientCode:  state.client.code,
         fileType:    'concept_catalog',
@@ -977,25 +1166,25 @@ function renderStepFiles(container, state, root) {
           renderStepFiles(container, state, root);
         },
       });
-    }
+    };
 
+    container.querySelector('#js-catalog-open')?.addEventListener('click', abrirCatalogo);
+
+    // Estado vacío con salida (regla 5): del catálogo propio siempre se puede
+    // volver al estándar, y el link dice a qué se vuelve.
     container.querySelector('#js-catalog-replace')?.addEventListener('click', async () => {
-      if (!await showConfirm('¿Reemplazar el catálogo guardado? Se perderá el catálogo actual.')) return;
-      const statusEl = container.querySelector('#js-catalog-status');
-      const uploadEl = container.querySelector('#js-catalog-upload');
-      statusEl.innerHTML = '<div class="alert alert--info" style="margin:0;">Cargá el nuevo catálogo:</div>';
-      uploadEl.style.display = '';
-      container.querySelector('#js-catalog-replace')?.remove();
-      initFileUploadStep(uploadEl, {
-        clientCode:  state.client.code,
-        fileType:    'concept_catalog',
-        existingData: null,
-        onComplete:  async (data) => {
-          state.catalog = { rows: data.rows, fileName: data.fileName, parseMetadata: data.parseMetadata };
-          await saveClientCatalog(state.client.code, state.catalog);
-          renderStepFiles(container, state, root);
-        },
-      });
+      if (!await showConfirm(`¿Volver al catálogo estándar? Se borra el catálogo propio de este cliente y se usan los ${CATALOGO_SEED.length} conceptos estándar.`)) return;
+      try {
+        await deleteClientCatalog(state.client.code);
+      } catch {
+        // Si no se pudo borrar, la pantalla NO puede decir que se borró: el
+        // catálogo propio sigue guardado y se va a volver a usar en la próxima
+        // corrida.
+        showToast('No se pudo borrar el catálogo guardado — seguís usando el propio.', 'danger');
+        return;
+      }
+      state.catalog = null;
+      renderStepFiles(container, state, root);
     });
 
     if (state.tab) {
@@ -1006,6 +1195,7 @@ function renderStepFiles(container, state, root) {
       clientCode:  state.client.code,
       fileType:    'tab_control',
       existingData: state.tab,
+      required:    true,
       autoDetect:  (headers) => autoDetectFor('tab_control')(headers, catalogRows),
       onComplete:  (data) => {
         const prev = state.tab;
@@ -1028,7 +1218,12 @@ function renderStepFiles(container, state, root) {
   }
 
   // ── Archivos adicionales por control ────────────────────────────────────────
-  const filesArea = container.querySelector('#js-control-files');
+  // `filesArea` queda para lo que NO es un casillero de archivo (los editores de
+  // config de cada control). Los casilleros van arriba, en la grilla de 2
+  // columnas; los opcionales, abajo, como renglón dashed.
+  const filesArea    = container.querySelector('#js-control-files');
+  const dropzonesEl  = container.querySelector('#js-file-dropzones');
+  const opcionalesEl = container.querySelector('#js-optional-files');
 
   // Un `fileSpec` con `shared: true` se pide UNA sola vez aunque lo declaren
   // varios controles seleccionados: es literalmente el mismo archivo (el
@@ -1050,24 +1245,32 @@ function renderStepFiles(container, state, root) {
       // Un archivo puede declarar un hueco propio en el layout del paso
       // (`fileSpec.slot`) — el Tabulado anterior lo hace, en la grilla de 2
       // columnas de arriba. Si ese hueco no está en pantalla (el layout de
-      // Variaciones no se renderizó), cae a la lista de abajo como cualquier
-      // otro, que es exactamente lo que hacía el chequeo de `esVariaciones`.
+      // Variaciones no se renderizó), cae a la grilla de casilleros como
+      // cualquier otro, que es exactamente lo que hacía el chequeo de
+      // `esVariaciones`.
       const slotPropio = fileSpec.slot ? container.querySelector(fileSpec.slot) : null;
+
+      // Opcional de verdad (nadie lo gatea) → abajo, no arriba: cargado o no,
+      // el lugar es el mismo, así no salta de sitio al cargarlo.
+      const esOpcionalSuelto = fileSpec.optional
+        && !CONTROLES_CON_OPCIONAL_GATEADO.includes(controlId);
 
       let uploadDiv;
       if (slotPropio) {
         uploadDiv = slotPropio;
+      } else if (esOpcionalSuelto) {
+        uploadDiv = mountOptionalRow(opcionalesEl, fileSpec, {
+          cargado: !!state.controlFiles[controlId]?.[fileSpec.key],
+        });
       } else {
-        const wrapper = document.createElement('div');
-        wrapper.style.marginBottom = 'var(--sp-3)';
-        wrapper.innerHTML = `
-          <h4 style="margin:0 0 var(--sp-2);font-size:var(--text-base);">
-            ${esc(ctrl.label)} — ${esc(fileSpec.label)}
-          </h4>
-        `;
-        uploadDiv = document.createElement('div');
-        wrapper.appendChild(uploadDiv);
-        filesArea.appendChild(wrapper);
+        const slot = document.createElement('div');
+        // Los flujos multi-archivo traen su propia lista adentro: a media
+        // grilla quedan ilegibles.
+        slot.className = flowFor(fileSpec.fileType) === 'single'
+          ? 'dz-grid__slot'
+          : 'dz-grid__slot dz-grid__slot--wide';
+        dropzonesEl.appendChild(slot);
+        uploadDiv = slot;
       }
 
       // Qué función propone las columnas la declara la ficha del tipo de
@@ -1089,6 +1292,11 @@ function renderStepFiles(container, state, root) {
         clientCode:  state.client.code,
         fileType:    fileSpec.fileType,
         existingData: state.controlFiles[controlId]?.[fileSpec.key] || null,
+        // El tag "OBLIGATORIO" es sólo para los de arriba. Lo opcional ya lo
+        // dice su renglón dashed, y los dos formatos de Resumen de Agrupadores
+        // no son ni una cosa ni la otra (el gate pide uno de los dos, lo
+        // explica el checklist del panel): sin tag antes que con uno que miente.
+        required:    fileSpec.optional ? undefined : true,
         autoDetect,
         onComplete:  (data) => {
           const prev = state.controlFiles[controlId]?.[fileSpec.key];
@@ -1369,9 +1577,11 @@ export function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsP
   ].filter(Boolean);
   const headerTitle = parts.join(' / ');
 
+  // El option vacío dice qué hacer (regla 5). El value sigue siendo '': "sin
+  // elegir" no cambió de significado para el gate ni para el mapeo.
   const opts = (selected = '') =>
     ['', ...tabHeaders]
-      .map(h => `<option value="${esc(h)}" ${h === selected ? 'selected' : ''}>${esc(h) || '— Sin asignar —'}</option>`)
+      .map(h => `<option value="${esc(h)}" ${h === selected ? 'selected' : ''}>${esc(h) || 'Elegí la columna del Tabulado…'}</option>`)
       .join('');
 
   // La muestra de valores reales de la columna elegida, más el aviso si su
@@ -1393,63 +1603,110 @@ export function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsP
   // renderConceptMap en variacionesConceptMap.js).
   container.querySelector('[data-tab-extra-panel]')?.remove();
 
+  // Cada campo, ya resuelto: qué se ve, de dónde salió el valor y si está
+  // pendiente. Se calcula antes de pintar porque el contador del encabezado
+  // ("5 de 6 listas") cuenta lo mismo que se dibuja abajo.
+  const resueltos = fields
+    .filter(f => !f.groupHeader)
+    .map(f => {
+      // Un valor guardado que ya no está entre los encabezados de ESTE
+      // Tabulado (renumeración, otro layout) se trata como si no estuviera
+      // asignado: el <select> ya lo dibuja en el placeholder (`opts()` no
+      // encuentra `option` que matchear y el navegador cae a la primera),
+      // pero antes el badge seguía diciendo "auto ✓" o "↺ sesión anterior" en
+      // verde — el badge afirmaba lo contrario de lo que se veía en pantalla.
+      // Tratarlo como vacío hace que salga "⚠ sin asignar", que es lo que hay
+      // que corregir.
+      const rawVal  = state.tabExtraConfig[f.key] || '';
+      const omitido = esOmitido(rawVal);
+      const val     = (!omitido && isStaleTabValue(rawVal, tabHeaders)) ? '' : rawVal;
+      // Sólo OBLIGATORIA ofrece la vía de escape — CLAVE no admite omisión
+      // (sin esto el archivo no sirve) y OPCIONAL no bloquea, así que
+      // declararlo ausente no cambiaría nada. Hoy ningún campo de este panel
+      // es CLAVE, pero el check queda explícito para cuando lo sea.
+      const necessity = necessityOfKey('tab_control', f.key);
+      return {
+        f, val, omitido, necessity,
+        level:        matchLevel(omitido ? '' : val, { autoDetected, hasSavedMapping: hasSavedConfig }),
+        puedeOmitir:  necessity === NECESSITY.OBLIGATORIA,
+        esBloqueante: necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA,
+        // "Lista" = resuelta: tiene columna, o el analista declaró que el
+        // archivo no la trae. Las dos son decisiones tomadas.
+        lista:        !!val || omitido,
+      };
+    });
+  const listas = resueltos.filter(r => r.lista).length;
+  const porKey = new Map(resueltos.map(r => [r.f.key, r]));
+
   const panel = document.createElement('div');
   panel.dataset.tabExtraPanel = '';
-  panel.style.cssText = 'margin-top:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);';
+  panel.style.cssText = 'margin-top:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface);';
   panel.innerHTML = `
-    <h4 style="margin:0 0 var(--sp-1);font-size:var(--text-base);">Columnas del Tabulado — ${esc(headerTitle)}</h4>
-    ${autoDetected
-      ? `<p class="text-sm" style="margin:0 0 var(--sp-2);color:var(--color-match-exact);">🤖 Se detectaron las columnas automáticamente — verificá que sean correctas.</p>`
-      : `<p class="text-muted" style="margin:0 0 var(--sp-3);font-size:var(--text-sm);">Indicá qué columna del Tabulado corresponde a cada campo. FECHA_INI y FECHA_FIN se calculan del período.</p>`
-    }
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--sp-3);">
+    <div style="display:flex;align-items:baseline;gap:var(--sp-3);margin-bottom:var(--sp-1);">
+      <h4 class="wizard-step-title" style="font-size:15px;flex:1;">¿Qué columna del Tabulado corresponde a cada campo?</h4>
+      <span class="field-count" data-tab-extra-count>${listas} de ${resueltos.length} listas</span>
+    </div>
+    <p class="text-muted" style="margin:0 0 var(--sp-3);font-size:var(--text-sm);">
+      ${autoDetected
+        ? 'La app propone sola las que reconoce — revisá sobre todo las marcadas en amarillo.'
+        : `Indicá qué columna del Tabulado corresponde a cada campo (${esc(headerTitle)}). FECHA_INI y FECHA_FIN se calculan del período.`}
+    </p>
+    <div class="field-grid">
       ${fields.map(f => {
         if (f.groupHeader) {
           return `
-            <div style="grid-column:1/-1;margin-top:var(--sp-2);padding-bottom:var(--sp-1);border-bottom:1px solid var(--color-border);">
-              <span style="font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-wordmark);">${esc(f.groupHeader)}</span>
+            <div class="field-grid__header">
+              <span class="wizard-section-label" style="margin-bottom:0;">${esc(f.groupHeader)}</span>
             </div>
           `;
         }
-        // Un valor guardado que ya no está entre los encabezados de ESTE
-        // Tabulado (renumeración, otro layout) se trata como si no estuviera
-        // asignado: el <select> ya lo dibuja en "— Sin asignar —" (`opts()`
-        // no encuentra `option` que matchear y el navegador cae a la
-        // primera), pero antes el badge seguía diciendo "✓ auto" o "↺ sesión
-        // anterior" en verde — el badge afirmaba lo contrario de lo que se
-        // veía en pantalla. Tratarlo como vacío hace que salga "⚠ sin
-        // asignar", que es lo que hay que corregir.
-        const rawVal   = state.tabExtraConfig[f.key] || '';
-        const omitido  = esOmitido(rawVal);
-        const val      = (!omitido && isStaleTabValue(rawVal, tabHeaders)) ? '' : rawVal;
-        const level    = matchLevel(omitido ? '' : val, { autoDetected, hasSavedMapping: hasSavedConfig });
-        const style    = matchSelectStyle(level);
-        const badge    = matchBadge(level);
-        // Sólo OBLIGATORIA ofrece la vía de escape — CLAVE no admite omisión
-        // (sin esto el archivo no sirve) y OPCIONAL no bloquea, así que
-        // declararlo ausente no cambiaría nada. Hoy ningún campo de este
-        // panel es CLAVE, pero el check queda explícito para cuando lo sea.
-        const necessity  = necessityOfKey('tab_control', f.key);
-        const puedeOmitir = necessity === NECESSITY.OBLIGATORIA;
-        const esBloqueante = necessity === NECESSITY.CLAVE || necessity === NECESSITY.OBLIGATORIA;
+        const r = porKey.get(f.key);
+        const { name, code, help } = tabFieldParts(f.key, { fallbackLabel: f.label });
+        // El amarillo es para lo que hay que ir a resolver. Una columna OPCIONAL
+        // vacía no lo es —el control corre igual— y pintarla igual que las que
+        // sí bloquean es el aviso que salta de más: a la tercera vez ya no se
+        // mira ninguno. El badge y el <select> usan el MISMO nivel, o el campo
+        // diría dos cosas distintas de sí mismo.
+        const nivel = (r.omitido || (!r.lista && !r.esBloqueante)) ? 'none' : r.level;
+        const style = matchSelectStyle(nivel);
+        // La explicación de qué pasa si se queda sin columna sale de la
+        // necesidad que declara el contrato — no de un texto por campo, que
+        // podría decir algo distinto de lo que el gate hace de verdad.
+        const queEs   = necessityHelp(r.necessity);
+        const ayuda   = help ? `${help} ${queEs}` : queEs;
+        // Pendiente = bloquea y no está resuelto. Ahí la explicación no se
+        // esconde detrás del "?": baja a la vista (regla 3).
+        const pendiente = r.esBloqueante && !r.lista;
         return `
-          <div class="form-group" style="margin-bottom:0;" data-fu-field-group="${esc(f.key)}">
-            <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">
-              ${esc(f.label)}${omitido ? ' <span style="color:var(--color-text-muted);font-size:0.8em;">⊘ declarada ausente</span>' : badge}
-            </label>
-            <div style="display:flex;gap:var(--sp-2);align-items:center;">
-              <select class="form-select" data-tab-extra-key="${esc(f.key)}"${omitido ? ' disabled' : ''}
-                style="${style}${omitido ? 'opacity:0.6;' : ''}">
-                ${opts(omitido ? '' : val)}
+          <div class="field" data-fu-field-group="${esc(f.key)}">
+            <div class="field__head">
+              <span class="field__label">${esc(name)}</span>
+              ${code ? `<span class="field__code">${esc(code)}</span>` : ''}
+              ${r.esBloqueante ? '<span class="field__req" title="Obligatoria para este control" aria-label="obligatoria">*</span>' : ''}
+              ${help ? `<span data-field-help="${esc(f.key)}"></span>` : ''}
+              <span class="field__spacer"></span>
+              ${fieldBadgeHtml(nivel, { omitido: r.omitido })}
+            </div>
+            <div class="field__row">
+              <select class="form-select" data-tab-extra-key="${esc(f.key)}"${r.omitido ? ' disabled' : ''}
+                style="${style}${r.omitido ? 'opacity:0.6;' : ''}">
+                ${r.omitido
+                  ? '<option value="">Declarada ausente en este archivo</option>'
+                  : opts(r.val)}
               </select>
-              ${puedeOmitir ? `
-                <button type="button" class="btn btn--sm ${omitido ? 'btn--primary' : 'btn--ghost'}"
-                  data-tab-extra-omit="${esc(f.key)}" aria-pressed="${omitido}"
+              ${r.puedeOmitir ? `
+                <button type="button" class="btn btn--sm ${r.omitido ? 'btn--primary' : 'btn--ghost'}"
+                  data-tab-extra-omit="${esc(f.key)}" aria-pressed="${r.omitido}"
                   title="Declarar que este archivo no trae esta columna">⊘</button>
               ` : ''}
             </div>
-            ${omitido ? `<div class="text-muted" style="font-size:var(--text-xs);margin-top:2px;">No se resuelve — se computa como sin dato, no como cero.</div>` : ''}
-            <div data-fu-col-hint>${omitido ? '' : hintFor(f.key, val)}</div>
+            ${r.omitido
+              ? `<div class="field__help field__help--muted">
+                   Marcaste que este Tabulado no la trae — se computa como sin dato, no como cero.
+                   <button type="button" class="ctrl-link" data-tab-extra-omit="${esc(f.key)}">Deshacer</button>
+                 </div>`
+              : (pendiente ? `<div class="field__help">${esc(ayuda)}</div>` : '')}
+            <div data-fu-col-hint>${r.omitido ? '' : hintFor(f.key, r.val)}</div>
           </div>
         `;
       }).join('')}
@@ -1467,9 +1724,34 @@ export function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsP
   panel.querySelectorAll('[data-tab-extra-key]').forEach(sel => {
     sel.addEventListener('change', async () => {
       const k = sel.dataset.tabExtraKey;
+      const estaba = !!state.tabExtraConfig[k];
       if (sel.value) state.tabExtraConfig[k] = sel.value;
       else delete state.tabExtraConfig[k];
       await guardarConfig();
+      // Pasar de "sin asignar" a asignada (o al revés) cambia el badge, el
+      // contador "X de Y listas" y si la explicación baja a la vista: se
+      // redibuja el panel para que las tres cosas digan lo mismo que el
+      // <select>. Cambiar de una columna a otra no cambia ninguna, así que ahí
+      // no se redibuja nada — el analista no pierde el foco por gusto.
+      if (estaba !== !!sel.value) {
+        renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, hasNr });
+      }
+    });
+  });
+
+  // El "?" de cada campo: la explicación larga vive detrás de él (regla 3) y no
+  // en un `title`, que en un touchpad no se ve nunca. Se reusa el popover que ya
+  // está en el header y en el Paso 1 — con su Escape, su click-afuera y su aria.
+  panel.querySelectorAll('[data-field-help]').forEach(host => {
+    const key = host.dataset.fieldHelp;
+    const { name, code, help } = tabFieldParts(key, {});
+    const necessity = necessityOfKey('tab_control', key);
+    renderHelpPopover(host, {
+      label: code ? `${name} · ${code}` : name,
+      bodyHtml: `
+        <p style="margin:0 0 var(--sp-2);">${esc(help)}</p>
+        <p class="help-popover__note" style="margin:0;">${esc(necessityHelp(necessity))}</p>
+      `,
     });
   });
 

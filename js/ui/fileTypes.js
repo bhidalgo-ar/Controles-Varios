@@ -34,6 +34,14 @@
 //                              tiene que divergir de `label` — hoy ninguna
 //                              ficha lo usa (D-050 unificó la de Acumuladores)
 //   dropHint       {string}    aclaración extra en la zona de drop
+//   siglas         {string[]}  cómo se reconoce este archivo por su nombre —
+//                              **semilla, no identidad** (mismo criterio que
+//                              TAB_CODE_SEEDS, D-035): si el nombre no trae
+//                              ninguna, la zona de drop AVISA y ofrece "Usarlo
+//                              igual", nunca bloquea (D-036/D-055). Una ficha sin
+//                              `siglas` no se chequea nunca — preferimos no
+//                              avisar a avisar de más, porque un aviso que
+//                              salta siempre se ignora a la tercera vez
 //   aliasOf        {string}    comparte la ficha de otro tipo (ver tab_prev_file)
 //
 // El Tabulado declara además `extraFieldGroups` y `conceptCodeToKey`: las
@@ -137,6 +145,7 @@ export const FILE_TYPES = {
   // tabuladoControl.js. El detector plano de nominaMaestra.js no lo lee.
   tab_control: {
     label: 'Tabulado (Controles)',
+    siglas: ['TABULADO', 'TAB'],
     parse: parseTabuladoControl,
     detectHeaders: detectHeadersTabulado,
     autoDetect: autoDetectTabMapping,
@@ -267,6 +276,7 @@ export const FILE_TYPES = {
 
   brutos_file: {
     label: 'Reporte de Brutos',
+    siglas: ['BRUTOS'],
     parse: parseBrutos,
     detectHeaders: detectHeadersXlsx,
     autoDetect: autoDetectBrutosMapping,
@@ -280,6 +290,7 @@ export const FILE_TYPES = {
 
   gs_pers_file: {
     label: 'Reporte de GS Pers (Gastos Personales y Cochera)',
+    siglas: ['GS_PERS', 'GSPERS'],
     parse: parseGsPers,
     detectHeaders: detectHeadersXlsx,
     autoDetect: autoDetectGsPersMapping,
@@ -293,6 +304,7 @@ export const FILE_TYPES = {
 
   nr_file: {
     label: 'Reporte de NR (No Remunerativos)',
+    siglas: ['NR'],
     parse: parseNr,
     detectHeaders: detectHeadersXlsx,
     autoDetect: autoDetectNrMapping,
@@ -322,6 +334,7 @@ export const FILE_TYPES = {
 
   rend_file: {
     label: 'Reporte de Rendimiento',
+    siglas: ['RENDIMIENTO', 'REND'],
     parse: parseRendimiento,
     detectHeaders: detectHeadersXlsx,
     autoDetect: autoDetectRendimientoMapping,
@@ -341,6 +354,7 @@ export const FILE_TYPES = {
 
   costo_total_file: {
     label: 'Reporte de Costo Total (por empleado)',
+    siglas: ['COSTO_TOTAL', 'COSTO'],
     parse: parseCostoTotal,
     detectHeaders: detectHeadersXlsx,
     autoDetect: autoDetectCostoTotalMapping,
@@ -354,6 +368,7 @@ export const FILE_TYPES = {
   // Catálogo de conceptos: formato fijo, no requiere mapeo de columnas.
   concept_catalog: {
     label: 'Catálogo de Conceptos',
+    siglas: ['CATALOGO'],
     parse: parseConceptCatalog,
     detectHeaders: detectHeadersXlsx,
     autoDetect: null,
@@ -371,6 +386,7 @@ export const FILE_TYPES = {
   // un consumidor que no existe.
   conta_file: {
     label: 'Contabilidad Desglosada',
+    siglas: ['CONTA', 'CONTABILIDAD'],
     parse: parseConta,
     detectHeaders: detectHeadersXlsx,
     autoDetect: null,
@@ -382,6 +398,7 @@ export const FILE_TYPES = {
   // CC x Empleado: formato fijo, encabezados constantes.
   cc_x_ee_file: {
     label: 'CC x Empleado',
+    siglas: ['CC_X_EMPLEADO', 'CC_X_EE', 'CCXEE'],
     parse: parseCcXEmpleado,
     detectHeaders: detectHeadersXlsx,
     autoDetect: null,
@@ -397,6 +414,7 @@ export const FILE_TYPES = {
   // por la pantalla de vista previa + "Confirmar y procesar".
   acreditaciones_file: {
     label: 'Acreditaciones (export de Axton)',
+    siglas: ['ACREDITACIONES', 'CONTACRED'],
     parse: parseAcreditaciones,
     detectHeaders: detectHeadersXlsx,
     autoDetect: null,
@@ -416,6 +434,7 @@ export const FILE_TYPES = {
   // que ya usa CONTA (`dropLabelFor` → `fileTypeLabel`).
   acumuladores_file: {
     label: 'Acumuladores (export de Axton)',
+    siglas: ['ACUMULADORES'],
     dropHint: ' (uno por mes)',
     parse: parseAcumuladores,
     detectHeaders: detectHeadersXlsx,
@@ -435,6 +454,7 @@ export const FILE_TYPES = {
   // del mapeo listarían el texto del título en vez de las columnas.
   asiento_conceptos_file: {
     label: 'Conceptos liquidados de FINADIET (Meta4)',
+    siglas: ['FINADIET'],
     parse: parseFinadietAsiento,
     detectHeaders: detectHeadersFinadietAsiento,
     autoDetect: autoDetectFinadietAsientoMapping,
@@ -534,6 +554,50 @@ export function dropLabelFor(fileType) {
 /** Aclaración extra en la zona de drop ('' si no tiene). */
 export function dropHintFor(fileType) {
   return FILE_TYPES[fileType]?.dropHint || '';
+}
+
+/** Siglas con las que se reconoce este archivo por su nombre (`[]` = no se chequea). */
+export function siglasFor(fileType) {
+  return FILE_TYPES[fileType]?.siglas || [];
+}
+
+/**
+ * ¿El nombre del archivo trae alguna de las siglas de su tipo?
+ *
+ * Devuelve `true` también cuando **no hay contra qué chequear** (el tipo no
+ * declara siglas, o no llegó nombre): sin evidencia no se afirma nada. Es el
+ * mismo criterio conservador que `checkColumnType()` — un aviso que salta de
+ * más se ignora a la tercera vez y deja de proteger.
+ *
+ * El match es por palabra, no por substring: `'NR'` tiene que aparecer como
+ * `Marval_NR_2026-08.xlsx` y no adentro de `ENERO`. Se ignoran mayúsculas,
+ * acentos y con qué se separan las palabras (`_`, `-`, espacio, punto), porque
+ * eso cambia de cliente en cliente y no es lo que se está mirando.
+ *
+ * **Nunca bloquea nada** (D-036): lo único que hace un `false` es pintar el
+ * aviso "no parece un X" con la salida "Usarlo igual".
+ *
+ * @param {string} fileName
+ * @param {string[]} siglas
+ */
+export function nameMatchesSiglas(fileName, siglas) {
+  if (!Array.isArray(siglas) || siglas.length === 0) return true;
+  const name = normalizarNombre(fileName);
+  if (!name) return true;
+  const palabras = ` ${name} `;
+  return siglas.some(s => {
+    const sigla = normalizarNombre(s);
+    return sigla !== '' && palabras.includes(` ${sigla} `);
+  });
+}
+
+/** Mayúsculas, sin acentos y con un solo espacio entre palabras. */
+function normalizarNombre(texto) {
+  return String(texto ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
 }
 
 /** ¿Muestra el selector de apellido/nombre en una columna o en dos? */
