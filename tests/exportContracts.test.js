@@ -4,7 +4,7 @@
 //
 // Este test no cambia comportamiento — valida que la fuente única declarada en
 // js/exports/contracts.js tiene la forma correcta, y que ninguna clave que hoy
-// ya bloquea el avance (required:true en FIELD_DEFS o en los TAB_*_FIELDS)
+// ya bloquea el avance (required:true en la ficha de su tipo de archivo)
 // quede con una necesidad más débil en el mapa derivado. Es el assert que
 // reemplaza la verificación manual "¿el contrato cubre todo lo que ya
 // bloqueaba?" — si alguien agrega un contrato nuevo y se olvida una clave que
@@ -12,15 +12,26 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-// fileUpload.js (de donde sale FIELD_DEFS, ver el barrido de "piso, nunca
-// techo" más abajo) arrastra js/db.js — necesita Dexie sobre una IndexedDB
-// falsa, igual que tests/variacionesConceptMap.test.js.
+// Los contratos arrastran js/controls/nr.js y rendVsTabu.js, que a su vez
+// arrastran js/db.js — necesita Dexie sobre una IndexedDB falsa, igual que
+// tests/variacionesConceptMap.test.js.
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 globalThis.Dexie = Dexie;
 
 const { EXPORT_CONTRACTS, NECESSITY, fieldNecessityMap, necessityOfKey, blocksProgress, FINANZAS_ALLOWED_KEYS } =
   await import('./js/exports/contracts.js');
+
+// Las columnas de entrada las declara la ficha de cada tipo de archivo
+// (Fase 4). El barrido de "piso, nunca techo" las lee del original, que es lo
+// único que hace que valga para los 17 tipos sin una segunda lista a mano.
+const { FILE_TYPES } = await import('./js/ui/fileTypes.js');
+
+/** Todas las columnas que declara un tipo: las del alta más las del Paso 2. */
+function columnasDe(fileType) {
+  const def = FILE_TYPES[fileType];
+  return [...def.fields, ...(def.extraFieldGroups || []).flatMap(g => g.fields)];
+}
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -133,11 +144,12 @@ for (const c of finanzas) {
 
 // ── Un contrato es un PISO, nunca un techo ───────────────────────────────────
 //
-// Derivado de `FIELD_DEFS` (el original en `js/ui/fileUpload.js`, no una copia
-// acá): ninguna clave con `required: true` puede dejar de bloquear porque
+// Derivado de la ficha de cada tipo (`js/ui/fileTypes.js`, el original y no una
+// copia acá): ninguna clave con `required: true` puede dejar de bloquear porque
 // algún contrato la declare OPCIONAL. Este es el assert que faltaba — la
 // versión a mano de más abajo cubría 6 claves elegidas al escribirla, y el caso
-// que se escapó no estaba entre ellas.
+// que se escapó no estaba entre ellas. Ahora recorre también las 27 columnas
+// del Paso 2, que antes vivían fuera de FIELD_DEFS y no las miraba nadie.
 //
 // El caso real: `puestoColumn` existe en DOS fileTypes con necesidades
 // opuestas (`tab_control` opcional · `cat_empleados` **required**), y
@@ -150,15 +162,13 @@ for (const c of finanzas) {
 // agarra, y lo que va a agarrar la próxima colisión cuando entre otro contrato
 // (el asiento de FINADIET ya sumó un fileType más, D-046).
 
-const { FIELD_DEFS } = await import('./js/ui/fileUpload.js');
-
 let requiredChecked = 0;
-for (const [fileType, fields] of Object.entries(FIELD_DEFS)) {
-  for (const f of fields) {
+for (const fileType of Object.keys(FILE_TYPES)) {
+  for (const f of columnasDe(fileType)) {
     if (!f.required) continue;
     requiredChecked++;
     assert(`${fileType}.${f.key}: sigue bloqueando (ningún contrato le baja la necesidad)`,
-      blocksProgress(f.key, true) === true);
+      blocksProgress(fileType, f.key, true) === true);
   }
 }
 assert('el barrido recorrió los required:true de verdad (si no, los asserts de arriba pasan por vacuidad)',
@@ -171,21 +181,23 @@ assert('el barrido recorrió los required:true de verdad (si no, los asserts de 
 // contrato las conoce, que es lo que hace que su necesidad se derive en vez de
 // depender del flag legado.
 
-const YA_BLOQUEABAN_HOY = {
-  empleadoColumn:          NECESSITY.CLAVE,
-  legajoColumn:            NECESSITY.CLAVE,
-  tabSalBaseColumn:        NECESSITY.OBLIGATORIA,
-  tabACuFutAumenColumn:    NECESSITY.OBLIGATORIA,
-  tabGtosPersonalesColumn: NECESSITY.OBLIGATORIA,
-  tabDtoCocheraColumn:     NECESSITY.OBLIGATORIA,
-};
+const YA_BLOQUEABAN_HOY = [
+  ['tab_control',  'empleadoColumn',          NECESSITY.CLAVE],
+  ['brutos_file',  'legajoColumn',            NECESSITY.CLAVE],
+  ['gs_pers_file', 'legajoColumn',            NECESSITY.CLAVE],
+  ['nr_file',      'legajoColumn',            NECESSITY.CLAVE],
+  ['tab_control',  'tabSalBaseColumn',        NECESSITY.OBLIGATORIA],
+  ['tab_control',  'tabACuFutAumenColumn',    NECESSITY.OBLIGATORIA],
+  ['tab_control',  'tabGtosPersonalesColumn', NECESSITY.OBLIGATORIA],
+  ['tab_control',  'tabDtoCocheraColumn',     NECESSITY.OBLIGATORIA],
+];
 
 const RANK = { [NECESSITY.CLAVE]: 3, [NECESSITY.OBLIGATORIA]: 2, [NECESSITY.OPCIONAL]: 1 };
 
-for (const [key, minNecessity] of Object.entries(YA_BLOQUEABAN_HOY)) {
-  const derived = necessityOfKey(key);
-  assert(`${key}: el contrato la cubre (no queda undeclared)`, derived !== null);
-  assert(`${key}: necesidad derivada (${derived}) >= la que ya bloqueaba (${minNecessity})`,
+for (const [fileType, key, minNecessity] of YA_BLOQUEABAN_HOY) {
+  const derived = necessityOfKey(fileType, key);
+  assert(`${fileType}.${key}: el contrato la cubre (no queda undeclared)`, derived !== null);
+  assert(`${fileType}.${key}: necesidad derivada (${derived}) >= la que ya bloqueaba (${minNecessity})`,
     derived !== null && RANK[derived] >= RANK[minNecessity]);
 }
 
@@ -193,18 +205,27 @@ for (const [key, minNecessity] of Object.entries(YA_BLOQUEABAN_HOY)) {
 // No suben de OPCIONAL sin importar cuántos contratos las referencien con una
 // necesidad más fuerte.
 
-assert('apellidoNombreColumn queda OPCIONAL (decisión de Willy, "dejalo como está")',
-  necessityOfKey('apellidoNombreColumn') === NECESSITY.OPCIONAL);
-assert('puestoColumn queda OPCIONAL (decisión de Willy, "dejalo como está")',
-  necessityOfKey('puestoColumn') === NECESSITY.OPCIONAL);
+// Se aplican POR CLAVE y no por (archivo, clave), a propósito: Willy pidió
+// dejarlas como están, y scopearlas ahora las subiría en algún archivo — que es
+// justo lo que no se pidió. `cat_empleados.puestoColumn` sigue bloqueando igual,
+// pero por su `required: true` (piso, nunca techo), no por el contrato.
+assert('tab_control.apellidoNombreColumn queda OPCIONAL (decisión de Willy, "dejalo como está")',
+  necessityOfKey('tab_control', 'apellidoNombreColumn') === NECESSITY.OPCIONAL);
+assert('tab_control.puestoColumn queda OPCIONAL (decisión de Willy)',
+  necessityOfKey('tab_control', 'puestoColumn') === NECESSITY.OPCIONAL);
+assert('cat_empleados.puestoColumn también queda OPCIONAL en el contrato…',
+  necessityOfKey('cat_empleados', 'puestoColumn') === NECESSITY.OPCIONAL);
+assert('…pero sigue bloqueando por su required:true (es el bug de D-045, ahora por dos vías)',
+  blocksProgress('cat_empleados', 'puestoColumn', true) === true);
 
 // Confirmar que estas dos SÍ son consumidas por varios contratos — si no lo
 // fueran, el assert de arriba no probaría nada (pasaría por vacuidad).
 const map = fieldNecessityMap();
-assert('apellidoNombreColumn está referenciada por más de un contrato (si no, el test de arriba no prueba nada)',
-  (map.get('apellidoNombreColumn')?.contracts.size ?? 0) > 1);
-assert('puestoColumn está referenciada por al menos un contrato',
-  (map.get('puestoColumn')?.contracts.size ?? 0) > 0);
+const usos = (fileType, key) => map.get(`${fileType}::${key}`)?.contracts.size ?? 0;
+assert('tab_control.apellidoNombreColumn está referenciada por más de un contrato (si no, el test de arriba no prueba nada)',
+  usos('tab_control', 'apellidoNombreColumn') > 1);
+assert('puestoColumn está referenciada desde los DOS archivos (es la colisión de D-045)',
+  usos('tab_control', 'puestoColumn') > 0 && usos('cat_empleados', 'puestoColumn') > 0);
 
 // ── Los 18 conceptos de NR están en el contrato, derivados de NR_CONCEPTS ────
 // (no una segunda lista copiada a mano)
@@ -219,75 +240,97 @@ assert('el contrato de NR Reporte no tiene más conceptos que NR_CONCEPTS (nada 
 // necessityOfKey de un concepto NR debe salir OBLIGATORIA por el lado tabKey
 // (nr_reporte) — el punto entero del Paso 2 es que esto pase a gatear.
 const indemPreaviso = NR_CONCEPTS.find(c => c.key === 'indemPreaviso');
-assert('un concepto NR (tabKey) sale OBLIGATORIA en el mapa derivado',
-  necessityOfKey(indemPreaviso.tabKey) === NECESSITY.OBLIGATORIA);
-assert('un concepto NR (nrKey, modo Controlar) sale OBLIGATORIA en el mapa derivado',
-  necessityOfKey(indemPreaviso.nrKey) === NECESSITY.OBLIGATORIA);
+assert('un concepto NR sale OBLIGATORIA desde el Tabulado (modo Reporte)',
+  necessityOfKey('tab_control', indemPreaviso.tabKey) === NECESSITY.OBLIGATORIA);
+assert('…y desde el archivo de NR (modo Controlar)',
+  necessityOfKey('nr_file', indemPreaviso.nrKey) === NECESSITY.OBLIGATORIA);
 
-// ── El mapa por clave asume que un mismo nombre de clave significa lo mismo
-// en todos los contratos que lo usan ─────────────────────────────────────────
+// ── El mapa está scopeado a (archivo, clave): ya no hay colisiones ──────────
 //
-// `fieldNecessityMap()` es un mapa PLANO: junta la necesidad de una clave a
-// través de TODOS los contratos, sin distinguir de qué tipo de archivo viene.
-// Hoy es seguro porque `legajoColumn` de Brutos/GS Pers/NR y `empleadoColumn`
-// del Tabulado son CLAVE en los tres lugares que los usan — pero si algún
-// contrato nuevo (Paso 6) declarara la MISMA clave con una necesidad distinta,
-// el mapa la resolvería mal: le prestaría la necesidad más fuerte de un
-// archivo no relacionado, sobre-bloqueando un campo que no debería estarlo.
+// D-041 documentó el mapa plano como "fragilidad, hoy no hay colisión real". El
+// Paso 6 del contrato de export encontró DOS colisiones legítimas y este assert
+// las contaba: `puestoColumn` (opcional en el Tabulado, required en el Reporte
+// de Categorías) y `costoTotalColumn` (opcional en Rendimiento, required en el
+// Reporte de Costo Total). No eran un error en los contratos — la misma columna
+// pesa distinto en archivos distintos, y con un mapa plano eso no se puede
+// declarar sin mentir de un lado.
 //
-// **El Paso 6 hizo que esto dejara de ser hipotético.** Hay dos claves que
-// existen en DOS fileTypes con necesidades legítimamente distintas:
-//
-//   puestoColumn     · tab_control: opcional   · cat_empleados: required
-//   costoTotalColumn · rend_file:   opcional   · costo_total_file: required
-//
-// No es un error a corregir en los contratos: la misma columna es opcional en
-// un archivo y obligatoria en otro, y con un mapa plano eso no se puede
-// declarar sin mentir de un lado. La forma correcta es scopear el mapa por
-// `(fileType, clave)` — sigue pendiente, ahora con dos casos concretos en vez
-// de cero (ver specs/contrato-export.md).
-//
-// Lo que este assert protege mientras tanto es lo que SÍ puede producir un gate
-// incorrecto. Después del arreglo de "piso, nunca techo", lo único que el
-// contrato aporta al gate por sí solo es CLAVE (`blocksProgress`): una clave
-// declarada CLAVE en un contrato y no-CLAVE en otro bloquearía la carga de un
-// archivo que no la necesita. La divergencia OPCIONAL/OBLIGATORIA, en cambio,
-// no puede: ninguna de las dos bloquea sola, y el `required: true` de cada
-// fileType lo aporta `FIELD_DEFS` —que sí está scopeado— y ya no se puede
-// apagar (ver el barrido de arriba).
+// La Fase 4 lo arregla en la raíz: cada columna declara `fromFile`, y el mapa se
+// arma por `${fileType}::${key}`. Las dos claves siguen existiendo en dos
+// archivos, pero ahora cada una tiene su propia entrada, así que **no hay
+// ninguna divergencia que contar**. Este assert pasó de "son exactamente 2" a
+// "son cero", que es lo que cierra el pendiente de fondo de D-041.
 
 {
-  const porClave = new Map(); // key -> Map<exportId, necessity>
+  const porClave = new Map(); // `${fileType}::${key}` -> Map<exportId, necessity>
   for (const c of contracts) {
     for (const col of c.columns) {
       for (const key of col.from) {
-        if (!porClave.has(key)) porClave.set(key, new Map());
-        porClave.get(key).set(c.exportId, col.necessity);
+        const scoped = `${col.fromFile}::${key}`;
+        if (!porClave.has(scoped)) porClave.set(scoped, new Map());
+        porClave.get(scoped).set(c.exportId, col.necessity);
       }
     }
   }
 
-  const claveInconsistente = [];
-  for (const [key, porContrato] of porClave) {
-    const necesidades = [...porContrato.values()];
-    const algunaClave = necesidades.some(n => n === NECESSITY.CLAVE);
-    const todasClave  = necesidades.every(n => n === NECESSITY.CLAVE);
-    if (algunaClave && !todasClave) claveInconsistente.push([key, [...porContrato.entries()]]);
-  }
-
-  assert('ninguna clave es CLAVE en un contrato y no-CLAVE en otro (lo único que puede dar un gate incorrecto)',
-    claveInconsistente.length === 0);
-  for (const [key, usos] of claveInconsistente) {
-    console.error(`    ${key}: ${usos.map(([id, n]) => `${id}=${n}`).join(', ')}`);
-  }
-
-  // Las divergencias no-CLAVE que sí existen quedan a la vista en la salida del
-  // test, para que se vean crecer: si esta lista se estira más allá de las dos
-  // colisiones conocidas, es la señal de que el mapa scopeado dejó de poder
-  // esperar.
   const divergentes = [...porClave].filter(([, m]) => new Set(m.values()).size > 1);
-  assert(`las divergencias OPCIONAL/OBLIGATORIA conocidas siguen siendo 2 (hoy: ${divergentes.map(([k]) => k).join(', ') || 'ninguna'})`,
-    divergentes.length === 2);
+  assert(`no hay ninguna divergencia de necesidad (hoy: ${divergentes.map(([k]) => k).join(', ') || 'ninguna'})`,
+    divergentes.length === 0);
+  for (const [k, m] of divergentes) {
+    console.error(`    ${k}: ${[...m.entries()].map(([id, n]) => `${id}=${n}`).join(', ')}`);
+  }
+
+  // Y la prueba de que el scopeo no lo logró borrando información: las dos
+  // claves que colisionaban siguen usándose desde los dos archivos, cada una
+  // con su necesidad. Sin esto, el assert de cero divergencias pasaría igual si
+  // alguien borrara un contrato.
+  const enDosArchivos = k => new Set(
+    [...porClave.keys()].filter(sk => sk.endsWith(`::${k}`)).map(sk => sk.split('::')[0])
+  );
+  assert('puestoColumn sigue viniendo de dos archivos distintos',
+    enDosArchivos('puestoColumn').size === 2);
+  assert('costoTotalColumn también',
+    enDosArchivos('costoTotalColumn').size === 2);
+  assert('costoTotalColumn del Reporte de Costo Total es OBLIGATORIA, no la OPCIONAL de Rendimiento',
+    necessityOfKey('costo_total_file', 'costoTotalColumn') === NECESSITY.OBLIGATORIA
+    && necessityOfKey('rend_file', 'costoTotalColumn') === NECESSITY.OPCIONAL);
+}
+
+// ── Todo (archivo, clave) que un contrato consume, existe en su ficha ───────
+//
+// El guard que el scopeo habilita y que antes era imposible: con el mapa plano,
+// una clave mal tipeada en un contrato quedaba como una entrada más y nadie se
+// enteraba. Ahora se puede cruzar contra las columnas que el tipo declara.
+
+{
+  // Dos claves que `nr_reporte` consume y que NINGUNA ficha declara. No es un
+  // typo: `autoDetectTabExtraConfig` las completa sola, el Reporte NR las
+  // exporta, pero no están en el panel "Columnas del Tabulado" — así que si la
+  // auto-detección se equivoca, el analista no tiene dónde corregirlas ni cómo
+  // declararlas ausentes. Se listan acá en vez de agregarlas al panel porque
+  // agregarlas cambia lo que se ve en pantalla, y eso es una decisión de Willy.
+  const SIN_CAMPO_EN_LA_FICHA = new Set(['tabIdCentroTrabColumn', 'tabIdCategoriaColumn']);
+
+  const huerfanas = [];
+  let cruzadas = 0;
+  for (const c of contracts) {
+    for (const col of c.columns) {
+      for (const key of col.from) {
+        cruzadas++;
+        assert(`${c.exportId}.${col.key}: declara de qué archivo sale`,
+          typeof col.fromFile === 'string' && FILE_TYPES[col.fromFile] !== undefined);
+        if (SIN_CAMPO_EN_LA_FICHA.has(key)) continue;
+        if (!columnasDe(col.fromFile).some(f => f.key === key)) {
+          huerfanas.push(`${c.exportId}.${col.key} → ${col.fromFile}.${key}`);
+        }
+      }
+    }
+  }
+  assert('el barrido cruzó claves de verdad (si no, pasa por vacuidad)', cruzadas >= 60);
+  assert(`toda clave de un contrato existe en la ficha de su archivo${huerfanas.length ? ': ' + huerfanas.join(', ') : ''}`,
+    huerfanas.length === 0);
+  assert('las 2 conocidas sin campo en el panel siguen siendo 2 (si aparece una tercera, mirarla)',
+    SIN_CAMPO_EN_LA_FICHA.size === 2);
 }
 
 // ── blocksProgress: Paso 1 — SIN cambio de comportamiento todavía ────────────
@@ -301,23 +344,30 @@ assert('un concepto NR (nrKey, modo Controlar) sale OBLIGATORIA en el mapa deriv
 // medias activando el bloqueo antes de la omisión.
 
 assert('blocksProgress: CLAVE bloquea siempre, sin importar el flag legado',
-  blocksProgress('legajoColumn', false) === true);
+  blocksProgress('brutos_file', 'legajoColumn', false) === true);
 assert('blocksProgress: OBLIGATORIA NO bloquea todavía si el flag legado es false — sin esto se rompe NR hoy',
-  blocksProgress('reinHomeOficeColumn', false) === false);
+  blocksProgress('nr_file', 'reinHomeOficeColumn', false) === false);
 assert('blocksProgress: OBLIGATORIA respeta el flag legado si YA bloqueaba (tabSalBaseColumn)',
-  blocksProgress('tabSalBaseColumn', true) === true);
+  blocksProgress('tab_control', 'tabSalBaseColumn', true) === true);
 assert('blocksProgress: OPCIONAL no bloquea por sí sola (flag legado en false)',
-  blocksProgress('apellidoNombreColumn', false) === false);
+  blocksProgress('tab_control', 'apellidoNombreColumn', false) === false);
 // Antes este assert afirmaba lo contrario ("OPCIONAL nunca bloquea, ni con el
 // flag legado en true") y por eso el contrato podía APAGAR un `required: true`
 // de otro fileType — es el bug de `puestoColumn` documentado en el barrido de
 // arriba. El contrato suma obligación, nunca la saca.
 assert('blocksProgress: OPCIONAL NO desactiva un required:true del fileType (piso, no techo)',
-  blocksProgress('apellidoNombreColumn', true) === true);
+  blocksProgress('tab_control', 'apellidoNombreColumn', true) === true);
 assert('blocksProgress: una clave no contratada cae 100% al flag legado (true)',
-  blocksProgress('idPueColumn', true) === true);
+  blocksProgress('cat_empleados', 'idPueColumn', true) === true);
 assert('blocksProgress: una clave no contratada cae 100% al flag legado (false)',
-  blocksProgress('idPueColumn', false) === false);
+  blocksProgress('cat_empleados', 'idPueColumn', false) === false);
+// Lo que el scopeo agrega: la MISMA clave en otro archivo ya no se contagia la
+// necesidad. `legajoColumn` es CLAVE en Brutos/GS Pers/NR/Costo Total porque
+// esos contratos lo declaran; en un archivo que no lo declara, no.
+assert('blocksProgress: una clave CLAVE en un archivo no bloquea sola en otro que no la contrata',
+  blocksProgress('nomina_maestra', 'legajoColumn', false) === false);
+assert('…y ese mismo campo sigue bloqueando por su required:true',
+  blocksProgress('nomina_maestra', 'legajoColumn', true) === true);
 
 // Ningún concepto NR bloquea todavía por esta vía — es la prueba negativa de
 // que Paso 1, solo, no cambia nada para NR. El día que se agregue la omisión
@@ -326,7 +376,8 @@ assert('blocksProgress: una clave no contratada cae 100% al flag legado (false)'
 const { NR_CONCEPTS: nrConceptsParaGate } = await import('./js/controls/nr.js');
 assert('ningún concepto NR bloquea todavía (Paso 1 no activa el gate; eso es Paso 2)',
   nrConceptsParaGate.every(c =>
-    blocksProgress(c.nrKey, false) === false && blocksProgress(c.tabKey, false) === false));
+    blocksProgress('nr_file', c.nrKey, false) === false
+    && blocksProgress('tab_control', c.tabKey, false) === false));
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

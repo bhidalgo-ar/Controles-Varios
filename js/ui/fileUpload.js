@@ -6,7 +6,6 @@ import { mergeContaFiles } from '../parsers/contaExcel.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
 import { blocksProgress } from '../exports/contracts.js';
 import {
-  FILE_TYPES,
   fieldsFor,
   fileTypeLabel,
   isFixedFormat,
@@ -18,18 +17,6 @@ import {
   dropLabelFor,
   dropHintFor,
 } from './fileTypes.js';
-
-// Campos "estándar" por tipo de archivo — derivados de la ficha de cada tipo
-// (`js/ui/fileTypes.js`), que es donde se declaran. Acá no se agrega nada: un
-// tipo de archivo nuevo se declara allá y aparece solo.
-//
-// Se sigue exportando con este nombre para `tests/exportContracts.test.js`, que
-// deriva de acá el assert de "ningún contrato debilita un `required: true` que
-// ya existía" — leerlo del original es lo único que hace que ese assert valga
-// para los 16 tipos de archivo sin una segunda lista que mantener a mano.
-export const FIELD_DEFS = Object.fromEntries(
-  Object.entries(FILE_TYPES).map(([fileType, def]) => [fileType, def.fields])
-);
 
 // Qué pantalla de carga le toca a cada `flow` declarado en la ficha. Las dos
 // siguen siendo funciones distintas porque hacen cosas distintas —CONTA mergea y
@@ -584,7 +571,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
             const style = matchSelectStyle(level);
             // El asterisco tiene que coincidir con lo que el gate de abajo
             // realmente exige — si no, un campo bloqueante sale sin marcar.
-            const esBloqueante = blocksProgress(f.key, f.required);
+            const esBloqueante = blocksProgress(fileType, f.key, f.required);
             return `
               <div class="form-group" style="margin-bottom:0;">
                 <label class="form-label ${esBloqueante ? 'form-label--required' : ''}" style="font-size:var(--text-sm);">${escHtml(f.label)}${matchBadge(level)}</label>
@@ -632,7 +619,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
       // declarados `required: true` —puesto, ID/nombre de centro de costo,
       // departamento de Cat. Empleados, PRECIO de Rendimiento y COSTO TOTAL—
       // se podían dejar vacíos desde acá sin que nada avisara.
-      const faltantes = fields.filter(f => blocksProgress(f.key, f.required) && !newMapping[f.key]).map(f => f.label);
+      const faltantes = fields.filter(f => blocksProgress(fileType, f.key, f.required) && !newMapping[f.key]).map(f => f.label);
       if (faltantes.length) {
         showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
         btn.disabled = false;
@@ -702,7 +689,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
         const val   = savedMapping?.[f.key] || '';
         const level = fieldLevel(val);
         const style = matchSelectStyle(level);
-        const esBloqueante = blocksProgress(f.key, f.required);
+        const esBloqueante = blocksProgress(fileType, f.key, f.required);
         return `
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label ${esBloqueante ? 'form-label--required' : ''}">${f.label}${matchBadge(level)}</label>
@@ -834,7 +821,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
     // Validar campos requeridos — deriva de EXPORT_CONTRACTS (Paso 1 de
     // specs/contrato-export.md) para toda clave que algún export ya consuma;
     // cae a `f.required` para lo que todavía no está contratado.
-    const faltantes = fields.filter(f => blocksProgress(f.key, f.required) && !mapping[f.key]).map(f => f.label);
+    const faltantes = fields.filter(f => blocksProgress(fileType, f.key, f.required) && !mapping[f.key]).map(f => f.label);
     if (faltantes.length) {
       showToast(`Falta completar: ${faltantes.join(', ')}`, 'warning');
       return;
