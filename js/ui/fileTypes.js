@@ -30,8 +30,9 @@
 //   flow           {string}    cómo se sube: 'single' (default, un archivo por
 //                              slot), 'multi' (N archivos que se concatenan) o
 //                              'multi-periodo' (N archivos, cada uno con su mes)
-//   dropLabel      {string}    override del texto de la zona de drop, sólo
-//                              donde ya divergía de `label` (ver acumuladores)
+//   dropLabel      {string}    override del texto de la zona de drop cuando
+//                              tiene que divergir de `label` — hoy ninguna
+//                              ficha lo usa (D-050 unificó la de Acumuladores)
 //   dropHint       {string}    aclaración extra en la zona de drop
 //   aliasOf        {string}    comparte la ficha de otro tipo (ver tab_prev_file)
 //
@@ -408,15 +409,13 @@ export const FILE_TYPES = {
   // RG 4003: hasta 8), y cada archivo lleva su propio período — de ahí
   // `flow: 'multi-periodo'` y no `'multi'` a secas.
   //
-  // `dropLabel` no es un capricho: la zona de drop ya decía "Acumuladores
-  // (Axton)" mientras la etiqueta del tipo dice "Acumuladores (export de
-  // Axton)". La divergencia es anterior a la ficha; se declara para preservarla
-  // tal cual en un paso que es cero cambio de comportamiento, no para
-  // bendecirla. Unificar los dos textos es una decisión de Willy, no un arreglo
-  // que se cuela en un refactor.
+  // Hasta D-048 la zona de drop tenía su propio `dropLabel` ("Acumuladores
+  // (Axton)"), distinto de la etiqueta del tipo — divergencia anterior a la
+  // ficha, preservada a propósito en un paso de cero cambio de comportamiento.
+  // D-050 la unificó: sin `dropLabel`, la zona de drop cae al mismo fallback
+  // que ya usa CONTA (`dropLabelFor` → `fileTypeLabel`).
   acumuladores_file: {
     label: 'Acumuladores (export de Axton)',
-    dropLabel: 'Acumuladores (Axton)',
     dropHint: ' (uno por mes)',
     parse: parseAcumuladores,
     detectHeaders: detectHeadersXlsx,
