@@ -1451,9 +1451,15 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   gap: var(--sp-3);
   align-items: center;
 }
+/* Head pegado arriba: la lista puede ser larga y el analista tiene que seguir
+   sabiendo qué columna está mirando. Quien scrollea es `.page-content` (regla
+   1), así que la card NO puede tener overflow propio — con un scroller
+   intermedio el sticky se ancla ahí y no se pega nunca. */
 .home-table__head {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--color-surface);
   padding: 10px var(--sp-6);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--table-head-border);
   color: var(--t3); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
 }
 .home-table__row { padding: 14px var(--sp-6); border-bottom: 1px solid var(--line-soft); transition: background var(--transition); }
@@ -1469,6 +1475,20 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 .home-mini-dots { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
 .home-table__last-run { font-size: 12px; color: var(--t2); }
 .home-table__actions { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+
+/* La card de la tabla recorta el head sticky contra sus esquinas redondeadas
+   sin crear un scroller (ver `.home-table__head`). */
+.home-table-card { padding: 0; overflow: clip; }
+
+.home-hidden-note {
+  margin: var(--sp-3) 0 0;
+  font-size: 12px; color: var(--t3); font-family: var(--font-tool);
+}
+.home-hidden-note__link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--celeste-deeper);
+}
+.home-hidden-note__link:hover { text-decoration: underline; }
 
 .row-menu { position: relative; display: inline-block; }
 .row-menu__panel {

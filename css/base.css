@@ -204,6 +204,7 @@ img { max-width: 100%; height: auto; display: block; }
 .app-header__context:empty,
 .app-header__steps:empty,
 .app-header__hint:empty,
+.app-header__tools:empty,
 .app-header__primary:empty { display: none; }
 
 .app-header__nav {
@@ -240,11 +241,26 @@ img { max-width: 100%; height: auto; display: block; }
 .app-header__spacer { flex: 1 1 auto; }
 
 .app-header__hint,
+.app-header__tools,
 .app-header__primary {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   flex-shrink: 0;
+}
+
+/* La barra es blanca en Sobrio pero navy en Intenso: lo que la pantalla cuelga
+   en los slots toma los tokens del header para no quedar ilegible sobre el
+   navy (mismo criterio que los ghost de abajo). */
+.app-header .month-selector {
+  background: transparent;
+  border-color: var(--header-btn-border);
+  color: var(--header-fg);
+}
+.app-header .month-selector__arrow { color: var(--header-fg-muted); }
+.app-header .month-selector__arrow:hover {
+  background: var(--header-btn-hover-bg);
+  color: var(--header-fg);
 }
 
 /* La primaria de la barra es siempre pill. Y cuando todavía no está lista NO
@@ -266,6 +282,11 @@ img { max-width: 100%; height: auto; display: block; }
 /* Botones ghost de la barra (ej. "🏠 Inicio"): en Intenso la barra es ink, así
    que el borde y el texto salen de los tokens del header y no de los generales
    —si no, quedarían ilegibles sobre el navy. */
+/* La secundaria de la barra conserva el borde celeste (es su identidad) pero
+   deja pasar el fondo del header. */
+.app-header .btn--secondary { background: transparent; }
+.app-header .btn--secondary:hover { background: var(--celeste-dim); }
+
 .app-header .btn--ghost {
   color: var(--header-fg-muted);
   border-color: var(--header-btn-border);

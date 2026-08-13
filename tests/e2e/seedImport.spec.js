@@ -38,6 +38,7 @@ test('importar un seed de prueba crea los clientes y muestra la versión', async
   await expect(page.locator('#js-seed-version')).toHaveText('Sin seed importado');
 
   const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.click('#js-data-menu-btn');
   await page.click('#js-seed-import-btn');
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(seedPath);
@@ -58,6 +59,7 @@ test('importar el mismo seed dos veces no duplica clientes', async ({ page }, te
 
   for (let i = 0; i < 2; i++) {
     const fileChooserPromise = page.waitForEvent('filechooser');
+    await page.click('#js-data-menu-btn');
     await page.click('#js-seed-import-btn');
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles(seedPath);
