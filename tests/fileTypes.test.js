@@ -19,7 +19,7 @@ globalThis.Dexie = Dexie;
 const {
   FILE_TYPES, fieldsFor, fileTypeLabel, isFixedFormat, hasNameMapping,
   metaLineFor, detectHeadersFor, parseFor, flowFor, dropLabelFor, dropHintFor,
-  autoDetectFor,
+  autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor,
 } = await import('./js/ui/fileTypes.js');
 
 let ok = 0, fail = 0;
@@ -174,6 +174,76 @@ for (const ctrl of Object.values(CONTROL_REGISTRY)) {
   if (prev) assert(`${ctrl.id}: el Tabulado anterior apunta a su hueco de la grilla`,
     prev.slot === '#js-var-prev-upload');
 }
+
+// ── Las columnas del Tabulado que se piden en el Paso 2 ─────────────────────
+// Eran cinco arrays sueltos en controlsWizard.js más un mapa de códigos. Se
+// piden en el Paso 2 y no al subir el archivo, y sólo las que necesita algún
+// control seleccionado: no tiene sentido pedirle los 18 conceptos de NR a quien
+// corre sólo Brutos.
+
+const TODOS = new Set(['brutos', 'gsPers', 'nr']);
+const gruposDe = (activos, opts) => extraFieldGroupsFor('tab_control', activos, opts);
+const camposDe = (activos, opts) => gruposDe(activos, opts).flatMap(g => g.fields);
+
+assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 5);
+assert('son 27 columnas en total', camposDe(TODOS).length === 27);
+assert('el Tabulado anterior las comparte por referencia (es el mismo archivo)',
+  FILE_TYPES.tab_prev_file.extraFieldGroups === FILE_TYPES.tab_control.extraFieldGroups);
+
+// Mismas reglas de forma que `fields`: sin esto un campo nuevo entra sin
+// `required` y deja de bloquear en silencio.
+for (const g of gruposDe(TODOS)) {
+  assert(`grupo ${g.id}: declara requiredBy explícitamente (id de control o null)`,
+    g.requiredBy === null || typeof g.requiredBy === 'string');
+  assert(`grupo ${g.id}: tiene campos`, Array.isArray(g.fields) && g.fields.length > 0);
+  for (const f of g.fields) {
+    assert(`${g.id}.${f.key}: tiene key y label`, !!f.key && !!f.label);
+    assert(`${g.id}.${f.key}: declara required explícitamente`, typeof f.required === 'boolean');
+  }
+}
+
+const todasLasClaves = camposDe(TODOS).map(f => f.key);
+assert('ninguna columna del Paso 2 está declarada dos veces',
+  new Set(todasLasClaves).size === todasLasClaves.length);
+assert('ninguna choca con una columna que se pide al subir el archivo',
+  todasLasClaves.every(k => !fieldsFor('tab_control').some(f => f.key === k)));
+
+// Sólo lo que pide el control seleccionado, más los compartidos.
+assert('con sólo Brutos: sus 2 columnas + las 5 compartidas',
+  camposDe(new Set(['brutos'])).length === 7);
+assert('con sólo NR: sus 18 conceptos + las 5 compartidas',
+  camposDe(new Set(['nr'])).length === 23);
+assert('sin ningún control: sólo las 5 compartidas',
+  camposDe(new Set()).length === 5);
+
+// **El panel y el gate usan conjuntos DISTINTOS.** El panel muestra los
+// compartidos; el gate de "no podés avanzar" no los mira. Hoy da igual (los 5
+// son OPCIONAL en los contratos), pero el día que uno suba a OBLIGATORIA la
+// diferencia importa — y este assert es el que la mantiene explícita en vez de
+// que dependa de un `...TAB_SHARED_FIELDS` que alguien mueve de lugar.
+assert('el gate NO mira las columnas compartidas',
+  camposDe(TODOS, { soloGateados: true }).length === 22);
+assert('…y el panel SÍ (los 5 de diferencia son exactamente los compartidos)',
+  camposDe(TODOS).length - camposDe(TODOS, { soloGateados: true }).length === 5);
+assert('sin ningún control seleccionado el gate no pide nada',
+  camposDe(new Set(), { soloGateados: true }).length === 0);
+
+// El orden es el de declaración: es lo que dibuja el panel de arriba a abajo.
+assert('los grupos salen en el orden en que se muestran',
+  gruposDe(TODOS).map(g => g.id).join(',') === 'brutos,gsPers,nrIndem,nrOtros,shared');
+assert('sólo los dos grupos de NR llevan subtítulo',
+  gruposDe(TODOS).filter(g => g.header).map(g => g.header).join(' · ') === 'Indemnizatorios · Otros NR');
+
+// El mapa de códigos: es lo que resuelve por código lo que el catálogo del
+// cliente no resolvió por nombre (D-039).
+const codeToKey = conceptCodeToKeyFor('tab_control');
+assert('el mapa de códigos apunta sólo a columnas declaradas',
+  Object.values(codeToKey).every(k => todasLasClaves.includes(k)));
+assert('ningún código apunta a dos claves distintas',
+  new Set(Object.values(codeToKey)).size === Object.values(codeToKey).length);
+assert('un tipo sin columnas del Paso 2 devuelve vacío, no rompe',
+  extraFieldGroupsFor('nr_file', TODOS).length === 0
+  && Object.keys(conceptCodeToKeyFor('nr_file')).length === 0);
 
 // ── Las líneas de metadata ───────────────────────────────────────────────────
 // Antes eran una cadena de 11 `||`: el tipo que no figuraba caía al molde de
