@@ -112,6 +112,25 @@ controlConfigs: {
 
 ---
 
+### Qué se declara y dónde (Fase 4, D-048)
+
+Tres registros, cada uno con un test que falla si una entrada queda a medias. La regla es la misma en
+los tres: **lo que un módulo necesita saber de otro se declara, no se cablea con un `if` por nombre.**
+
+| Registro | Dónde | Declara |
+|---|---|---|
+| Tipos de archivo | `js/ui/fileTypes.js` (`FILE_TYPES`) | etiqueta, columnas a mapear, parser, detector de encabezados, auto-detección, línea de metadata, flujo de carga. Más, para el Tabulado, las 27 columnas que se piden en el Paso 2 |
+| Controles | `js/controls/registry.js` (`CONTROL_REGISTRY`) | scope, archivos que pide (con `slot` / `rerenderOnLoad` / `shared`), `run`/`summarize`/`renderResults`, y su `config` |
+| Exports | `js/exports/contracts.js` (`EXPORT_CONTRACTS`) | columnas del entregable y de qué `(archivo, clave)` sale cada una |
+
+`js/ui/fileUpload.js` no menciona ningún tipo de archivo por nombre, y hay un assert que lo hace
+cumplir. `js/ui/controlsWizard.js` nombra sólo los dos que monta directo (el Tabulado y el catálogo),
+que no son `additionalFiles` de ningún control.
+
+La obligatoriedad de una columna de entrada **se deriva** de los contratos de export
+(`blocksProgress(fileType, key, legacyRequired)`), y el contrato es un piso: puede sumar obligación
+sobre el `required` de la ficha, nunca sacarla (D-041, D-045).
+
 ## 5. Seam de adaptadores por sourceSystem
 
 Los controles no vuelven a ver una columna cruda de Meta4 o Axton. Cada control declara `inputs` en forma lógica (`tabulado`, `reporte_brutos`, `reporte_nr`); un índice de adaptadores resuelve, según el `sourceSystem` del cliente, cómo parsear el archivo real a esa forma lógica.

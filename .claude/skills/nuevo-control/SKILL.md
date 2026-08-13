@@ -1,18 +1,22 @@
 ---
 name: nuevo-control
-description: Agregar un control nuevo a Controles Nómina, o una variante ("Generar Reporte") de uno existente. Cablea los 6 puntos de integración (parser, fileUpload, controlsWizard, módulo, registry, test) y las reglas que hacen que el resultado sea correcto — consolidación por legajo, null vs 0, semáforo por unidad declarada. Usar cuando el pedido sea "agregar el control X", "controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control a la batería.
+description: Agregar un control nuevo a Controles Nómina, o una variante ("Generar Reporte") de uno existente. Cablea los 5 puntos de integración (parser, ficha del tipo de archivo, módulo, registry, test) y las reglas que hacen que el resultado sea correcto — consolidación por legajo, null vs 0, semáforo por unidad declarada. Usar cuando el pedido sea "agregar el control X", "controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control a la batería.
 ---
 
 # Agregar un control nuevo
 
 Un control cruza un reporte de Meta4 (o de Axton) contra el Tabulado, o dos reportes entre sí.
-Agregarlo **no es escribir un archivo**: son 6 puntos de integración, y el que se olvida siempre es
-`fileUpload.js`. Síntoma típico: la pill aparece en el wizard pero el archivo no se puede subir.
+Agregarlo **no es escribir un archivo**: son 5 puntos de integración.
+
+Hasta la Fase 4 eran 6, y el que se olvidaba siempre era `fileUpload.js` — porque un tipo de archivo
+vivía repartido en ~12 lugares entre `fileUpload.js` y `controlsWizard.js`, sin ningún guard entre
+ellos. Hoy el tipo de archivo se declara **una vez** en `js/ui/fileTypes.js` y `tests/fileTypes.test.js`
+falla si la ficha queda a medias. Los otros 5 puntos siguen siendo tuyos.
 
 Referencias, todas código y todas vigentes: `js/controls/nr.js` (control de referencia, los dos
-modos), `js/parsers/nrParser.js` (parser de referencia), el encabezado de `js/controls/registry.js`
-(contrato de la entrada, campo por campo), `tests/gsPersControl.test.js` (la regla de consolidación
-escrita como test).
+modos), `js/parsers/nrParser.js` (parser de referencia), los encabezados de `js/ui/fileTypes.js` y
+`js/controls/registry.js` (los dos contratos, campo por campo), `tests/gsPersControl.test.js` (la
+regla de consolidación escrita como test).
 
 ## Antes de escribir código
 
@@ -29,16 +33,19 @@ Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va
 5. A qué clientes se ofrece. El default es el cliente que lo pidió (D-015); `scope: 'general'` sólo
    si Willy lo confirma.
 
-## Los 6 puntos
+## Los 5 puntos
 
 | # | Archivo | Qué |
 |---|---|---|
 | 1 | `js/parsers/<x>Parser.js` | `parse<X>`, `autoDetect<X>Mapping`, re-export de `detectHeaders` |
-| 2 | `js/ui/fileUpload.js` | **cinco** lugares — ver abajo |
-| 3 | `js/ui/controlsWizard.js` | import + entrada en `AUTO_DETECT` |
-| 4 | `js/controls/<x>.js` | `run` / `summarize` / `renderResults` |
-| 5 | `js/controls/registry.js` | imports + entrada (los campos, en el encabezado del archivo) |
-| 6 | `tests/<x>Control.test.js` | + agregarlo a la cadena `test:unit` |
+| 2 | `js/ui/fileTypes.js` | **una** entrada en `FILE_TYPES` — ver abajo |
+| 3 | `js/controls/<x>.js` | `run` / `summarize` / `renderResults` |
+| 4 | `js/controls/registry.js` | imports + entrada (los campos, en el encabezado del archivo) |
+| 5 | `tests/<x>Control.test.js` | + agregarlo a la cadena `test:unit` |
+
+`js/ui/fileUpload.js` y `js/ui/controlsWizard.js` **no se tocan**. Si te encontrás escribiendo un
+`if (fileType === '…')` en alguno de los dos, algo falta en la ficha —
+`tests/fileTypes.test.js` afirma que `fileUpload.js` no menciona ningún tipo de archivo por nombre.
 
 ### 1 — el parser
 
@@ -49,30 +56,36 @@ Seguí la forma de `nrParser.js`. Dos cosas que no se deducen del archivo:
 - Los reportes de M4 traen subtotales y separadores mezclados con los datos: descartá las filas sin
   legajo válido antes de devolver nada.
 
-### 2 — `fileUpload.js`, los cinco lugares
+### 2 — la ficha del tipo de archivo
 
-El import, `FIELD_DEFS`, `parseFile()`, `fileTypeLabel()` — y la cadena de `||` de la rama que arma
-la línea de metadata (`grep -n "fileType === 'tab_control'" js/ui/fileUpload.js`). Ese quinto es el
-que se olvida: sin él el archivo sube pero no muestra "N registros".
+Una entrada en `FILE_TYPES` (`js/ui/fileTypes.js`). El contrato completo está en el encabezado de ese
+archivo; copiá la ficha de `nr_file`, que es la más parecida a un reporte típico. Lo que no se deduce:
 
-En `FIELD_DEFS`, el legajo va `required: true`. Para los conceptos: **si tu control ya tiene contrato
-en `js/exports/contracts.js`** (Brutos/GS Pers/NR, ver D-041 y `specs/contrato-export.md`), no pongas
-`required` a mano — la obligatoriedad se deriva del contrato (`necessityOfKey()`), y un `required`
-puesto ahí queda ignorado en cuanto exista el contrato. Si tu control **todavía no** tiene contrato
-(el resto, hoy), `required: false` en los conceptos sigue siendo el default correcto: un cliente puede
-no liquidar un concepto y el control tiene que correr igual — no lo vuelvas `true` "para que se
-note", eso traba a cualquier cliente sin ese concepto sin ninguna vía de escape (ver el Paso 2 de
-`specs/contrato-export.md`: activar `OBLIGATORIA` sin la omisión declarada rompe la carga). Un tipo
-de archivo de formato fijo (`conta_file`) va con `[]`.
+- **`autoDetect` se declara siempre, aunque sea `null`.** Sin declararlo queda `undefined`,
+  indistinguible de un olvido, y el analista mapea a mano un archivo que la app sabía leer sola.
+- **`fixedFormat` no es "no tiene columnas".** Es "se parsea derecho, sin pantalla de confirmación".
+  `acreditaciones_file` no tiene ninguna columna que mapear y aun así pasa por la vista previa, que
+  es lo único que le muestra al analista que subió el archivo correcto.
+- **`meta`** es la línea que se ve al lado del nombre del archivo cargado. Un reporte normal usa
+  `metaRegistros`. Si te olvidás, el test falla; antes salía la línea de otro tipo, en silencio.
+- **`flow`** sólo si el analista sube varios archivos del mismo tipo en una corrida (CONTA,
+  Acumuladores). El default es uno por slot.
 
-### 3 — `controlsWizard.js`
+En `fields`, el legajo va `required: true`, y **`required` se declara en todos los campos**, aunque
+sea `false` — sin él queda `undefined` → falsy → el campo deja de bloquear en silencio. Para los
+conceptos: **si tu control ya tiene contrato en `js/exports/contracts.js`** (ver D-041 y
+`specs/contrato-export.md`), la obligatoriedad se deriva del contrato
+(`necessityOfKey(fileType, key)`), y el `required` de la ficha queda como piso — un contrato suma
+obligación, nunca la saca (D-045). Si tu control **todavía no** tiene contrato, `required: false` en
+los conceptos sigue siendo el default correcto: un cliente puede no liquidar un concepto y el control
+tiene que correr igual — no lo vuelvas `true` "para que se note", eso traba a cualquier cliente sin
+ese concepto sin ninguna vía de escape (ver el Paso 2 de `specs/contrato-export.md`: activar
+`OBLIGATORIA` sin la omisión declarada rompe la carga). Un tipo de formato fijo va con `fields: []`.
 
-Alcanza con importar el `autoDetect` y registrarlo en `AUTO_DETECT` con clave = `fileType`.
 `canGoNext` no se toca salvo que la validación no sea "están todos los archivos requeridos" — el
-único caso hoy es `agrupadores` ("al menos uno de dos opcionales"). Si hay variantes agrupadas, sumá
-la constante de IDs junto a las que ya están.
+único caso hoy es `agrupadores` ("al menos uno de dos opcionales").
 
-### 4 — el módulo del control
+### 3 — el módulo del control
 
 **Consolidar por legajo, los dos lados.** El Tabulado trae una fila **por liquidación**, no por
 empleado: un legajo con mensual + baja aparece dos veces. El reporte informa el total sumado — salvo
@@ -149,14 +162,22 @@ En una variante "Generar Reporte" no llega archivo primario: nombralo `_primaryR
 
 Para `renderResults` → leé `ui-resultados.md`, en esta misma carpeta.
 
-### 5 — el registry
+### 4 — el registry
 
 Los campos están documentados en el encabezado de `js/controls/registry.js`. Lo que se olvida:
 `help: { what, how[] }` es el popover "?" que ve el analista — `what` en una o dos oraciones, `how`
 como pasos imperativos ("Bajá el Reporte de X de M4."). Y en variantes agrupadas, el `group.id` tiene
 que ser idéntico en las dos entradas o se renderizan como pills sueltas.
 
-### 6 — el test
+**Si tu control tiene configuración propia del cliente** (una tabla de cuentas, un régimen, umbrales),
+declarala en `config` — no la cablees en `controlsWizard.js`. Una declaración cubre los cinco momentos
+(cargar, state, editor del Paso 2, guardar y viajar a `run()`); antes eran siete lugares sin nada que
+los ligara, y olvidarse del `mapping` daba un control corriendo con su default sin que nada avisara.
+Dos que no se deducen: `default()` devuelve una **copia nueva** (el editor la muta en el lugar), y un
+editor sin `mappingKey` es una config que el analista toca y el control nunca ve —
+`tests/controlConfigRegistry.test.js` lo prohíbe.
+
+### 5 — el test
 
 Corre en Node, así que necesita el shim **antes** de importar el registry (que importa módulos de UI
 que registran listeners a nivel de módulo):
@@ -189,7 +210,7 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 ## Checklist
 
 ```
-[ ] parser · fileUpload (5 lugares) · wizard · módulo · registry · test
+[ ] parser · ficha en fileTypes.js · módulo · registry · test
 [ ] test agregado a la cadena test:unit de package.json, y `npm run test:unit` pasa
 [ ] probado en el navegador con un archivo real (para servir la app, ver README.md)
 [ ] CHANGELOG.md

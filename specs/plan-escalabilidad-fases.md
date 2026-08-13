@@ -270,21 +270,51 @@ la app no llega a levantar Dexie — y se confirmó que fallan igual en la rama 
 
 ## Fase 4 — Registro declarativo de archivos y controles
 
-**Estado: planeada.** Es la más grande de las cinco, y donde se cumple "agregar un control no toca
-12 lugares".
+**Estado: cerrada** (2026-08-13). Era la más grande de las cinco, y es donde se cumple "agregar un
+control no toca 12 lugares". Detalle completo en `specs/fase-4-registro-declarativo.md` (la spec, con
+guardrails y evals acordados antes de escribir código) y D-048 (las decisiones).
 
-- Paso 0, chico y aislado, se puede mergear ya: reemplazar el `Promise.all` de 10 nombres por
-  posición en `controlsWizard.js` por carga por clave — es un default silencioso de manual
-  (desalinear el destructuring mete la config de un control en el state de otro sin ningún error).
-- `js/ui/fileTypes.js` con un mapa único (`FILE_TYPES = { nr_file: { label, fields, parse,
-  autoDetect, ... } }`) — hoy agregar un tipo de archivo toca ~12 puntos en `fileUpload.js` +
-  `controlsWizard.js`, sin ningún guard entre ellos.
-- Config declarada en el registry en vez de 6 bloques de código por control con config.
+**Lo primero que apareció al medir:** no eran ~12 puntos, eran **19** entre `fileUpload.js` y
+`controlsWizard.js`, más **7 por cada control con configuración propia**. Ninguno de los 26 tenía
+guard.
 
-No depende de las Fases 1-3, pero es la de mayor esfuerzo — dejarla última no es por prioridad baja,
-es por tamaño.
+Entró en 7 PRs mergeables por separado, todos con cero cambio de comportamiento visible:
 
----
+| | Paso | Qué cerró |
+|---|---|---|
+| 1 | `js/ui/fileTypes.js` — una ficha por tipo | 12 de los 19 · `fileUpload.js` −197 líneas |
+| 2 | CONTA y Acumuladores entran a la ficha (`flow`) | los 2 flujos multi-archivo |
+| 3 | El wizard deriva de la ficha | los 5 restantes · `AUTO_DETECT` y 8 imports, borrados |
+| 4 | Las 27 columnas del Paso 2 → `tab_control` | habilitó el paso 5 |
+| 5 | Mapa de necesidad scopeado a `(fileType, clave)` | **el assert pasó de 2 divergencias a 0** |
+| 6 | Config por control declarada en el registry | los 7 puntos → 1 declaración |
+| 7 | Skill, documentación y el barrido de ciclos como test | los 6 puntos del skill → 5 |
+
+**El pendiente de fondo, cerrado.** El mapa de necesidad de `contracts.js` era plano por clave; D-045
+había encontrado dos colisiones reales y las dejó *contadas* porque el esquema no podía
+representarlas. Cada columna de contrato declara ahora `fromFile` y el mapa se arma por
+`(fileType, clave)`. El assert dice **cero divergencias**, con tres asserts más que impiden llegar a
+ese cero borrando información.
+
+**Lo que la fase rescató de quedar implícito** — cuatro cosas que estaban en el código sin nada que
+dijera que eran a propósito, y que se habrían perdido en el próximo refactor: que `fixedFormat` no se
+deriva de `fields: []`; que el panel del Paso 2 y el gate de avance usan conjuntos distintos de
+campos; que Rend vs Asiento lee la agrupación de conceptos pero no la guarda; y cuándo una config
+viaja como `null` y cuándo no viaja. Las cuatro son asserts ahora.
+
+**Lo que se ganó en verificación**, que era el agujero real de este entorno: los ciclos de import
+rompen sólo en el navegador, y los 12 e2e que los agarrarían no corren sin red al CDN. Entraron
+`tests/moduleCycles.test.js` (barrido estático de los 69 módulos, validado inyectando un ciclo real),
+`tests/e2e/moduleGraph.spec.js` (importa el grafo más grande de la app sirviendo Dexie desde
+`node_modules`) y `tests/e2e/multiUpload.spec.js` (las dos pantallas multi-archivo no tenían ninguna
+cobertura).
+
+**Reportado y NO arreglado, para decidir:** `tabIdCentroTrabColumn` y `tabIdCategoriaColumn` las
+consume el contrato de `nr_reporte` y las completa sola la auto-detección, pero no están en el panel
+"Columnas del Tabulado" — si la auto-detección se equivoca, el analista no tiene dónde corregirlas.
+Y la zona de drop de Acumuladores dice "Acumuladores (Axton)" mientras la etiqueta del tipo dice
+"Acumuladores (export de Axton)"; la divergencia es anterior a la fase y quedó declarada y fijada por
+un assert en vez de unificada de prestado.
 
 ## Fase 5 — Cerrar el ciclo (el skill)
 
@@ -323,16 +353,16 @@ la Columna de Puesto del Reporte de Categorías (D-045). Lo que sigue, en orden 
    x EE, EE x CATEG y acumuladores) y **filas atenuadas** (Rend x EE pinta en gris los legajos sin
    contraparte). Migrar sin eso sería una regresión visible en el entregable — detalle en
    `specs/contrato-export.md`, "Lo que falta para migrar los writers del Paso 6".
-2. **Fase 4** — la más grande. `fileTypes.js` con un mapa único y la config declarada en el registry.
-3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz) recién después de la Fase 4: un adaptador nuevo
-   sobre parsers todavía duplicados hereda la duplicación.
+2. ~~**Fase 4**~~ — cerrada el 2026-08-13 en 7 PRs. Ver la sección de la fase, más arriba.
+3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz): ahora sí destrabado. La condición que lo
+   frenaba era que un adaptador nuevo sobre parsers todavía duplicados hereda la duplicación — con la
+   ficha por tipo de archivo, un sistema de origen nuevo declara sus tipos en vez de copiar los del
+   anterior.
 
-**Pendiente de fondo, sin urgencia pero ya no hipotético:** el mapa de necesidad de `contracts.js` es
-plano por clave y no por `(fileType, clave)`. El Paso 6 encontró **dos** colisiones reales
-(`puestoColumn`, `costoTotalColumn`: la misma columna es opcional en un archivo y obligatoria en otro).
-Hoy no puede producir un gate incorrecto —el contrato pasó a ser un piso, nunca un techo (D-045)— pero
-tampoco se puede declarar la verdad de los dos lados. El test cuenta las divergencias y falla si aparece
-una tercera.
+**Pendiente de fondo: cerrado** (Fase 4, paso 5). El mapa de necesidad de `contracts.js` era plano por
+clave y no por `(fileType, clave)`, con dos colisiones reales que no se podían declarar sin mentir de un
+lado. Cada columna declara ahora `fromFile` y el assert pasó de "las divergencias son exactamente 2" a
+"no hay ninguna".
 
 **Nota de entorno, para no repetir la pregunta:** desde esta sesión hay Chromium real disponible en el
 sandbox (`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, ver

@@ -1,6 +1,6 @@
 # Fase 4 — Registro declarativo de archivos y controles
 
-**Estado: spec, a confirmar por Willy antes de tocar código.**
+**Estado: cerrada** (2026-08-13). Los 7 pasos entraron mergeados por separado — PRs #119, #120, #121, #122, #123, #124 y el de este cambio. Las decisiones, en D-048; el estado de la fase, en `specs/plan-escalabilidad-fases.md`.
 Fecha: 2026-08-13 · Rama: `claude/fase-4-registro-declarativo-n1gz5v`
 
 Continúa `specs/plan-escalabilidad-fases.md` (Fase 4) y **no pisa** el contrato de export
@@ -318,4 +318,20 @@ no se resuelven.
 
 ---
 
-**Confirmada por Willy:** pendiente.
+**Confirmada por Willy:** sí, el 2026-08-13 (el corte en 7 pasos y las tres decisiones de arriba).
+
+---
+
+## Cierre — lo que cambió respecto de esta spec
+
+Todo lo planeado entró. Tres cosas que la spec no anticipaba y que se resolvieron en el camino:
+
+1. **No eran ~12 puntos: eran 19**, más 7 por cada control con config. El conteo real está en la
+   tabla de arriba y se verificó uno por uno con archivo:línea.
+2. **La verificación que esta spec pedía no era suficiente en este entorno.** Los 12 e2e que fallan
+   por falta de red al CDN son exactamente los que agarrarían un ciclo de módulos — el riesgo con
+   nombre de la sección 1. Se cubrió con tres tests nuevos que sí corren acá (`moduleCycles`,
+   `moduleGraph`, `multiUpload`), y `moduleCycles` se validó inyectando un ciclo real.
+3. **Dos hallazgos de comportamiento, reportados y no arreglados**, según el guardrail de la sección
+   5: las dos columnas del Tabulado que ningún panel muestra, y los dos textos divergentes de la zona
+   de drop de Acumuladores. Los dos están fijados por asserts para que la decisión sea explícita.
