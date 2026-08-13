@@ -1,5 +1,5 @@
 // exportSinWriterConformidad.test.js — Los exports que arman su .xlsx A MANO
-// emiten exactamente las columnas de su contrato (D-049).
+// emiten exactamente las columnas de su contrato (D-050).
 // Correr desde la raíz del proyecto:
 //   node --input-type=module < tests/exportSinWriterConformidad.test.js
 //

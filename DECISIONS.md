@@ -1065,7 +1065,34 @@ el formulario de carga, ni el override de clave de legajo por corrida (D-038 pun
 
 ---
 
-## D-049 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
+## D-049 — `tabIdCentroTrabColumn` / `tabIdCategoriaColumn` entran al panel del Paso 2
+
+**Fecha:** 2026-08-13
+**Contexto:** D-048 dejó reportado, para que lo decida Willy, que estas dos columnas las consume el
+contrato de `nr_reporte` y las completa sola `autoDetectTabExtraConfig`, pero no estaban en el panel
+"Columnas del Tabulado" — si la auto-detección se equivocaba, el analista no tenía dónde corregirlas
+ni cómo declararlas ausentes. `tests/exportContracts.test.js` las llevaba en un `Set`
+(`SIN_CAMPO_EN_LA_FICHA`) como excepción explícita al guard de que todo `from` de un contrato existe en
+la ficha de su archivo.
+**Decisión:** agregarlas como grupo propio de `FILE_TYPES.tab_control.extraFieldGroups`
+(`js/ui/fileTypes.js`) — `nrIdent`, con `header: 'Identificación NR'`, en vez de meterlas en `shared`:
+a diferencia de las 5 columnas compartidas (nombre, apellido, tres fechas), a estas sólo las lee
+`nr_reporte` — ni Brutos ni GS Pers las tocan — así que van con `requiredBy: 'nr'` como `nrIndem` y
+`nrOtros`, no con `requiredBy: null`. Las dos quedan `required: false` en la ficha, consistente con la
+`NECESSITY.OPCIONAL` que ya tenían en el contrato — así que `pendingTabRequirements()` (el gate de
+"no podés avanzar") sigue sin bloquear por ellas, exactamente como antes. Se sacó la excepción de
+`tests/exportContracts.test.js`: ahora cruzan como cualquier otra columna contra la ficha.
+**Alternativas descartadas:** dejarlas en `shared` (mezclaría en el subtítulo compartido dos columnas
+que sólo NR usa, y el día que alguna suba a OBLIGATORIA el gate las aplicaría también a Brutos/GS Pers,
+que es lo que la nota de `extraFieldGroups` en la ficha advierte que hay que evitar).
+**Verificación.** `npm run test:unit` completo (los conteos de `tests/fileTypes.test.js` que dependían
+del total de grupos/columnas de `tab_control` se actualizaron: 5→6 grupos, 27→29 columnas). Screenshot
+manual del panel del Paso 2 con el Tabulado cargado: el subtítulo "Identificación NR" aparece entre
+"Otros NR" y las 5 compartidas, con las dos columnas auto-detectadas contra un Tabulado de prueba.
+
+---
+
+## D-050 — `acreditaciones_reporte` va a mano **por diseño**: la excepción se declara, y se verifica contra su contrato
 
 **Fecha:** 2026-08-13
 **Contexto:** Último pendiente del Paso 6 de `specs/contrato-export.md`. D-047 migró 4 de los 5 writers y

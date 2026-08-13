@@ -5,17 +5,21 @@
 // — no se declara dos veces.
 //
 // Ver specs/contrato-export.md para el porqué y el plan completo por pasos
-// (D-041, D-043, D-045, D-046 y D-047 en DECISIONS.md).
+// (D-041, D-043, D-045, D-046, D-047 y D-050 en DECISIONS.md).
 //
-// Dos reglas que no se deducen leyendo:
+// Tres reglas que no se deducen leyendo:
 //   1. **El contrato es un PISO, nunca un techo** — puede agregar obligación
 //      sobre el `required` de FIELD_DEFS, nunca sacarla (ver blocksProgress()).
 //   2. Los contratos migrados a un writer declaran también su layout
-//      (`width`/`groups`/`headerRows`); `acreditaciones_reporte` (el único que
-//      queda con su .xlsx a mano — D-047) declara sólo semántica. Declarar
-//      layout que nadie lee es una segunda fuente de verdad que se
+//      (`width`/`groups`/`headerRows`); los de `SIN_WRITER_POR_DISENO`
+//      (hoy sólo `acreditaciones_reporte` — D-050) declaran sólo semántica.
+//      Declarar layout que nadie lee es una segunda fuente de verdad que se
 //      desincroniza en silencio, y hay un assert en tests/exportContracts.test.js
 //      que lo impide en los dos sentidos.
+//   3. **Todo contrato está en `CON_WRITER` o en `SIN_WRITER_POR_DISENO`**, los
+//      dos declarados más abajo: no hay un tercer estado silencioso (D-050). El
+//      que va a mano se verifica igual contra su contrato, en
+//      tests/exportSinWriterConformidad.test.js.
 
 import { NR_CONCEPTS } from '../controls/nr.js';
 import { COLS } from '../controls/rendVsTabu.js';
@@ -427,7 +431,7 @@ const catDistribucion = (exportId, sheet, label, from) => ({
 // CONTROL que las lista y cierra contra el archivo de origen no se modela acá:
 // es una hoja de cierre con fórmulas entre hojas, no una tabla de datos.
 //
-// **Escribe su .xlsx a mano, por diseño y no por deuda (D-049).** Es el primer
+// **Escribe su .xlsx a mano, por diseño y no por deuda (D-050).** Es el primer
 // habitante de `SIN_WRITER_POR_DISENO` (`tests/exportContracts.test.js`): el
 // motivo es la FORMA de la hoja, y son 6 cosas que `writeContractSheet` no
 // describe, cada una con este único consumidor —
@@ -451,7 +455,7 @@ const catDistribucion = (exportId, sheet, label, from) => ({
 // es `SUM(D3:D<n>)`, misma hoja, y desde D-047 eso viaja tal cual en
 // `row[c.key]` sin que el writer tenga que saber nada.
 //
-// Que vaya a mano NO lo deja sin verificar, y eso es lo que cambió en D-049:
+// Que vaya a mano NO lo deja sin verificar, y eso es lo que cambió en D-050:
 // `tests/exportSinWriterConformidad.test.js` arma el workbook de verdad y
 // comprueba que cada hoja de detalle emita EXACTAMENTE estas columnas, en este
 // orden, y ninguna más. Sin eso, el assert de D-020 de más abajo probaba algo
@@ -546,7 +550,7 @@ export const EXPORT_CONTRACTS = {
   finadiet_asiento_gral:  finadietAsientoGral,
 };
 
-// ── Cómo se escribe cada export: por el writer, o a mano por diseño (D-049) ───
+// ── Cómo se escribe cada export: por el writer, o a mano por diseño (D-050) ───
 //
 // Los dos grupos **particionan** `EXPORT_CONTRACTS`: cada contrato tiene que
 // estar en exactamente uno, y `tests/exportContracts.test.js` lo hace cumplir.

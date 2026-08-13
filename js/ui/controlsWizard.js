@@ -1355,8 +1355,9 @@ function renderTabExtraConfig(container, state, root, { hasBrutos, hasGsPers, ha
   const autoDetected   = state.tabExtraConfigAutoDetected;
 
   // El orden y los subtítulos salen de la ficha: los grupos vienen en orden de
-  // declaración (Brutos · GS Pers · Indemnizatorios · Otros NR · compartidos) y
-  // el que trae `header` inserta su subtítulo de ancho completo.
+  // declaración (Brutos · GS Pers · Indemnizatorios · Otros NR · Identificación
+  // NR · compartidos) y el que trae `header` inserta su subtítulo de ancho
+  // completo.
   const fields = extraFieldGroupsFor('tab_control', activeExtraGroups({ hasBrutos, hasGsPers, hasNr }))
     .flatMap(g => (g.header ? [{ groupHeader: g.header }, ...g.fields] : g.fields));
 

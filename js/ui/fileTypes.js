@@ -198,6 +198,13 @@ export const FILE_TYPES = {
       { key: 'tabReintGuardColumn',     label: 'REINT_GUARD — columna en Tabulado',     required: false },
       { key: 'tabIncrementoStColumn',   label: 'INCREMENTO_ST — columna en Tabulado',   required: false },
     ] },
+    // Sólo las consume el Reporte NR (`nr_reporte`, D-048/D-049): a diferencia
+    // de `shared`, no las usa Brutos ni GS Pers, así que van en su propio grupo
+    // atado a `requiredBy: 'nr'` en vez de mezclarse con las 5 compartidas.
+    { id: 'nrIdent', requiredBy: 'nr', header: 'Identificación NR', fields: [
+      { key: 'tabIdCentroTrabColumn', label: 'ID_CENTRO_TRAB — columna en Tabulado', required: false },
+      { key: 'tabIdCategoriaColumn',  label: 'ID_CATEGORIA — columna en Tabulado',   required: false },
+    ] },
     { id: 'shared', requiredBy: null, fields: [
       { key: 'tabNombreColumn',      label: 'Columna NOMBRE',     required: false },
       { key: 'tabApellido1Column',   label: 'Columna APELLIDO_1', required: false },

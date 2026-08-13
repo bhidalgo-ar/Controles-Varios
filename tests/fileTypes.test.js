@@ -185,8 +185,8 @@ const TODOS = new Set(['brutos', 'gsPers', 'nr']);
 const gruposDe = (activos, opts) => extraFieldGroupsFor('tab_control', activos, opts);
 const camposDe = (activos, opts) => gruposDe(activos, opts).flatMap(g => g.fields);
 
-assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 5);
-assert('son 27 columnas en total', camposDe(TODOS).length === 27);
+assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 6);
+assert('son 29 columnas en total', camposDe(TODOS).length === 29);
 assert('el Tabulado anterior las comparte por referencia (es el mismo archivo)',
   FILE_TYPES.tab_prev_file.extraFieldGroups === FILE_TYPES.tab_control.extraFieldGroups);
 
@@ -211,8 +211,8 @@ assert('ninguna choca con una columna que se pide al subir el archivo',
 // Sólo lo que pide el control seleccionado, más los compartidos.
 assert('con sólo Brutos: sus 2 columnas + las 5 compartidas',
   camposDe(new Set(['brutos'])).length === 7);
-assert('con sólo NR: sus 18 conceptos + las 5 compartidas',
-  camposDe(new Set(['nr'])).length === 23);
+assert('con sólo NR: sus 18 conceptos + ID_CENTRO_TRAB/ID_CATEGORIA + las 5 compartidas',
+  camposDe(new Set(['nr'])).length === 25);
 assert('sin ningún control: sólo las 5 compartidas',
   camposDe(new Set()).length === 5);
 
@@ -222,7 +222,7 @@ assert('sin ningún control: sólo las 5 compartidas',
 // diferencia importa — y este assert es el que la mantiene explícita en vez de
 // que dependa de un `...TAB_SHARED_FIELDS` que alguien mueve de lugar.
 assert('el gate NO mira las columnas compartidas',
-  camposDe(TODOS, { soloGateados: true }).length === 22);
+  camposDe(TODOS, { soloGateados: true }).length === 24);
 assert('…y el panel SÍ (los 5 de diferencia son exactamente los compartidos)',
   camposDe(TODOS).length - camposDe(TODOS, { soloGateados: true }).length === 5);
 assert('sin ningún control seleccionado el gate no pide nada',
@@ -230,9 +230,9 @@ assert('sin ningún control seleccionado el gate no pide nada',
 
 // El orden es el de declaración: es lo que dibuja el panel de arriba a abajo.
 assert('los grupos salen en el orden en que se muestran',
-  gruposDe(TODOS).map(g => g.id).join(',') === 'brutos,gsPers,nrIndem,nrOtros,shared');
-assert('sólo los dos grupos de NR llevan subtítulo',
-  gruposDe(TODOS).filter(g => g.header).map(g => g.header).join(' · ') === 'Indemnizatorios · Otros NR');
+  gruposDe(TODOS).map(g => g.id).join(',') === 'brutos,gsPers,nrIndem,nrOtros,nrIdent,shared');
+assert('sólo los tres grupos de NR llevan subtítulo',
+  gruposDe(TODOS).filter(g => g.header).map(g => g.header).join(' · ') === 'Indemnizatorios · Otros NR · Identificación NR');
 
 // El mapa de códigos: es lo que resuelve por código lo que el catálogo del
 // cliente no resolvió por nombre (D-039).
