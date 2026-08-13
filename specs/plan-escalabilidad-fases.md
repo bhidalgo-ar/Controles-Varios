@@ -68,12 +68,17 @@ el sentido del inventario de la auditoría, que agrupa algunos juntos.)
 | 3 | Badge "⚠ sin asignar" ilegible en dark mode (2 hex cableados en vez de tokens) | media | nada — **movido a la Fase 2**, que rehace esa capa entera |
 | 6 | Fallback de columna sólo lo tiene Brutos (`'1003'`/`'1017'` cableados) | — | ✅ cerrado 2026-08-12 — códigos confirmados contra el Tabulado real; y el fallback de Brutos resultó ser **letra muerta** (buscaba una columna `'1003'`, Meta4 la exporta `'1003-SUELDO'`) |
 
-### Decisiones pendientes, no técnicas (fuera del inventario de bugs pero abiertas desde antes)
+### Decisiones no técnicas — las dos cerradas
 
-- **D-010** — el seed con datos reales de clientes sigue en la raíz de un repo público. Opciones:
-  repo privado / sacar el seed y distribuirlo por SharePoint / anonimizarlo.
-- **D-013** — la contraseña del modo admin la generó un agente; el repo es público, así que el hash
-  es visible. ¿Rotarla?
+- **D-010 — cerrado el 2026-08-13.** El seed con datos reales de los 22 clientes sigue en la raíz de un
+  repo público. Willy confirmó que no hay exposición que preocupe (no hay credenciales ni datos de
+  empleados): el repo pasa a privado y la app se hostea en otro lado más adelante, y ahí el seed real se
+  muda. Sin acción pendiente de este lado — es lo que D-010 ya había decidido el 2026-07-30, ahora
+  reconfirmado.
+- **D-013 — cerrado el 2026-08-12.** El hash **salió del código fuente**: la contraseña de `#/admin` se
+  cambia desde un panel de la propia pantalla ("🔑 Cambiar contraseña") y su hash queda en el navegador
+  (`appConfig.adminPasswordHash`), no en el repo. La del código quedó como contraseña de arranque, y
+  mientras se use la pantalla lo avisa y ofrece cambiarla. Ver el cierre de D-013 en `DECISIONS.md`.
 
 ---
 
@@ -309,12 +314,15 @@ rompen sólo en el navegador, y los 12 e2e que los agarrarían no corren sin red
 `node_modules`) y `tests/e2e/multiUpload.spec.js` (las dos pantallas multi-archivo no tenían ninguna
 cobertura).
 
-**Reportado y NO arreglado, para decidir:** `tabIdCentroTrabColumn` y `tabIdCategoriaColumn` las
-consume el contrato de `nr_reporte` y las completa sola la auto-detección, pero no están en el panel
-"Columnas del Tabulado" — si la auto-detección se equivoca, el analista no tiene dónde corregirlas.
-Y la zona de drop de Acumuladores dice "Acumuladores (Axton)" mientras la etiqueta del tipo dice
-"Acumuladores (export de Axton)"; la divergencia es anterior a la fase y quedó declarada y fijada por
-un assert en vez de unificada de prestado.
+**Lo que la fase reportó para decidir, ya cerrado** (las dos cosas, el 2026-08-13, después de que
+Willy las mirara):
+
+- `tabIdCentroTrabColumn` y `tabIdCategoriaColumn` las consume el contrato de `nr_reporte` y las
+  completaba sola la auto-detección, pero no estaban en el panel "Columnas del Tabulado": si la
+  auto-detección se equivocaba, el analista no tenía dónde corregirlas. Ahora tienen su grupo propio
+  ("Identificación NR") en el panel, así que se pueden corregir o declarar ausentes — PR #126, D-049.
+- La zona de drop de Acumuladores decía "Acumuladores (Axton)" mientras la etiqueta del tipo decía
+  "Acumuladores (export de Axton)". Se unificó con la etiqueta del tipo — PR #129, D-050.
 
 ## Fase 5 — Cerrar el ciclo (el skill)
 
@@ -340,29 +348,46 @@ el texto del skill para eso, ya está escrito en modo condicional.
 
 ## Cómo retomar
 
-**Actualizado el 2026-08-12 (quinta pasada del día).** Las Fases 0, 1, 2, 3 y 5 están cerradas, y el
-contrato de export (`specs/contrato-export.md`) llegó al **Paso 6**: el 5 cerró el último falso verde
-conocido (Brutos/GS Pers con la columna sin mapear pasaban por "0 diferencias = todo bien" sin haber
-comparado un solo legajo), el 4b sacó las últimas ~80 líneas de ExcelJS a mano por control a
-`writeGroupedContractSheet()`, y el 6 declaró los 5 contratos que faltaban — y de paso destapó un bug
-vivo: un contrato podía **apagar** un `required: true` de otro tipo de archivo, y estaba apagando el de
-la Columna de Puesto del Reporte de Categorías (D-045). Lo que sigue, en orden de menor a mayor tamaño:
+**Actualizado el 2026-08-13, después del PR #130 y revisado contra el código (no contra estos
+documentos).** **Este plan está terminado:** las cinco fases están cerradas, y el contrato de export
+(`specs/contrato-export.md`) cerró sus **8 pasos**. Los 14 bugs y los 5 hotspots del relevamiento
+original también. `npm run test:unit`: 33 archivos, 0 fallas.
 
-1. **Migrar los writers del Paso 6** — los 5 contratos nuevos declaran semántica pero su `.xlsx` todavía
-   se arma a mano. No es mecánico: al writer le faltan **fila de TOTAL** (la usan Rend vs Tabulado, Rend
-   x EE, EE x CATEG y acumuladores) y **filas atenuadas** (Rend x EE pinta en gris los legajos sin
-   contraparte). Migrar sin eso sería una regresión visible en el entregable — detalle en
-   `specs/contrato-export.md`, "Lo que falta para migrar los writers del Paso 6".
-2. ~~**Fase 4**~~ — cerrada el 2026-08-13 en 7 PRs. Ver la sección de la fase, más arriba.
-3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz): ahora sí destrabado. La condición que lo
-   frenaba era que un adaptador nuevo sobre parsers todavía duplicados hereda la duplicación — con la
-   ficha por tipo de archivo, un sistema de origen nuevo declara sus tipos en vez de copiar los del
-   anterior.
+**Ojo con lo que decían estos documentos hasta hoy** — tres ítems figuraban como pendientes y ya estaban
+hechos: la Fase 4 (el `ROADMAP.md` decía "en curso"), el "`fileTypes.js` original" (no quedó nada vivo:
+`FIELD_DEFS` ya no existe en `fileUpload.js` y hay un assert que impide reescribirla) y el Paso 7 del
+contrato (D-041 está en `DECISIONS.md` y el skill ya apunta al contrato). Si un documento y el código no
+coinciden, gana el código: la próxima sesión pierde más tiempo rehaciendo algo hecho que leyendo esto.
+
+**Dónde vive lo que queda abierto:** en `ROADMAP.md`, sección "Estado al 2026-08-13", como lista
+priorizada con el motivo de cada orden. En una línea cada uno: probar el asiento de FINADIET contra el
+archivo real (pendiente de un archivo del cliente), cerrar el mis-mapeo —lo único que quedó del
+relevamiento, detalle en `specs/auditoria-escalabilidad-2026-08.md`—, y los 8 conceptos de NR sin
+semilla (pendiente de un Tabulado con indemnizaciones). Axton (v2.6/2.7) quedó destrabado por la Fase 4
+pero Willy lo puso a futuro el 2026-08-13: no arrancarlo sin pedido explícito.
 
 **Pendiente de fondo: cerrado** (Fase 4, paso 5). El mapa de necesidad de `contracts.js` era plano por
 clave y no por `(fileType, clave)`, con dos colisiones reales que no se podían declarar sin mentir de un
 lado. Cada columna declara ahora `fromFile` y el assert pasó de "las divergencias son exactamente 2" a
 "no hay ninguna".
+
+<details>
+<summary>Cómo se retomaba el 2026-08-12, cuando faltaban la Fase 4 y los writers del Paso 6</summary>
+
+Las Fases 0, 1, 2, 3 y 5 estaban cerradas, y el contrato de export llegaba al **Paso 6**: el 5 cerró el
+último falso verde conocido (Brutos/GS Pers con la columna sin mapear pasaban por "0 diferencias = todo
+bien" sin haber comparado un solo legajo), el 4b sacó las últimas ~80 líneas de ExcelJS a mano por
+control a `writeGroupedContractSheet()`, y el 6 declaró los 5 contratos que faltaban — y de paso destapó
+un bug vivo: un contrato podía **apagar** un `required: true` de otro tipo de archivo, y estaba apagando
+el de la Columna de Puesto del Reporte de Categorías (D-045). Lo que seguía:
+
+1. **Migrar los writers del Paso 6** — cerrado el 2026-08-13: 4 migraron (D-047, con `opts.totalRow` y
+   `opts.dimIf`) y Acreditaciones quedó como excepción declarada y verificada contra su contrato (D-051).
+2. **Fase 4** — cerrada el 2026-08-13 en 7 PRs. Ver la sección de la fase, más arriba.
+3. **v2.6/2.7** (seam de adaptadores + Axton piloto con Merz): destrabado por la Fase 4, y puesto a
+   futuro por Willy el 2026-08-13.
+
+</details>
 
 **Nota de entorno, para no repetir la pregunta:** desde esta sesión hay Chromium real disponible en el
 sandbox (`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, ver
