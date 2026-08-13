@@ -1375,3 +1375,65 @@ y ni la barra ni "Siguiente" se mueven, y se llega al final del contenido. Suite
 **Lo que queda para las tareas siguientes del rediseño:** el selector de mes y el menú "Datos ▾" del home
 (tarea 3), "← Anterior" al lado de la primaria en vez de en la barra al pie del wizard y el "Cancelar"
 del Paso 3 (tareas 5 y 6), y el "⬇ Exportar" como primaria de resultados (tarea 7).
+
+
+## D-055 — Paso 2: los archivos obligatorios abren la pantalla, y cada columna se pide con su nombre en criollo
+
+**Fecha:** 2026-08-13
+**Contexto:** Quinta tarea del rediseño Fase 1 (`docs/rediseno/README.md` → pantalla 4 y reglas 3 y 4;
+`CAMBIOS_TECNICOS.md` §7, §8 y §9). El Paso 2 abría con el Catálogo de Conceptos —opcional, con default,
+casi nunca se toca— en un `<details>` arriba de todo, y los archivos que la corrida sí necesita quedaban
+abajo, cada uno con un `<h4>` propio. El panel "Columnas del Tabulado" pedía hasta 29 columnas con el
+`label` de su ficha, que es el código del concepto: `'A_CTA_FUT_AUMEN — columna en Tabulado'`. El
+analista que no lo tiene memorizado no puede decidir qué columna elegir sin ir a preguntar.
+
+**Decisión:**
+
+1. **Obligatorio arriba, opcional abajo.** Los casilleros de los archivos que la corrida necesita abren
+   la pantalla en grilla de 2 columnas; el Catálogo de Conceptos y CC x Empleado bajan a un renglón
+   dashed al final con su default dicho en palabras ("Usando el estándar (22 conceptos)", "Sin él, el
+   centro de costo de cada empleado sale del asiento contable") y la carga detrás de un link.
+   Excepción declarada: los dos formatos de Resumen de Agrupadores están marcados `optional` pero el
+   gate exige uno de los dos (ver `canGoNext`), así que se quedan arriba —mandarlos a la zona de lo
+   opcional diría que se pueden saltear— y ninguno lleva tag, porque ni "OBLIGATORIO" ni "OPCIONAL"
+   serían ciertos. Lo aclara el checklist del panel: "Resumen (Largo o Tabulado)".
+2. **Un casillero, cinco estados, el mismo tamaño** (`.dropzone`): vacío, arrastrando, procesando, aviso
+   de sigla y cargado. Sin esto la pantalla saltaba en cada carga.
+3. **La sigla en el nombre se chequea, y avisa sin trabar (D-036).** Cada ficha puede declarar `siglas`;
+   si el nombre no trae ninguna, el casillero dice "No parece un X" y ofrece **Usarlo igual · Elegir
+   otro**. Las dos salidas dejan al analista pudiendo seguir. `siglas` es **semilla, no identidad**
+   (mismo criterio que `TAB_CODE_SEEDS`, D-035) y una ficha sin `siglas` no se chequea nunca: preferimos
+   no avisar a avisar de más, porque un aviso que salta siempre se ignora a la tercera vez. El aviso
+   viaja con el archivo (`siglaMismatch`) y se sigue viendo en el casillero cargado después de confirmar
+   el mapeo — persistirlo en el run es la tarea 7 del rediseño.
+4. **Nombre en criollo + código técnico + badge de origen + muestra, por campo** (regla 3). Los nombres
+   viven en una **tabla** (`js/ui/fieldHelp.js`), no en una derivación: nada en el código sabe que
+   `INDEM_ANT_DESP` es "Indemnización por antigüedad (despido)", y adivinarlo con reglas de texto daría
+   nombres plausibles y equivocados. **Ninguna clave interna se renombra.** Cuatro claves quedan sin
+   nombre criollo a propósito (`ASIG_PAS`, `REINT_GUARD`, `INCREMENTO_ST`, `GRA_VACNOG_SAC`): se
+   muestran con su código, que es lo que se veía antes, hasta que Willy confirme qué nombran.
+   `tests/fieldHelp.test.js` es el guard de que la tabla cubra las claves que el panel muestra y de que
+   el código en mono sea el mismo que usa la auto-detección.
+5. **La explicación de "qué pasa si esta columna falta" se genera de la necesidad del contrato**, no se
+   escribe por campo: si se escribiera a mano podría decir algo distinto de lo que el gate hace de
+   verdad. Cuando el campo está pendiente esa explicación baja a texto visible bajo el `<select>`; el
+   resto del tiempo vive detrás del "?" (`helpPopover.js`, con su Escape y su click-afuera).
+6. **El amarillo sólo para lo que hay que ir a resolver.** Una columna OPCIONAL vacía no se pinta ni
+   lleva badge: el control corre igual. Marcarla como las que bloquean es el aviso que salta de más.
+7. **El gate no cambia, cambia dónde se cuenta.** `canGoNext` sigue decidiendo. El hint de la barra pasa
+   a ser compacto ("Falta: 1 archivo · 1 columna") y el detalle se lee en el checklist "Para ejecutar te
+   falta" del panel lateral. Los dos salen de la MISMA lista (`step2Checklist`) para que no puedan decir
+   cosas distintas.
+8. **Los placeholders dicen qué hacer** (regla 5): "— Sin asignar —" / "— Seleccioná —" → "Elegí la
+   columna del Tabulado…" (en la pantalla de carga, la columna del archivo que se está subiendo). El
+   `value` sigue siendo `''`: para el gate y para el mapeo, "sin elegir" no cambió de significado.
+
+**Verificación:** `tests/e2e/paso2Dropzone.spec.js` (9 casos) recorre el ciclo completo del casillero y
+la grilla de campos en Chromium; el Paso 2 entero se recorrió a mano en el navegador (grilla de
+casilleros, checklist del panel con "Falta: 4 archivos · 2 columnas" en la barra, renglones opcionales
+abriéndose, columnas en claro y en oscuro). Suite e2e: los mismos 15 fallos que la baseline (los que
+necesitan CDN, D-048), verificado corriendo `main` con `git stash`.
+
+**Lo que queda:** el multi-archivo de Contabilidad Desglosada sigue con su pantalla propia sin
+restylear (va con la tarea 8, que es la pantalla de Rendimiento vs Asiento), y los avisos de la corrida
+todavía no viajan al run (tarea 7).

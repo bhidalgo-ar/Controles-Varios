@@ -2004,3 +2004,211 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 }
 .varmap__hint  { font-size: var(--text-xs); color: var(--color-text-muted); }
 .varmap__error { font-size: var(--text-xs); color: var(--color-danger); }
+
+/* ── Paso 2 — dropzones, campos con ayuda y opcionales (pantalla 4) ──────────
+   Los archivos obligatorios abren la pantalla como zonas grandes en grilla de
+   2 columnas; lo opcional baja a un renglón dashed al final (regla 4). Un
+   mismo casillero pasa por los 5 estados sin cambiar de tamaño — vacío,
+   arrastrando, procesando, aviso de sigla y cargado— para que la pantalla no
+   salte mientras se cargan los archivos. */
+
+.dz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.dz-grid__slot { min-width: 0; }
+/* Los flujos multi-archivo (Contabilidad, Acumuladores) traen su propia lista
+   adentro: con media grilla quedan ilegibles. */
+.dz-grid__slot--wide { grid-column: 1 / -1; }
+@media (max-width: 900px) { .dz-grid { grid-template-columns: 1fr; } }
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 74px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--celeste-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all .22s cubic-bezier(.4, 0, .2, 1);
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.dropzone:hover {
+  border-color: var(--celeste);
+  background: var(--celeste-dim);
+}
+.dropzone--dragover {
+  border-color: var(--celeste);
+  border-style: dashed;
+  background: var(--celeste-dim);
+  box-shadow: 0 0 0 3px rgba(0, 172, 212, .12);
+}
+/* Procesando, aviso y cargado no se clickean: la acción está en sus botones. */
+.dropzone--loading,
+.dropzone--warn,
+.dropzone--loaded { cursor: default; border-style: solid; }
+.dropzone--loading { border-color: var(--line); }
+.dropzone--warn    { border-color: var(--error-bd); background: var(--error-bg); }
+.dropzone--loaded  { border-color: var(--ok-bd);    background: var(--ok-bg); }
+
+.dropzone__icon {
+  flex-shrink: 0;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-size: 15px; line-height: 1;
+  background: var(--celeste-dim);
+  color: var(--celeste-deeper);
+}
+.dropzone--warn   .dropzone__icon { background: transparent; color: var(--error-tx); font-size: 17px; }
+.dropzone--loaded .dropzone__icon { background: rgba(34, 197, 94, .18); color: var(--ok-tx); font-weight: 700; }
+
+.dropzone__body  { flex: 1; min-width: 0; }
+.dropzone__title {
+  font-size: 13.5px; font-weight: 700; color: var(--t1);
+  overflow-wrap: anywhere;
+}
+.dropzone--empty .dropzone__title,
+.dropzone--dragover .dropzone__title { color: var(--celeste-deeper); }
+.dropzone--warn   .dropzone__title { color: var(--error-tx); font-weight: 600; }
+.dropzone__hint  { font-size: 12px; color: var(--t3); margin-top: 2px; }
+.dropzone__meta  {
+  font-size: 12px; color: var(--t2); margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+/* El nombre del archivo en mono: es un dato para comparar carácter por carácter
+   contra lo que el analista bajó de Meta4, no prosa. */
+.dropzone__file {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px; color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.dropzone__tag {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--celeste-deeper); background: var(--celeste-dim);
+  border-radius: var(--radius-full); padding: 4px 10px;
+}
+.dropzone__tag--optional { color: var(--t3); background: var(--line-soft); }
+.dropzone__tag--plain    { background: transparent; color: var(--t3); letter-spacing: .08em; }
+.dropzone__actions { flex-shrink: 0; display: flex; align-items: center; gap: var(--sp-2); }
+/* Los avisos de esta corrida (sigla que no coincide) viajan con el archivo
+   cargado: el aviso no desaparece al confirmar — D-036, avisa pero no traba. */
+.dropzone__warnchip {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--warn-tx); background: var(--warn-bg); border: 1px solid var(--warn-bd);
+  border-radius: var(--radius-full); padding: 2px 8px;
+}
+.dropzone__progress {
+  height: 3px; border-radius: var(--radius-full); background: var(--line-soft);
+  overflow: hidden; margin-top: 6px;
+}
+.dropzone__progress-fill {
+  height: 100%; background: var(--celeste); border-radius: var(--radius-full);
+  transition: width .2s linear;
+}
+/* Parseando no hay porcentaje real que informar — la barra se desliza en vez de
+   inventar un avance (misma animación que la pantalla de carga grande). */
+.dropzone__progress-fill--indeterminate {
+  width: 40% !important;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+/* ── Campos del Paso 2: nombre en criollo + código + badge + muestra ───────── */
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3) var(--sp-4);
+}
+@media (max-width: 900px) { .field-grid { grid-template-columns: 1fr; } }
+.field-grid__header {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-2);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.field { min-width: 0; }
+.field__head {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-bottom: 4px; flex-wrap: wrap;
+}
+.field__label { font-size: 12.5px; font-weight: 700; color: var(--t1); }
+.field__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px; color: var(--t3); letter-spacing: .02em;
+}
+.field__req { color: var(--error); font-weight: 700; }
+.field__spacer { flex: 1; }
+.field__badge {
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  border-radius: var(--radius-full); padding: 2px 8px;
+}
+.field__badge--auto  { color: var(--ok-tx);    background: var(--ok-bg);    border: 1px solid var(--ok-bd); }
+.field__badge--saved { color: var(--ok-tx);    background: transparent;     border: 1px solid var(--ok-bd); font-weight: 600; }
+.field__badge--warn  { color: var(--warn-tx);  background: var(--warn-bg);  border: 1px solid var(--warn-bd); }
+.field__badge--omit  { color: var(--t3);       background: var(--line-soft); border: 1px solid var(--line); }
+/* El "?" del campo reusa `helpPopover.js`; en una grilla de 2 columnas el panel
+   tiene que abrir hacia adentro o se sale de la card. */
+.field .help-popover { margin-left: 0; }
+.field .help-popover__panel { left: 0; right: auto; width: 280px; }
+.field__row { display: flex; gap: var(--sp-2); align-items: center; }
+.field__row .form-select { flex: 1; min-width: 0; }
+/* Cuando el campo está pendiente la explicación no se esconde detrás del "?":
+   baja a la vista, que es donde el analista la va a leer (regla 3). */
+.field__help {
+  font-size: 11.5px; color: var(--t2); line-height: 1.45; margin-top: 4px;
+}
+.field__help--muted { color: var(--t3); }
+
+/* ── Renglón de lo opcional, al final (regla 4) ───────────────────────────── */
+.optional-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 10px var(--sp-4);
+  margin-top: var(--sp-3);
+  background: transparent;
+}
+.optional-row__icon    { color: var(--t3); flex-shrink: 0; }
+.optional-row__title   { font-size: 13px; font-weight: 700; color: var(--t1); }
+.optional-row__file    {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px; color: var(--t2); overflow-wrap: anywhere;
+}
+.optional-row__tag {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  color: var(--t3); background: var(--line-soft);
+  border-radius: var(--radius-full); padding: 2px 8px;
+}
+.optional-row__default { font-size: 12.5px; color: var(--t2); flex: 1; min-width: 0; }
+.optional-row__host    { flex-basis: 100%; }
+
+/* ── Checklist "Para ejecutar te falta" del panel lateral ──────────────────── */
+.side-checklist { display: flex; flex-direction: column; gap: 7px; }
+.side-checklist__item {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  font-size: 12.5px; color: var(--t1);
+}
+.side-checklist__mark { flex-shrink: 0; width: 14px; text-align: center; line-height: 1.4; }
+.side-checklist__item--done    .side-checklist__mark { color: var(--ok-tx); }
+.side-checklist__item--done    { color: var(--t2); }
+.side-checklist__item--pending .side-checklist__mark { color: var(--t3); }
+.side-checklist__item--warn    { color: var(--warn-tx); font-weight: 600; }
+.side-checklist__item--warn    .side-checklist__mark { color: var(--warn-tx); }
+.side-checklist__detail { display: block; font-weight: 400; color: var(--t3); margin-top: 2px; }
+
+/* Contador "X de Y listas" del encabezado del panel de columnas. */
+.field-count {
+  font-size: 12px; font-weight: 700; color: var(--t2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}

@@ -1,0 +1,85 @@
+<!doctype html><meta charset="utf-8"><title>paso 2 — casilleros y campos</title>
+<link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/css/components.css">
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<script src="/node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<style>body { padding: 24px; background: var(--color-bg, #F5F7F8); font-family: var(--font-tool); }</style>
+<div id="host-drop"></div>
+<div id="host-campos"></div>
+<pre id="out">—</pre>
+<script type="module">
+  // Las dos mitades del Paso 2, montadas por separado: el casillero de archivo
+  // (con sus cinco estados) y la grilla de campos con el bloque de ayuda. Mismo
+  // esquema que uploadOmission.html y columnHints.html — Dexie y SheetJS desde
+  // node_modules, así corre sin red al CDN.
+  const { initFileUploadStep }   = await import('../../../js/ui/fileUpload.js');
+  const { renderTabExtraConfig } = await import('../../../js/ui/controlsWizard.js');
+  const out = document.getElementById('out');
+
+  // Datos inventados (regla del repo: nunca un export de cliente).
+  const BRUTOS = [
+    ['LEGAJO', 'SAL_BASE', 'A_CTA_FUT_AUMEN'],
+    ['1', 1000, 100],
+    ['2', 2000, 200],
+  ];
+
+  const xlsxFile = (aoa, name) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Hoja1');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  };
+
+  window.__completes = [];
+
+  window.__mountDrop = () => new Promise(res => {
+    document.getElementById('host-drop').innerHTML = '';
+    initFileUploadStep(document.getElementById('host-drop'), {
+      clientCode: 'TEST-DZ', fileType: 'brutos_file', existingData: null,
+      required: true,
+      autoDetect: () => ({
+        legajoColumn: 'LEGAJO', salBaseColumn: 'SAL_BASE', aCuFutAumenColumn: 'A_CTA_FUT_AUMEN',
+      }),
+      onComplete: d => { window.__completes.push(d); },
+    });
+    setTimeout(res, 150);
+  });
+
+  // `nombre` decide si el archivo trae la sigla del reporte o no — es lo único
+  // que separa el estado "cargado" del estado "no parece un Reporte de Brutos".
+  window.__drop = (nombre) => new Promise(res => {
+    const dt = new DataTransfer();
+    dt.items.add(xlsxFile(BRUTOS, nombre));
+    const input = document.querySelector('#host-drop input[type=file]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(res, 600);
+  });
+
+  const TAB_ROWS = [
+    { 'LEGAJO': '1', '1003-SUELDO': '1.500.000,00', 'FEC_PAGO': '15/03/2026' },
+    { 'LEGAJO': '2', '1003-SUELDO': '980.000,50',   'FEC_PAGO': '15/03/2026' },
+  ];
+
+  // El panel de columnas con un Tabulado ya parseado: SUELDO mapeada (queda
+  // "lista") y A_CTA_FUT_AUMEN sin asignar (queda pendiente, con su explicación
+  // a la vista).
+  window.__mountCampos = (config) => {
+    const host = document.getElementById('host-campos');
+    host.innerHTML = '';
+    const state = {
+      client: { code: 'TEST-DZ' },
+      tab: { parsedRows: TAB_ROWS },
+      tabExtraConfig: config || { tabSalBaseColumn: '1003-SUELDO' },
+      tabExtraConfigAutoDetected: true,
+      catalog: null,
+      selectedControls: [],
+      step: 1,
+    };
+    const root = document.createElement('div');
+    root.innerHTML = '<div id="js-wizard-nav"></div>';
+    renderTabExtraConfig(host, state, root, { hasBrutos: true, hasGsPers: false, hasNr: false });
+    window.__state = state;
+  };
+
+  out.textContent = 'listo';
+</script>

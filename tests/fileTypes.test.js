@@ -20,6 +20,7 @@ const {
   FILE_TYPES, fieldsFor, fileTypeLabel, isFixedFormat, hasNameMapping,
   metaLineFor, detectHeadersFor, parseFor, flowFor, dropLabelFor, dropHintFor,
   autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor,
+  siglasFor, nameMatchesSiglas,
 } = await import('./js/ui/fileTypes.js');
 
 let ok = 0, fail = 0;
@@ -366,6 +367,52 @@ assert('el Tabulado NO lo ofrece (trae una fila por liquidación)', hasNameMappi
     nombrados.length === 0);
   assert('…y tampoco declara su propia lista de campos',
     !/FIELD_DEFS\s*=/.test(src));
+}
+
+// ── Siglas: reconocer el archivo por su nombre ───────────────────────────────
+//
+// El contrato entero de esta feature es "avisa, no traba" (D-036), y de este
+// lado eso significa una cosa: SIN evidencia no se afirma nada. Un tipo que no
+// declara siglas, o un nombre vacío, tienen que dar `true` — o la pantalla
+// avisaría "no parece un X" de todo lo que se sube.
+
+assert('un tipo sin siglas declaradas nunca avisa',
+  nameMatchesSiglas('cualquier cosa.xlsx', siglasFor('nomina_maestra')) === true);
+assert('sin nombre de archivo tampoco se afirma nada',
+  nameMatchesSiglas('', siglasFor('brutos_file')) === true);
+
+assert('el Reporte de Brutos se reconoce por su sigla',
+  nameMatchesSiglas('Cliente_Brutos_2026-08.xlsx', siglasFor('brutos_file')) === true);
+assert('…sin importar mayúsculas ni con qué se separen las palabras',
+  nameMatchesSiglas('cliente brutos agosto.XLSX', siglasFor('brutos_file')) === true);
+assert('un nombre sin la sigla avisa',
+  nameMatchesSiglas('Brutos agosto FINAL v2.xlsx', siglasFor('nr_file')) === false);
+
+// El match es por palabra y no por substring: si no, `'NR'` matchearía adentro
+// de "ENERO" y el aviso no protegería de nada.
+assert('NR no matchea adentro de otra palabra',
+  nameMatchesSiglas('Cliente_ENERO_2026.xlsx', siglasFor('nr_file')) === false);
+assert('NR sí matchea como palabra suelta',
+  nameMatchesSiglas('Cliente_NR_enero.xlsx', siglasFor('nr_file')) === true);
+assert('TAB no matchea adentro de TABULADO por substring, pero TABULADO sí',
+  nameMatchesSiglas('Cliente_Tabulado_2026-08.xlsx', siglasFor('tab_control')) === true);
+
+// Las siglas con guión bajo son varias palabras: el archivo puede separarlas
+// como quiera (`GS PERS`, `GS-PERS`, `GS_PERS`) y sigue siendo el mismo.
+assert('una sigla de dos palabras matchea con cualquier separador',
+  ['Cliente_GS_PERS_08.xlsx', 'Cliente GS-PERS 08.xlsx'].every(
+    n => nameMatchesSiglas(n, siglasFor('gs_pers_file')) === true));
+
+// El Tabulado del período anterior comparte la ficha del Tabulado (aliasOf), así
+// que comparte las siglas: si no, el segundo slot de Variaciones avisaría siempre.
+assert('tab_prev_file hereda las siglas del Tabulado',
+  nameMatchesSiglas('Cliente_Tabulado_2026-07.xlsx', siglasFor('tab_prev_file')) === true);
+
+for (const [fileType, def] of entries) {
+  if (!def.siglas) continue;
+  assert(`${fileType}: siglas es un array de strings no vacíos`,
+    Array.isArray(def.siglas) && def.siglas.length > 0
+    && def.siglas.every(s => typeof s === 'string' && s.trim() !== ''));
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);

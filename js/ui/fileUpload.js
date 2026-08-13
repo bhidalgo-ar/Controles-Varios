@@ -17,6 +17,8 @@ import {
   flowFor,
   dropLabelFor,
   dropHintFor,
+  siglasFor,
+  nameMatchesSiglas,
 } from './fileTypes.js';
 
 // Qué pantalla de carga le toca a cada `flow` declarado en la ficha. Las dos
@@ -42,8 +44,12 @@ const MULTI_UPLOADS = {
  *   fileType     {string}         - Tipo de archivo
  *   existingData {object|null}    - Datos ya cargados en esta sesión (null = primera vez)
  *   onComplete   {function(data)} - Se llama cuando el archivo está parseado y listo
+ *   required     {boolean}        - si es obligatorio para la corrida; sólo pinta el
+ *                                   tag de la zona de drop (quién bloquea el avance
+ *                                   lo sigue decidiendo `canGoNext` del wizard).
+ *                                   Sin declarar, no se pinta ningún tag
  */
-export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }) {
+export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }) {
   // Cómo se sube este tipo lo declara su ficha, no un `if` por nombre de
   // archivo: un tipo multi-archivo nuevo declara su `flow` y funciona sin tocar
   // nada de acá. Un `flow` sin implementación corta con un error que lo nombra
@@ -64,14 +70,14 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
 
   if (existingData) {
     renderAlreadyLoaded(container, existingData,
-      () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
+      () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete, autoDetect, required }),
       onComplete
     );
     return;
   }
 
-  renderDropZone(container, fileType, async (file) => {
-    renderLoadingProgress(container, 'reading', 0);
+  renderDropZone(container, fileType, async (file, { siglaMismatch = false } = {}) => {
+    renderLoadingProgress(container, 'reading', 0, { fileName: file.name });
 
     let arrayBuffer;
     try {
@@ -80,18 +86,18 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       });
     } catch (err) {
       renderError(container, err.message,
-        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }));
+        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }));
       return;
     }
 
-    renderLoadingProgress(container, 'parsing');
+    renderLoadingProgress(container, 'parsing', 0, { fileName: file.name });
 
     let headers, preview;
     try {
       ({ headers, preview } = detectHeadersFor(fileType, arrayBuffer));
     } catch (err) {
       renderError(container, `No se pudo leer el Excel: ${err.message}`,
-        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }));
+        () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }));
       return;
     }
 
@@ -99,19 +105,19 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
     // Ojo: NO es lo mismo que "no tiene campos" — `acreditaciones_file` no tiene
     // ninguno y aun así pasa por la pantalla de confirmación (ver fileTypes.js).
     if (isFixedFormat(fileType)) {
-      renderLoadingProgress(container, 'parsing');
+      renderLoadingProgress(container, 'parsing', 0, { fileName: file.name });
       try {
         const result = parseFor(fileType, arrayBuffer, null);
-        const data = { ...result, mapping: {}, fileName: file.name, fileType };
+        const data = { ...result, mapping: {}, fileName: file.name, fileType, siglaMismatch };
         renderAlreadyLoaded(
           container,
           data,
-          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
+          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete, autoDetect, required }),
           onComplete
         );
       } catch (err) {
         renderError(container, `Error al procesar: ${err.message}`,
-          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }));
+          () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete, autoDetect, required }));
       }
       return;
     }
@@ -158,7 +164,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       headers, preview, fileType, savedMapping, autoDetected, omitCandidates,
       fileName: file.name,
       onConfirm: async (mapping) => {
-        renderLoadingProgress(container, 'parsing');
+        renderLoadingProgress(container, 'parsing', 0, { fileName: file.name });
         try {
           const result = parseFor(fileType, arrayBuffer, mapping);
           await saveFileProfile(clientCode, fileType, mapping);
@@ -167,12 +173,16 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
           // pueda mostrar la muestra de valores de cada columna sin volver a
           // parsear el workbook. Vive en memoria y no se persiste (igual que
           // `arrayBuffer`): son filas de un archivo con datos de empleados.
-          const data = { ...result, mapping, fileName: file.name, fileType, headers, preview, arrayBuffer, clientCode };
+          // `siglaMismatch` viaja con los datos del archivo: el aviso no
+          // desaparece al confirmar el mapeo — sigue visible en el casillero
+          // cargado, que es donde el analista lo va a volver a ver antes de
+          // ejecutar (D-036: avisa, no traba).
+          const data = { ...result, mapping, fileName: file.name, fileType, headers, preview, arrayBuffer, clientCode, siglaMismatch };
 
           renderAlreadyLoaded(
             container,
             data,
-            () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete }),
+            () => initFileUploadStep(container, { clientCode, fileType, existingData: null, onComplete, autoDetect, required }),
             onComplete
           );
 
@@ -180,11 +190,11 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
           renderError(container, `Error al procesar: ${err.message}`, showMappingForm);
         }
       },
-      onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect }),
+      onCancel: () => initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }),
     });
 
     showMappingForm();
-  });
+  }, { required });
 }
 
 // ── Carga múltiple de Contabilidad Desglosada (CONTA) ─────────────────────────
@@ -458,94 +468,166 @@ function inferPeriodFromFileName(name) {
 
 // ── Renders internos ──────────────────────────────────────────────────────────
 
-function renderDropZone(container, fileType, onFile) {
+// Un casillero de archivo pasa por cinco estados sin cambiar de tamaño ni de
+// lugar (pantalla 4 del rediseño): vacío → arrastrando → procesando → aviso de
+// sigla → cargado. Los cinco son la misma caja `.dropzone` con un modificador,
+// para que la pantalla no salte mientras se cargan los archivos.
+
+function renderDropZone(container, fileType, onFile, { required } = {}) {
+  const label   = dropLabelFor(fileType);
+  const hint    = dropHintFor(fileType);
+  const tag     = required === true ? 'OBLIGATORIO' : required === false ? 'OPCIONAL' : '';
+  const tagCls  = required === false ? ' dropzone__tag--optional' : '';
+  const titulo  = `Arrastrá el ${label}${hint}`;
+
   container.innerHTML = `
-    <div class="file-drop" id="js-drop-zone">
-      <div class="file-drop__icon">📂</div>
-      <div class="file-drop__text">
-        <strong>${fileTypeLabel(fileType)}</strong> — arrastrá o hacé clic para elegir (.xlsx)
+    <div class="dropzone dropzone--empty" id="js-drop-zone" role="button" tabindex="0"
+         aria-label="Cargar ${escHtml(label)}">
+      <span class="dropzone__icon" aria-hidden="true">⬆</span>
+      <div class="dropzone__body">
+        <div class="dropzone__title" data-dz-title>${escHtml(titulo)}</div>
+        <div class="dropzone__hint">o hacé clic para buscarlo — .xlsx</div>
       </div>
+      <span class="dropzone__tag${tagCls}" data-dz-tag ${tag ? '' : 'hidden'}>${escHtml(tag)}</span>
       <input type="file" accept=".xlsx,.xls" style="display:none" id="js-file-input">
     </div>
   `;
 
   const dropZone  = container.querySelector('#js-drop-zone');
   const fileInput = container.querySelector('#js-file-input');
+  const tituloEl  = dropZone.querySelector('[data-dz-title]');
+  const tagEl     = dropZone.querySelector('[data-dz-tag]');
+
+  // El texto cambia mientras el archivo está en el aire: "Soltá acá" es lo que
+  // hay que hacer en ese momento, y "Arrastrá el X" ya no.
+  const setDragging = (on) => {
+    dropZone.classList.toggle('dropzone--dragover', on);
+    tituloEl.textContent = on ? `Soltá acá — ${label}` : titulo;
+    tagEl.textContent = on ? 'ARRASTRANDO' : tag;
+    tagEl.classList.toggle('dropzone__tag--plain', on);
+    tagEl.hidden = on ? false : !tag;
+  };
+
+  const tomar = (file) => { if (file) handleFile(file, onFile, container, fileType, { required }); };
 
   dropZone.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) handleFile(file, onFile, container, fileType);
+  dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
   });
+  fileInput.addEventListener('change', (e) => tomar(e.target.files[0]));
 
   // Drop zone interno: stopPropagation para no duplicar con el handler del container
   dropZone.addEventListener('dragover', (e) => {
     e.preventDefault(); e.stopPropagation();
-    dropZone.classList.add('file-drop--dragover');
+    setDragging(true);
   });
   dropZone.addEventListener('dragleave', (e) => {
     e.stopPropagation();
-    dropZone.classList.remove('file-drop--dragover');
+    setDragging(false);
   });
   dropZone.addEventListener('drop', (e) => {
     e.preventDefault(); e.stopPropagation();
-    dropZone.classList.remove('file-drop--dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file, onFile, container, fileType);
+    setDragging(false);
+    tomar(e.dataTransfer.files[0]);
   });
 
   // Expandir el área de drop al contenedor completo (captura drops fuera del ícono)
   container.addEventListener('dragover', (e) => {
     e.preventDefault();
-    dropZone.classList.add('file-drop--dragover');
+    setDragging(true);
   });
   container.addEventListener('dragleave', (e) => {
-    if (!container.contains(e.relatedTarget)) dropZone.classList.remove('file-drop--dragover');
+    if (!container.contains(e.relatedTarget)) setDragging(false);
   });
   container.addEventListener('drop', (e) => {
     e.preventDefault();
-    dropZone.classList.remove('file-drop--dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file, onFile, container, fileType);
+    setDragging(false);
+    tomar(e.dataTransfer.files[0]);
   });
 }
 
-function handleFile(file, onFile, container, fileType) {
+function handleFile(file, onFile, container, fileType, { required } = {}) {
   if (!isValidExcelFile(file)) {
     renderError(container,
       `"${file.name}" no es un Excel (.xlsx). Elegí un archivo Excel.`,
-      () => renderDropZone(container, fileType, onFile));
+      () => renderDropZone(container, fileType, onFile, { required }));
     return;
   }
-  onFile(file);
+
+  // El nombre no trae la sigla del reporte: se avisa y se sigue igual si el
+  // analista lo dice (D-036). Un archivo raro del cliente no puede dejarlo sin
+  // salida, así que "Usarlo igual" es una acción de primer nivel, no un rincón.
+  if (!nameMatchesSiglas(file.name, siglasFor(fileType))) {
+    renderSiglaWarning(container, file, fileType, {
+      onKeep:  () => onFile(file, { siglaMismatch: true }),
+      onOther: () => renderDropZone(container, fileType, onFile, { required }),
+    });
+    return;
+  }
+
+  onFile(file, { siglaMismatch: false });
 }
 
 /**
- * Muestra la pantalla de carga con barra de progreso.
- * phase = 'reading'  → barra real con porcentaje
- * phase = 'parsing'  → barra indeterminada animada
+ * "No parece un X" — el aviso de sigla, con sus dos salidas. **Nunca bloquea:**
+ * las dos salidas dejan al analista donde quiere estar, y la de seguir adelante
+ * deja marcado el archivo para que el aviso se siga viendo después.
  */
-function renderLoadingProgress(container, phase, pct = 0) {
-  const label = phase === 'reading' ? `Leyendo archivo… ${pct}%` : 'Procesando…';
-  const indet = phase === 'parsing';
+function renderSiglaWarning(container, file, fileType, { onKeep, onOther }) {
   container.innerHTML = `
-    <div class="loading-screen">
-      <div class="spinner"></div>
-      <p class="text-muted" id="js-progress-label">${label}</p>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill ${indet ? 'progress-bar-fill--indeterminate' : ''}"
-             id="js-progress-fill"
-             style="width:${indet ? '40' : pct}%"></div>
+    <div class="dropzone dropzone--warn" data-dz-sigla-warning>
+      <span class="dropzone__icon" aria-hidden="true">⚠</span>
+      <div class="dropzone__body">
+        <div class="dropzone__title">
+          No parece un ${escHtml(fileTypeLabel(fileType))} — el nombre no trae la sigla.
+        </div>
+        <div class="dropzone__file">${escHtml(file.name)}</div>
+      </div>
+      <div class="dropzone__actions">
+        <button type="button" class="btn btn--secondary btn--sm" id="js-sigla-keep">Usarlo igual</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="js-sigla-other">Elegir otro</button>
       </div>
     </div>
   `;
+  container.querySelector('#js-sigla-keep').addEventListener('click', onKeep);
+  container.querySelector('#js-sigla-other').addEventListener('click', onOther);
+}
+
+/**
+ * El casillero mientras se lee el archivo.
+ * phase = 'reading'  → barra real con porcentaje
+ * phase = 'parsing'  → barra indeterminada animada (el parser no reporta avance,
+ *                      y una barra que sube sola sería progreso inventado)
+ */
+function renderLoadingProgress(container, phase, pct = 0, { fileName = '' } = {}) {
+  const indet = phase === 'parsing';
+  const label = indet
+    ? `Procesando ${fileName || 'el archivo'}…`
+    : `Leyendo ${fileName || 'el archivo'}… ${pct}%`;
+  container.innerHTML = `
+    <div class="dropzone dropzone--loading">
+      <span class="spinner spinner--sm" aria-hidden="true"></span>
+      <div class="dropzone__body">
+        <div class="dropzone__title" id="js-progress-label">${escHtml(label)}</div>
+        <div class="dropzone__progress">
+          <div class="dropzone__progress-fill ${indet ? 'dropzone__progress-fill--indeterminate' : ''}"
+               id="js-progress-fill"
+               style="width:${indet ? '40' : pct}%"></div>
+        </div>
+      </div>
+      <span class="dropzone__tag dropzone__tag--plain">PROCESANDO</span>
+    </div>
+  `;
+  // El nombre del archivo que se está leyendo, para que `updateReadingProgress`
+  // no tenga que recibirlo otra vez en cada tick del progreso.
+  container.querySelector('#js-progress-label').dataset.dzFile = fileName;
 }
 
 /** Actualiza el label y el ancho de la barra sin re-renderizar todo el DOM */
 function updateReadingProgress(container, pct) {
   const label = container.querySelector('#js-progress-label');
   const fill  = container.querySelector('#js-progress-fill');
-  if (label) label.textContent = `Leyendo archivo… ${pct}%`;
+  if (label) label.textContent = `Leyendo ${label.dataset.dzFile || 'el archivo'}… ${pct}%`;
   if (fill)  fill.style.width  = `${pct}%`;
 }
 
@@ -712,8 +794,12 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   // el arrayBuffer de esta sesión — permite ajustar el mapeo sin re-subir el archivo)
   const fields = fieldsFor(fileType);
   const canRemap = fields.length > 0 && headers?.length > 0 && arrayBuffer;
+  // El option vacío dice qué hacer, no cómo se llama el estado en el que está
+  // ("— Sin asignar —"). El value sigue siendo '': para el gate y para el
+  // mapeo, "sin elegir" no cambió de significado.
+  const placeholder = `Elegí la columna del ${fileTypeLabel(fileType)}…`;
   const opts = (selected = '') => ['', ...((headers) || [])]
-    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Sin asignar —'}</option>`)
+    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || escHtml(placeholder)}</option>`)
     .join('');
 
   // Omisiones declaradas (⊘) del mapeo confirmado — mismo Set y mismo cableado
@@ -780,11 +866,21 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   ` : '';
 
   container.innerHTML = `
-    <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--color-match-exact);background:var(--color-match-exact-bg);border-radius:var(--radius-md);font-size:var(--text-sm);">
-      <span style="color:var(--color-match-exact);font-weight:600;">✓</span>
-      <strong style="flex-shrink:0;">${escHtml(fileName)}</strong>
-      <span style="color:var(--color-text-muted);flex:1;">${metaLine}${warns}</span>
-      <button class="btn btn--ghost btn--sm" id="js-replace-btn" style="flex-shrink:0;">↺ Cambiar</button>
+    <div class="dropzone dropzone--loaded">
+      <span class="dropzone__icon" aria-hidden="true">✓</span>
+      <div class="dropzone__body">
+        <div class="dropzone__title">${escHtml(fileTypeLabel(fileType))}</div>
+        <div class="dropzone__meta">
+          <span class="dropzone__file">${escHtml(fileName)}</span>
+          <span>·</span>
+          <span>${metaLine}</span>
+          ${warns}
+          ${existingData.siglaMismatch
+            ? `<span class="dropzone__warnchip" title="El nombre del archivo no trae la sigla de este reporte. Lo estás usando igual.">sigla no coincide</span>`
+            : ''}
+        </div>
+      </div>
+      <button class="btn btn--ghost btn--sm" id="js-replace-btn">Cambiar</button>
     </div>
     ${remapHtml}
   `;
@@ -873,8 +969,9 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   ` : '';
 
   // Construir opciones del selector de columnas
+  const placeholder = `Elegí la columna del ${fileTypeLabel(fileType)}…`;
   const opts = (selected = '') => ['', ...headers]
-    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || '— Seleccioná —'}</option>`)
+    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || escHtml(placeholder)}</option>`)
     .join('');
 
   // Muestra de valores reales de la columna elegida + aviso si su contenido no
