@@ -7,6 +7,15 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: la app tiene tres temas y el botón 🌙 pasa a ser un selector — 2026-08-13
+
+- **Primera tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 1). Es sólo la piel: no cambia ningún control, ningún cálculo ni ninguna pantalla.
+- **Tres temas, elegidos desde el mismo lugar donde estaba la luna:** **Sobrio** (el claro de siempre, el default), **Intenso** (la misma pantalla con la barra superior azul oscuro y las tarjetas con sombra en vez de línea fina) y **Oscuro** (el modo oscuro que ya existía, intacto). El menú se abre desde la barra, se cierra con Escape o clickeando afuera, y el elegido queda tildado.
+- **El que ya tenía elegido claro u oscuro no pierde nada:** la preferencia guardada en el navegador se traduce sola (claro → Sobrio, oscuro → Oscuro) la primera vez que abre. Se sigue aplicando antes de dibujar la pantalla, así que no parpadea al cargar.
+- **Intenso sale sólo de variables de color**, no de reglas nuevas por pantalla: cuando el rediseño avance, cada pantalla nueva va a responder al tema sin trabajo extra. Entran también los tres valores que van a usar las pantallas siguientes (la acción principal atenuada cuando falta algo, el borde del encabezado de las tablas y la sombra de los menús flotantes).
+- **Se fue el pie de página institucional** (oficinas, contacto, legales): es una herramienta interna y la identidad H&A la lleva la barra de arriba. **El aviso de privacidad queda igual.** Ojo: el único link a `#/admin` vivía ahí — la pantalla sigue funcionando escribiendo la dirección, y el link vuelve cuando se rediseñe el home.
+- **`tests/e2e/themePicker.spec.js`**: los tres temas se aplican y se guardan, la preferencia vieja se migra, la barra de Intenso cambia de color siguiendo el token, no hay pie de página y el aviso de privacidad sigue visible.
+
 ### feat: se ve qué trae la columna elegida, y avisa si no es lo que ahí va — 2026-08-13
 
 - **El agujero que quedaba después del contrato de export.** Los 8 pasos de `specs/contrato-export.md` lograron que una columna **vacía** grite (gate, badge "⚠ sin asignar", toggle ⊘). Una columna **equivocada** seguía pasando en verde: mapeada + obligatoria = satisfecha, aunque apunte al lugar errado — y la mandatoriedad lo *empeora*, porque un `required` queda satisfecho por el valor equivocado. Es el caso peor y el más silencioso: **da un número mal, no un vacío**.

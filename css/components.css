@@ -231,7 +231,7 @@
 /* ── Card ────────────────────────────────────────────────────── */
 .card {
   background: var(--color-surface);
-  border: var(--border);
+  border: var(--card-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -830,6 +830,112 @@
   line-height: 1.45;
 }
 
+/* ── Selector de tema (barra superior) — ver js/main.js ──────────────────── */
+.theme-picker {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.theme-picker__btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--header-btn-border);
+  background: var(--header-btn-hover-bg);
+  color: var(--header-fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.theme-picker__btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.theme-picker__btn:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.theme-picker__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-toast);
+  width: 230px;
+  padding: var(--sp-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: var(--popover-shadow);
+  font-family: var(--font-tool);
+  text-align: left;
+}
+.theme-picker__label {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--celeste);
+  padding: 6px 10px 8px;
+}
+.theme-picker__option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: var(--sp-2) 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition);
+}
+.theme-picker__option:hover { background: var(--celeste-dim); }
+.theme-picker__option[aria-checked="true"] { background: var(--celeste-dim); }
+.theme-picker__option:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+.theme-picker__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* La muestra imita la barra superior de cada tema */
+.theme-picker__swatch--sobrio  { background: #FFFFFF; }
+.theme-picker__swatch--intenso { background: #EEF2F6; }
+.theme-picker__swatch--oscuro  { background: #111518; }
+.theme-picker__swatch-bar { height: 5px; flex-shrink: 0; }
+.theme-picker__swatch--sobrio  .theme-picker__swatch-bar { background: #FFFFFF; border-bottom: 1.5px solid var(--celeste); }
+.theme-picker__swatch--intenso .theme-picker__swatch-bar { background: #15263D; }
+.theme-picker__swatch--oscuro  .theme-picker__swatch-bar { background: #1C2229; }
+.theme-picker__text { flex: 1; min-width: 0; }
+.theme-picker__name {
+  display: block;
+  font-size: 12px;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+}
+.theme-picker__desc {
+  display: block;
+  font-size: 10.5px;
+  color: var(--t3);
+}
+.theme-picker__check {
+  color: var(--celeste-dark);
+  font-weight: var(--fw-bold);
+  font-size: 13px;
+  visibility: hidden;
+}
+.theme-picker__option[aria-checked="true"] .theme-picker__check { visibility: visible; }
+
 /* ── Empty state ─────────────────────────────────────────────── */
 .empty-state {
   text-align: center;
@@ -1023,7 +1129,8 @@
     --color-warning-bg-hover: #3B2600;
   }
 }
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="oscuro"] {
   --color-banner-text:    #D7B896;
   --color-toast-success:  #A5D6A7;
   --color-toast-danger:   #EF9A9A;
@@ -1031,7 +1138,10 @@
   --color-toast-info:     #81D4FA;
   --color-warning-bg-hover: #3B2600;
 }
-[data-theme="light"] {
+/* Los dos temas claros (Sobrio e Intenso) comparten estos valores. */
+[data-theme="light"],
+[data-theme="sobrio"],
+[data-theme="intenso"] {
   --color-banner-text:    #4E342E;
   --color-toast-success:  #1B5E20;
   --color-toast-danger:   #B71C1C;

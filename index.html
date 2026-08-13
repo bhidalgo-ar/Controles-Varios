@@ -24,13 +24,18 @@
   <!-- Dexie.js para IndexedDB -->
   <script src="https://unpkg.com/dexie@4/dist/dexie.min.js"></script>
 
-  <!-- Tema: aplicado antes del primer paint para evitar flash blanco/negro -->
+  <!-- Tema: aplicado antes del primer paint para evitar flash blanco/negro.
+       Valores: sobrio (default) | intenso | oscuro. Los navegadores que
+       guardaron la clave vieja (light/dark) se migran acá mismo. -->
   <script>
     (function() {
+      var LEGACY = { light: 'sobrio', dark: 'oscuro' };
       var stored = localStorage.getItem('theme');
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var isDark = stored === 'dark' || (!stored && prefersDark);
-      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+      var theme  = LEGACY[stored] || stored;
+      if (theme !== 'sobrio' && theme !== 'intenso' && theme !== 'oscuro') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'sobrio';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
 
@@ -63,15 +68,64 @@
     <!-- Navegación contextual — poblada por JS -->
     <nav class="app-header__nav" id="js-header-nav" aria-label="Navegación principal"></nav>
 
-    <!-- Toggle de tema claro/oscuro -->
-    <button
-      id="js-theme-toggle"
-      class="btn btn--ghost btn--sm"
-      aria-label="Cambiar entre modo claro y oscuro"
-      title="Modo claro / oscuro"
-      style="font-size:18px;padding:var(--sp-1) var(--sp-2);line-height:1;">
-      🌙
-    </button>
+    <!-- Selector de tema — Sobrio (default) / Intenso / Oscuro -->
+    <div class="theme-picker" id="js-theme-picker">
+      <button
+        type="button"
+        id="js-theme-toggle"
+        class="theme-picker__btn"
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls="js-theme-panel"
+        aria-label="Tema de la app"
+        title="Tema de la app">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"></path>
+        </svg>
+      </button>
+
+      <div class="theme-picker__panel" id="js-theme-panel" role="menu" aria-label="Tema de la app" hidden>
+        <div class="theme-picker__label">Tema de la app</div>
+
+        <button type="button" class="theme-picker__option" role="menuitemradio"
+                data-theme-value="sobrio" aria-checked="false">
+          <span class="theme-picker__swatch theme-picker__swatch--sobrio" aria-hidden="true">
+            <span class="theme-picker__swatch-bar"></span>
+          </span>
+          <span class="theme-picker__text">
+            <span class="theme-picker__name">Sobrio</span>
+            <span class="theme-picker__desc">Plano, l&iacute;neas finas</span>
+          </span>
+          <span class="theme-picker__check" aria-hidden="true">&check;</span>
+        </button>
+
+        <button type="button" class="theme-picker__option" role="menuitemradio"
+                data-theme-value="intenso" aria-checked="false">
+          <span class="theme-picker__swatch theme-picker__swatch--intenso" aria-hidden="true">
+            <span class="theme-picker__swatch-bar"></span>
+          </span>
+          <span class="theme-picker__text">
+            <span class="theme-picker__name">Intenso</span>
+            <span class="theme-picker__desc">Barra ink, profundidad</span>
+          </span>
+          <span class="theme-picker__check" aria-hidden="true">&check;</span>
+        </button>
+
+        <button type="button" class="theme-picker__option" role="menuitemradio"
+                data-theme-value="oscuro" aria-checked="false">
+          <span class="theme-picker__swatch theme-picker__swatch--oscuro" aria-hidden="true">
+            <span class="theme-picker__swatch-bar"></span>
+          </span>
+          <span class="theme-picker__text">
+            <span class="theme-picker__name">Oscuro</span>
+            <span class="theme-picker__desc">Fondo oscuro, poco brillo</span>
+          </span>
+          <span class="theme-picker__check" aria-hidden="true">&check;</span>
+        </button>
+      </div>
+    </div>
   </header>
 
   <!-- ── Aviso de privacidad ─────────────────────────────────── -->
@@ -104,45 +158,9 @@
     </div>
   </main>
 
-  <!-- ── Footer ──────────────────────────────────────────────── -->
-  <footer class="app-footer">
-    <div class="app-footer__logo">
-      <div class="app-footer__iso">H&amp;A</div>
-      <span class="app-footer__wordmark">Hidalgo &amp; Asociados</span>
-    </div>
-    <div class="app-footer__offices">
-      <div>
-        <strong class="app-footer__office-name">Pacheco de Melo</strong>
-        Pacheco de Melo 1833, Piso 6°<br>
-        C1126AAA &mdash; C.A.B.A.
-      </div>
-      <div>
-        <strong class="app-footer__office-name">Tucumán</strong>
-        Tucumán 829, Piso 1° y 5°<br>
-        C1049AAQ &mdash; C.A.B.A.
-      </div>
-      <div>
-        <strong class="app-footer__office-name">Neuquén</strong>
-        Fotheringham 478<br>
-        Neuquén Capital
-      </div>
-      <div>
-        <strong class="app-footer__office-name">Contacto</strong>
-        info_ar@bhidalgo.com.ar<br>
-        +54 11 2284 2031
-      </div>
-    </div>
-    <div class="app-footer__legal">
-      Hidalgo &amp; Asociados &copy; 1987&ndash;2026. Todos los derechos reservados.
-      &mdash;
-      <a href="https://hidalgoyasociados.com.ar" target="_blank" rel="noopener noreferrer">
-        hidalgoyasociados.com.ar
-      </a>
-      &nbsp;&middot;&nbsp; Controles Nómina v1.0 (MVP)
-      &nbsp;&middot;&nbsp; Uso interno — datos procesados en el navegador.
-      &nbsp;&middot;&nbsp; <a href="#/admin">Modo admin</a>
-    </div>
-  </footer>
+  <!-- El footer institucional se retiró en el rediseño Fase 1 (app interna).
+       Ojo: el único link a #/admin vivía acá — hoy la pantalla se abre
+       escribiendo la URL, hasta que el rediseño del home le dé un lugar. -->
 
   <!-- ── Bootstrap de la app ─────────────────────────────────── -->
   <script type="module" src="js/main.js"></script>

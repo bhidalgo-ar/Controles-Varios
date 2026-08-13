@@ -115,28 +115,78 @@ function updateHeaderNav(hash) {
   }
 }
 
-// ── Tema claro / oscuro ───────────────────────────────────────────────────────
+// ── Tema de la app: Sobrio / Intenso / Oscuro ─────────────────────────────────
+//
+// El tema se guarda en `localStorage.theme` y se aplica como `data-theme` en el
+// <html>; los valores los remapea css/tokens.css. El primer <script> del <head>
+// hace lo mismo antes del primer paint para que no parpadee al cargar — acá se
+// repite la resolución (misma lógica, dos lugares a propósito: el head no puede
+// importar módulos) y se persiste la migración de la clave vieja.
+
+const THEMES = ['sobrio', 'intenso', 'oscuro'];
+
+// Claves guardadas por la versión anterior (toggle 🌙 claro/oscuro).
+const LEGACY_THEMES = { light: 'sobrio', dark: 'oscuro' };
+
+function resolveTheme() {
+  const stored = localStorage.getItem('theme');
+  const migrated = LEGACY_THEMES[stored];
+  if (migrated) return { theme: migrated, migrated: true };
+  if (THEMES.includes(stored)) return { theme: stored, migrated: false };
+  // Nunca eligió: respetamos la preferencia del sistema y no la guardamos.
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return { theme: prefersDark ? 'oscuro' : 'sobrio', migrated: false };
+}
 
 function initTheme() {
-  const stored = localStorage.getItem('theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const isDark = stored === 'dark' || (!stored && prefersDark);
-  applyTheme(isDark, false);
+  const { theme, migrated } = resolveTheme();
+  applyTheme(theme, migrated);
 }
 
-function applyTheme(dark, save = true) {
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  const btn = document.getElementById('js-theme-toggle');
-  if (btn) btn.textContent = dark ? '☀️' : '🌙';
-  if (save) localStorage.setItem('theme', dark ? 'dark' : 'light');
+function applyTheme(theme, save = true) {
+  if (!THEMES.includes(theme)) return;
+  document.documentElement.setAttribute('data-theme', theme);
+  for (const opt of document.querySelectorAll('[data-theme-value]')) {
+    opt.setAttribute('aria-checked', String(opt.dataset.themeValue === theme));
+  }
+  if (save) localStorage.setItem('theme', theme);
 }
 
-function setupThemeToggle() {
-  const btn = document.getElementById('js-theme-toggle');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    applyTheme(!isDark);
+// Menú del selector: abre/cierra con el botón, cierra con click afuera y con
+// Escape (mismo patrón que js/ui/helpPopover.js).
+function setupThemePicker() {
+  const btn   = document.getElementById('js-theme-toggle');
+  const panel = document.getElementById('js-theme-panel');
+  if (!btn || !panel) return;
+
+  const close = () => {
+    panel.setAttribute('hidden', '');
+    btn.setAttribute('aria-expanded', 'false');
+  };
+  const open = () => {
+    panel.removeAttribute('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (panel.hasAttribute('hidden')) open(); else close();
+  });
+
+  panel.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const option = e.target.closest('[data-theme-value]');
+    if (!option) return;
+    applyTheme(option.dataset.themeValue);
+    close();
+    btn.focus();
+  });
+
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || panel.hasAttribute('hidden')) return;
+    close();
+    btn.focus();
   });
 }
 
@@ -166,7 +216,7 @@ async function init() {
 
   initTheme();
   setupPrivacyBanner();
-  setupThemeToggle();
+  setupThemePicker();
 
   // Escuchar cambios de URL (clicks en links con href="#/...")
   window.addEventListener('hashchange', handleRoute);

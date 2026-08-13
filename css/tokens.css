@@ -1,4 +1,18 @@
-/* tokens.css — Variables de diseño H&A para Controles Nómina */
+/* tokens.css — Variables de diseño H&A para Controles Nómina
+ *
+ * Tres temas, un solo sistema (ver docs/rediseno/CAMBIOS_TECNICOS.md §2):
+ *   sobrio  (default) → barra blanca, hairlines, sombras mínimas
+ *   intenso           → misma estructura, barra ink y cards con profundidad
+ *   oscuro            → el dark mode de siempre
+ *
+ * `sobrio` es alias exacto de `light` e `intenso` hereda del mismo bloque
+ * claro: el tema Intenso sale SÓLO de tokens de superficie. Si un componente
+ * necesita preguntar por el tema, está mal factorizado.
+ *
+ * `light` y `dark` se conservan como valores válidos de `data-theme` — son los
+ * que usan los fixtures de tests/e2e y los navegadores que ya tenían la clave
+ * vieja guardada.
+ */
 
 /* ══════════════════════════════════════════════════════════════
    MODO CLARO (default)
@@ -125,6 +139,40 @@
 
   --font-tool: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif;
   --serif:     'DM Serif Display', Georgia, 'Times New Roman', serif;
+
+  /* Familia de los títulos de display y KPIs: la sans operativa en Sobrio y
+     Oscuro, el serif H&A en Intenso. Un solo token para que las pantallas no
+     pregunten por el tema. */
+  --font-display: var(--font-tool);
+
+  /* ══════════════════════════════════════════════════════════
+     Barra superior — los temas la repintan sin que base.css
+     tenga que preguntar cuál está activo.
+     ══════════════════════════════════════════════════════════ */
+  --header-bg:           var(--color-surface);
+  --header-fg:           var(--color-text);
+  --header-fg-muted:     var(--color-wordmark);
+  --header-pill-bg:      var(--color-info-bg);
+  --header-pill-fg:      var(--color-primary);
+  --header-btn-border:   var(--color-border);
+  --header-btn-hover-bg: var(--color-bg-subtle);
+
+  /* Borde del hairline de las cards. Existe aparte de --border porque el tema
+     Intenso las deja sin borde (con sombra en su lugar) sin tocar los bordes
+     de inputs ni de separadores internos. */
+  --card-border: var(--border);
+
+  /* Primaria atenuada: cuando la acción principal todavía no está lista NO
+     desaparece — se atenúa y un hint al lado dice qué falta (regla 2 del
+     rediseño). La consume el restyle de .btn--primary:disabled. */
+  --primary-disabled: #A9DFEE;
+
+  /* Borde inferior del thead y superior de la fila de totales en las tablas
+     de resultados. */
+  --table-head-border: var(--ink);
+
+  /* Sombra única de popovers y menús flotantes. */
+  --popover-shadow: 0 12px 32px rgba(30, 58, 95, 0.16);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -177,13 +225,18 @@
     --neutral-bg: rgba(140,131,123,0.18); --neutral-bd: rgba(140,131,123,0.34); --neutral-tx: #B6ABA0;
 
     --sh-tool: 0 8px 28px rgba(0,0,0,0.50);
+
+    --primary-disabled: rgba(31,190,224,0.32);
+    --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
   }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   TOGGLE MANUAL — sobreescribe preferencia del sistema
+   TEMA OSCURO elegido a mano — sobreescribe preferencia del sistema
+   ("oscuro" es el valor nuevo del selector; "dark" es el de siempre)
    ══════════════════════════════════════════════════════════════ */
-[data-theme="dark"] {
+[data-theme="dark"],
+[data-theme="oscuro"] {
   --color-wordmark:    #9D948C;
   --color-black:       #DCE4E8;
   --color-surface:     #1C2229;
@@ -238,9 +291,19 @@
   --neutral-bg: rgba(140,131,123,0.18); --neutral-bd: rgba(140,131,123,0.34); --neutral-tx: #B6ABA0;
 
   --sh-tool: 0 8px 28px rgba(0,0,0,0.50);
+
+  --primary-disabled: rgba(31,190,224,0.32);
+  --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
 }
 
-[data-theme="light"] {
+/* ══════════════════════════════════════════════════════════════
+   TEMAS CLAROS — "sobrio" (default del selector) es alias exacto de
+   "light"; "intenso" arranca del mismo bloque y abajo cambia sólo
+   los tokens de superficie.
+   ══════════════════════════════════════════════════════════════ */
+[data-theme="light"],
+[data-theme="sobrio"],
+[data-theme="intenso"] {
   --color-wordmark:    #8C837B;
   --color-black:       #000000;
   --color-surface:     #FFFFFF;
@@ -286,4 +349,33 @@
   --neutral-bg: rgba(140,131,123,0.12); --neutral-bd: rgba(140,131,123,0.30); --neutral-tx: #6B635C;
 
   --sh-tool: 0 6px 24px rgba(30,58,95,0.09);
+
+  --primary-disabled: #A9DFEE;
+  --popover-shadow:   0 12px 32px rgba(30, 58, 95, 0.16);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TEMA INTENSO — la misma pantalla, otra piel
+   Mismas zonas, mismos lugares y mismos copys que Sobrio: acá abajo
+   van SÓLO tokens de superficie (barra ink, cards con profundidad,
+   radio más blando, serif de display). Nada de reglas por tema.
+   ══════════════════════════════════════════════════════════════ */
+[data-theme="intenso"] {
+  /* Barra superior ink con el borde celeste */
+  --header-bg:           #15263D;
+  --header-fg:           var(--color-white);
+  --header-fg-muted:     #C7D5E4;
+  --header-pill-bg:      rgba(0, 172, 212, 0.22);
+  --header-pill-fg:      #7FE0F4;
+  --header-btn-border:   rgba(255, 255, 255, 0.22);
+  --header-btn-hover-bg: rgba(255, 255, 255, 0.10);
+
+  /* Cards sin hairline: la profundidad la da la sombra */
+  --card-border: 1px solid transparent;
+  --shadow-sm:   var(--sh-tool);
+  --shadow-md:   0 10px 30px rgba(30, 58, 95, 0.13);
+  --radius-lg:   14px;
+
+  /* Títulos de display y KPIs en el serif H&A */
+  --font-display: var(--serif);
 }
