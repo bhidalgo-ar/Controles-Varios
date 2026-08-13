@@ -123,6 +123,33 @@ del wizard va, y sin un caso real no se puede decidir bien.
   Tabulado de Marval 04-2026, así que su código no se pudo confirmar y se siguen pidiendo a mano en el Paso
   2 (D-039). Para cerrarlo hace falta un Tabulado de un mes con indemnizaciones liquidadas — no se inventan
   por analogía.
+- **NR derivado del catálogo de conceptos del cliente, en vez de los 18 cableados.** Dirección definida por
+  Willy el 2026-08-13, al confirmar el gate de OBLIGATORIA en la carga de archivo
+  (`specs/obligatoria-gate-carga-archivo.md`): el Tabulado es el archivo madre —trae los conceptos que
+  **realmente se liquidaron** ese período— y el entregable es un **template fijo** que pide un conjunto
+  declarado de conceptos. Hoy ese conjunto son los 18 de `NR_CONCEPTS` (`js/controls/nr.js`), escritos a
+  mano y compartidos por todos los clientes. Lo que corresponde es que cada cliente cargue su **catálogo de
+  conceptos**, marque ahí cuáles son no remunerativos, y que el control derive su lista de eso: matchear
+  solo y avisar en los dos sentidos — **una columna del entregable que quedó sin match** (el concepto no se
+  liquidó, o el catálogo del cliente no lo tiene) y **un concepto NR nuevo en el Tabulado que el entregable
+  todavía no contempla** (alta de concepto en Meta4 que hay que sumar al template).
+  **Media maquinaria ya está:** `js/parsers/conceptCatalog.js` parsea el `.xlsx` por cliente y ya valida
+  `CLASIFICACION` con el valor `no_remu`; `clientCatalogs` está en la DB desde v3; y la auto-detección de
+  columnas de NR ya lee del catálogo activo (`buildParserMapping` en `js/parsers/conceptMatcher.js`, con
+  `CATALOGO_SEED` como fallback). Lo que falta es que la **lista de conceptos del control y del contrato de
+  export** salga del catálogo en vez de la constante.
+  **Lo que hay que resolver antes de codearlo, y es la parte difícil:** `EXPORT_CONTRACTS` es hoy estático y
+  `contracts.js` deriva las 18 columnas de `NR_CONCEPTS` (con asserts que las cuentan en
+  `tests/exportContracts.test.js`); derivarlo del catálogo lo vuelve **por cliente**, que es un cambio de
+  forma del contrato, no un ajuste. Y el aviso de "concepto nuevo" **no puede auto-agregar la columna**: el
+  template es fijo porque del otro lado hay un destino que espera ese layout — sumarle una columna es una
+  decisión coordinada con quien recibe el archivo, así que la app detecta y avisa, no decide. Tampoco
+  reemplaza a la omisión declarada: "el catálogo dice que este cliente no lo tiene" y "el analista declaró
+  que este archivo no lo trae" son dos afirmaciones distintas, y la segunda sigue siendo la que habilita
+  subir el archivo de este mes.
+  **Cuándo conviene hacerlo:** hoy el control de NR lo usa **sólo Marval**, así que los 18 cableados no
+  duelen. El día que un segundo cliente pida NR con otro juego de conceptos, esto pasa de mejora a
+  requisito.
 - **Asiento de Remuneraciones — promoción a control de sistema.** Con el plan de cuentas, los centros de
   costo y las categorías fuera del código (viven en `controlConfigs`, editables desde el Paso 2), lo único
   específico de FINADIET que queda es la semilla de esa config. Cuando un segundo cliente pida el mismo

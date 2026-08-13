@@ -1,6 +1,6 @@
 # Gate de OBLIGATORIA en la carga de archivo — toggle ⊘ en fileUpload.js
 
-> **Estado:** spec confirmada, pendiente de implementar.
+> **Estado:** **confirmada por Willy el 2026-08-13**, pendiente de implementar.
 > Cierra el pendiente que D-041 (punto 4) dejó declarado y D-048 listó como "no se tocó":
 > activar el bloqueo de `OBLIGATORIA` en el formulario de carga, llevando antes la omisión
 > declarada (`OMITIDO`, toggle ⊘) a esa superficie. Es el mismo movimiento que el Paso 2 de
@@ -20,6 +20,14 @@ los 18 conceptos de `nr_file`, `salBaseColumn`/`aCuFutAumenColumn` de `brutos_fi
 `gtosPersonalesColumn`/`dtoCocheraColumn` de `gs_pers_file`. La lista NO se cablea: se deriva de
 `necessityOfKey(fileType, key) === OBLIGATORIA && !f.required`, así un contrato futuro queda
 gateado solo.
+
+**Alcance de uso hoy, y por qué el diseño alcanza:** el control de NR lo usa **sólo Marval**. Los 18
+conceptos están cableados en `NR_CONCEPTS` y son los mismos para todos, así que la omisión declarada
+por archivo resuelve el caso real completo. La dirección de futuro —que la lista de conceptos NR salga
+del **catálogo de conceptos de cada cliente**, y que el control avise tanto de una columna del
+entregable sin match como de un concepto NR nuevo aparecido en el Tabulado— quedó definida por Willy el
+2026-08-13 y anotada en `ROADMAP.md` (parking lot), con lo que falta y lo que hay que resolver antes.
+No es parte de este trabajo: pasa de mejora a requisito el día que un segundo cliente pida NR.
 
 **Verificado antes de escribir esto** (no son supuestos):
 - `parseNr`/`parseBrutos`/`parseGsPers` sólo leen `mapping.legajoColumn`; el resto de las claves
@@ -111,6 +119,10 @@ gateado solo.
 - Subir de necesidad `NO_TOCAR_TODAVIA` o cualquier otra clave OPCIONAL.
 - Las 8 semillas de NR que faltan y la lista cableada de `rendVsTabu.js` (deuda declarada en
   CLAUDE.md).
+- **Derivar los conceptos NR del catálogo del cliente** en vez de `NR_CONCEPTS`, y los dos avisos que
+  eso habilita (columna del entregable sin match · concepto NR nuevo en el Tabulado). Dirección
+  confirmada y anotada en `ROADMAP.md`; cambia la forma del contrato de export (pasa a ser por
+  cliente), así que es un trabajo aparte y posterior a este.
 - Refactor/unificación del toggle con el del wizard (ver Guardrails).
 - Cualquier cambio de resultados, semáforo o exports.
 
@@ -167,4 +179,5 @@ o en la conversación, no se resuelven.
 ---
 
 **Fecha de creación:** 2026-08-13
-**Confirmada por el usuario:** pendiente de confirmación
+**Confirmada por el usuario:** sí — Willy, 2026-08-13 (las 3 decisiones de las secciones 4 y 5
+respondidas; el arreglo de las referencias muertas de `contracts.js` va en el mismo PR)
