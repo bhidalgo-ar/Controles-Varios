@@ -16,6 +16,7 @@ import {
   saveClientCatalog,
   deleteClientCatalog,
   getConfig,
+  updateControlRun,
   getGroupers,
   getGrouperConcepts,
   getControlConfigsForClient,
@@ -993,6 +994,17 @@ function buildWizardSidebarHtml(state) {
       <span class="wizard-section-label">${todoListo ? 'Todo listo para ejecutar' : 'Para ejecutar te falta'}</span>
       ${checklistHtml}
     </div>
+    ${thresholdsSectionHtml()}
+  `;
+}
+
+/**
+ * La sección "Umbrales" del panel lateral. La comparten el paso de archivos y
+ * la pantalla de la corrida: con qué números se está midiendo tiene que decir
+ * lo mismo antes y durante la ejecución.
+ */
+function thresholdsSectionHtml() {
+  return `
     <div>
       <span class="wizard-section-label">Umbrales</span>
       <div class="threshold-grid">
@@ -1832,7 +1844,6 @@ function renderStepExecute(container, state, root) {
 
     <button class="btn btn--primary btn--lg btn--pill" id="js-execute-btn">${esc(executeCtaLabel(state))}</button>
     <p class="text-sm text-muted" style="text-align:center;margin-top:var(--sp-2);">Sin salir de esta pantalla</p>
-    <div id="js-execute-status" style="margin-top:var(--sp-5);"></div>
   `;
 
   container.querySelector('#js-period-select').addEventListener('change', e => {
@@ -1846,7 +1857,9 @@ function renderStepExecute(container, state, root) {
   });
   container.querySelector('#js-execute-btn').addEventListener('click', () => {
     container.querySelector('#js-execute-btn').disabled = true;
-    executeControls(state, container.querySelector('#js-execute-status'), container, root);
+    // La corrida se apodera de la pantalla: el formulario desaparece y en su
+    // lugar queda el progreso, con "Cancelar" como única acción (regla 2).
+    executeControls(state, container, root);
   });
 }
 
@@ -1913,72 +1926,72 @@ function renderInlineResults(container, state, root) {
 
 // ── Ejecución ─────────────────────────────────────────────────────────────────
 
-// A1 — Procesamiento de la corrida: barra de progreso + checklist de 3 pasos
-// atados a hitos reales del pipeline (lectura → cruce → umbrales), no a un
-// timer fake. Ver design_handoff_rediseno_controles/README.md §Animaciones.
-const EXEC_BAR_WIDTHS = ['6%', '38%', '70%', '100%'];
 const EXEC_TIER_RANK  = { error: 0, warn: 1, ok: 2, info: 3 };
 
-async function executeControls(state, statusEl, container, root) {
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const wait = ms => (reduceMotion ? Promise.resolve() : new Promise(r => setTimeout(r, ms)));
-
+/**
+ * La corrida en vivo: una barra general + una tarjeta por control (terminado /
+ * corriendo / en cola) y, al final, la runbar con el resumen y "Ver resultados".
+ *
+ * **La barra dice sólo lo que el motor sabe.** Los controles corren uno detrás
+ * del otro y cada `run()` es sincrónico: adentro de un control no hay progreso
+ * que informar, así que la barra mide *controles terminados sobre el total* —
+ * el único avance real— y la tarjeta del que está corriendo muestra un spinner
+ * sin porcentaje. Un porcentaje inventado dentro del control se leería como
+ * información y no lo sería.
+ *
+ * Entre control y control se cede el hilo (`yieldToPaint`) por dos razones: sin
+ * eso el navegador no llega a pintar el cambio de estado de las tarjetas, y el
+ * clic en "Cancelar" no se procesaría hasta que terminara todo.
+ */
+async function executeControls(state, container, root) {
   const quickRun = state.quickRun === true;
   const tab = state.tab;
-  const nCtrl = state.selectedControls.length;
   const totalLegajos = tabEmpleadosCount(state);
 
-  const uniqueFileNames = [...new Set([tab?.fileName, ...state.selectedControls.flatMap(id => {
-    const ctrl = CONTROL_REGISTRY[id];
-    return ctrl ? ctrl.additionalFiles.map(f => state.controlFiles[id]?.[f.key]?.fileName) : [];
-  })].filter(Boolean))];
+  // Ceder el hilo para que el navegador pinte y para que el clic en "Cancelar"
+  // llegue a procesarse. `setTimeout` y no `requestAnimationFrame`: con la
+  // pestaña en segundo plano rAF no dispara y la corrida quedaría colgada.
+  const yieldToPaint = () => new Promise(r => setTimeout(r, 0));
 
-  // thresholdPct sólo afecta el texto del paso 3 — se completa después de la
-  // primera pintura para que la barra aparezca al instante del clic (sin await antes).
-  let thresholdPct = DEFAULT_SEMAFORO_THRESHOLD_PCT;
+  const units = state.selectedControls
+    .map(id => ({ id, ctrl: CONTROL_REGISTRY[id] }))
+    .filter(u => u.ctrl)
+    .map(u => ({
+      id: u.id, ctrl: u.ctrl, label: u.ctrl.label || u.id,
+      status: 'queued', ms: null, tier: null, summary: null,
+    }));
 
-  const execSteps = [
-    {
-      label: `Leyendo ${uniqueFileNames.length} archivo${uniqueFileNames.length === 1 ? '' : 's'} Excel`,
-      note: uniqueFileNames.join(' · ') || '—',
+  const ui = {
+    units,
+    phase:        'prep',   // prep → running → done | cancelled | error
+    filesUsed:    runFilesUsed(state),
+    totalLegajos,
+    thresholdPct: DEFAULT_SEMAFORO_THRESHOLD_PCT,
+    elapsedMs:    null,
+    cancelRequested: false,
+    errorMessage: null,
+    onCancel: () => {
+      // El control que ya está corriendo no se puede interrumpir a mitad de
+      // camino: la corrida se corta cuando ése termine, y se dice.
+      ui.cancelRequested = true;
+      paint();
     },
-    {
-      label: totalLegajos ? `Cruzando ${totalLegajos.toLocaleString('es-AR')} legajos` : 'Cruzando legajos',
-      note: `${nCtrl} control${nCtrl === 1 ? '' : 'es'}`,
-    },
-    {
-      label: 'Aplicando umbrales y semáforos',
-      get note() { return `verde 0% · amarillo ≤${thresholdPct}% · rojo >${thresholdPct}%`; },
-    },
-  ];
+    onRerun: () => executeControls(state, container, root),
+  };
+  const paint = () => renderRunScreen(container, state, ui, root);
 
-  let stepsDone = 0; // cantidad de pasos del checklist ya completados (0..3)
+  // Mientras corre, las flechas ← → no cambian de paso: el wizard se movería
+  // abajo de la corrida. Se vuelven a enganchar en el próximo render().
+  state._navController?.abort();
 
-  function renderProgress() {
-    statusEl.innerHTML = `
-      <div class="exec-progress"><div class="exec-progress__fill" style="width:${EXEC_BAR_WIDTHS[stepsDone]};"></div></div>
-      <div class="exec-steps">
-        ${execSteps.map((s, i) => {
-          const done   = stepsDone > i;
-          const active = stepsDone === i;
-          return `
-            <div class="exec-step">
-              <span class="exec-step__dot ${done ? 'exec-step__dot--done' : active ? 'exec-step__dot--active' : ''}">${done ? '✓' : ''}</span>
-              <span class="exec-step__label ${done || active ? 'exec-step__label--done' : ''}">${esc(s.label)}</span>
-              <span class="exec-step__note">${esc(s.note)}</span>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-  }
-
-  renderProgress();
+  const t0 = performance.now();
+  paint();
 
   try {
-    thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
+    ui.thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
+    const thresholdPct = ui.thresholdPct;
 
-    // ── Paso 1 · Leyendo archivos ────────────────────────────────────────────
+    // ── Preparación · configs y archivos de la corrida ───────────────────────
     // Las preferencias del usuario (mapeos de columnas) se guardan siempre,
     // sean borrador o quick — son configuración que el usuario reusa.
     // Se guarda lo que declaró algún control seleccionado, salvo lo `readOnly`
@@ -2017,14 +2030,22 @@ async function executeControls(state, statusEl, container, root) {
       }
     }
 
-    stepsDone = 1; renderProgress(); await wait(220);
-
-    // ── Paso 2 · Cruzando legajos ────────────────────────────────────────────
+    // ── Los controles, uno por uno ───────────────────────────────────────────
     const runResults = {};
+    ui.phase = 'running';
+    paint();
+    await yieldToPaint();
 
-    for (const controlId of state.selectedControls) {
-      const ctrl = CONTROL_REGISTRY[controlId];
-      if (!ctrl) continue;
+    for (const u of units) {
+      if (ui.cancelRequested) break;
+
+      const controlId = u.id;
+      const ctrl      = u.ctrl;
+
+      u.status = 'running';
+      paint();
+      await yieldToPaint();
+      const tCtrl = performance.now();
 
       const mapping = {
         tab:    { ...(tab?.mapping || {}), ...state.tabExtraConfig },
@@ -2100,67 +2121,363 @@ async function executeControls(state, statusEl, container, root) {
       const primaryRows = state.controlFiles[controlId]?.[primaryKey]?.parsedRows || [];
 
       runResults[controlId] = ctrl.run(primaryRows, tabRows, mapping);
+
+      // El semáforo de la tarjeta sale del MISMO cálculo que ordena la cascada
+      // de resultados (computeSemaforoStatus sobre la unidad declarada) — no de
+      // `summary.status`, que marca amarillo con una sola diferencia.
+      u.summary = ctrl.summarize ? ctrl.summarize(runResults[controlId]) : null;
+      u.tier = !u.summary ? 'info'
+        : u.summary.status === 'error' ? 'error'
+        : u.summary.unitsTotal == null ? 'info'
+        : computeSemaforoStatus(u.summary.unitsWithDiff, u.summary.unitsTotal, thresholdPct);
+      u.ms     = performance.now() - tCtrl;
+      u.status = 'done';
+      paint();
     }
 
-    stepsDone = 2; renderProgress(); await wait(220);
+    // ── Cancelada: lo que ya se calculó no se guarda ─────────────────────────
+    // El run creado arriba queda con sus archivos pero sin resultados, y lo dice
+    // en sus notas: media corrida guardada como si fuera una corrida es la clase
+    // de número que después nadie revisa.
+    if (ui.cancelRequested) {
+      if (runId != null) {
+        const nota = 'Corrida cancelada por el analista — sin resultados guardados.';
+        await updateControlRun(runId, { notes: state.notes ? `${state.notes} · ${nota}` : nota });
+      }
+      ui.phase = 'cancelled';
+      ui.elapsedMs = performance.now() - t0;
+      paint();
+      return;
+    }
 
-    // ── Paso 3 · Aplicando umbrales y semáforos ──────────────────────────────
-    // Calcula el tier (error/warn/ok) de cada control para ordenar la cascada
-    // de tarjetas errores-primero (ver renderInlineResults) y persiste resultados.
-    const tierByControlId = state.selectedControls
-      .map(controlId => {
-        const ctrl = CONTROL_REGISTRY[controlId];
-        const summary = ctrl?.summarize ? ctrl.summarize(runResults[controlId]) : null;
-        const tier = !summary ? 'info'
-          : summary.status === 'error' ? 'error'
-          : summary.unitsTotal == null ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
-        return { controlId, tier };
-      });
-    const tierOrder = tierByControlId
-      .slice()
-      .sort((a, b) => EXEC_TIER_RANK[a.tier] - EXEC_TIER_RANK[b.tier])
-      .map(t => t.controlId);
-
+    // ── Guardado de resultados ───────────────────────────────────────────────
     if (!quickRun) {
-      for (const controlId of state.selectedControls) {
-        if (runResults[controlId] !== undefined) {
-          await saveControlRunResults(runId, controlId, runResults[controlId]);
+      for (const u of units) {
+        if (runResults[u.id] !== undefined) {
+          await saveControlRunResults(runId, u.id, runResults[u.id]);
         }
       }
     }
 
-    stepsDone = 3; renderProgress(); await wait(180);
+    // Errores primero: el orden de la cascada de resultados y el de las tarjetas
+    // de la corrida terminada salen de la misma lista.
+    const tierOrder = units
+      .slice()
+      .sort((a, b) => EXEC_TIER_RANK[a.tier] - EXEC_TIER_RANK[b.tier])
+      .map(u => u.id);
 
-    // Al terminar, navegar al hero de resultados 1b (gauge + semáforo + cascada
-    // errores-primero, animaciones A2/A3/A4). Ver handoff §Interactions: "mostrar
-    // progreso... navegar al hero 1b al terminar".
-    // Sólo posible con run guardado (el hero lee todo de la DB por runId).
-    if (runId != null) {
-      window.location.hash = `#/control-results/${runId}`;
-      return;
-    }
-
-    // Ejecución rápida: no hay run persistido para navegar, así que mostramos los
-    // resultados inline (cascada errores-primero) bajo la cabecera 1C — el
-    // popover "Detalles del run" avisa que no se guardó.
-    state.lastRunId            = runId;
-    state.lastRunResults       = runResults;
-    state.lastRunIsDefinitive  = false;
-    state.lastRunTierOrder     = tierOrder;
-    state.lastRunTierByControlId = Object.fromEntries(tierByControlId.map(t => [t.controlId, t.tier]));
-    render(root, state);
+    // La corrida no navega sola: termina en la runbar ("Corrida completa en X s")
+    // y el analista entra a los resultados cuando quiere — el resumen de la
+    // corrida es la última pantalla donde se lee qué tardó y qué salió en rojo.
+    ui.phase     = 'done';
+    ui.elapsedMs = performance.now() - t0;
+    ui.onSeeResults = () => {
+      if (runId != null) {
+        window.location.hash = `#/control-results/${runId}`;
+        return;
+      }
+      // Ejecución rápida: no hay run persistido para navegar, así que mostramos
+      // los resultados inline (cascada errores-primero) bajo la cabecera 1C — el
+      // popover "Detalles del run" avisa que no se guardó.
+      state.lastRunId              = runId;
+      state.lastRunResults         = runResults;
+      state.lastRunIsDefinitive    = false;
+      state.lastRunTierOrder       = tierOrder;
+      state.lastRunTierByControlId = Object.fromEntries(units.map(u => [u.id, u.tier]));
+      render(root, state);
+    };
+    paint();
 
   } catch (err) {
     console.error('[controlsWizard] Error al ejecutar:', err);
-    statusEl.innerHTML = `
-      <div class="alert alert--danger" style="margin-bottom:0;">
-        ❌ Error al ejecutar los controles: ${esc(err.message)}
-      </div>
-    `;
-    const execBtn = statusEl.parentElement?.querySelector('#js-execute-btn');
-    if (execBtn) execBtn.disabled = false;
+    ui.phase        = 'error';
+    ui.elapsedMs    = performance.now() - t0;
+    ui.errorMessage = err.message;
+    paint();
   }
+}
+
+// ── Pantalla de la corrida ────────────────────────────────────────────────────
+
+/**
+ * Los archivos con los que se está corriendo, sin repetir: el mismo Tabulado lo
+ * usan todos los controles y un reporte puede estar compartido entre dos.
+ */
+function runFilesUsed(state) {
+  const files = [];
+  const push = (label, fileData) => {
+    if (!fileData?.fileName) return;
+    if (files.some(f => f.fileName === fileData.fileName)) return;
+    files.push({
+      label,
+      fileName: fileData.fileName,
+      rows: fileData.parseMetadata?.totalRows ?? null,
+    });
+  };
+
+  push('Tabulado', state.tab);
+  for (const id of state.selectedControls) {
+    const ctrl = CONTROL_REGISTRY[id];
+    if (!ctrl) continue;
+    for (const f of ctrl.additionalFiles) push(f.label, state.controlFiles[id]?.[f.key]);
+  }
+  return files;
+}
+
+const RUN_UNIT_PLURAL = { legajo: 'legajos', cc: 'centros de costo', lista: 'listas' };
+
+function formatSeconds(ms) {
+  // Un control chico corre en milisegundos y "0,0 s" se lee como si no hubiera
+  // corrido. Se dice que fue menos de una décima, que es lo que pasó.
+  if (ms < 100) return 'menos de 0,1 s';
+  return `${(ms / 1000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+}
+
+/** Lo que la tarjeta de un control terminado dice del resultado, en una pill. */
+function runCardBadge(u) {
+  if (!u.summary || u.summary.unitsTotal == null) return null;
+  if (u.summary.status === 'error') return { tone: 'error', text: 'no se pudo completar' };
+  const n = u.summary.unitsWithDiff || 0;
+  if (n === 0) return { tone: 'ok', text: 'sin diferencias' };
+  const unidad = RUN_UNIT_PLURAL[u.summary.unit] || `${u.summary.unit || 'unidad'}s`;
+  return {
+    tone: u.tier === 'error' ? 'error' : 'warn',
+    text: `${n.toLocaleString('es-AR')} ${n === 1 ? (u.summary.unit || 'unidad') : unidad} con diferencia`,
+  };
+}
+
+function renderRunScreen(container, state, ui, root) {
+  const total    = ui.units.length;
+  const doneList = ui.units.filter(u => u.status === 'done');
+  const done     = doneList.length;
+  const terminada = ui.phase === 'done' || ui.phase === 'cancelled' || ui.phase === 'error';
+
+  // Errores primero cuando terminó; mientras corre, el orden de ejecución (que
+  // es el que el analista está mirando avanzar).
+  const cards = terminada
+    ? ui.units.slice().sort((a, b) => EXEC_TIER_RANK[a.tier ?? 'info'] - EXEC_TIER_RANK[b.tier ?? 'info'])
+    : ui.units;
+
+  const titulo = ui.phase === 'cancelled' ? 'Corrida cancelada'
+    : ui.phase === 'error' ? 'La corrida se cortó por un error'
+    : ui.phase === 'done'  ? 'Listo'
+    : 'Ejecutando los controles…';
+
+  container.innerHTML = `
+    <h3 class="wizard-step-title">${esc(titulo)}</h3>
+    <p class="text-muted" style="margin:0 0 var(--sp-4);font-size:var(--text-sm);">
+      ${terminada
+        ? 'Todo corrió en tu navegador — los datos de los empleados no salieron de acá.'
+        : 'Todo corre en tu navegador — no cierres la pestaña hasta que termine.'}
+    </p>
+
+    <div class="wizard-onepane">
+      <div class="wizard-onepane__main">
+        <div id="js-run-bar"></div>
+        <div class="exec-progress ${!terminada && done === 0 ? 'exec-progress--indeterminate' : ''}"
+             role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"
+             aria-label="Controles terminados">
+          <div class="exec-progress__fill" style="width:${total ? Math.round((done / total) * 100) : 0}%;"></div>
+        </div>
+        <div class="run-cards">
+          ${cards.map(u => runCardHtml(u, ui)).join('')}
+        </div>
+      </div>
+      <div class="wizard-onepane__side">
+        <div>
+          <span class="wizard-section-label">Esta corrida</span>
+          <p class="run-side__line">${esc(state.client.name)} · ${esc(periodToLabel(state.period))}</p>
+          <p class="run-side__line run-side__line--muted">
+            ${total} control${total === 1 ? '' : 'es'} · ${ui.filesUsed.length} archivo${ui.filesUsed.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div>
+          <span class="wizard-section-label">Archivos usados</span>
+          ${ui.filesUsed.length
+            ? ui.filesUsed.map(f => `
+                <p class="run-side__line" title="${esc(f.fileName)}">
+                  ${esc(f.label)}${f.rows != null ? ` · ${f.rows.toLocaleString('es-AR')} filas` : ''}
+                </p>`).join('')
+            : '<p class="run-side__line run-side__line--muted">Estos controles no piden archivos.</p>'}
+        </div>
+        ${thresholdsSectionHtml()}
+      </div>
+    </div>
+  `;
+
+  // El "← Anterior" del pie se va mientras dura la corrida: el paso no puede
+  // cambiar abajo de un control que está corriendo. Vuelve solo en el próximo
+  // render() (al volver a los archivos o al salir a resultados).
+  const nav = root?.querySelector('#js-wizard-nav');
+  if (nav) nav.style.display = 'none';
+
+  renderRunBar(container.querySelector('#js-run-bar'), state, ui, root, { done, total });
+  syncRunHeader(state, ui, { done, total });
+}
+
+function runCardHtml(u, ui) {
+  if (u.status === 'done') {
+    const badge  = runCardBadge(u);
+    const cruzados = u.summary?.unitsTotal != null
+      ? `${u.summary.unitsTotal.toLocaleString('es-AR')} ${RUN_UNIT_PLURAL[u.summary.unit] || 'unidades'} cruzados · `
+      : '';
+    return `
+      <div class="run-card run-card--done">
+        <span class="run-card__mark" aria-hidden="true">✓</span>
+        <div class="run-card__body">
+          <div class="run-card__title">${esc(u.label)}</div>
+          <span class="run-card__meta">${esc(cruzados)}terminado en ${esc(formatSeconds(u.ms ?? 0))}</span>
+        </div>
+        ${badge ? `<span class="run-card__badge run-card__badge--${esc(badge.tone)}">${esc(badge.text)}</span>` : ''}
+      </div>`;
+  }
+
+  if (u.status === 'running') {
+    // Sin porcentaje a propósito: adentro de un control el motor no reporta
+    // avance, y un número que no sale de ningún lado se lee como si saliera.
+    const detalle = ui.totalLegajos && u.ctrl.tabRequired !== false
+      ? `Cruzando ${ui.totalLegajos.toLocaleString('es-AR')} legajos contra el Tabulado…`
+      : 'Procesando…';
+    return `
+      <div class="run-card run-card--running">
+        <span class="run-card__spinner" aria-hidden="true"></span>
+        <div class="run-card__body">
+          <div class="run-card__title">${esc(u.label)}</div>
+          <span class="run-card__meta">${esc(detalle)}</span>
+          <div class="run-card__bar"><div class="run-card__bar-fill"></div></div>
+        </div>
+      </div>`;
+  }
+
+  const nota = ui.cancelRequested ? 'Cancelado — no se ejecutó' : 'En cola';
+  return `
+    <div class="run-card run-card--queued">
+      <span class="run-card__mark" aria-hidden="true">${ui.units.indexOf(u) + 1}</span>
+      <div class="run-card__body">
+        <div class="run-card__title">${esc(u.label)}</div>
+        <span class="run-card__meta">${esc(nota)}</span>
+      </div>
+    </div>`;
+}
+
+/**
+ * La runbar del final: cuánto tardó, cómo salió (rojo primero) y la salida a
+ * los resultados. Mientras la corrida avanza no hay runbar.
+ */
+function renderRunBar(el, state, ui, root, { done, total }) {
+  if (!el) return;
+  if (ui.phase !== 'done' && ui.phase !== 'cancelled' && ui.phase !== 'error') {
+    el.innerHTML = '';
+    return;
+  }
+
+  const volver = () => { state.lastRunResults = null; state.step = 1; render(root, state); };
+
+  if (ui.phase === 'error') {
+    el.innerHTML = `
+      <div class="runbar runbar--error">
+        <span class="runbar__mark runbar__mark--error" aria-hidden="true">!</span>
+        <div class="runbar__body">
+          <div class="runbar__title">La corrida se cortó por un error</div>
+          <span class="runbar__meta runbar__meta--error">${esc(ui.errorMessage || 'Error desconocido')}</span>
+        </div>
+        <div class="runbar__actions">
+          <button type="button" class="btn btn--secondary btn--sm" id="js-run-back">← Volver a los archivos</button>
+        </div>
+      </div>`;
+    el.querySelector('#js-run-back').addEventListener('click', volver);
+    return;
+  }
+
+  if (ui.phase === 'cancelled') {
+    el.innerHTML = `
+      <div class="runbar runbar--warn">
+        <span class="runbar__mark runbar__mark--warn" aria-hidden="true">⏹</span>
+        <div class="runbar__body">
+          <div class="runbar__title">Corrida cancelada a los ${esc(formatSeconds(ui.elapsedMs ?? 0))}</div>
+          <span class="runbar__meta">
+            ${done} de ${total} control${total === 1 ? '' : 'es'} habían terminado — no se guardó ningún resultado.
+          </span>
+        </div>
+        <div class="runbar__actions">
+          <button type="button" class="btn btn--secondary btn--sm" id="js-run-back">← Volver a los archivos</button>
+          <button type="button" class="btn btn--primary btn--sm" id="js-run-rerun">↺ Ejecutar de nuevo</button>
+        </div>
+      </div>`;
+    el.querySelector('#js-run-back').addEventListener('click', volver);
+    el.querySelector('#js-run-rerun').addEventListener('click', () => ui.onRerun?.());
+    return;
+  }
+
+  // Terminada: el veredicto en una línea, con lo rojo adelante.
+  const conteos = ['error', 'warn', 'ok'].map(t => ({
+    t, n: ui.units.filter(u => u.tier === t).length,
+  })).filter(x => x.n > 0);
+  const soloReportes = ui.units.every(u => u.tier === 'info');
+  const partes = conteos.map(({ t, n }) => {
+    const color = t === 'error' ? 'rojo' : t === 'warn' ? 'amarillo' : 'verde';
+    const txt = `${n} control${n === 1 ? '' : 'es'} en ${color}`;
+    return t === 'error'
+      ? `<strong class="runbar__meta--error">${esc(txt)}</strong>`
+      : esc(txt);
+  });
+  const nInfo = ui.units.filter(u => u.tier === 'info').length;
+  if (nInfo > 0 && !soloReportes) partes.push(esc(`${nInfo} de generación de reporte`));
+
+  el.innerHTML = `
+    <div class="runbar runbar--ok">
+      <span class="runbar__mark runbar__mark--ok" aria-hidden="true">✓</span>
+      <div class="runbar__body">
+        <div class="runbar__title">Corrida completa en ${esc(formatSeconds(ui.elapsedMs ?? 0))}</div>
+        <span class="runbar__meta">
+          ${soloReportes
+            ? 'Esta corrida sólo incluye controles de generación de reporte.'
+            : partes.join(' · ')}
+        </span>
+      </div>
+      <div class="runbar__actions">
+        <button type="button" class="btn btn--secondary btn--sm" id="js-run-rerun">↺ Ejecutar de nuevo</button>
+        <button type="button" class="btn btn--primary btn--sm" id="js-run-results">Ver resultados →</button>
+      </div>
+    </div>`;
+  el.querySelector('#js-run-results').addEventListener('click', () => ui.onSeeResults?.());
+  el.querySelector('#js-run-rerun').addEventListener('click', () => ui.onRerun?.());
+}
+
+/**
+ * La barra superior durante la corrida: los pasos, en qué control va y una sola
+ * acción — "Cancelar" mientras corre, "Ver resultados →" cuando terminó. Sin
+ * "volver": el paso no puede cambiar abajo de una corrida en curso.
+ */
+function syncRunHeader(state, ui, { done, total }) {
+  const corriendo = ui.phase === 'prep' || ui.phase === 'running';
+  const hintTexto = ui.cancelRequested && corriendo
+    ? 'Cancelando al terminar el control en curso…'
+    : corriendo
+      ? (ui.phase === 'prep'
+          ? 'Preparando la corrida…'
+          : `Corriendo ${Math.min(done + 1, total)} de ${total}…`)
+      : '';
+
+  setHeader({
+    back: corriendo ? null : { label: '← Inicio', href: '#/' },
+    context: state.client?.name
+      ? { name: state.client.name, meta: state.period ? periodToLabel(state.period) : '' }
+      : null,
+    steps: { labels: WIZARD_STEP_LABELS, current: 2 },
+    hint: hintTexto ? { text: hintTexto } : null,
+    primary: corriendo
+      ? {
+          id: 'js-run-cancel',
+          label: 'Cancelar',
+          variant: 'secondary',
+          disabled: ui.cancelRequested,
+          onClick: ui.onCancel,
+        }
+      : ui.phase === 'done'
+        ? { id: 'js-run-results-header', label: 'Ver resultados →', onClick: () => ui.onSeeResults?.() }
+        : null,
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

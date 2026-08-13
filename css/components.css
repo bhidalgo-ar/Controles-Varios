@@ -1740,35 +1740,102 @@ table.rb-grid tfoot > tr > :nth-child(2) {
    ══════════════════════════════════════════════════════════════ */
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes pulseOk { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.45); } 100% { box-shadow: 0 0 0 14px rgba(34,197,94,0); } }
-@keyframes pulseCeleste { 0% { box-shadow: 0 0 0 0 rgba(0,172,212,.45); } 100% { box-shadow: 0 0 0 12px rgba(0,172,212,0); } }
 
 .anim-card-in { animation: cardIn 0.45s cubic-bezier(.4,0,.2,1) both; }
 
-/* A1 — Procesamiento de la corrida (controlsWizard.js → executeControls) */
+/* Paso 3 — La corrida en vivo (controlsWizard.js → executeControls)
+   La barra general mide controles terminados sobre el total: es el único avance
+   que el motor conoce. Mientras no terminó ninguno va indeterminada — una barra
+   quieta en 0 se lee como "no arrancó". */
 .exec-progress {
-  width: 100%; max-width: 560px; margin: 0 auto var(--sp-5);
+  width: 100%; margin: 0 0 var(--sp-4);
   height: 6px; border-radius: 9999px; background: var(--line-soft); overflow: hidden;
 }
 .exec-progress__fill {
   height: 100%; border-radius: 9999px; background: var(--celeste);
-  transition: width 0.8s cubic-bezier(.4,0,.2,1);
+  transition: width 0.5s cubic-bezier(.4,0,.2,1);
 }
-.exec-steps {
-  display: flex; flex-direction: column;
-  width: 100%; max-width: 560px; margin: 0 auto; font-family: var(--font-tool);
+.exec-progress--indeterminate .exec-progress__fill {
+  width: 32% !important;
+  animation: execSlide 1.3s cubic-bezier(.4,0,.2,1) infinite;
 }
-.exec-step { display: flex; align-items: center; gap: var(--sp-3); padding: 9px 0; }
-.exec-step__dot {
-  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+@keyframes execSlide { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
+
+.run-cards { display: flex; flex-direction: column; gap: var(--sp-3); font-family: var(--font-tool); }
+.run-card {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 13px 16px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--color-surface);
+  transition: all var(--transition);
+}
+.run-card--done    { border-color: var(--ok-bd); }
+.run-card--running { border: 2px solid var(--celeste); padding: 12px 15px; }
+.run-card--queued  { border: 1px dashed var(--line); background: transparent; }
+.run-card__mark {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; color: var(--color-white); background: var(--line);
-  transition: background var(--transition);
+  font-size: 12px; font-weight: 700;
 }
-.exec-step__dot--active { background: var(--celeste); animation: pulseCeleste 1.1s cubic-bezier(.4,0,.2,1) infinite; }
-.exec-step__dot--done   { background: var(--ok); }
-.exec-step__label { font-size: 13px; font-weight: 600; color: var(--t3); flex: 1; transition: color var(--transition); }
-.exec-step__label--done { color: var(--t1); }
-.exec-step__note { font-size: 12px; color: var(--t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-card--done   .run-card__mark { background: var(--ok-bg); color: var(--ok-tx); border: 1px solid var(--ok-bd); }
+.run-card--queued .run-card__mark { border: 1px solid var(--line); color: var(--t3); }
+.run-card__spinner {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--line-soft); border-top-color: var(--celeste);
+  animation: spin 0.8s linear infinite;
+}
+.run-card__body { flex: 1; min-width: 0; }
+.run-card__title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.run-card--queued .run-card__title { color: var(--t3); }
+.run-card__meta {
+  display: block; font-size: 12px; color: var(--t2); margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.run-card--queued .run-card__meta { color: var(--t3); }
+/* Barra del control en curso: indeterminada, porque adentro de un `run()` no
+   hay progreso que informar (ver executeControls). */
+.run-card__bar {
+  margin-top: 7px; height: 4px; border-radius: 9999px;
+  background: var(--line-soft); overflow: hidden; max-width: 340px;
+}
+.run-card__bar-fill {
+  width: 32%; height: 100%; border-radius: 9999px; background: var(--celeste);
+  animation: execSlide 1.3s cubic-bezier(.4,0,.2,1) infinite;
+}
+.run-card__badge {
+  flex-shrink: 0; padding: 4px 11px; border-radius: 9999px;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.run-card__badge--ok    { background: var(--ok-bg);    color: var(--ok-tx);    border: 1px solid var(--ok-bd); }
+.run-card__badge--warn  { background: var(--warn-bg);  color: var(--warn-tx);  border: 1px solid var(--warn-bd); }
+.run-card__badge--error { background: var(--error-bg); color: var(--error-tx); border: 1px solid var(--error-bd); }
+
+.run-side__line { margin: 0 0 3px; font-size: 12.5px; color: var(--t2); font-variant-numeric: tabular-nums; }
+.run-side__line--muted { color: var(--t3); }
+
+/* Runbar del final de la corrida */
+.runbar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 13px 16px; margin-bottom: var(--sp-4);
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--color-surface); box-shadow: var(--sh-tool);
+  font-family: var(--font-tool);
+}
+.runbar--ok    { border-color: var(--ok-bd); }
+.runbar--warn  { border-color: var(--warn-bd); }
+.runbar--error { border-color: var(--error-bd); }
+.runbar__mark {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.runbar__mark--ok    { background: var(--ok-bg);    color: var(--ok-tx); }
+.runbar__mark--warn  { background: var(--warn-bg);  color: var(--warn-tx); }
+.runbar__mark--error { background: var(--error-bg); color: var(--error-tx); }
+.runbar__body { flex: 1; min-width: 0; }
+.runbar__title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.runbar__meta { display: block; font-size: 12.5px; color: var(--t3); margin-top: 2px; }
+.runbar__meta--error { color: var(--error-tx); font-weight: 700; }
+.runbar__actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
 
 /* A3 — Fila de diferencias expandible (controlsResults.js): grid 0fr⇄1fr,
    nunca se mide la altura en JS. */
@@ -1787,8 +1854,9 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   .anim-card-in,
   .hero-ctrl-row,
   .status-dot,
-  .exec-step__dot,
   .ctrl-detail-grid,
+  .run-card__spinner,
+  .run-card__bar-fill,
   .exec-progress__fill {
     animation: none !important;
     transition: none !important;
