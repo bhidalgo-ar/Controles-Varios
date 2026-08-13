@@ -1,41 +1,40 @@
 // resultsHeader.js — Cabecera compartida de la pantalla de resultados (1C).
 //
-// Reemplaza el stack viejo (app-header 68px + page-actions + wizard-steps +
-// card-header + banner de estado) por dos barras sticky de 88px en total:
-//   1. app-header comprimido a 44px (misma barra global de siempre, sólo con
-//      la clase `.app-header--compact` — ver setCompactHeader).
-//   2. esta barra de contexto (~46px): volver, status-dot + cliente·período +
-//      una línea de veredicto, y el popover "Detalles del run" (fecha, banner
-//      Ejecución rápida/Borrador/Definitivo, Reconfigurar, Ejecutar de nuevo).
+// Con la barra superior única (54px) el "volver" y el "Cliente · Período" con
+// su semáforo se mudaron a los slots de esa barra (setHeader), y acá queda la
+// barra de veredicto: la línea de resumen y el popover "Detalles del run"
+// (fecha, banner Ejecución rápida/Borrador/Definitivo, Reconfigurar, Ejecutar
+// de nuevo). Las dos son zonas fijas: la que scrollea es la de abajo.
 //
 // Usada por controlsResults.js (run guardado) y controlsWizard.js (run rápido
 // del paso 3) — mismo componente en los dos casos (ver spec §1).
 
-const TIER_DOT = { error: 'error', warn: 'warn', ok: 'ok', info: 'neutral' };
+import { setHeader } from './appHeader.js';
 
-/** Comprime/restaura el app-header global (68px → 44px). Ver css/base.css. */
-export function setCompactHeader(active) {
-  document.querySelector('.app-header')?.classList.toggle('app-header--compact', Boolean(active));
-}
+const TIER_DOT = { error: 'error', warn: 'warn', ok: 'ok', info: 'neutral' };
 
 /**
  * @param {HTMLElement} container - se reemplaza su contenido
  * @param {object} opts
  * @param {'ok'|'warn'|'error'|'info'} [opts.tier]
- * @param {string} opts.clientePeriodo
+ * @param {string} opts.cliente - nombre del cliente (va a la barra superior)
+ * @param {string} opts.periodo - período ya formateado ("Agosto 2026")
  * @param {string} opts.verdictLine
  * @param {{label: string, href?: string, onClick?: () => void}} [opts.back]
  * @param {object} [opts.run] - ver renderRunPopover
  */
-export function renderResultsContextBar(container, { tier = 'info', clientePeriodo, verdictLine, back, run } = {}) {
-  setCompactHeader(true);
+export function renderResultsContextBar(container, { tier = 'info', cliente, periodo, verdictLine, back, run } = {}) {
+  // Volver y "Cliente · Período" (con el dot del semáforo) van a la barra
+  // superior; el semáforo lo sigue decidiendo quien llama, acá sólo se pinta.
+  setHeader({
+    back,
+    context: { name: cliente, meta: periodo, tone: TIER_DOT[tier] || 'neutral' },
+  });
 
   container.className = 'results-ctx-bar';
   container.innerHTML = `
-    <span class="results-ctx-bar__back"></span>
-    <span class="status-dot status-dot--${TIER_DOT[tier] || 'neutral'}" aria-hidden="true"></span>
-    <strong class="results-ctx-bar__name">${esc(clientePeriodo)}</strong>
     ${verdictLine ? `<span class="results-ctx-bar__verdict">${esc(verdictLine)}</span>` : ''}
+    <span class="results-ctx-bar__help"></span>
     <span class="results-ctx-bar__spacer"></span>
     ${run ? `
       <details class="results-ctx-bar__details">
@@ -44,20 +43,6 @@ export function renderResultsContextBar(container, { tier = 'info', clientePerio
       </details>
     ` : ''}
   `;
-
-  const backSlot = container.querySelector('.results-ctx-bar__back');
-  if (back) {
-    if (back.href) {
-      backSlot.innerHTML = `<a href="${esc(back.href)}" class="btn btn--ghost btn--sm">${esc(back.label)}</a>`;
-    } else {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn--ghost btn--sm';
-      btn.textContent = back.label;
-      btn.addEventListener('click', back.onClick);
-      backSlot.appendChild(btn);
-    }
-  }
 
   if (run) renderRunPopover(container.querySelector('#js-run-popover'), run);
 }

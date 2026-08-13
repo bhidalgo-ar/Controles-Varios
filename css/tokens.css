@@ -100,7 +100,11 @@
 
   /* ── Layout ──────────────────────────────────────────────── */
   --max-width:     1280px;
-  --header-height: 68px;
+  /* Barra superior única del rediseño (Fase 1, tarea 2): una sola franja de
+     54px para toda la app. `.app-main` descuenta esta altura del alto de la
+     ventana, así que cambiarla acá reacomoda el layout entero. */
+  --header-height:   54px;
+  --header-border-w: 2px;
 
   /* ── Transiciones ────────────────────────────────────────── */
   --transition:  150ms ease;
@@ -156,6 +160,10 @@
   --header-pill-fg:      var(--color-primary);
   --header-btn-border:   var(--color-border);
   --header-btn-hover-bg: var(--color-bg-subtle);
+  /* Hint de "qué falta" al lado de la primaria (regla 2). Va sobre la barra,
+     así que no puede salir de --warn-tx a secas: en Intenso la barra es ink y
+     ese ámbar oscuro no se lee. */
+  --header-hint-fg:      var(--warn-tx);
 
   /* Borde del hairline de las cards. Existe aparte de --border porque el tema
      Intenso las deja sin borde (con sombra en su lugar) sin tocar los bordes
@@ -369,6 +377,8 @@
   --header-pill-fg:      #7FE0F4;
   --header-btn-border:   rgba(255, 255, 255, 0.22);
   --header-btn-hover-bg: rgba(255, 255, 255, 0.10);
+  --header-hint-fg:      #FBBF24;
+  --header-border-w:     3px;
 
   /* Cards sin hairline: la profundidad la da la sombra */
   --card-border: 1px solid transparent;

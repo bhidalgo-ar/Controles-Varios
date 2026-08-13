@@ -49,7 +49,6 @@ export async function renderControlsResults(root, runId) {
         hour: '2-digit', minute: '2-digit',
       })
     : '';
-  const clientePeriodo = `${client?.name ?? 'Cliente'} · ${periodLabel}`;
   const backTarget = { label: '← Volver a los controles', href: `#/controls/${client?.id ?? ''}` };
 
   root.innerHTML = `
@@ -71,7 +70,7 @@ export async function renderControlsResults(root, runId) {
   let isDefinitive = run.isDefinitive === true;
   function mountCtxBar(tier, verdictLine) {
     renderResultsContextBar(ctxBarEl, {
-      tier, clientePeriodo, verdictLine, back: backTarget,
+      tier, cliente: client?.name ?? 'Cliente', periodo: periodLabel, verdictLine, back: backTarget,
       run: {
         createdAtLabel: createdAt,
         periodNote: run.notes || null,
@@ -92,12 +91,8 @@ export async function renderControlsResults(root, runId) {
         onRerun:       () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
       },
     });
-    const nameEl = ctxBarEl.querySelector('.results-ctx-bar__name');
-    if (nameEl) {
-      const helpSlot = document.createElement('span');
-      nameEl.insertAdjacentElement('afterend', helpSlot);
-      renderHelpPopover(helpSlot, CONTROL_HELP);
-    }
+    const helpSlot = ctxBarEl.querySelector('.results-ctx-bar__help');
+    if (helpSlot) renderHelpPopover(helpSlot, CONTROL_HELP);
   }
 
   if (resultsRows.length === 0) {

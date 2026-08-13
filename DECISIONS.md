@@ -1326,3 +1326,52 @@ forma (un importe donde va otro importe; una fecha donde va un número, porque u
 número). Eso lo ataja la muestra visible, no el aviso — y es la razón del orden. Y las columnas del
 Paso 2 no se repiten en la pantalla de resultados porque la corrida no guarda ese mapeo (anotado en
 `ROADMAP.md` como la decisión que falta).
+
+---
+
+## D-054 — Una sola barra superior de 54px con slots, y el body deja de scrollear
+
+**Fecha:** 2026-08-13
+**Contexto:** Segunda tarea del rediseño Fase 1 (`docs/rediseno/README.md` → "Orden sugerido", punto 2;
+detalle por archivo en `CAMBIOS_TECNICOS.md` §3 y §5). Hasta acá la identidad y la navegación se
+repartían en tres franjas apiladas que cada pantalla armaba por su cuenta: el `app-header` de 68px, el
+bloque `page-actions` (volver + título + botones) que cada vista renderizaba dentro de su
+`.page-content`, y la tira `wizard-steps` de 32px sólo en el wizard. Sumaban ~150px de alto en el Paso 2
+y, como el que scrolleaba era el `body`, el botón "Siguiente" —que vivía en una barra sticky al pie de
+la página— podía quedar fuera de vista o pisado. La pantalla de resultados resolvía lo mismo con un
+tercer mecanismo, `setCompactHeader`, que achicaba el header global a 44px para hacerle lugar a su barra
+de contexto.
+
+**Decisión:**
+
+1. **Una barra sola, siempre de la misma altura**, con huecos fijos: volver · Cliente · Período · pasos
+   del wizard · hint · acción primaria · selector de tema. `#js-header-nav` se conserva como el slot de
+   "volver" —los e2e y las vistas lo conocen por ese nombre—. `app-header--compact` se elimina: la barra
+   ya no cambia de tamaño según la pantalla, así que nada tiene que acordarse de restaurarla.
+2. **`setHeader({ back, context, steps, hint, primary })` define la barra ENTERA en cada llamada**: lo
+   que no se pasa queda vacío. Las vistas la llaman al montar y no heredan restos de la pantalla
+   anterior; el router además la vacía en cada cambio de ruta, así que una vista que tarde (o que falle)
+   no deja el "volver" ni los pasos de la anterior colgados. **Sólo mueve DOM**: los handlers siguen
+   siendo los de cada vista, que se pasan como `onClick`.
+3. **El módulo vive en `js/ui/appHeader.js`, no en `js/main.js`**, aunque el handoff lo pedía ahí:
+   `main.js` importa a todas las vistas, así que una vista importándolo de vuelta arma un ciclo, y un
+   ciclo rompe la app en el navegador y en ningún otro lado (D-048, `tests/moduleCycles.test.js`).
+   `main.js` lo re-exporta para que la API se pida desde un solo lugar.
+4. **El `body` deja de scrollear** (regla 1 del rediseño): `.app-main` mide `calc(100vh - 54px)` y el
+   contenido scrollea adentro. Es lo que garantiza que la barra y el botón de avance no se vayan de
+   pantalla sin depender de un `sticky` por pantalla. Las filas 1 y 2 de esa grilla son para barras fijas
+   de la pantalla (hoy, la de veredicto de resultados) y `.page-content` se ancla a la fila 3 aunque sea
+   el único hijo: en una fila `auto` se estiraría con su contenido y el recorte se comería lo de abajo.
+5. **La barra de resultados se parte en dos**: el volver y el "Cliente · Período" con su dot se van a los
+   slots de arriba, y abajo queda la línea de veredicto con "Detalles del run". El semáforo lo sigue
+   decidiendo quien llama (`computeSemaforoStatus`), la barra sólo lo pinta.
+
+**Verificación:** las 5 pantallas recorridas en Chromium (home, Pasos 1/2/3 y resultados, más
+agrupadores y checklist) en Sobrio y en Intenso: barra de 54px, `body` sin scroll, `.app-main` dentro del
+viewport y la primaria a la vista en todas. Con el contenido más largo que la pantalla, scrollea la zona
+y ni la barra ni "Siguiente" se mueven, y se llega al final del contenido. Suite e2e completa: los mismos
+14 fallos que la baseline (los que necesitan CDN, D-048), verificado corriendo `main` con `git stash`.
+
+**Lo que queda para las tareas siguientes del rediseño:** el selector de mes y el menú "Datos ▾" del home
+(tarea 3), "← Anterior" al lado de la primaria en vez de en la barra al pie del wizard y el "Cancelar"
+del Paso 3 (tareas 5 y 6), y el "⬇ Exportar" como primaria de resultados (tarea 7).

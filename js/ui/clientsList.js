@@ -12,6 +12,7 @@ import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../uti
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { downloadBlob } from '../utils/exportData.js';
 import { tryAutoLoadSeed, getLoadedSeedMeta, inspectSeed, applySeed, tryLoadKnownCompanies, tryLoadKnownConsultants } from '../seed/importSeed.js';
+import { setHeader } from './appHeader.js';
 
 const TIER_DOT = { ok: 'ok', warn: 'warn', error: 'error', neutral: 'neutral', info: 'neutral' };
 
@@ -41,6 +42,11 @@ function positionRowMenuPanel(btn, panel) {
  */
 export async function renderClientsList(root) {
   const state = { period: currentPeriod() };
+
+  // El inicio no tiene contexto de cliente ni pasos: la barra queda con la
+  // identidad y el selector de tema, nada más. El selector de mes y el menú
+  // "Datos ▾" se mudan a sus slots cuando se rediseñe esta pantalla.
+  setHeader();
 
   root.innerHTML = `
     <div class="page-content">

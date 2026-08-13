@@ -46,7 +46,8 @@ import {
 import { nombreCoincideConMetadata } from '../parsers/tabuladoHtml.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
-import { renderResultsContextBar, setCompactHeader } from './resultsHeader.js';
+import { renderResultsContextBar } from './resultsHeader.js';
+import { setHeader }               from './appHeader.js';
 
 // ── Caché de sesión del Tabulado ─────────────────────────────────────────────
 // Evita re-subir el Tabulado entre runs mientras la página esté activa.
@@ -261,20 +262,22 @@ export async function renderControlsWizard(root, clientId) {
   render(root, state);
 }
 
-// Shell del wizard (page-actions + wizard-steps + card + nav) — se remonta
-// cada vez que se vuelve de la pantalla de resultados (1C, sólo 2 barras
-// sticky, sin este shell) a un paso normal. Ver render().
+// Shell del wizard (título + card + nav) — se remonta cada vez que se vuelve
+// de la pantalla de resultados (1C, sin este shell) a un paso normal. El
+// "volver", el cliente·período, los pasos y "Siguiente" ya no viven acá: van a
+// los slots de la barra superior (ver syncWizardHeader). Ver render().
 function mountWizardShell(root, client) {
   root.innerHTML = `
-    <div class="page-content" style="padding-bottom:80px;">
+    <!-- Poco padding abajo a propósito: el nav queda sticky contra el borde de
+         esta zona, que ahora es la que scrollea — todo lo que se le sume acá lo
+         despega del piso de la pantalla. -->
+    <div class="page-content" style="padding-bottom:var(--sp-3);">
       <div class="page-actions">
         <div class="page-actions__title">
-          <a href="#/" class="btn btn--ghost btn--sm">← Inicio</a>
-          <h2 style="margin:0 0 0 var(--sp-3);">Controles — ${esc(client.name)}</h2>
+          <h2 style="margin:0;">Controles — ${esc(client.name)}</h2>
           <span id="js-control-help"></span>
         </div>
       </div>
-      <div class="wizard-steps" id="js-wizard-steps" style="margin:var(--sp-3) 0;"></div>
       <div class="card">
         <div class="card__body" id="js-step-content" style="padding:var(--sp-5);"></div>
       </div>
@@ -290,9 +293,43 @@ function mountWizardShell(root, client) {
   `;
   root.dataset.wizardView = 'steps';
 
-  // Ayuda "cómo ejecutar un control" — vive en el header, así queda visible en
-  // los 3 pasos (el header no se re-renderiza al cambiar de paso).
+  // Ayuda "cómo ejecutar un control" — al lado del título, visible en los 3
+  // pasos (este bloque no se re-renderiza al cambiar de paso).
   renderHelpPopover(root.querySelector('#js-control-help'), CONTROL_HELP);
+}
+
+const WIZARD_STEP_LABELS = ['Controles', 'Archivos', 'Ejecutar'];
+
+/**
+ * Deja la barra superior mostrando en qué está la corrida: volver, cliente ·
+ * período, los 3 pasos y la primaria "Siguiente →" con su hint de qué falta.
+ *
+ * La primaria está acá y no al pie porque el botón de avance no puede quedar
+ * fuera de vista (regla 1 del rediseño): la barra no scrollea nunca. Se
+ * re-sincroniza en cada renderWizardNav — o sea también cuando cambia un
+ * select del Paso 2 y `canGoNext` pasa a ser verdadero.
+ */
+function syncWizardHeader(root, state) {
+  const isLast  = state.step === 2;
+  const canNext = canGoNext(state);
+  const hint    = !canNext && !isLast ? nextStepHint(state) : '';
+
+  setHeader({
+    back: { label: '← Inicio', href: '#/' },
+    context: state.client?.name
+      ? { name: state.client.name, meta: state.period ? periodToLabel(state.period) : '' }
+      : null,
+    steps: { labels: WIZARD_STEP_LABELS, current: state.step },
+    hint: hint ? { text: hint, tone: 'warn' } : null,
+    primary: isLast ? null : {
+      id: 'js-next-btn',
+      label: 'Siguiente →',
+      disabled: !canNext,
+      onClick: () => {
+        if (canGoNext(state)) { state.step++; render(root, state); }
+      },
+    },
+  });
 }
 
 // ── Render central ────────────────────────────────────────────────────────────
@@ -300,13 +337,9 @@ function mountWizardShell(root, client) {
 function render(root, state) {
   const showResultsPage = state.step === 2 && !!state.lastRunResults;
 
-  // Cabecera comprimida (1C): sólo en el paso 3 con resultados ya mostrados
-  // (siempre un run rápido — ver executeControls, que navega a #/control-results
-  // apenas hay runId). Cualquier otro paso usa el app-header normal.
-  setCompactHeader(showResultsPage);
-
-  // Pantalla de resultados (1C): dos barras sticky, sin el shell del wizard
-  // (page-actions/wizard-steps/card/nav) — mismo criterio que controlsResults.js.
+  // Pantalla de resultados (1C): barra de veredicto + contenido, sin el shell
+  // del wizard (título/card/nav) — mismo criterio que controlsResults.js. La
+  // barra superior la reescribe renderResultsContextBar.
   if (showResultsPage) {
     if (root.dataset.wizardView !== 'results') {
       root.innerHTML = `
@@ -323,9 +356,6 @@ function render(root, state) {
   if (root.dataset.wizardView === 'results') {
     mountWizardShell(root, state.client);
   }
-
-  // Indicadores de paso
-  root.querySelector('#js-wizard-steps').innerHTML = buildStepDots(state.step);
 
   // Contenido del paso — envuelto en div para animación fade-in
   const content = root.querySelector('#js-step-content');
@@ -359,39 +389,20 @@ function render(root, state) {
   }, { signal: state._navController.signal });
 }
 
-function buildStepDots(current) {
-  const labels = ['Controles', 'Archivos', 'Ejecutar'];
-  return labels.map((lbl, i) => {
-    const isDone   = i < current;
-    const isActive = i === current;
-    const stepClass = isDone ? 'wizard-step--done' : isActive ? 'wizard-step--active' : '';
-    const step = `
-      <div class="wizard-step ${stepClass}">
-        <div class="wizard-step__bubble">${isDone ? '✓' : i + 1}</div>
-        <div class="wizard-step__label">${lbl}</div>
-      </div>`;
-    const connector = i < labels.length - 1
-      ? `<div class="wizard-step__connector ${isDone ? 'wizard-step__connector--done' : ''}"></div>`
-      : '';
-    return step + connector;
-  }).join('');
-}
-
 function renderWizardNav(root, state) {
+  // "Siguiente →" y el hint de qué falta viven en la barra superior desde el
+  // rediseño; acá abajo queda sólo el "← Anterior" y el atajo de teclado.
+  syncWizardHeader(root, state);
+
   const nav = root.querySelector('#js-wizard-nav');
+  if (!nav) return;
   const isFirst = state.step === 0;
   const isLast  = state.step === 2;
-  const canNext = canGoNext(state);
-
-  // Con resultados ya mostrados, render() muestra la cabecera 1C en vez de
-  // este nav — este bloque sólo corre en modo pre-ejecución (ver showResultsPage).
-  const prevLabel = '← Anterior';
-  const hint = !canNext && !isLast ? nextStepHint(state) : '';
 
   nav.innerHTML = `
     <div style="display:flex;align-items:center;gap:var(--sp-3);">
       ${!isFirst
-        ? `<button class="btn btn--ghost btn--sm" id="js-prev-btn">${prevLabel}</button>`
+        ? `<button class="btn btn--ghost btn--sm" id="js-prev-btn">← Anterior</button>`
         : ''}
       ${!isLast ? `
         <span class="text-muted" style="font-size:11px;display:none;" id="js-kbd-hint">
@@ -401,15 +412,10 @@ function renderWizardNav(root, state) {
         </span>
       ` : ''}
     </div>
-    <div style="display:flex;align-items:center;gap:var(--sp-3);">
-      ${hint ? `<span class="text-sm text-muted" style="font-style:italic;">${hint}</span>` : ''}
-      ${!isLast
-        ? `<button class="btn btn--primary" id="js-next-btn" ${canNext ? '' : 'disabled'}>
-             Siguiente →
-           </button>`
-        : ''}
-    </div>
   `;
+
+  // En el Paso 1 no queda nada al pie: una barra vacía con sombra es ruido.
+  nav.style.display = isFirst ? 'none' : 'flex';
 
   // Mostrar hint de teclado solo en pantallas anchas (>720px) para no quitar espacio en móvil
   const kbdHint = nav.querySelector('#js-kbd-hint');
@@ -420,9 +426,6 @@ function renderWizardNav(root, state) {
     if (state.step === 2) state.lastRunResults = null;
     state.step--;
     render(root, state);
-  });
-  nav.querySelector('#js-next-btn')?.addEventListener('click', () => {
-    if (canGoNext(state)) { state.step++; render(root, state); }
   });
 }
 
@@ -1595,7 +1598,8 @@ function renderInlineResults(container, state, root) {
   const ctxBarEl = root.querySelector('#js-results-ctx-bar');
   renderResultsContextBar(ctxBarEl, {
     tier: overallTier,
-    clientePeriodo: `${state.client.name} · ${periodToLabel(state.period)}`,
+    cliente: state.client.name,
+    periodo: periodToLabel(state.period),
     verdictLine,
     back: { label: '← Volver a los controles', onClick: () => { state.step = 0; render(root, state); } },
     run: {

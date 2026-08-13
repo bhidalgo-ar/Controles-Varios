@@ -10,6 +10,7 @@ import {
   getGrouperConcepts, addConceptToGrouper, removeConceptFromGrouper,
 } from '../db.js';
 import { showToast, showConfirm } from './toast.js';
+import { setHeader } from './appHeader.js';
 
 export async function renderGrouperEditor(root, clientId) {
   const client = await getClient(clientId);
@@ -18,12 +19,18 @@ export async function renderGrouperEditor(root, clientId) {
     return;
   }
 
+  // Volver y el nombre del cliente van a la barra superior; el botón sigue
+  // llamándose `js-back-btn` y haciendo lo mismo, sólo cambió de lugar.
+  setHeader({
+    back: { id: 'js-back-btn', label: '← Volver', onClick: () => { window.location.hash = '#/'; } },
+    context: { name: client.name, meta: 'Agrupadores' },
+  });
+
   root.innerHTML = `
     <div class="page-content">
       <div class="page-actions">
         <div class="page-actions__title">
-          <button class="btn btn--ghost btn--sm" id="js-back-btn">← Volver</button>
-          <h2>Agrupadores — <span style="color:var(--color-wordmark);font-weight:300;">${escHtml(client.name)}</span></h2>
+          <h2>Agrupadores</h2>
         </div>
         <div class="page-actions__buttons">
           <button class="btn btn--primary" id="js-new-grouper-btn">+ Nuevo agrupador</button>
@@ -37,7 +44,6 @@ export async function renderGrouperEditor(root, clientId) {
     </div>
   `;
 
-  root.querySelector('#js-back-btn').addEventListener('click', () => { window.location.hash = '#/'; });
   root.querySelector('#js-new-grouper-btn').addEventListener('click', () => showNewGrouperModal(root, client.code));
 
   await reloadGroupers(root, client.code);
