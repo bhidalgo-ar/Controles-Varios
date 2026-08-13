@@ -1140,7 +1140,12 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-.hero-gauge__label { font-size: 12px; color: var(--t2); margin-top: 4px; }
+/* El nombre de la unidad medida (legajos, centros de costo, cuentas contables):
+   acotado para que no se meta debajo del anillo y pase a dos líneas si hace falta. */
+.hero-gauge__label {
+  font-size: 12px; color: var(--t2); margin-top: 4px;
+  max-width: 120px; text-align: center; line-height: 1.25;
+}
 
 .hero-verdict__badge {
   display: inline-flex; align-items: center; gap: var(--sp-2);
