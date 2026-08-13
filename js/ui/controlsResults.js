@@ -336,6 +336,15 @@ function groupSummariesByUnit(controlSummaries) {
       ctrls,
       unitsTotal:    sumUnitsTotal(ctrls),
       unitsWithDiff: sumUnitsWithDiff(ctrls),
+      // Cuántas unidades DISTINTAS vio la corrida, para el texto del subtítulo:
+      // dos controles sobre los mismos 4 empleados son 4 legajos verificados en
+      // 2 controles, no 8. El summary de cada control informa cuántas unidades
+      // verificó, no cuáles, así que lo más cercano que se puede afirmar es el
+      // mayor de los controles — el mismo criterio que el fallback del KPI
+      // "Legajos cruzados". Si dos controles miraran empleados distintos, la
+      // unión sería mayor, y no hay dato para saberlo: por eso el texto dice
+      // "en N controles" y no promete una dotación.
+      unitsMax: ctrls.reduce((max, c) => Math.max(max, c.summary.unitsTotal || 0), 0),
     }))
     .sort((a, b) => {
       if (a.unit === 'legajo' || b.unit === 'legajo') return a.unit === 'legajo' ? -1 : 1;
@@ -420,9 +429,14 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
     subline = 'Esta corrida sólo incluye controles de generación de reporte (sin cruce de diferencias).';
   } else if (overallTier === 'ok') {
     // Una frase por unidad verificada: "100 legajos verificados · 24 centros de
-    // costo verificados, sin diferencias". Nunca un total que las sume.
-    const unitBits = unitGroups.map(g =>
-      `${fmtUnitCount(g.unitsTotal, g.unit)} ${fmtVerificado(g.unitsTotal, g.unit)}`);
+    // costo verificados, sin diferencias". Nunca un total que las sume, y nunca
+    // el mismo empleado contado una vez por control: con dos controles sobre 4
+    // empleados dice "4 legajos verificados en 2 controles", no "8 legajos".
+    const unitBits = unitGroups.map(g => {
+      const n = g.unitsMax;
+      const frase = `${fmtUnitCount(n, g.unit)} ${fmtVerificado(n, g.unit)}`;
+      return g.ctrls.length > 1 ? `${frase} en ${g.ctrls.length} controles` : frase;
+    });
     subline = unitBits.length === 0 ? 'Sin diferencias.'
             : unitBits.length === 1 ? `${unitBits[0]} sin diferencias.`
             : `${unitBits.join(' · ')}, sin diferencias.`;
