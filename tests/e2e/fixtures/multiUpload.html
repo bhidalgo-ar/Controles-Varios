@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><title>multi</title>
+<link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/css/components.css">
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<script src="/node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<div id="host"></div><pre id="out">—</pre>
+<script type="module">
+  const { initFileUploadStep } = await import('../../../js/ui/fileUpload.js');
+  const out = document.getElementById('out');
+  window.__completes = [];
+
+  // Datos inventados (regla del repo: nunca un export de cliente en el repo).
+  const CONTA = [
+    ['FEC_PAGO','ID_EMPLEADO','NOMBRE','APELLIDO_1','ID_CONCEPTO','NOMBRE_LARGO','CUENTA_CONTAB','ID_CONTA','ID_CENTRO_COSTO','CC_NOMBRE','DEBE','HABER','N_CUENTA_CONTABLE','DEBE_HABER'],
+    ['01/04/2026','1','Juan','Perez','1003','Sueldo','61010','1','10','Administracion',1000,0,'Sueldos','D'],
+    ['01/04/2026','2','Ana','Gomez','1003','Sueldo','61010','1','10','Administracion',2000,0,'Sueldos','D'],
+    ['01/04/2026','2','Ana','Gomez','1003','Sueldo','61010','1','','Null',500,0,'Sueldos','D'],
+  ];
+  const ACUM = [
+    ['Legajo','Apellido y Nombre','CUIL','Nro','Acumulador','Operacion','Valor','Empresa'],
+    ['1','Perez Juan','20111111112','5','Rem. Bruta','SUMA',1000,'ACME'],
+    ['2','Gomez Ana','27222222223','5','Rem. Bruta','SUMA',2000,'ACME'],
+  ];
+
+  const xlsxFile = (aoa, name) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Hoja1');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  };
+
+  window.__mount = (fileType) => new Promise(res => {
+    window.__completes = [];
+    document.getElementById('host').innerHTML = '';
+    initFileUploadStep(document.getElementById('host'), {
+      clientCode: 'TEST', fileType, existingData: null,
+      onComplete: d => { window.__completes.push(d); },
+    });
+    setTimeout(res, 150);
+  });
+
+  window.__drop = (fileType, names) => new Promise(res => {
+    const aoa = fileType === 'conta_file' ? CONTA : ACUM;
+    const dt = new DataTransfer();
+    for (const n of names) dt.items.add(xlsxFile(aoa, n));
+    const input = document.querySelector('#host input[type=file]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(res, 600);
+  });
+
+  window.__dropText = () => document.querySelector('#host .file-drop__text')?.textContent.replace(/\s+/g,' ').trim();
+  out.textContent = 'listo';
+</script>

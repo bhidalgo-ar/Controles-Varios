@@ -18,7 +18,7 @@ globalThis.Dexie = Dexie;
 
 const {
   FILE_TYPES, fieldsFor, fileTypeLabel, isFixedFormat, hasNameMapping,
-  metaLineFor, detectHeadersFor, parseFor,
+  metaLineFor, detectHeadersFor, parseFor, flowFor, dropLabelFor, dropHintFor,
 } = await import('./js/ui/fileTypes.js');
 
 let ok = 0, fail = 0;
@@ -161,6 +161,64 @@ assert('los campos de un tipo desconocido son lista vacía',
   Array.isArray(fieldsFor('no_existe_file')) && fieldsFor('no_existe_file').length === 0);
 assert('un tipo desconocido no es de formato fijo ni tiene mapeo de nombre',
   isFixedFormat('no_existe_file') === false && hasNameMapping('no_existe_file') === false);
+
+// ── Cómo se sube cada tipo (`flow`) ──────────────────────────────────────────
+// Antes eran dos `if (fileType === '…')` al principio de initFileUploadStep.
+// Un tipo multi-archivo que se olvidara de declararse caía al flujo de un
+// archivo por slot: el analista subía UN mes donde el control espera N, y el
+// control corría igual con datos incompletos.
+
+const FLOWS_CON_PANTALLA = new Set(['single', 'multi', 'multi-periodo']);
+
+for (const [fileType] of entries) {
+  assert(`${fileType}: declara un flujo que la app sabe manejar (${flowFor(fileType)})`,
+    FLOWS_CON_PANTALLA.has(flowFor(fileType)));
+}
+
+assert('CONTA se sube de a varios archivos', flowFor('conta_file') === 'multi');
+assert('Acumuladores se sube de a varios, cada uno con su período',
+  flowFor('acumuladores_file') === 'multi-periodo');
+assert('el Tabulado es un archivo por slot', flowFor('tab_control') === 'single');
+assert('un tipo sin flow declarado es "single" (el default de 15 de los 17)',
+  flowFor('nr_file') === 'single' && FILE_TYPES.nr_file.flow === undefined);
+
+// Los dos flujos multi son distintos entre sí a propósito: CONTA concatena y
+// avisa duplicados, Acumuladores pide un mes por archivo. Si alguna vez quedan
+// con el mismo flow, uno de los dos perdió su pantalla.
+assert('los dos flujos multi NO son el mismo',
+  flowFor('conta_file') !== flowFor('acumuladores_file'));
+
+// ── Los textos de la zona de drop, preservados al pie de la letra ────────────
+// La zona de drop de Acumuladores decía "Acumuladores (Axton)" mientras la
+// etiqueta del tipo dice "Acumuladores (export de Axton)". La divergencia es
+// anterior a la ficha. Derivar el texto de `label` la habría "arreglado" en un
+// paso que es cero cambio de comportamiento, así que se declara tal cual y se
+// fija acá — el día que Willy decida unificarlas, este assert es el que avisa
+// que el texto de pantalla cambia.
+
+assert('la zona de drop de Acumuladores conserva su texto histórico',
+  dropLabelFor('acumuladores_file') === 'Acumuladores (Axton)');
+assert('…que NO es el mismo que la etiqueta del tipo (la divergencia sigue viva)',
+  dropLabelFor('acumuladores_file') !== fileTypeLabel('acumuladores_file'));
+assert('Acumuladores aclara que va uno por mes',
+  dropHintFor('acumuladores_file') === ' (uno por mes)');
+assert('CONTA no diverge: su zona de drop usa la etiqueta del tipo',
+  dropLabelFor('conta_file') === 'Contabilidad Desglosada'
+  && dropLabelFor('conta_file') === fileTypeLabel('conta_file'));
+assert('CONTA no lleva aclaración extra', dropHintFor('conta_file') === '');
+
+// Las dos líneas completas, armadas igual que en la pantalla — es la forma de
+// afirmar "no cambió ni un carácter" sin abrir el navegador.
+const lineaDrop = ft => `${dropLabelFor(ft)} — arrastrá uno o varios .xlsx${dropHintFor(ft)}, o hacé clic para elegir`;
+assert('la línea de CONTA sale idéntica a la de antes de la ficha',
+  lineaDrop('conta_file') === 'Contabilidad Desglosada — arrastrá uno o varios .xlsx, o hacé clic para elegir');
+assert('la línea de Acumuladores sale idéntica a la de antes de la ficha',
+  lineaDrop('acumuladores_file') === 'Acumuladores (Axton) — arrastrá uno o varios .xlsx (uno por mes), o hacé clic para elegir');
+
+// Un tipo desconocido no inventa un flujo multi: cae a 'single', que es el
+// camino que sí sabe avisar que el tipo no existe (parseFor tira el error).
+assert('un tipo desconocido cae a single, no a un flujo multi inventado',
+  flowFor('no_existe_file') === 'single');
 
 // ── El selector de apellido/nombre ───────────────────────────────────────────
 // Sólo los formatos con una fila por empleado lo muestran.
