@@ -426,6 +426,38 @@ const catDistribucion = (exportId, sheet, label, from) => ({
   ],
 });
 
+// ── Variación entre quincenas (POP · Axton) ──────────────────────────────────
+// Las 11 columnas del reporte que recibe **HR** del cliente (no Finanzas): por
+// eso lleva altas, bajas y variaciones además del neto — es información de HR
+// para HR. El criterio de D-020 corre al revés en este contrato y por eso es
+// `audience: 'payroll'`: lo que no puede llevar datos de HR es un entregable de
+// Finanzas, como Acreditaciones acá abajo.
+//
+// `from: []` en TODAS las columnas: ninguna sale de una clave que el analista
+// mapee. Las dos de valor hora se DERIVAN (importe ÷ cantidad del concepto de
+// horas normales, de cada Tabulado) y el resto sale de columnas que el parser
+// del Tabulado de Axton resuelve por nombre, sin pantalla de mapeo.
+//
+// `Variación %` va como TEXTO y no como número a propósito: cuando el valor hora
+// de la quincena anterior es 0 no hay porcentaje que calcular y la celda dice
+// `s/base`. Un 100% ahí sería un número plausible y equivocado.
+const popVariaciones = {
+  exportId: 'pop_variaciones', sheet: 'Variaciones', layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label: 'Legajo',            key: 'legajo',     width: 10, from: [], necessity: NECESSITY.CLAVE,       type: 'txt' },
+    { label: 'Apellido y Nombre', key: 'nombre',     width: 34, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt' },
+    { label: 'VH anterior',       key: 'vhAnterior', width: 14, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'VH actual',         key: 'vhActual',   width: 14, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+    { label: 'MOD',               key: 'mod',        width: 8,  from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', dataAlign: 'center' },
+    { label: 'Variación $',       key: 'dif',        width: 14, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', diffHighlight: true },
+    { label: 'Variación %',       key: 'pctLabel',   width: 13, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', dataAlign: 'right' },
+    { label: 'MOD CBU',           key: 'modCbu',     width: 10, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', dataAlign: 'center' },
+    { label: 'Alta',              key: 'alta',       width: 8,  from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', dataAlign: 'center' },
+    { label: 'Baja',              key: 'baja',       width: 8,  from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', dataAlign: 'center' },
+    { label: 'Neto',              key: 'neto',       width: 16, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num' },
+  ],
+};
+
 // ── Acreditaciones (Paso 6) ──────────────────────────────────────────────────
 // **El primer contrato `audience: 'finanzas'`** (D-020) — los otros dos son las
 // solapas planas del asiento de FINADIET, más abajo: este .xlsx lo recibe
@@ -551,6 +583,7 @@ export const EXPORT_CONTRACTS = {
   // la otra.
   cat_x_empleados_cc:     catDistribucion('cat_x_empleados_cc', 'Por Centro de Costo', 'Centro de Costo', ['centroCostoColumn']),
   acreditaciones_reporte: acreditacionesReporte,
+  pop_variaciones:        popVariaciones,
   // Asiento de FINADIET: los dos únicos del Paso 6 que ya salen por
   // `writeContractSheet`, así que declaran también su layout (D-046).
   finadiet_asiento_cc:    finadietAsientoPorCentro,
@@ -580,6 +613,9 @@ export const CON_WRITER = [
   // Los 4 del Paso 6 que entraron limpio en el writer (D-047).
   'rend_vs_tabu', 'rend_vs_asiento', 'rend_x_ee',
   'cat_x_empleados_puesto', 'cat_x_empleados_cc',
+  // Una hoja, 11 columnas planas, sin grupos ni fila de TOTAL: nació sobre
+  // `writeContractSheet` y no necesita nada que el writer no tenga.
+  'pop_variaciones',
 ];
 
 /**

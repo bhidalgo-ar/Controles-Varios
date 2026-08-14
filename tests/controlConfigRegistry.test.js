@@ -35,8 +35,8 @@ for (const cfg of todas) {
 }
 
 assert(`hay controles con config declarada (${conConfig.length})`, conConfig.length >= 10);
-assert(`son 9 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
-  porClave.size === 9);
+assert(`son 10 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
+  porClave.size === 10);
 
 // ── Forma de cada declaración ───────────────────────────────────────────────
 

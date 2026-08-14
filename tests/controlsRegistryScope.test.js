@@ -35,8 +35,11 @@ const controls = Object.values(CONTROL_REGISTRY);
 // Axton — ver specs/control-acumuladores-ganancias.md.
 // Se agregó "finadiet_asiento" (16º), el asiento contable de remuneraciones de
 // FINADIET — ver specs/finadiet-asiento-remuneraciones.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET',
-  controls.length === 16);
+// Se agregó "pop_variaciones" (17º), la variación entre quincenas de OPmobility
+// Pilar: el primero que cruza dos Tabulados de AXTON entre sí — ver
+// specs/control-variacion-quincenas-pop.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP',
+  controls.length === 17);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

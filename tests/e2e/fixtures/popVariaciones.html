@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/popVariaciones.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Variación entre quincenas" (POP) con el
+     control contra el reporte de Axton ya hecho, para verificar en un navegador
+     real lo que no se puede afirmar leyendo el código: que el Resumen y el
+     Detalle se dibujen, que la marca de "sin dato" se vea distinta de un cero, y
+     que se lea en los tres temas. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runPopVariaciones, renderPopVariacionesResults, summarizePopVariaciones }
+  from '../../../js/controls/popVariaciones.js';
+
+const LIQ_1RA = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) - (v)';
+const LIQ_2DA = '2da Quincena c/ sobregiro Julio 2026 (2da Quincena 07-2026) - (v)';
+
+const fila = ({ legajo, nombre, cant, imp, neto = 500000, cbu = '0170099220000012345678',
+                ingreso = '2015-09-01', egreso = null, liq }) => ({
+  esTotalGeneral: false, legajo, apellido_nombre: nombre, ingreso, egreso, cbu,
+  liquidacion: liq, cant_1010: cant, imp_1010: imp, neto_cant: null, neto_imp: neto,
+});
+
+// 40 legajos: la mayoría sin variación, algunos con variación de valor hora, uno
+// sin el concepto liquidado (valor hora "—"), un alta, una baja y un cambio de CBU.
+const NOMBRES = ['PEREZ JUAN', 'GOMEZ SUSANA', 'LOPEZ MARIA', 'DIAZ CARLOS'];
+const prev = [], act = [];
+for (let i = 1; i <= 40; i++) {
+  const nombre = NOMBRES[i % NOMBRES.length];
+  const vh = 8000 + (i % 3) * 500;
+  prev.push(fila({ legajo: String(i), nombre, cant: 80, imp: 80 * vh, liq: LIQ_1RA }));
+  if (i === 7) continue;                                     // liquidó sólo en la 1ª quincena
+  const sube = i % 9 === 0;                                  // 4 legajos con variación
+  act.push(fila({
+    legajo: String(i), nombre,
+    cant: i === 13 ? null : 90,                              // 13: sin el concepto → "—"
+    imp:  i === 13 ? null : 90 * (sube ? vh * 1.12 : vh),
+    neto: i === 21 ? null : 600000,                          // 21: sin neto → "—"
+    cbu: i === 5 ? '0170099220000099999999' : undefined,     // 5: cambió el CBU
+    egreso: i === 30 ? '2026-07-22' : null,                  // 30: baja en la quincena
+    ingreso: i === 31 ? '2026-07-18' : '2015-09-01',         // 31: alta en la quincena
+    liq: LIQ_2DA,
+  }));
+}
+prev.push({ esTotalGeneral: true, legajo: null, cant_1010: prev.reduce((s, r) => s + r.cant_1010, 0),
+            imp_1010: prev.reduce((s, r) => s + r.imp_1010, 0) });
+
+// El reporte de Axton: coincide salvo en dos legajos, para que se vea el bloque
+// de diferencias y la columna "vs Axton" de la planilla.
+const variacRows = act.map(r => ({
+  legajo: r.legajo, apellido_nombre: r.apellido_nombre,
+  vh_anterior: prev.find(p => p.legajo === r.legajo)?.imp_1010 / 80 || null,
+  vh_actual: r.cant_1010 ? r.imp_1010 / r.cant_1010 : 9999,
+  mod: r.cant_1010 ? 'N' : 'N', variacion: null, pct_variacion: null,
+  mod_cbu: 'N', puesto_anterior: 'M100', puesto_actual: 'M100', mod_puesto: 'N',
+  alta: 'N', baja: 'N', neto: r.neto_imp ?? 0,
+}));
+
+const results = runPopVariaciones(prev, [], {
+  legajoKeyMode: 'sin_ceros', period: '2026-07', tab_actRows: act, variacRows,
+});
+renderPopVariacionesResults(results, document.getElementById('host'));
+
+window.__resumen = summarizePopVariaciones(results);
+window.__results = { total: results.rows.length, difs: results.control.difs.length };
+window.__listo = true;
+</script>
+</body></html>
