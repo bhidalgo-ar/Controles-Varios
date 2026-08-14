@@ -18,21 +18,60 @@ tabla de 900 legajos.
 - Cuando las dos distribuciones coinciden 1:1, un toggle "sólo con diferencia / todos"
   (`catXEmpleados.js`).
 
-Tabla: `class="data-table data-table--compact"` + `enhanceGrid()`. Toolbar: `class="results-toolbar"`,
-filtros y buscador a la izquierda, `renderExportMenu` a la derecha. Después de **cada** render del
-`<tbody>` —incluido el re-render que dispara un filtro— hay que volver a inicializar
-`initShowMorePagination(tbody, { pageSize: 50 })` y después `initSearchCombobox(...)` pasándole la
-paginación, de `js/ui/tableTools.js`. En ese orden: el buscador necesita la paginación ya creada.
+Toolbar y tabla salen de dos funciones de `js/ui/tableTools.js`, y las usan los 10 controles: no armes
+la barra a mano ni encadenes la paginación vos.
+
+```js
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+
+// filterSel es tu <select> de siempre ("sólo con diferencia / todos"); va a la izquierda
+const { searchEl, exportEl, kpisEl } = createResultsToolbar(container, { left: filterSel });
+renderExportMenu(exportEl, { onExcel, onCsv, onCopy });
+
+// después de CADA render del <tbody> —incluido el re-render que dispara el filtro—
+wireTableTools(tableHost.querySelector('table'), {
+  rows: shownRows,                                  // mismo orden que los <tr>
+  getLabel: r => `${r.legajo} — ${r.nombre}`,
+  searchEl,
+  stickyCols: 2,                                    // 0 si no querés columnas fijas
+});
+```
+
+`wireTableTools` encadena paginación (50 filas + "Mostrar todas"), buscador, `enhanceGrid()`, el total
+de la selección y los KPIs de la barra. Cuatro cosas que se deducen mal:
+
+- **La fila de TOTAL se recalcula sola si la ponés en un `<tfoot>`.** Cuando el analista filtra o busca,
+  la etiqueta pasa a "TOTAL de la selección" y los importes bajan a las filas que quedaron. Sólo toca las
+  celdas que ya mostraban un número; si alguna no se puede totalizar sale `—`, no un número inventado. No
+  escribas tu propio "TOTAL — N legajos": lo va a pisar. Paginar **no** cambia el total (no cambiaste lo
+  que estás mirando, sólo cuánto entra en la pantalla).
+- **Tu `<select>` de filtro se dibuja como chips** si tiene hasta 4 opciones (con más sigue siendo un
+  desplegable: los 18 conceptos de NR serían una pared). Los chips son sólo la piel — el `<select>` sigue
+  en el DOM y sigue siendo el único que leés. No cambies cómo leés el filtro.
+- La barra queda **pegada arriba** al scrollear. Si tu pantalla no es la tabla Detalle típica (sólo
+  exportar, sin buscador; selects de orden propios), no la fuerces acá.
+- `sticky: false` saltea `enhanceGrid` — lo usa `variaciones.js` en una de sus tablas.
+
+La tabla, `class="data-table data-table--compact"`. Para la celda de diferencia, `diffCellHtml(v, { max })`
+de `resultBlocks.js`: pinta la pastilla roja, el cero en gris y, con `absentLabel: 'sin comparar'`, el
+amarillo de lo que **no se pudo** comparar — que antes se leía igual que "dio cero".
 
 Export: `renderExportMenu(el, { onExcel, onCsv, onCopy })`. Las tres salidas llevan **todas** las
 filas con diferencia y **todos** los conceptos, sin importar el filtro de pantalla. El `.xlsx` se
 arma con `loadExcelJS()` de `js/utils/exportData.js`; nombre
 `<Control>_<Modo>_${periodSuffix(results.period)}.xlsx`.
 
-Colores desde `css/tokens.css` (`var(--color-danger)`, `var(--color-success)`, `var(--sp-3)`). Si
-necesitás un tinte por grupo de concepto, declaralo como constante arriba del módulo y compartilo
-entre tabla y export (`nr.js`) — pero comprobalo en dark mode antes de darlo por cerrado; ya hubo un
-badge ilegible por eso.
+**Ningún color cableado en `js/`, ni uno.** `tests/themeSourceOfTruth.test.js` falla si aparece un `#hex`
+en cualquier módulo de `js/` (la única excepción declarada es `js/controls/variaciones.js`, que arma un
+documento HTML aparte para imprimir a PDF, sin las hojas de la app). Todo sale de `css/tokens.css`:
+`var(--color-danger)`, `var(--color-success)`, `var(--sp-3)`. Si te falta un tinte —por ejemplo uno por
+grupo de concepto—, el token nuevo va a `tokens.css` con su valor en los tres temas, y el módulo lo pide
+por `var(--…)`. Tampoco preguntes por el tema desde `js/` (nada de `data-theme`): el único que puede es
+`js/main.js`, que es quien lo aplica. Y el serif se pide por `--font-display`, nunca por `--serif`: es
+tipografía de un solo tema.
+
+Los temas son **tres** —Sobrio (default), Intenso y Oscuro— y hay que mirar la pantalla en los tres antes
+de darla por cerrada. Ya hubo un badge ilegible, y en la última pasada tres cosas más (D-059).
 
 Números: `toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })`, y `'—'`
 para `null`.
