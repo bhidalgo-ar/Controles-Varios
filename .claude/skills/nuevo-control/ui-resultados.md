@@ -38,13 +38,23 @@ wireTableTools(tableHost.querySelector('table'), {
 ```
 
 `wireTableTools` encadena paginación (50 filas + "Mostrar todas"), buscador, `enhanceGrid()`, el total
-de la selección y los KPIs de la barra. Cuatro cosas que se deducen mal:
+de la selección y los KPIs de la barra. Cinco cosas que se deducen mal:
 
 - **La fila de TOTAL se recalcula sola si la ponés en un `<tfoot>`.** Cuando el analista filtra o busca,
   la etiqueta pasa a "TOTAL de la selección" y los importes bajan a las filas que quedaron. Sólo toca las
   celdas que ya mostraban un número; si alguna no se puede totalizar sale `—`, no un número inventado. No
   escribas tu propio "TOTAL — N legajos": lo va a pisar. Paginar **no** cambia el total (no cambiaste lo
   que estás mirando, sólo cuánto entra en la pantalla).
+- **El rótulo de esa fila lleva la unidad: `<td colspan="2">TOTAL — ${n} legajos</td>`.** De ahí saca la
+  unidad el "TOTAL de la selección — 1 legajo" al filtrar; si escribís sólo `TOTAL`, sale "1 fila", que no
+  dice de qué. La celda del rótulo tiene que ocupar las columnas fijas (`colspan` = `stickyCols`) — el
+  sticky y el ancho de la fila de totales se resuelven a partir de eso (D-060).
+- **Del ancho no te ocupás, pero no lo peleés.** El Detalle usa el ancho de la ventana
+  (`.page-content--wide`), la planilla avisa con una sombra que sigue para el costado, `enhanceGrid()`
+  reserva el ancho que necesitan los totales —que tienen más dígitos que cualquier fila— y ofrece
+  "Ampliar" si aún así no entra. Todo eso es automático: no le pongas `white-space`, `min-width` ni
+  `overflow` a mano a las celdas, y no metas la tabla en un scroller propio (`enhanceGrid` arma el suyo;
+  uno intermedio le rompe el sticky). Lo fija `tests/e2e/planillaAncha.spec.js`.
 - **Tu `<select>` de filtro se dibuja como chips** si tiene hasta 4 opciones (con más sigue siendo un
   desplegable: los 18 conceptos de NR serían una pared). Los chips son sólo la piel — el `<select>` sigue
   en el DOM y sigue siendo el único que leés. No cambies cómo leés el filtro.

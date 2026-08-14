@@ -1680,3 +1680,83 @@ screenshots de referencia: son decisiones de marca y de la regla 2 del rediseño
 desaparece, se atenúa"), no una deriva de tema. Tampoco se tocó `h1..h6 { color: var(--color-primary) }`
 de `base.css`, que pinta los títulos de página en celeste donde los screenshots 18 y 20 los muestran en
 ink: es igual en los tres temas y cambiarlo mueve todas las pantallas, así que es su propia tarea.
+
+---
+
+## D-060 — Una planilla más ancha que la pantalla: el ancho es del Detalle, y el total nunca se derrama
+
+**Fecha:** 2026-08-14
+**Contexto:** Willy mandó una captura de la solapa Planilla → DATOS de Acumuladores Ganancias: en la fila
+de TOTAL se leía `0,0036.857.323,85` —dos importes distintos pegados, que se leen como un número que no
+existe— y las últimas columnas de la derecha no se veían. Es la planilla más ancha de la app (13 columnas
+sobre 308 legajos), pero el problema no es de ese control: son los mismos `enhanceGrid()` /
+`wireTableTools()` en **19 lugares de 12 controles**, así que se arregla una vez y para todos.
+
+Medido en un navegador real antes de tocar nada: la tabla pide **1699px** y el recuadro donde vive tiene
+**1096px**. O sea ~580px de columnas —casi 5 de las 13— fuera de la vista, sin nada que lo avise: la
+barra de scroll horizontal del sistema mide 2px y es transparente hasta que le pasás el mouse.
+
+**Decisión — tres reglas, más una salida:**
+
+1. **El Detalle usa el ancho de la ventana; el Resumen mantiene el tope de 1280px.**
+   `.page-content--wide` (`css/base.css`) se aplica a la solapa Detalle de `controlsResults.js` y a la
+   pantalla de resultados del wizard, que es sólo detalle. La app estaba topeada a `--max-width: 1280px`
+   en todas las pantallas: en un monitor de 1920 tiraba 640px justo donde más falta hacen. El Resumen
+   **no** se toca — es texto y tarjetas, y una línea de texto de 1800px no se lee.
+
+2. **Ningún importe se dibuja en una caja más angosta que él.** Dos partes:
+   - `white-space: nowrap` en las celdas de `.rb-grid`: la planilla ya scrollea, que sea más ancha es
+     barato; que un número se lea mal, no.
+   - **El ancho que necesita la fila de TOTAL se reserva** (`reserveTotalsWidth` en `resultBlocks.js`).
+     Un total suma cientos de legajos, así que tiene dos o tres dígitos más que cualquier importe de la
+     tabla (`36.857.323,85` por legajo → `28.777.461.315,60` de total). Cuando la planilla no entra a lo
+     ancho, el navegador reparte mirando el encabezado y las filas de datos, le da a la columna lo que
+     necesita **un** legajo, y el total —alineado a la derecha— se derrama **hacia la izquierda** sobre la
+     columna de al lado. Ese derrame es el `0,0036.857.323,85` de la captura, y no lo delata ningún
+     `scrollWidth`: el desborde a la izquierda no cuenta como overflow.
+     No se puede pedir en CSS: `min-width: max-content` en una celda de tabla lo ignora el navegador
+     (verificado), y un `min-width` fijo en px sería un número inventado. Así que se mide el texto que la
+     fila de TOTAL ya tiene puesto —una medición por columna, una sola vez— y se reserva como piso.
+     **El piso se escribe en la celda del ENCABEZADO**, no en la del pie: con la planilla apretada el
+     navegador **no mira** las celdas del `<tfoot>` para repartir el ancho (un `min-width` en el pie no
+     mueve nada — verificado), y el encabezado además es la fila que ningún control reconstruye al
+     ordenar o filtrar. No hace falta recalcular al filtrar: el total de la selección es más corto que el
+     general, así que el piso sigue alcanzando.
+
+3. **Se avisa que la planilla sigue para el costado**, sin JS: sombra en los bordes que se apaga sola al
+   llegar a la punta (cuatro fondos — las "tapas" viajan con el contenido, las sombras quedan fijas al
+   recuadro) y barra de scroll declarada a 10px en vez de la overlay de 2px del sistema. El color sale
+   del token nuevo `--scroll-shadow`, que en oscuro no puede ser el mismo negro translúcido.
+
+   **Salida para las más anchas:** botón **"Ampliar"** (`enhanceWidthEscape`), que lleva la planilla a
+   toda la pantalla y se cierra con el botón o con Escape. No es un modal: es la misma tabla, con su
+   filtro y su orden intactos, así que al cerrar el analista vuelve exactamente a donde estaba. Aparece
+   **sólo si de verdad falta ancho** — ofrecer una solución a un problema que el analista no tiene es
+   ruido — y se re-evalúa con un `ResizeObserver`, porque la tabla puede montarse dentro de una ficha
+   colapsada (ancho 0) o cambiar de ancho al abrirse otra solapa.
+
+**El bug de la columna fija de la fila de TOTAL.** El sticky de las dos primeras columnas se declara por
+posición (`:first-child` / `:nth-child(2)`) para sobrevivir a los controles que reconstruyen el `<tbody>`
+al ordenar. En la fila de TOTAL eso miente: el rótulo ocupa las dos columnas fijas con `colspan="2"`, así
+que `:nth-child(2)` no es la 2ª columna, **es el primer importe** — y quedaba clavado a 74px del borde,
+montado encima de los importes que pasaban por debajo al scrollear. Se corrige por atributo
+(`[colspan]:not([colspan="1"]):first-child + *` recibe `left: auto`), no en JS, para que siga valiendo
+cuando `initSelectionTotals` reescriba la fila al filtrar. El rótulo sí se sigue fijando, pero midiendo
+lo que ocupan las dos columnas juntas.
+
+**De paso:** la fila de TOTAL de las planillas de Acumuladores decía `TOTAL` sin la unidad, y al filtrar
+salía "TOTAL de la selección — **1 fila**" en vez de "1 legajo" (`selectionLabelHtml` saca la unidad del
+rótulo original). Ahora dice `TOTAL — N legajos`, como los otros 8 controles.
+
+**Escrito como assert:** `tests/e2e/planillaAncha.spec.js` sobre un fixture de 13 columnas y 308 legajos
+—la única forma de verificar esto es en un navegador real, porque las tres reglas son de layout: cuánto
+ancho da el navegador a cada columna, qué celda queda fija al scrollear, y si el contenido entra—. Cubre
+que cada columna reserve el ancho de su total y que ningún total se derrame, que el botón "Ampliar"
+aparezca sólo cuando falta ancho y vuelva con Escape, que el primer importe del pie **no** quede clavado,
+y que el rótulo sí quede fijo y nombre la unidad al filtrar. Los tres primeros fallan si se saca el
+arreglo (verificado).
+
+**Lo que NO se hizo:** un modal de pantalla completa como default (opción descartada con Willy: te saca
+del listado de controles y para comparar dos controles hay que abrir y cerrar), y elegir qué columnas
+mirar. Con el ancho de la ventana entran casi todas las planillas; si alguna sigue molestando, ahí se
+evalúa el selector de columnas.

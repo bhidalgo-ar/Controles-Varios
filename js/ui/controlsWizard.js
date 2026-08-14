@@ -348,7 +348,9 @@ function render(root, state) {
   if (showResultsPage) {
     if (root.dataset.wizardView !== 'results') {
       root.innerHTML = `
-        <div class="page-content"><div id="js-inline-results-page"></div></div>
+        <!-- --wide: esta pantalla es sólo el detalle de los controles, así que
+             las planillas usan el ancho de la ventana (D-060). -->
+        <div class="page-content page-content--wide"><div id="js-inline-results-page"></div></div>
       `;
       root.dataset.wizardView = 'results';
     }

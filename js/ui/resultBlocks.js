@@ -279,7 +279,180 @@ export function enhanceGrid(tableEl, { stickyCols = 1, col1Width = 74 } = {}) {
   }
 
   enhanceGroupedHead(tableEl);
+  reserveTotalsWidth(tableEl);
+  enhanceWidthEscape(wrap);
   return wrap;
+}
+
+// ── El ancho que necesita la fila de TOTAL ───────────────────────────────────
+//
+// Un total suma cientos de legajos, así que tiene DOS O TRES DÍGITOS MÁS que
+// cualquier importe de la tabla ("36.857.323,85" por legajo → "28.777.461.315,60"
+// de total). Cuando la planilla es más ancha que la pantalla, el navegador reparte
+// el ancho mirando el encabezado y las filas de datos y le da a la columna lo que
+// necesita el importe de UN legajo: el total, que está alineado a la derecha, se
+// dibuja entonces más ancho que su columna y se derrama sobre la de al lado. Así
+// se veía "0,00" seguido de "36.857.323,85" como si fuera un solo número — el
+// síntoma que reportó Willy en Acumuladores (D-060).
+//
+// No se puede pedir en CSS: `min-width: max-content` en una celda de tabla lo
+// ignora el navegador (verificado), y un `min-width` fijo en px sería un número
+// inventado que sobra en las columnas cortas. Así que se mide el texto que la
+// fila de TOTAL ya tiene puesto —13 mediciones, una por columna, una sola vez— y
+// se reserva ese ancho como piso.
+//
+// No hace falta recalcularlo cuando el analista filtra: `initSelectionTotals`
+// reemplaza los totales por los de la selección, que son MÁS CORTOS que el total
+// general, así que el piso que reservamos sigue alcanzando.
+//
+// El piso se escribe en la celda del ENCABEZADO de esa columna, no en la del pie:
+// cuando la planilla no entra a lo ancho, el navegador no mira las celdas del
+// `<tfoot>` para repartir el ancho (verificado — un `min-width` en el pie no mueve
+// nada) y sí respeta el del encabezado, que además es la fila que ningún control
+// reconstruye al ordenar o filtrar.
+function reserveTotalsWidth(tableEl) {
+  const footRow = tableEl.tFoot?.rows?.[0];
+  const headRows = [...(tableEl.tHead?.rows || [])];
+  if (!footRow || headRows.length === 0) return;
+
+  const headByCol = headCellsByColumn(headRows);
+  const range = document.createRange();
+
+  let col = 0;
+  for (const cell of footRow.cells) {
+    const span = cell.colSpan || 1;
+    const target = span === 1 ? headByCol[col] : null;
+    col += span;
+    // El rótulo ("TOTAL — 514 legajos") ocupa las columnas fijas y no es un
+    // importe; y un encabezado que agrupa varias columnas no representa a una
+    // sola, así que reservarle ancho no diría de cuál.
+    if (!target || (target.colSpan || 1) > 1) continue;
+
+    range.selectNodeContents(cell);
+    const textWidth = range.getBoundingClientRect().width;
+    // Ficha colapsada (ancho 0): todavía no hay nada que medir. Lo reintenta el
+    // observer de enhanceWidthEscape cuando la tabla se muestre.
+    if (textWidth <= 0) continue;
+
+    const cs = getComputedStyle(target);
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const floor = Math.ceil(textWidth + pad);
+    // Nunca se baja un piso ya puesto: si el encabezado necesita más que el
+    // total, manda el encabezado.
+    if (floor > (parseFloat(target.style.minWidth) || 0)) {
+      target.style.minWidth = `${floor}px`;
+    }
+  }
+  range.detach?.();
+}
+
+/**
+ * Qué celda del encabezado representa a cada columna: la de la última fila que
+ * la ocupa (con encabezado de dos niveles, la de abajo — salvo que la de arriba
+ * baje con `rowspan`). Mismo recorrido que `paintColumnGroups`.
+ */
+function headCellsByColumn(headRows) {
+  const byCol = [];
+  const spannedCols = new Set();
+
+  let col = 0;
+  for (const th of headRows[0].cells) {
+    const span = th.colSpan || 1;
+    for (let k = 0; k < span; k++) {
+      byCol[col + k] = th;
+      if ((th.rowSpan || 1) > 1) spannedCols.add(col + k);
+    }
+    col += span;
+  }
+
+  for (const row of headRows.slice(1)) {
+    let c = 0;
+    for (const th of row.cells) {
+      while (spannedCols.has(c)) c++;
+      const span = th.colSpan || 1;
+      for (let k = 0; k < span; k++) byCol[c + k] = th;
+      c += span;
+    }
+  }
+  return byCol;
+}
+
+// ── "Ampliar": la salida para la planilla que ni así entra ───────────────────
+//
+// El Detalle ya usa el ancho de la ventana (`.page-content--wide`, D-060), y con
+// eso la mayoría de las planillas entran completas. Las más anchas —Acumuladores
+// con 13 columnas, rendVsAsiento— siguen sin entrar en una notebook, y para esas
+// va este botón: agranda la planilla a toda la pantalla, sin sacar al analista de
+// la corrida (al cerrar vuelve a donde estaba, con el filtro y el orden puestos).
+//
+// El botón aparece SÓLO si de verdad falta ancho: mostrarlo en una tabla que ya
+// se ve entera es ofrecer una solución a un problema que el analista no tiene.
+// Se re-evalúa con un ResizeObserver porque la tabla puede montarse dentro de una
+// ficha colapsada (ancho 0) o cambiar de ancho al abrirse otra solapa.
+
+const escapeWired = new WeakSet();
+
+// Cuál planilla está ampliada ahora, y cómo cerrarla. Es UNA sola en toda la app:
+// hay 19 planillas y algunos controles rebobinan su tabla al ordenar (crean un
+// wrap nuevo), así que el Escape se escucha una vez acá y no una vez por tabla —
+// si no, cada re-render dejaba un listener más colgado del documento.
+let openFull = null;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !openFull) return;
+  e.preventDefault();
+  openFull();
+});
+
+function enhanceWidthEscape(wrap) {
+  if (escapeWired.has(wrap)) return;
+  escapeWired.add(wrap);
+
+  const bar = document.createElement('div');
+  bar.className = 'rb-grid-bar';
+  bar.hidden = true;
+  bar.innerHTML = `
+    <button type="button" class="btn btn--ghost btn--sm js-rb-expand" aria-pressed="false">
+      <span aria-hidden="true">⤢</span> Ampliar
+    </button>
+  `;
+  wrap.insertAdjacentElement('beforebegin', bar);
+
+  const btn = bar.querySelector('.js-rb-expand');
+  let full = false;
+
+  const setFull = (value) => {
+    // Una sola ampliada por vez: si había otra abierta, se cierra primero.
+    if (value && openFull && openFull !== close) openFull();
+
+    full = value;
+    wrap.classList.toggle('rb-grid-wrap--full', full);
+    document.body.classList.toggle('has-rb-grid-full', full);
+    btn.setAttribute('aria-pressed', String(full));
+    btn.innerHTML = full
+      ? '<span aria-hidden="true">✕</span> Salir de pantalla completa'
+      : '<span aria-hidden="true">⤢</span> Ampliar';
+    openFull = full ? close : null;
+    // Ampliada siempre se ofrece el camino de vuelta, aunque ya entre toda.
+    if (full) { bar.hidden = false; btn.focus(); }
+    else refresh();
+  };
+
+  const close = () => setFull(false);
+
+  const refresh = () => {
+    // Con la ficha colapsada el ancho es 0 y no hay nada que medir todavía: la
+    // reserva de ancho de los totales se hace acá, cuando la tabla se muestra.
+    if (wrap.clientWidth > 0) reserveTotalsWidth(wrap.querySelector('table.rb-grid'));
+    if (full) return;
+    const falta = wrap.clientWidth > 0 && wrap.scrollWidth > wrap.clientWidth + 1;
+    bar.hidden = !falta;
+  };
+
+  btn.addEventListener('click', () => setFull(!full));
+
+  refresh();
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(refresh).observe(wrap);
 }
 
 // ── Encabezado de dos niveles: grupos tintados y sticky escalonado ──────────

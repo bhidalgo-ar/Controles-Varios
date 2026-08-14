@@ -997,8 +997,9 @@ function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
   toolbar.appendChild(searchEl);
   panel.appendChild(toolbar);
 
+  // Sin scroller propio: el de la planilla lo arma `enhanceGrid()` alrededor de
+  // la tabla, y uno intermedio además se tragaría la nota al pie (D-060).
   const tableHost = document.createElement('div');
-  tableHost.style.overflowX = 'auto';
   panel.appendChild(tableHost);
 
   const totals = {};
@@ -1024,7 +1025,10 @@ function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
       </tbody>
       <tfoot>
         <tr style="font-weight:700;border-top:2px solid var(--color-border);">
-          <td colspan="2">TOTAL</td>
+          <!-- Con la unidad: es de donde sale "TOTAL de la selección — 1 legajo"
+               al filtrar (ver selectionLabelHtml en tableTools.js). Sin ella la
+               fila decía "1 fila", que no dice de qué. -->
+          <td colspan="2">TOTAL — ${rows.length} legajo${rows.length === 1 ? '' : 's'}</td>
           ${shownConcepts.map(c => `<td style="text-align:right;">${fmtNum(totals[c.key])}</td>`).join('')}
         </tr>
       </tfoot>

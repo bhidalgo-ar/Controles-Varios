@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/planillaAncha.spec.js — NO es una pantalla de la app.
+     Monta una planilla MÁS ANCHA que la pantalla (13 columnas y 308 legajos, como la de
+     Acumuladores) con una fila de TOTAL cuyos importes tienen tres dígitos más
+     que los de cada legajo: es la única forma de verificar en un navegador real
+     las tres reglas de D-060 (ancho reservado para los totales, la columna fija
+     correcta en la fila de TOTAL, y el botón "Ampliar" que aparece sólo si falta
+     ancho). Datos inventados, como todos los tests. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<!-- El ancho de la card imita el del Detalle de un control -->
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { wireTableTools } from '../../../js/ui/tableTools.js';
+
+const CONCEPTOS = [
+  'Bruto para ganancias', 'Excluye del SAC teórico', 'No Rem. gravado IIGG',
+  'Retribuciones no habituales', 'SAC primera cuota', 'SAC segunda cuota', 'TOTAL',
+  'Jubilación', 'Obra social', 'Sindicato', 'IMPUESTO',
+];
+const BASE = [27801666.66, 0, 6001373.98, 371447.67, 2682835.54, 0, 36857323.85, 3058183.33, 834050, 0, 3071443.65];
+
+const rows = Array.from({ length: 308 }, (_, i) => ({
+  legajo: String(i + 1),
+  // Nombres largos a propósito: la columna de nombre empuja a las de importes
+  // y es ahí donde el navegador aprieta los totales (el caso que reprodujo el bug).
+  nombre: i === 0 ? 'PEREZ JUAN CARLOS' : 'GOMEZ SUSANA MARIA',
+  vals: BASE.map(v => v * (1 + i / 100)),
+}));
+const fmt = n => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const host = document.getElementById('host');
+const toolbar = document.createElement('div');
+toolbar.className = 'results-toolbar';
+const searchEl = document.createElement('div');
+toolbar.appendChild(searchEl);
+host.appendChild(toolbar);
+
+const tableHost = document.createElement('div');
+host.appendChild(tableHost);
+
+const totales = CONCEPTOS.map((_, c) => rows.reduce((acc, r) => acc + r.vals[c], 0));
+tableHost.innerHTML = `
+  <table class="data-table data-table--compact">
+    <thead><tr>
+      <th>Legajo</th><th>Apellido y Nombre</th>
+      ${CONCEPTOS.map(c => `<th style="text-align:right;">${c}</th>`).join('')}
+    </tr></thead>
+    <tbody>
+      ${rows.map(r => `<tr>
+        <td>${r.legajo}</td><td>${r.nombre}</td>
+        ${r.vals.map(v => `<td style="text-align:right;">${fmt(v)}</td>`).join('')}
+      </tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="font-weight:700;">
+      <td colspan="2">TOTAL — ${rows.length} legajos</td>
+      ${totales.map(v => `<td style="text-align:right;">${fmt(v)}</td>`).join('')}
+    </tr></tfoot>
+  </table>`;
+
+wireTableTools(tableHost.querySelector('table'), {
+  rows, getLabel: r => `${r.legajo} — ${r.nombre}`, searchEl, stickyCols: 2,
+});
+window.__listo = true;
+</script></body></html>
