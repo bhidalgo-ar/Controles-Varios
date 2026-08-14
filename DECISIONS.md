@@ -1437,3 +1437,52 @@ necesitan CDN, D-048), verificado corriendo `main` con `git stash`.
 **Lo que queda:** el multi-archivo de Contabilidad Desglosada sigue con su pantalla propia sin
 restylear (va con la tarea 8, que es la pantalla de Rendimiento vs Asiento), y los avisos de la corrida
 todavía no viajan al run (tarea 7).
+
+## D-056 — Paso 3: la corrida se muestra control por control, y termina en una runbar en vez de navegar sola
+
+**Fecha:** 2026-08-13
+**Contexto:** Sexta tarea del rediseño Fase 1 (`docs/rediseno/README.md` → pantalla 5;
+`CAMBIOS_TECNICOS.md` §7, punto "Paso 3"). Hasta acá la ejecución mostraba una barra de progreso con un
+checklist fijo de 3 renglones —"Leyendo N archivos Excel", "Cruzando N legajos", "Aplicando umbrales y
+semáforos"— con anchos cableados (`EXEC_BAR_WIDTHS = ['6%','38%','70%','100%']`) y esperas de 220ms para
+que se alcanzaran a ver. Esos renglones no eran los controles: con 4 controles seleccionados, el paso
+"Cruzando legajos" abarcaba los 4 y no se sabía en cuál iba, ni cuál había terminado, ni cuánto tardó
+cada uno. Al terminar, la pantalla navegaba sola a los resultados.
+
+**Decisión:**
+
+1. **Una tarjeta por control, con sus tres estados**: terminado (✓ verde, "N legajos cruzados ·
+   terminado en 1,5 s" y una pill con el resultado), corriendo (spinner + borde celeste) y en cola
+   (dashed, numerado). La unidad de la pantalla pasa a ser el control, que es la unidad en la que el
+   analista piensa la corrida.
+2. **La barra general mide controles terminados sobre el total, y nada más.** Es el único avance que el
+   motor conoce: cada `run()` es sincrónico y adentro no reporta nada. Por eso **la tarjeta del control
+   en curso no muestra porcentaje** —muestra una barra indeterminada—: un número que no sale del motor
+   se lee igual que uno que sí, y el prototipo mostraba "62%" que ninguna función podría calcular.
+   Mientras no terminó ninguno, la barra general también va indeterminada: quieta en 0% se lee como que
+   no arrancó.
+3. **Entre control y control se cede el hilo** (`setTimeout(0)`, no `requestAnimationFrame`: con la
+   pestaña en segundo plano rAF no dispara y la corrida quedaría colgada). Sin eso el navegador no
+   pinta el cambio de estado de las tarjetas y el clic en "Cancelar" no llegaría a procesarse hasta que
+   terminara todo.
+4. **"Cancelar" es la única acción mientras corre** (regla 2), y corta *entre* controles: al que ya está
+   corriendo no se lo puede interrumpir a mitad de camino, y la barra lo dice ("Cancelando al terminar
+   el control en curso…"). **Una corrida cancelada no guarda resultados**: el run ya creado se queda con
+   sus archivos y una nota que dice que se canceló. Media corrida guardada como si fuera una corrida es
+   la clase de número que después nadie revisa. También se saca el "← Anterior" del pie y las flechas
+   ← →: el paso no puede cambiar abajo de un control que está corriendo.
+5. **La corrida ya no navega sola: termina en la runbar** ("Corrida completa en 4,2 s" + el veredicto en
+   una línea, con lo rojo primero y en color de error) con "Ver resultados →" como primaria y "↺
+   Ejecutar de nuevo" al lado. Antes el `window.location.hash` se pisaba apenas terminaba el último
+   control, así que cuánto tardó y qué salió en rojo pasaba de largo. Las tarjetas se reordenan
+   errores-primero al terminar, con el mismo `EXEC_TIER_RANK` que ordena la cascada de resultados.
+6. **El color de cada pill sale de `computeSemaforoStatus` sobre la unidad declarada**, no de
+   `summary.status` (regla de CLAUDE.md): el mismo control tiene que salir del mismo color acá y en
+   resultados.
+7. **El panel lateral repite los archivos usados y los umbrales** con los que se está corriendo. Los
+   umbrales salen de `thresholdsSectionHtml()`, la misma función que usa el panel del Paso 2, para que
+   no puedan decir números distintos antes y durante la corrida.
+
+**Lo que queda afuera:** la sección "N avisos" del panel (screenshot 15) necesita que los avisos de
+archivo/columna viajen en el run — eso es la tarea 7 (agregado [ADITIVO] 2 de `CAMBIOS_TECNICOS.md`) y
+todavía no existe el campo. Se prefirió no mostrar una sección vacía antes que inventar avisos.

@@ -98,6 +98,12 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
   await expect(page.locator('h3', { hasText: 'Paso 3 — Período y ejecución' })).toBeVisible();
   await page.click('#js-execute-btn');
 
+  // La corrida termina en la runbar y no navega sola: la tarjeta del control
+  // queda en verde con su duración y "Ver resultados →" abre los resultados.
+  await expect(page.locator('.run-card--done', { hasText: 'Cruce por Agrupadores' })).toBeVisible();
+  await expect(page.locator('.runbar__title')).toContainText('Corrida completa en');
+  await page.click('#js-run-results');
+
   await page.waitForURL(/#\/control-results\/\d+/);
 
   const card = page.locator('.control-card[data-control-id="agrupadores"]');
