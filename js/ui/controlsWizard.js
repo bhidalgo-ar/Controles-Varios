@@ -855,10 +855,6 @@ function renderStepControls(container, state, root) {
             <div class="control-recap-pills">${asideFilesHtml}</div>
             ${asideFiles.length ? '<p class="wizard-section-hint" style="margin-top:var(--sp-2);">Se cargan en el paso siguiente.</p>' : ''}
           </div>
-          <div class="ctrl-help">
-            <span id="js-step1-help"></span>
-            <button type="button" class="ctrl-help__label" id="js-step1-help-label">¿Qué hace cada control?</button>
-          </div>
         </div>
       </div>
     ` : `
@@ -940,17 +936,6 @@ function renderStepControls(container, state, root) {
     });
   });
 
-  // "¿Qué hace cada control?" — la única ayuda global de la pantalla, detrás del
-  // "?" (mismo popover que el home y resultados). El texto de al lado abre lo
-  // mismo que el botón: es el blanco grande de click.
-  const helpSlot = container.querySelector('#js-step1-help');
-  if (helpSlot) {
-    renderHelpPopover(helpSlot, CONTROL_HELP);
-    container.querySelector('#js-step1-help-label')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      helpSlot.querySelector('.help-popover__btn')?.click();
-    });
-  }
 }
 
 // ── Paso 1: Cargar todos los archivos ─────────────────────────────────────────
