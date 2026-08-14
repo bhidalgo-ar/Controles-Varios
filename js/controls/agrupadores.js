@@ -15,7 +15,7 @@
 
 import { runMatching } from '../matching.js';
 import { computeInsights } from '../insights.js';
-import { formatAmount, formatDiff, formatPct } from '../utils/currency.js';
+import { formatAmount, formatDiff, formatDiffText, formatPct } from '../utils/currency.js';
 import {
   renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, enhanceGrid,
 } from '../ui/resultBlocks.js';
@@ -153,7 +153,9 @@ export function renderAgrupadoresResults(results, container) {
           label: g.grouperName,
           ok: g.rowsWithDiff === 0,
           detail: `$ ${formatAmount(g.totalNomina)} vs $ ${formatAmount(g.totalResumen)}`
-            + (g.rowsWithDiff > 0 ? ` · ${formatDiff(g.diffAbsolute)} (${g.rowsWithDiff}/${g.rowsTotal} legajos)` : ' · sin diferencia'),
+            // `detail` se escapa al render (resultBlocks.js): va texto plano, no
+            // el `formatDiff` con <span> — el color del chip ya sale de `ok`.
+            + (g.rowsWithDiff > 0 ? ` · ${formatDiffText(g.diffAbsolute)} (${g.rowsWithDiff}/${g.rowsTotal} legajos)` : ' · sin diferencia'),
         })),
       });
 

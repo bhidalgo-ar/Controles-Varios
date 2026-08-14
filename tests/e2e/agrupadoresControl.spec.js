@@ -119,4 +119,10 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
   await expect(card).toContainText('Sueldo');
   // La diferencia de $100 en el legajo 2 tiene que verse reflejada en el detalle.
   await expect(card).toContainText('100,00');
+
+  // El chip de totales muestra el importe, NO la etiqueta HTML escrita como
+  // texto: `renderChecks` escapa el `detail`, así que ahí va texto plano.
+  const chip = card.locator('.rb-chk', { hasText: 'Sueldo' }).first();
+  await expect(chip).toContainText('+$ 100,00');
+  await expect(chip).not.toContainText('<span');
 });

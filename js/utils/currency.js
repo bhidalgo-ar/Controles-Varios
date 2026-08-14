@@ -112,12 +112,25 @@ export function formatAmount(value, decimales = 2) {
   }).format(value);
 }
 
-/** Formatea una diferencia con signo y color: +1.234,50 en verde, -500,00 en rojo */
+/**
+ * Formatea una diferencia con signo, SIN etiquetas: "+$ 1.234,50" / "-$ 500,00".
+ * Es la versión que va donde el texto se escapa antes de entrar al HTML (los
+ * `detail` de `renderChecks`, por ejemplo): ahí `formatDiff` se vería como el
+ * `<span>` crudo en pantalla.
+ */
+export function formatDiffText(value) {
+  if (value === 0) return '$ 0,00';
+  return `${value > 0 ? '+' : '-'}$ ${formatAmount(Math.abs(value))}`;
+}
+
+/**
+ * Formatea una diferencia con signo y color: +1.234,50 en verde, -500,00 en rojo.
+ * Devuelve HTML — sólo sirve en los slots que insertan crudo (`right` de
+ * `renderIssues`, celdas de tabla). Para todo lo demás, `formatDiffText`.
+ */
 export function formatDiff(value) {
-  if (value === 0) return '<span class="text-success">$ 0,00</span>';
-  const fmt = formatAmount(Math.abs(value));
-  if (value > 0) return `<span class="text-success">+$ ${fmt}</span>`;
-  return `<span class="text-danger">-$ ${fmt}</span>`;
+  const tone = value < 0 ? 'text-danger' : 'text-success';
+  return `<span class="${tone}">${formatDiffText(value)}</span>`;
 }
 
 /** Formatea un porcentaje con signo: +1,23% o -0,45% */
