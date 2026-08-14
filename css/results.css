@@ -309,3 +309,254 @@
   .results-hero__kpis { gap: var(--sp-4) var(--sp-6); }
   .results-ctrl-card { flex-wrap: wrap; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Resultados — Detalle (pantalla 7 del rediseño; screenshots
+   03-sobrio-resultados-detalle y 19-detalle-23-diferencias)
+
+   La solapa Detalle de CADA control: solapas + barra de herramientas
+   fijas arriba, y abajo la planilla en su propia card con scroll.
+
+   Lo que se pinta acá lo montan `js/ui/tableTools.js` (barra, chips,
+   KPIs, total de la selección) y `js/ui/resultBlocks.js` (planilla,
+   encabezado de dos niveles, badges de Δ). Ningún control pinta nada
+   de esto por su cuenta: lo que cada uno declara sigue siendo su
+   filtro, sus columnas y sus datos.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Locales de esta pantalla — no son tokens del sistema (ver css/tokens.css). */
+  --detalle-tabs-h:     40px;  /* alto de la barra de solapas, para apilar la de herramientas debajo */
+  --detalle-head-h:     34px;  /* fallback del alto de la 1ª fila del encabezado (lo mide enhanceGrid) */
+  /* El tinte de los grupos de columnas (--detalle-grp-*) es color y cambia por
+     tema, así que vive en css/tokens.css: acá sólo quedan los locales de
+     layout. */
+}
+
+/* ── Solapas + barra de herramientas, fijas ──────────────────────
+   La marca `--sticky` la pone `createResultsToolbar` (y `tabs--sticky` sobre
+   las solapas de arriba): sólo se fijan las solapas que tienen una tabla
+   abajo. El botón de exportar y el filtro nunca quedan fuera de vista con
+   una tabla de 500 legajos. */
+.tabs--sticky > .tabs__list {
+  position: sticky;
+  top: 0;
+  z-index: 22;
+  margin: 0;
+  padding: 0 var(--sp-3);
+  min-height: var(--detalle-tabs-h);
+  align-items: flex-end;
+  background: var(--color-surface);
+}
+.results-toolbar--sticky {
+  position: sticky;
+  top: var(--detalle-tabs-h);
+  z-index: 21;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-tool);
+}
+.results-toolbar__left,
+.results-toolbar__right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.results-toolbar__right { margin-left: auto; }
+
+/* El buscador ya dice qué se busca en su placeholder ("Buscá por legajo o
+   nombre…"): la etiqueta queda para el lector de pantalla. */
+.results-toolbar--sticky .table-search { min-width: 240px; max-width: 300px; }
+.results-toolbar--sticky .table-search__label {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.results-toolbar--sticky .table-search__input {
+  border-radius: var(--radius-full);
+  border-color: var(--color-border);
+  padding-left: var(--sp-8);
+  font-size: 12.5px;
+}
+.results-toolbar--sticky .table-search__control::before {
+  content: '⌕';
+  position: absolute;
+  left: 12px;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--t3);
+  pointer-events: none;
+}
+
+/* ── Chips de filtro ─────────────────────────────────────────────
+   La piel del `<select>` de cada control (ver chipifySelect en
+   js/ui/tableTools.js). El select sigue siendo el control real: acá se lo
+   saca de la vista, no del DOM ni del árbol de accesibilidad. */
+.results-filter-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.results-chips { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); }
+.results-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  padding: 5px 14px;
+  font-family: var(--font-tool);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--t2);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.results-chip:hover { border-color: var(--celeste); color: var(--celeste-deeper); }
+.results-chip__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--t3);
+}
+.results-chip--active {
+  background: var(--celeste);
+  border-color: var(--celeste);
+  color: var(--color-white);
+}
+.results-chip--active .results-chip__count { color: var(--color-white); opacity: 0.85; }
+/* El filtro de diferencias activo se pinta con el color de lo que hay que ir a
+   mirar, no con el celeste de "esto es lo normal". */
+.results-chip--dif.results-chip--active {
+  background: var(--error);
+  border-color: var(--error);
+}
+/* El foco vive en el select oculto: se muestra sobre el chip que representa. */
+.results-filter-sr:focus + .results-chips .results-chip--active {
+  outline: 2px solid var(--celeste);
+  outline-offset: 2px;
+}
+
+/* ── KPIs y hint de la derecha ───────────────────────────────────── */
+.results-toolbar__kpis {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: 11.5px;
+  color: var(--t3);
+  white-space: nowrap;
+}
+.results-kpi strong {
+  color: var(--t1);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.results-kpi__badge {
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.results-kpi__badge--ok    { background: var(--ok-bg);    border: 1px solid var(--ok-bd);    color: var(--ok-tx); }
+.results-kpi__badge--error { background: var(--error-bg); border: 1px solid var(--error-bd); color: var(--error-tx); }
+.results-toolbar__hint {
+  max-width: 270px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--t3);
+  white-space: normal;
+}
+
+/* ── Planilla: encabezado de dos niveles y grupos tintados ────────
+   La 2ª fila del encabezado se pega DEBAJO de la 1ª (`--rb-thead-h1` lo mide
+   enhanceGrid sobre la fila real: su alto depende del texto). Sin esto las dos
+   filas se pegaban en top:0 y la de abajo tapaba a la de arriba. */
+table.rb-grid--2lvl thead tr:first-child > th { z-index: 4; }
+table.rb-grid--2lvl thead tr:nth-child(2) > th {
+  top: var(--rb-thead-h1, var(--detalle-head-h));
+  z-index: 3;
+}
+table.rb-grid thead th.rb-grid__grp--a { background: var(--detalle-grp-a-head); }
+table.rb-grid thead th.rb-grid__grp--b { background: var(--detalle-grp-b-head); }
+table.rb-grid tbody td.rb-grid__grp--a { background: var(--detalle-grp-a); }
+table.rb-grid tbody td.rb-grid__grp--b { background: var(--detalle-grp-b); }
+table.rb-grid tfoot td.rb-grid__grp--a { background: var(--detalle-grp-a-head); }
+table.rb-grid tfoot td.rb-grid__grp--b { background: var(--detalle-grp-b-head); }
+
+/* La fila de TOTAL cierra la planilla con la misma línea que abre la tabla del
+   home: 2px ink. Cuando muestra el total de la SELECCIÓN (hay un filtro
+   activo), lo dice en su etiqueta — ver selectionLabelHtml. */
+table.rb-grid tfoot > tr > * { border-top: 2px solid var(--table-head-border); }
+
+/* ── Δ: la diferencia como badge, la ausencia también ─────────────
+   El 0,00 se lee discreto (no hay nada que hacer con él) y la diferencia
+   salta. `null` no es 0: cuando falta un lado no se pudo comparar, y eso se
+   dice en amarillo en vez de un "—" mudo. */
+.rb-diffbadge {
+  display: inline-block;
+  border-radius: var(--radius-full);
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.rb-diffbadge--error { background: var(--error-bg); border: 1px solid var(--error-bd); color: var(--error-tx); }
+.rb-diffbadge--warn  { background: var(--warn-bg);  border: 1px solid var(--warn-bd);  color: var(--warn-tx); font-size: 11px; }
+.rb-diffzero { color: var(--t3); font-variant-numeric: tabular-nums; }
+/* La barra de magnitud queda debajo del badge (los números van a la derecha),
+   no cruzando la celda entera como un subrayado suelto. */
+.rb-magcell .rb-magbar { left: auto; right: 6px; bottom: 3px; opacity: 0.4; }
+/* En la fila de TOTAL la cápsula sobra: la fila entera ya está destacada. */
+table.rb-grid tfoot .rb-diffbadge {
+  background: none;
+  border-color: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ── Avisos de la corrida en "Detalles del run" ───────────────────
+   Screenshot 17. Los avisos viajan con el run (aditivo 2, ver
+   js/ui/runWarnings.js); un run viejo no los tiene y esa también es una
+   respuesta — por eso la sección vacía se dice, no se oculta. */
+.run-warnings {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--warn-bd);
+  border-radius: var(--radius-md);
+  background: var(--warn-bg);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--warn-tx);
+}
+.run-warnings__label {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: var(--sp-1);
+}
+.run-warnings__list { margin: 0; padding-left: var(--sp-3); list-style: none; }
+.run-warnings__list li { margin-top: 2px; text-indent: calc(-1 * var(--sp-3)); }
+.run-warnings--empty {
+  border-color: var(--line);
+  background: none;
+  color: var(--t3);
+}
+
+@media (max-width: 768px) {
+  .results-toolbar__hint { display: none; }
+  .results-toolbar--sticky .table-search { min-width: 160px; }
+}

@@ -25,8 +25,7 @@ import { showToast }        from './toast.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { mountResultsHeader, renderResultsTabs, runMetaLabel } from './resultsHeader.js';
 import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from './runExport.js';
-import { columnValues, checkColumnType } from './columnHints.js';
-import { typeOfKey } from '../exports/contracts.js';
+import { columnWarningsOf } from './runWarnings.js';
 import { fileTypeLabel } from './fileTypes.js';
 
 const TIER_RANK = { error: 0, warn: 1, ok: 2, info: 3 };
@@ -100,6 +99,9 @@ export async function renderControlsResults(root, runId) {
         periodNote: run.notes || null,
         isQuickRun: false,
         isDefinitive,
+        // Los que quedaron registrados AL EJECUTAR (aditivo 2). Un run guardado
+        // antes de que el campo existiera no los trae y la sección sale vacía.
+        warnings: run.warnings || [],
         onToggleDefinitive: async () => {
           const newValue = !isDefinitive;
           try {
@@ -178,6 +180,7 @@ export async function renderControlsResults(root, runId) {
       createdAtLabel: createdAt,
       estadoLabel: isDefinitive ? 'Definitivo' : 'Borrador',
       notes: run.notes || null,
+      warnings: run.warnings || [],
       controles: controlSummaries.map(({ row, ctrl, summary, tier }) => ({
         controlId: row.controlId,
         label: ctrl.label,
@@ -332,41 +335,24 @@ async function getPrevTierByControlId(run, thresholdPct) {
 // igual, sin esto no quedaba rastro: el que revisa después no tiene forma de
 // saber que se corrió con una columna sospechosa. Decisión de Willy, 2026-08-13.
 //
-// **Se recalcula, no se guarda.** Cada archivo de la corrida ya tiene guardadas
-// sus filas y su mapeo (`controlRunFiles`), así que el aviso sale de ahí: no hay
-// una segunda copia que pueda desincronizarse del archivo con el que se corrió,
-// y no cambia el esquema de la base.
+// **El cartel de esta pantalla se recalcula, no se guarda.** Cada archivo de la
+// corrida ya tiene guardadas sus filas y su mapeo (`controlRunFiles`), así que el
+// aviso sale de ahí: no hay una segunda copia que pueda desincronizarse del
+// archivo con el que se corrió.
 //
-// **Límite conocido, y no es un olvido:** las columnas que se eligen en el Paso 2
+// **Lo que el recálculo no alcanza** son las columnas que se eligen en el Paso 2
 // (los 18 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN /
-// GTOS_PERSONALES / DTO_COCHERA y las 3 de fecha) NO están en el mapeo que la
+// GTOS_PERSONALES / DTO_COCHERA y las 3 de fecha): NO están en el mapeo que la
 // corrida guarda — `tabExtraConfig` viaja al control pero no al registro del
-// archivo. Su aviso se ve en pantalla al elegirlas; para que se repita acá hace
-// falta que la corrida guarde el mapeo del Tabulado ya mergeado, que es una
-// decisión sobre qué se persiste y no se toma de paso (anotado en ROADMAP.md).
+// archivo. Ésas ahora sí quedan registradas, pero por el otro camino: el run
+// guarda sus avisos al ejecutar (`warnings`, ver js/ui/runWarnings.js) y se ven
+// en "Detalles del run" y en el export.
 
-/**
- * Los avisos de tipo de todas las columnas mapeadas de una corrida.
- *
- * Sólo mira las claves cuyo valor es una columna que **existe** entre los
- * encabezados de las filas guardadas: eso deja afuera, sin necesidad de saber
- * nada de cada parser, tanto las omisiones declaradas (⊘) como las claves de
- * mapeo que no son columnas (períodos, configs, filas de otro archivo).
- */
-export function columnWarningsOf(runFiles) {
-  const out = [];
-  for (const f of (runFiles || [])) {
-    const rows = f?.parsedRows;
-    if (!Array.isArray(rows) || rows.length === 0) continue;
-    const encabezados = new Set(Object.keys(rows[0]));
-    for (const [key, col] of Object.entries(f.mapping || {})) {
-      if (typeof col !== 'string' || !encabezados.has(col)) continue;
-      const aviso = checkColumnType(columnValues(rows, col), typeOfKey(f.fileType, key));
-      if (aviso) out.push({ fileType: f.fileType, columna: col, mensaje: aviso.mensaje });
-    }
-  }
-  return out;
-}
+// La función vive en `js/ui/runWarnings.js` desde que los avisos también se
+// guardan con el run (aditivo 2): es el mismo criterio para el aviso que se
+// recalcula acá y para el que se registra al ejecutar. Se re-exporta porque
+// esta pantalla era su lugar original.
+export { columnWarningsOf };
 
 function buildColumnWarningsHtml(avisos) {
   if (!avisos.length) return '';

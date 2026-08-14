@@ -76,6 +76,49 @@ test('"Ver detalle →" cambia a la solapa Detalle', async ({ page }) => {
   await expect(page.locator('#js-tab-resumen')).toBeVisible();
 });
 
+test('"Detalles del run" lista los avisos con los que se corrió', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=rojo`);
+
+  await page.click('.run-details > summary');
+  const popover = page.locator('.run-details__popover');
+  await expect(popover).toBeVisible();
+
+  // Los estados del run siguen igual — el bloque de avisos se suma, no reemplaza.
+  await expect(popover).toContainText('📝 Borrador');
+
+  const avisos = popover.locator('.run-warnings');
+  await expect(avisos.locator('.run-warnings__label')).toHaveText('2 avisos de esta corrida');
+  await expect(avisos).toContainText('la sigla del nombre no coincide');
+  await expect(avisos).toContainText('no parecen importes');
+});
+
+test('una corrida sin avisos lo dice (y una vieja, sin el campo, se lee igual)', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=verde`);
+
+  await page.click('.run-details > summary');
+  await expect(page.locator('.run-details__popover .run-warnings--empty'))
+    .toHaveText('Sin avisos en esta corrida.');
+});
+
+test('la barra de herramientas del Detalle queda a la vista al scrollear', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=rojo`);
+  await page.click('.results-tab:has-text("Detalle")');
+  // …y dentro de la ficha del control, su propia solapa Detalle (la tabla).
+  await page.click('.control-card .tabs__tab:has-text("Detalle")');
+
+  const toolbar = page.locator('.results-toolbar--sticky');
+  await expect(toolbar).toBeVisible();
+  const antes = await toolbar.boundingBox();
+
+  // Quien scrollea es .page-content (regla 1 del rediseño). La ficha del control
+  // recorta con `overflow: clip`: con `hidden` sería un scroller intermedio y la
+  // barra se anclaría ahí, o sea nunca.
+  await page.locator('.page-content').evaluate(el => { el.scrollTop = 400; });
+  await expect.poll(async () => (await toolbar.boundingBox()).y).toBeLessThanOrEqual(antes.y);
+  await expect(toolbar).toBeInViewport();
+  await expect(page.locator('.results-toolbar--sticky .btn')).toBeVisible();
+});
+
 test('el menú Exportar ofrece Excel y JSON, y avisa que lleva datos personales', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=rojo`);
 

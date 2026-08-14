@@ -277,7 +277,100 @@ export function enhanceGrid(tableEl, { stickyCols = 1, col1Width = 74 } = {}) {
   if (stickyCols >= 2) {
     tableEl.style.setProperty('--rb-stick1-width', `${col1Width}px`);
   }
+
+  enhanceGroupedHead(tableEl);
   return wrap;
+}
+
+// ── Encabezado de dos niveles: grupos tintados y sticky escalonado ──────────
+//
+// Varios controles arman el encabezado en dos filas: la de arriba agrupa
+// ("Salario Base", "A Cta Fut Aumen") y la de abajo son las columnas del grupo.
+// Con las dos filas en `top:0` la segunda tapaba a la primera al scrollear, y el
+// tinte de cada grupo lo elegía cada control con un hex inline — el mismo
+// concepto salía celeste en un control y lila en otro.
+//
+// Se resuelve acá, sobre la tabla ya pintada: la 2ª fila se pega debajo de la 1ª
+// (`--rb-thead-h1`, medido de la fila real porque su alto depende del texto), y
+// cada grupo recibe una clase de tinte alternado (celeste dim / navy dim) que
+// alcanza a su encabezado y a sus celdas. El `background` inline del control se
+// borra en esas celdas: si no, ganaría por especificidad y el tinte del sistema
+// no se vería.
+
+const observedHeads = new WeakSet();
+
+function enhanceGroupedHead(tableEl) {
+  const headRows = [...(tableEl.tHead?.rows || [])];
+  tableEl.classList.toggle('rb-grid--2lvl', headRows.length >= 2);
+  if (headRows.length < 2) return;
+
+  syncHeadRowHeight(tableEl, headRows[0]);
+  paintColumnGroups(tableEl, headRows);
+}
+
+/** El alto real de la 1ª fila del encabezado, para que la 2ª se pegue abajo. */
+function syncHeadRowHeight(tableEl, headRow) {
+  const apply = () => {
+    const h = headRow.offsetHeight;
+    // Sin alto todavía (la ficha del control está colapsada): se deja el default
+    // del CSS y el observer lo corrige cuando la tabla se muestre.
+    if (h > 0) tableEl.style.setProperty('--rb-thead-h1', `${h}px`);
+  };
+  apply();
+  if (typeof ResizeObserver !== 'undefined' && !observedHeads.has(headRow)) {
+    observedHeads.add(headRow);
+    new ResizeObserver(apply).observe(headRow);
+  }
+}
+
+/** Tinte alternado por grupo, del encabezado hasta la fila de totales. */
+function paintColumnGroups(tableEl, headRows) {
+  // Columna donde arranca cada celda de la 1ª fila; las que abarcan las dos
+  // filas (rowspan) ocupan su columna también en la 2ª.
+  const ranges = [];
+  const spannedCols = new Set();
+  let col = 0;
+  for (const th of headRows[0].cells) {
+    const span = th.colSpan || 1;
+    if ((th.rowSpan || 1) > 1) for (let k = 0; k < span; k++) spannedCols.add(col + k);
+    if (span > 1) ranges.push({ from: col, to: col + span - 1, cls: `rb-grid__grp--${ranges.length % 2 === 0 ? 'a' : 'b'}`, th });
+    col += span;
+  }
+  if (ranges.length === 0) return;
+
+  // Las celdas de la 2ª fila caen en las columnas que la 1ª no ocupó con rowspan.
+  const row2 = [];
+  let c2 = 0;
+  for (const th of headRows[1].cells) {
+    while (spannedCols.has(c2)) c2++;
+    const span = th.colSpan || 1;
+    for (let k = 0; k < span; k++) row2[c2 + k] = th;
+    c2 += span;
+  }
+
+  const bodyRows = [...tableEl.tBodies].flatMap(b => [...b.rows]).concat([...(tableEl.tFoot?.rows || [])]);
+
+  for (const { from, to, cls, th } of ranges) {
+    tint(th, cls);
+    for (let i = from; i <= to; i++) tint(row2[i], cls);
+    for (const tr of bodyRows) {
+      const byCol = [];
+      let c = 0;
+      for (const cell of tr.cells) {
+        const span = cell.colSpan || 1;
+        for (let k = 0; k < span; k++) byCol[c + k] = cell;
+        c += span;
+      }
+      for (let i = from; i <= to; i++) tint(byCol[i], cls);
+    }
+  }
+}
+
+function tint(cell, cls) {
+  if (!cell || cell.classList.contains(cls)) return;
+  cell.classList.remove('rb-grid__grp--a', 'rb-grid__grp--b');
+  cell.classList.add(cls);
+  cell.style.background = '';
 }
 
 /** Barra de magnitud para poner DENTRO de una celda `.rb-magcell` — de un vistazo, quién se dispara. */
@@ -288,19 +381,36 @@ export function magnitudeBarHtml(value, max) {
 }
 
 /**
+ * El contenido de una celda Δ: la diferencia como badge de error (pantalla 7 del
+ * rediseño), el 0,00 en discreto, y la ausencia como badge warn.
+ *
+ * `null` NO es `0` (CLAUDE.md): no se pudo comparar porque falta un lado, y eso
+ * es lo que dice el badge — antes salía un "—" mudo que se confundía con "dio
+ * cero". `absentLabel` deja que el control diga de qué lado falta
+ * ("ausente en Tab"); sin eso, se dice lo único que se sabe.
+ *
+ * @param {number|null} value
+ * @param {{ max?: number, decimals?: number, eps?: number, absentLabel?: string }} [opts]
+ */
+export function diffBadgeHtml(value, { max = 0, decimals = 2, eps = 0.01, absentLabel } = {}) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return `<span class="rb-diffbadge rb-diffbadge--warn">${esc(absentLabel || 'sin comparar')}</span>`;
+  }
+  const hasDiff = Math.abs(value) > eps;
+  if (!hasDiff) return `<span class="rb-diffzero">${fmtSigned(value, { decimals, eps })}</span>`;
+  return `<span class="rb-diffbadge rb-diffbadge--error">${fmtSigned(value, { decimals, eps })}</span>${magnitudeBarHtml(value, max)}`;
+}
+
+/**
  * Celda `<td>` de diferencia lista para usar: signo+flecha (nunca sólo color)
  * + barra de magnitud opcional. Reemplaza el patrón repetido
  * `<td style="...">${fmt(v)}</td>` + `diffStyle(v)` de cada control.
  *
  * @param {number|null} value
- * @param {{ max?: number, decimals?: number, eps?: number, background?: string }} [opts]
+ * @param {{ max?: number, decimals?: number, eps?: number, background?: string, absentLabel?: string }} [opts]
  */
-export function diffCellHtml(value, { max = 0, decimals = 2, eps = 0.01, background = '' } = {}) {
+export function diffCellHtml(value, { max = 0, decimals = 2, eps = 0.01, background = '', absentLabel } = {}) {
   const bg = background ? `background:${background};` : '';
-  if (value === null || value === undefined) {
-    return `<td class="rb-magcell" style="text-align:right;${bg}">—</td>`;
-  }
-  const hasDiff = Math.abs(value) > eps;
-  const bar = hasDiff ? magnitudeBarHtml(value, max) : '';
-  return `<td class="rb-magcell ${mvClass(value, eps)}" style="text-align:right;${bg}${hasDiff ? 'font-weight:700;' : ''}">${fmtSigned(value, { decimals, eps })}${bar}</td>`;
+  const cls = (value === null || value === undefined) ? '' : ` ${mvClass(value, eps)}`;
+  return `<td class="rb-magcell${cls}" style="text-align:right;${bg}">${diffBadgeHtml(value, { max, decimals, eps, absentLabel })}</td>`;
 }

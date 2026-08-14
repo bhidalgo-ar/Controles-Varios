@@ -237,6 +237,15 @@
   --swatch-intenso-bar: #15263D;
   --swatch-oscuro-bg:   #111518;
   --swatch-oscuro-bar:  #1C2229;
+
+  /* Tinte de los dos grupos de columnas de la tabla de Detalle: celeste y
+     navy, el par del sistema. Van translúcidos porque se apoyan sobre el
+     encabezado neutro de la grid. En Oscuro el navy ES el fondo, así que el
+     segundo grupo se tinta con luz en vez de con tinta. */
+  --detalle-grp-a:      rgba(0, 172, 212, 0.06);
+  --detalle-grp-a-head: rgba(0, 172, 212, 0.14);
+  --detalle-grp-b:      rgba(21, 38, 61, 0.045);
+  --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -303,6 +312,11 @@
     --color-toast-warning:    #FFCC80;
     --color-toast-info:       #81D4FA;
     --color-warning-bg-hover: #3B2600;
+
+    --detalle-grp-a:      rgba(31, 190, 224, 0.08);
+    --detalle-grp-a-head: rgba(31, 190, 224, 0.18);
+    --detalle-grp-b:      rgba(234, 241, 248, 0.045);
+    --detalle-grp-b-head: rgba(234, 241, 248, 0.10);
   }
 }
 
@@ -372,6 +386,11 @@
   --color-toast-warning:    #FFCC80;
   --color-toast-info:       #81D4FA;
   --color-warning-bg-hover: #3B2600;
+
+  --detalle-grp-a:      rgba(31, 190, 224, 0.08);
+  --detalle-grp-a-head: rgba(31, 190, 224, 0.18);
+  --detalle-grp-b:      rgba(234, 241, 248, 0.045);
+  --detalle-grp-b-head: rgba(234, 241, 248, 0.10);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -441,6 +460,11 @@
   --color-toast-warning:    #E65100;
   --color-toast-info:       #01579B;
   --color-warning-bg-hover: #FFF0C0;
+
+  --detalle-grp-a:      rgba(0, 172, 212, 0.06);
+  --detalle-grp-a-head: rgba(0, 172, 212, 0.14);
+  --detalle-grp-b:      rgba(21, 38, 61, 0.045);
+  --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
 }
 
 /* ══════════════════════════════════════════════════════════════

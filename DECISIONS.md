@@ -1545,7 +1545,82 @@ D-048): quedan para CI.
 
 ---
 
-## D-058 — El tema se resuelve entero en tokens.css: nada de reglas por tema ni hex sueltos
+## D-058 — Detalle: el TOTAL es el de lo que se está mirando, y los avisos viajan con la corrida
+
+**Fecha:** 2026-08-14
+**Contexto:** Octava tarea del rediseño Fase 1 (`docs/rediseno/README.md` → pantallas 7 "Resultados —
+Detalle" y 8 "Detalles del run", screenshots 03, 17 y 19; `CAMBIOS_TECNICOS.md` §10 y aditivos 2, 3 y 4).
+La solapa Detalle de cada control ya tenía todo lo que hace falta —filtro, buscador, paginación, export,
+sticky de encabezado y de columnas— pero tres cosas mentían o se perdían:
+
+- El filtro y el buscador **sólo escondían filas**: la fila de TOTAL seguía siendo la de todas. Con un
+  legajo en pantalla abajo decía "TOTAL — 514 legajos" y un número que no cerraba con nada de lo visible.
+- El encabezado de dos niveles tenía las dos filas en `top:0`: al scrollear, la de abajo tapaba a la de
+  arriba. Y el tinte de cada grupo lo elegía cada control con un hex inline (celeste y lila en Brutos y
+  GS Pers), o sea que el mismo concepto salía de distinto color según el control.
+- Los dos avisos de "avisa, no traba" (D-036) **no quedaban en ningún lado**: el de la sigla del archivo
+  se veía sólo al cargarlo, y el de columna se recalculaba en resultados pero nunca alcanzaba a las
+  columnas del Paso 2, que no están en el mapeo que la corrida guarda (limitación anotada en ROADMAP).
+
+**Decisión:**
+
+1. **La fila de TOTAL muestra el total de la selección filtrada** (`initSelectionTotals` en
+   `js/ui/tableTools.js`). Se recalcula leyendo la **tabla ya pintada**, no los datos del control: así
+   vale para los 9 controles sin que ninguno pase nada nuevo. Sólo totaliza las columnas que la fila de
+   TOTAL ya mostraba como número, y si alguna no se puede totalizar sale `—` en vez de un número
+   inventado. La etiqueta lo dice: "TOTAL de la selección — 23 legajos". **La paginación no es un
+   filtro:** con 50 de 514 filas a la vista el total sigue siendo el de las 514 (no cambió lo que se está
+   mirando, cambió cuánto entra en pantalla).
+2. **Los filtros cortos se ven como chips, pero el `<select>` sigue siendo el control.** `chipifySelect`
+   deja el select en el DOM —visualmente oculto, no `hidden`— y le escribe `value` + `change`; los chips
+   van `aria-hidden`. Así cada control lee su filtro exactamente como antes, el teclado y el lector de
+   pantalla siguen teniendo **un** control (no dos que dicen lo mismo), y los e2e que ya seleccionaban
+   por `selectOption` siguen pasando. Con más de 4 opciones no hay chips: 18 conceptos de NR en chips no
+   son un filtro, son una pared.
+3. **"Con diferencias" arranca activo — y se dice por qué.** El default ya lo decidía cada control (y se
+   respeta: sigue siendo suyo); lo que faltaba era el cartel al lado ("Este filtro arrancó activo porque
+   el control terminó con errores"), que desaparece al tocar otro chip. Sin eso, el analista cree que
+   está viendo la tabla entera.
+4. **El encabezado de dos niveles se pega escalonado y los grupos se tintan desde el sistema.**
+   `enhanceGrid()` mide la 1ª fila (`--rb-thead-h1`, con `ResizeObserver` porque la ficha del control
+   puede estar colapsada al montar), asigna el tinte alternado (celeste dim / navy dim) al grupo entero
+   —encabezado, celdas y totales— y **borra el `background` inline** de esas celdas, que si no ganaría por
+   especificidad. Ningún control cambió: el tinte dejó de ser una decisión de cada uno.
+5. **Δ es un badge.** La diferencia sale como badge de error y el cero en discreto, y `null` —que **no es
+   0**: falta un lado, no se pudo comparar— sale como badge warn ("sin comparar") en vez del `—` mudo de
+   antes, que se leía igual que "dio cero". `diffCellHtml` acepta `absentLabel` para el control que sepa
+   de qué lado falta ("ausente en Tab"); hoy ninguno lo pasa, y el texto genérico dice sólo lo que se sabe.
+6. **Los avisos de la corrida se guardan con el run** (`warnings: string[]`, aditivo declarado sobre
+   `js/db.js`). Se arman **al ejecutar** (`collectRunWarnings`, `js/ui/runWarnings.js`) con lo que el
+   analista tenía en pantalla: es la única oportunidad de verlos completos, porque los de las columnas del
+   Paso 2 no se pueden recalcular después. **Campo aditivo de verdad:** no se indexa (no hace falta subir
+   la versión de Dexie), crear un run sin pasarlo sigue funcionando, y un run viejo —sin el campo— muestra
+   la sección vacía. Se ven en "Detalles del run" y en el export (Excel y JSON). El cartel que ya se
+   recalculaba en la pantalla de resultados **queda**: son dos caminos con el mismo criterio, y el
+   recalculado sigue siendo el que no puede desincronizarse del archivo con el que se corrió.
+7. **Sin avisos también se dice** ("Sin avisos en esta corrida"). Un bloque ausente no distingue "no hubo"
+   de "no se miró" — el mismo criterio de D-036: que un dato no exista en un período es un resultado.
+8. **`.ctrl-detail-grid__inner` pasa de `overflow:hidden` a `overflow:clip`.** Recorta igual mientras la
+   ficha se abre, pero no crea un contenedor de scroll: con `hidden`, las solapas y la barra del Detalle
+   se anclaban a esa caja (que nunca scrollea) y no se pegaban nunca.
+
+**Lo que NO cambió:** los estados del run (⚡ rápida / 📝 borrador / ✅ definitivo) y su relación con el
+checklist mensual; `js/controls/semaforo.js` y el color de cada control; `unitsTotal`/`unitsWithDiff`, que
+se siguen contando en la unidad que declara `unit`; y ningún archivo de `js/controls/**` — todo el Detalle
+nuevo sale de los módulos compartidos (`tableTools.js`, `resultBlocks.js`) y del CSS.
+
+**Verificación:** `npm run test:unit` en verde (136 asserts; `tests/runWarnings.test.js` nuevo en la
+cadena, incluido el barrido de ciclos de import). En Chromium real: `tests/e2e/detalleTabla.spec.js`
+(fixture nuevo con el Detalle de Brutos) fija el total de la selección al buscar y al limpiar, los KPIs,
+el filtro inicial con su cartel, los badges de Δ y de ausencia, y el encabezado de dos niveles con sus
+tintes; `tests/e2e/resultsResumen.spec.js` suma los avisos en el popover, la sección vacía, y que la barra
+del Detalle quede a la vista al scrollear la pantalla real (ficha del control incluida). Los e2e que
+levantan la app entera no corren en este entorno (los CDN de `index.html` están bloqueados, D-048): quedan
+para CI, y fallan igual sin estos cambios.
+
+---
+
+## D-059 — El tema se resuelve entero en tokens.css: nada de reglas por tema ni hex sueltos
 
 **Fecha:** 2026-08-14
 **Contexto:** Novena y última tarea del rediseño Fase 1 (`docs/rediseno/README.md` → "Orden sugerido",

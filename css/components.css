@@ -1188,7 +1188,7 @@
 /* Planilla con superpoderes: scroll acotado + sticky header/footer/columnas.
    Selectores por posición (no por clase por celda) para sobrevivir a un
    control que reconstruye el <tbody> al ordenar (ver rendVsAsiento.js). */
-.rb-grid-wrap { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.rb-grid-wrap { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--color-surface); }
 table.rb-grid { border-collapse: separate; border-spacing: 0; width: 100%; }
 /* El encabezado de una grid es neutro, no el teal de `.data-table thead`: los
    controles pintan sus columnas con tintes translúcidos (rgba …, 0.18) que sólo
@@ -1662,7 +1662,11 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   transition: grid-template-rows 0.28s cubic-bezier(.4,0,.2,1);
 }
 .ctrl-detail-grid.is-open { grid-template-rows: 1fr; }
-.ctrl-detail-grid__inner { overflow: hidden; min-height: 0; }
+/* `clip` y no `hidden`: recorta igual mientras la ficha se abre, pero NO crea
+   un contenedor de scroll — con `hidden`, las solapas y la barra de
+   herramientas de adentro se anclaban a esta caja (que nunca scrollea) y no se
+   pegaban nunca al scrollear la pantalla. */
+.ctrl-detail-grid__inner { overflow: clip; min-height: 0; }
 
 /* A4 — Pulso al mejorar el estado de un control entre corridas */
 .status-dot--pulse-ok { animation: pulseOk 0.9s ease-out 3; }
