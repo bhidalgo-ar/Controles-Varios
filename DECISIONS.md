@@ -1542,3 +1542,66 @@ en verde y en rojo, y en Sobrio / Intenso / Oscuro, sobre un fixture nuevo
 hay dos franjas, el rojo va primero, el link cambia de solapa y el menú de export avisa lo que avisa. Los
 e2e que levantan la app entera no corren en este entorno (los CDN de `index.html` están bloqueados,
 D-048): quedan para CI.
+
+---
+
+## D-058 — El tema se resuelve entero en tokens.css: nada de reglas por tema ni hex sueltos
+
+**Fecha:** 2026-08-14
+**Contexto:** Novena y última tarea del rediseño Fase 1 (`docs/rediseno/README.md` → "Orden sugerido",
+punto 9: *"Pasada Intenso: verificar que todo responde al tema con solo variables"*), extendida a los
+tres temas. Se recorrieron las 10 pantallas en Sobrio, Intenso y Oscuro en un navegador real (1366×768),
+comparando Intenso contra los screenshots 04, 05, 06, 20 y 21 y midiendo el contraste de cada nodo de
+texto visible contra su fondo efectivo. Ningún módulo de `js/` ramificaba por tema —eso estaba bien—,
+pero sí había color decidido fuera de `css/tokens.css`, y ese color no seguía al tema.
+
+**Decisión:** `css/tokens.css` es el único archivo donde un tema cambia algo. Las otras tres hojas y
+todos los módulos de `js/` escriben `var(--token)` y nunca preguntan qué tema está activo.
+
+1. **Los tokens del banner de privacidad y de los toasts se mudan a `tokens.css`.** Vivían en
+   `components.css` con su propio juego de cuatro reglas por tema (`:root`, `@media (dark)`,
+   `[data-theme="dark|oscuro"]`, `[data-theme="light|sobrio|intenso"]`): dos archivos decidiendo
+   colores de tema, que es exactamente lo que hace que un componente quede fuera del sistema.
+2. **Lo que se apoya en la barra tiene tokens de barra.** Los tonos `--ok-tx` / `--warn-tx` /
+   `--error-tx` están calculados para superficies claras; sobre la barra ink de Intenso el veredicto de
+   resultados quedaba en 2,9:1 (el screenshot 21 lo muestra en naranja claro). Se suman
+   `--header-ok-fg` / `--header-warn-fg` / `--header-error-fg`, hermanos del `--header-hint-fg` que ya
+   existía por la misma razón, y en Intenso toman los tonos del tema Oscuro.
+3. **Los paneles flotantes de la barra vuelven a los valores de página.** El popover de "Detalles del
+   run", los menús "Datos ▾"/"⬇ Exportar ▾" y el selector de tema cuelgan del DOM de la barra pero se
+   dibujan sobre una superficie de página, y la regla `.app-header .btn--ghost { color:
+   var(--header-fg-muted) }` de `base.css` los alcanzaba igual: en Intenso, **"📌 Marcar como
+   definitivo" quedaba en #C7D5E4 sobre blanco — 1,5:1, invisible.** Se arregla redefiniendo los tokens
+   de barra dentro del panel, no tocando la regla del componente ni agregando una excepción por tema.
+4. **`--on-celeste`: el texto sobre un fondo celeste sólido lo decide el tema.** En Oscuro el celeste
+   sube a `#1FBEE0` y el blanco encima cae a 2,2:1 (el contador del chip de filtro, con su
+   `rgba(255,255,255,.75)` cableado, a 1,8:1). El token es blanco en los temas claros y un ink oscuro en
+   Oscuro; el chip activo, el checkbox marcado, la burbuja del paso activo, el segmented y la matriz de
+   Variaciones lo usan sin preguntar nada.
+5. **El resto de los literales pasa a token:** anillo de foco (`--focus-ring`, que en Oscuro seguía
+   siendo el celeste del tema claro), velo del modal (`--overlay-bg`, más opaco en Oscuro), pulso del
+   semáforo (`--ok-pulse`), fondo del ícono de casillero cargado (`--ok-soft-bg`) y las muestras del
+   selector de tema (`--swatch-*`, los únicos colores que a propósito **no** siguen al tema activo:
+   cada una es la miniatura de un tema y tiene que verse igual desde los tres).
+6. **El serif se pide por `--font-display`, nunca por `--serif`.** El KPI de las tarjetas de resultados
+   estaba cableado a `--serif` y salía en DM Serif Display también en Sobrio y en Oscuro, donde el resto
+   de los números va en la sans operativa. `--serif` sólo se referencia desde `tokens.css`.
+7. **Se borran los ocho `--color-group-*`:** estaban declarados sólo en el bloque oscuro (o sea, sin
+   valor en el estado por default del navegador, el bug que fija `tests/e2e/tokenDefaults.spec.js`) y no
+   los usaba nadie.
+
+**Escrito como assert:** `tests/themeSourceOfTruth.test.js` falla si una hoja que no sea `tokens.css`
+declara una regla por tema, mira `prefers-color-scheme`, tiene un color literal o pide `var(--serif)`;
+si un token de `tokens.css` no tiene su valor claro en `:root`; si un módulo de `js/` ramifica por tema;
+o si aparece un hex cableado en `js/`. Excepción declarada y única: `js/controls/variaciones.js` arma un
+documento HTML standalone para imprimir a PDF —el entregable que se le manda al cliente— que se abre en
+una ventana propia, sin las hojas de la app y sin tema. En el navegador, `themePicker.spec.js` cubre que
+los tokens resuelvan en los tres temas y que el texto sobre el celeste se dé vuelta en Oscuro, y
+`resultsResumen.spec.js` cubre los dos casos de la barra ink de Intenso.
+
+**Lo que NO se tocó, y por qué:** el celeste H&A `#00ACD4` con texto blanco da 2,7:1 y el primario
+atenuado (`--primary-disabled`) 1,5:1. Los dos son idénticos en los tres temas y son lo que muestran los
+screenshots de referencia: son decisiones de marca y de la regla 2 del rediseño ("la primaria no
+desaparece, se atenúa"), no una deriva de tema. Tampoco se tocó `h1..h6 { color: var(--color-primary) }`
+de `base.css`, que pinta los títulos de página en celeste donde los screenshots 18 y 20 los muestran en
+ink: es igual en los tres temas y cambiarlo mueve todas las pantallas, así que es su propia tarea.

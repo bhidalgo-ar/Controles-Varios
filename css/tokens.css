@@ -160,10 +160,16 @@
   --header-pill-fg:      var(--color-primary);
   --header-btn-border:   var(--color-border);
   --header-btn-hover-bg: var(--color-bg-subtle);
-  /* Hint de "qué falta" al lado de la primaria (regla 2). Va sobre la barra,
-     así que no puede salir de --warn-tx a secas: en Intenso la barra es ink y
-     ese ámbar oscuro no se lee. */
-  --header-hint-fg:      var(--warn-tx);
+  /* Estado sobre la barra. Los tonos --ok-tx / --warn-tx / --error-tx están
+     calculados para superficies claras: sobre la barra ink de Intenso no se
+     leen (el veredicto de resultados salía en 2,9:1 — verificado en navegador).
+     Por eso el estado que va ARRIBA de la barra tiene sus propios tokens, y
+     cada tema decide el tono. El hint de "qué falta" al lado de la primaria
+     (regla 2) es el caso ámbar de la misma familia. */
+  --header-ok-fg:        var(--ok-tx);
+  --header-warn-fg:      var(--warn-tx);
+  --header-error-fg:     var(--error-tx);
+  --header-hint-fg:      var(--header-warn-fg);
 
   /* Borde del hairline de las cards. Existe aparte de --border porque el tema
      Intenso las deja sin borde (con sombra en su lugar) sin tocar los bordes
@@ -181,6 +187,56 @@
 
   /* Sombra única de popovers y menús flotantes. */
   --popover-shadow: 0 12px 32px rgba(30, 58, 95, 0.16);
+
+  /* Texto sobre un fondo celeste sólido: chip de filtro activo, checkbox
+     marcado, burbuja del paso activo, segmented activo. En los temas claros es
+     blanco; en Oscuro el celeste se aclara (#1FBEE0) y el blanco encima cae a
+     2,2:1, así que ahí el texto se da vuelta y pasa a oscuro. Nadie pregunta
+     por el tema: la regla escribe `var(--on-celeste)` y listo. */
+  --on-celeste: var(--color-white);
+
+  /* Anillo de foco de inputs, selects y buscadores. Estaba cableado como
+     rgba(0,172,212,…) en cuatro reglas de components.css, así que en Oscuro
+     seguía siendo el celeste del tema claro. */
+  --focus-ring: 0 0 0 3px rgba(0, 172, 212, 0.15);
+
+  /* Velo detrás de los modales. En Oscuro necesita más cuerpo: un negro al 45 %
+     sobre un fondo que ya es casi negro no separa el modal del resto. */
+  --overlay-bg: rgba(0, 0, 0, 0.45);
+
+  /* Pulso del punto de semáforo en verde (keyframes de components.css y
+     results.css, que tenían el verde cableado en tres lugares). */
+  --ok-pulse:     rgba(34, 197, 94, 0.45);
+  --ok-pulse-out: rgba(34, 197, 94, 0);
+  /* Fondo del ícono de un casillero ya cargado. */
+  --ok-soft-bg:   rgba(34, 197, 94, 0.18);
+
+  /* ══════════════════════════════════════════════════════════
+     Banner de privacidad y toasts. Vivían en css/components.css con su
+     propio juego de reglas por tema — o sea, dos archivos decidiendo
+     colores de tema. Están acá, con el mismo patrón que el resto:
+     claro en :root, oscuro en los bloques de abajo.
+     ══════════════════════════════════════════════════════════ */
+  --color-banner-text:      #4E342E;
+  --color-toast-success:    #1B5E20;
+  --color-toast-danger:     #B71C1C;
+  --color-toast-warning:    #E65100;
+  --color-toast-info:       #01579B;
+  --color-warning-bg-hover: #FFF0C0;
+
+  /* ══════════════════════════════════════════════════════════
+     Muestras del selector de tema. Son los ÚNICOS colores que a
+     propósito NO siguen al tema activo: cada muestra es la miniatura de
+     un tema, así que tiene que verse igual desde cualquiera de los tres.
+     Por eso se declaran una sola vez acá y ningún bloque de tema los
+     pisa — pero salen de tokens.css igual que todo lo demás.
+     ══════════════════════════════════════════════════════════ */
+  --swatch-sobrio-bg:   #FFFFFF;
+  --swatch-sobrio-bar:  #FFFFFF;
+  --swatch-intenso-bg:  #EEF2F6;
+  --swatch-intenso-bar: #15263D;
+  --swatch-oscuro-bg:   #111518;
+  --swatch-oscuro-bar:  #1C2229;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -236,6 +292,17 @@
 
     --primary-disabled: rgba(31,190,224,0.32);
     --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
+
+    --on-celeste: #06212B;
+    --focus-ring: 0 0 0 3px rgba(31, 190, 224, 0.32);
+    --overlay-bg: rgba(0, 0, 0, 0.66);
+
+    --color-banner-text:      #D7B896;
+    --color-toast-success:    #A5D6A7;
+    --color-toast-danger:     #EF9A9A;
+    --color-toast-warning:    #FFCC80;
+    --color-toast-info:       #81D4FA;
+    --color-warning-bg-hover: #3B2600;
   }
 }
 
@@ -269,15 +336,6 @@
   --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.45);
   --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.55);
 
-  --color-group-orange:    #FF8A65;
-  --color-group-orange-bg: #3E1500;
-  --color-group-purple:    #CE93D8;
-  --color-group-purple-bg: #2A0040;
-  --color-group-teal:      #80CBC4;
-  --color-group-teal-bg:   #002622;
-  --color-group-amber:     #FFD54F;
-  --color-group-amber-bg:  #3E2900;
-
   --celeste:        #1FBEE0;
   --celeste-dark:   #16A6C6;
   --celeste-deeper: #5AD2EE;
@@ -302,6 +360,18 @@
 
   --primary-disabled: rgba(31,190,224,0.32);
   --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
+
+  /* El celeste de Oscuro es más claro: el texto encima se da vuelta. */
+  --on-celeste: #06212B;
+  --focus-ring: 0 0 0 3px rgba(31, 190, 224, 0.32);
+  --overlay-bg: rgba(0, 0, 0, 0.66);
+
+  --color-banner-text:      #D7B896;
+  --color-toast-success:    #A5D6A7;
+  --color-toast-danger:     #EF9A9A;
+  --color-toast-warning:    #FFCC80;
+  --color-toast-info:       #81D4FA;
+  --color-warning-bg-hover: #3B2600;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -360,6 +430,17 @@
 
   --primary-disabled: #A9DFEE;
   --popover-shadow:   0 12px 32px rgba(30, 58, 95, 0.16);
+
+  --on-celeste: var(--color-white);
+  --focus-ring: 0 0 0 3px rgba(0, 172, 212, 0.15);
+  --overlay-bg: rgba(0, 0, 0, 0.45);
+
+  --color-banner-text:      #4E342E;
+  --color-toast-success:    #1B5E20;
+  --color-toast-danger:     #B71C1C;
+  --color-toast-warning:    #E65100;
+  --color-toast-info:       #01579B;
+  --color-warning-bg-hover: #FFF0C0;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -377,8 +458,15 @@
   --header-pill-fg:      #7FE0F4;
   --header-btn-border:   rgba(255, 255, 255, 0.22);
   --header-btn-hover-bg: rgba(255, 255, 255, 0.10);
-  --header-hint-fg:      #FBBF24;
   --header-border-w:     3px;
+  /* Estado sobre la barra ink: los mismos tonos que usa el tema Oscuro para
+     texto sobre fondo oscuro. El veredicto de resultados salía en el rojo
+     oscuro de superficie clara y quedaba en 2,9:1 sobre el ink (comparar con
+     docs/rediseno/screenshots/21-detalle-23-intenso.png, donde va naranja). */
+  --header-ok-fg:        #4ADE80;
+  --header-warn-fg:      #FBBF24;
+  --header-error-fg:     #FB8254;
+  --header-hint-fg:      var(--header-warn-fg);
 
   /* Cards sin hairline: la profundidad la da la sombra */
   --card-border: 1px solid transparent;
@@ -388,4 +476,27 @@
 
   /* Títulos de display y KPIs en el serif H&A */
   --font-display: var(--serif);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PANELES FLOTANTES DE LA BARRA — vuelven a los valores de página
+   El popover de "Detalles del run", el menú "Datos ▾"/"Exportar ▾" y el
+   selector de tema cuelgan del DOM de la barra, pero se dibujan sobre una
+   superficie de página. Las reglas de base.css que pintan los botones de la
+   barra (`.app-header .btn--ghost { color: var(--header-fg-muted) }`) los
+   alcanzaban igual: en Intenso "📌 Marcar como definitivo" quedaba en
+   #C7D5E4 sobre blanco — 1,5:1, invisible (verificado en navegador).
+   Se arregla donde corresponde, redefiniendo los tokens de la barra dentro
+   del panel: ninguna regla de componente cambia y ninguna pregunta el tema.
+   ══════════════════════════════════════════════════════════════ */
+.run-details__popover,
+.row-menu__panel,
+.theme-picker__panel {
+  --header-fg:           var(--color-text);
+  --header-fg-muted:     var(--color-text-muted);
+  --header-btn-border:   var(--color-border);
+  --header-btn-hover-bg: var(--color-bg-subtle);
+  --header-ok-fg:        var(--ok-tx);
+  --header-warn-fg:      var(--warn-tx);
+  --header-error-fg:     var(--error-tx);
 }

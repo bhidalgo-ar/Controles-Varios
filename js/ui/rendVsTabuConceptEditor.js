@@ -122,7 +122,7 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
     // Aviso fuerte si no se encontró (casi) ningún concepto preconfigurado
     const lowMatch = assignedTotal > 0 && assignedMatched <= Math.min(2, assignedTotal - 1);
     const warningBanner = lowMatch ? `
-      <div style="margin-bottom:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-warning);background:var(--color-warning-bg, rgba(234,179,8,0.08));border-radius:var(--radius-md);font-size:var(--text-sm);">
+      <div style="margin-bottom:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-warning);background:var(--color-warning-bg);border-radius:var(--radius-md);font-size:var(--text-sm);">
         <strong style="color:var(--color-warning);">⚠ Solo se detectaron ${allCodes.length} columna${allCodes.length !== 1 ? 's' : ''} de concepto en el Tabulado</strong>
         (de los ${assignedTotal} conceptos preconfigurados, ${assignedMatched === 0 ? 'ninguno coincide' : `solo ${assignedMatched} coinciden`}).
         <br>Esto suele pasar cuando el archivo cargado en el casillero <strong>Tabulado</strong> no es el correcto

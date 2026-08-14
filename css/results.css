@@ -41,15 +41,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.results-header-ctx__verdict--ok    { color: var(--ok-tx); }
-.results-header-ctx__verdict--warn  { color: var(--warn-tx); }
-.results-header-ctx__verdict--error { color: var(--error-tx); }
+.results-header-ctx__verdict--ok    { color: var(--header-ok-fg); }
+.results-header-ctx__verdict--warn  { color: var(--header-warn-fg); }
+.results-header-ctx__verdict--error { color: var(--header-error-fg); }
 
 /* Pulso suave del dot sólo en verde (README §Interacciones): en amarillo o
    rojo el movimiento distrae de lo que hay que ir a mirar. */
 @keyframes dotpulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45); }
-  50%      { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--ok-pulse); }
+  50%      { box-shadow: 0 0 0 5px var(--ok-pulse-out); }
 }
 .status-dot--pulse { animation: dotpulse 2.4s ease-out infinite; }
 

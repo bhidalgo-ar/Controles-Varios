@@ -337,7 +337,7 @@ img { max-width: 100%; height: auto; display: block; }
 .header-step--active .header-step__bubble {
   background: var(--celeste);
   border-color: var(--celeste);
-  color: var(--color-white);
+  color: var(--on-celeste);
 }
 .header-step--active .header-step__label {
   color: var(--header-fg);

@@ -94,3 +94,61 @@ test('el menú Exportar ofrece Excel y JSON, y avisa que lleva datos personales'
   await page.locator('.results-hero__title').click();
   await expect(panel).toBeHidden();
 });
+
+// ── Lo que la barra ink de Intenso rompe si nadie lo mira ───────────────────
+// Los dos casos salieron de recorrer las pantallas en los tres temas: la barra
+// de Intenso es ink, y todo lo que se apoya en ella necesita tonos de fondo
+// oscuro. Los tonos --ok-tx/--warn-tx/--error-tx están calculados para
+// superficies claras.
+
+test('Intenso: el veredicto sobre la barra ink usa el tono de barra, no el de superficie clara', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=rojo`);
+  const verdict = page.locator('.results-header-ctx__verdict');
+  await expect(verdict).toBeVisible();
+
+  const colorEn = async (tema) => {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), tema);
+    return verdict.evaluate((el) => getComputedStyle(el).color);
+  };
+
+  // En Sobrio la barra es blanca: el rojo oscuro de siempre.
+  expect(await colorEn('sobrio')).toBe('rgb(192, 66, 15)');
+  // En Intenso la barra es ink y ese rojo queda en 2,9:1 — tiene que aclararse
+  // (así se ve en docs/rediseno/screenshots/21-detalle-23-intenso.png).
+  expect(await colorEn('intenso')).not.toBe('rgb(192, 66, 15)');
+});
+
+test('Intenso: los botones del popover de "Detalles del run" no heredan el color de la barra', async ({ page }) => {
+  // El popover cuelga del DOM de la barra pero se dibuja sobre una superficie
+  // blanca. Con el color de la barra, "📌 Marcar como definitivo" quedaba en
+  // #C7D5E4 sobre blanco: 1,5:1, invisible.
+  await page.goto(`${FIXTURE}?caso=rojo`);
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'intenso'));
+
+  await page.locator('.run-details summary').click();
+  const popover = page.locator('.run-details__popover');
+  await expect(popover).toBeVisible();
+
+  const boton = popover.locator('.btn--ghost').first();
+  await expect(boton).toBeVisible();
+
+  const { fg, bg } = await boton.evaluate((el) => {
+    let node = el, bg = 'rgba(0, 0, 0, 0)';
+    while (node) {
+      const c = getComputedStyle(node).backgroundColor;
+      if (c && c !== 'rgba(0, 0, 0, 0)') { bg = c; break; }
+      node = node.parentElement;
+    }
+    return { fg: getComputedStyle(el).color, bg };
+  });
+
+  const canal = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+  const lum = (c) => {
+    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const [r, g, b] = canal(c).map(f);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const l1 = lum(fg), l2 = lum(bg);
+  const contraste = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  expect(contraste, `"${await boton.textContent()}" en ${fg} sobre ${bg}`).toBeGreaterThan(3);
+});

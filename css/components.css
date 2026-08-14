@@ -420,7 +420,7 @@
 .table-search__input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(0, 172, 212, 0.15);
+  box-shadow: var(--focus-ring);
 }
 .table-search__clear {
   position: absolute;
@@ -540,7 +540,7 @@
 .form-textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(0, 172, 212, 0.15);
+  box-shadow: var(--focus-ring);
 }
 .form-input--error {
   border-color: var(--color-danger);
@@ -658,7 +658,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay-bg);
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
@@ -854,13 +854,13 @@
   flex-direction: column;
 }
 /* La muestra imita la barra superior de cada tema */
-.theme-picker__swatch--sobrio  { background: #FFFFFF; }
-.theme-picker__swatch--intenso { background: #EEF2F6; }
-.theme-picker__swatch--oscuro  { background: #111518; }
+.theme-picker__swatch--sobrio  { background: var(--swatch-sobrio-bg); }
+.theme-picker__swatch--intenso { background: var(--swatch-intenso-bg); }
+.theme-picker__swatch--oscuro  { background: var(--swatch-oscuro-bg); }
 .theme-picker__swatch-bar { height: 5px; flex-shrink: 0; }
-.theme-picker__swatch--sobrio  .theme-picker__swatch-bar { background: #FFFFFF; border-bottom: 1.5px solid var(--celeste); }
-.theme-picker__swatch--intenso .theme-picker__swatch-bar { background: #15263D; }
-.theme-picker__swatch--oscuro  .theme-picker__swatch-bar { background: #1C2229; }
+.theme-picker__swatch--sobrio  .theme-picker__swatch-bar { background: var(--swatch-sobrio-bar); border-bottom: 1.5px solid var(--celeste); }
+.theme-picker__swatch--intenso .theme-picker__swatch-bar { background: var(--swatch-intenso-bar); }
+.theme-picker__swatch--oscuro  .theme-picker__swatch-bar { background: var(--swatch-oscuro-bar); }
 .theme-picker__text { flex: 1; min-width: 0; }
 .theme-picker__name {
   display: block;
@@ -1041,59 +1041,13 @@
   100% { margin-left: 100%; }
 }
 
-/* ── Tokens propios de este archivo, con default en :root ─────────
-   `--color-banner-text`/`--color-toast-*`/`--color-warning-bg-hover` sólo
-   tenían valor dentro de `@media (dark)`, `[data-theme="dark"]` y
-   `[data-theme="light"]` — nunca en un `:root` base, a diferencia de TODO lo
-   demás en tokens.css. En el estado por default del navegador (sin
-   `data-theme`, sistema en modo claro) ninguna de esas tres reglas aplica, así
-   que la variable queda indefinida — confirmado en un navegador real. No se
-   rompía nada porque los `var(--token, #hex)` de más abajo tapaban el hueco
-   con un fallback inline, pero eso es al revés de lo que dice el ROADMAP
-   ("hex fuera de tokens.css, posiblemente muertos") — estos NO estaban
-   muertos, eran los únicos vivos. El fix real es acá, no en cada usuario del
-   token: un default en `:root`, mismo patrón que usa tokens.css para todo lo
-   demás (base claro, y recién después el override de oscuro). */
-:root {
-  --color-banner-text:      #4E342E;
-  --color-toast-success:    #1B5E20;
-  --color-toast-danger:     #B71C1C;
-  --color-toast-warning:    #E65100;
-  --color-toast-info:       #01579B;
-  --color-warning-bg-hover: #FFF0C0;
-}
-
-/* ── Dark mode: colores literales que necesitan override ─────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-banner-text:    #D7B896;
-    --color-toast-success:  #A5D6A7;
-    --color-toast-danger:   #EF9A9A;
-    --color-toast-warning:  #FFCC80;
-    --color-toast-info:     #81D4FA;
-    --color-warning-bg-hover: #3B2600;
-  }
-}
-[data-theme="dark"],
-[data-theme="oscuro"] {
-  --color-banner-text:    #D7B896;
-  --color-toast-success:  #A5D6A7;
-  --color-toast-danger:   #EF9A9A;
-  --color-toast-warning:  #FFCC80;
-  --color-toast-info:     #81D4FA;
-  --color-warning-bg-hover: #3B2600;
-}
-/* Los dos temas claros (Sobrio e Intenso) comparten estos valores. */
-[data-theme="light"],
-[data-theme="sobrio"],
-[data-theme="intenso"] {
-  --color-banner-text:    #4E342E;
-  --color-toast-success:  #1B5E20;
-  --color-toast-danger:   #B71C1C;
-  --color-toast-warning:  #E65100;
-  --color-toast-info:     #01579B;
-  --color-warning-bg-hover: #FFF0C0;
-}
+/* Los tokens del banner de privacidad y de los toasts (`--color-banner-text`,
+   `--color-toast-*`, `--color-warning-bg-hover`) vivían acá con su propio juego
+   de reglas por tema: dos archivos decidiendo colores de tema. Se mudaron a
+   css/tokens.css, que es el único lugar donde un tema cambia algo. La regla que
+   los hizo mudarse sigue valiendo y la fija tests/e2e/tokenDefaults.spec.js:
+   todo token necesita su default en `:root`, no un `var(--token, #hex)` en cada
+   uso — sin eso queda indefinido en el estado por default del navegador. */
 
 /* ══════════════════════════════════════════════════════════════
    REDISEÑO — tokens "tools" (ver css/tokens.css). Usado por:
@@ -1177,7 +1131,11 @@
   color: var(--t3); margin-bottom: 4px;
 }
 .rb-tile__value {
-  font-family: var(--serif); font-size: 23px; color: var(--ink);
+  /* Va por --font-display, no por --serif: el serif H&A es "sólo display y sólo
+     en Intenso" (docs/rediseno/README.md). Cableado a --serif, este KPI salía
+     en DM Serif Display también en Sobrio y en Oscuro, donde el resto de los
+     números va en la sans operativa. */
+  font-family: var(--font-display); font-size: 23px; color: var(--ink);
   line-height: 1.1; font-variant-numeric: tabular-nums;
 }
 .rb-tile__value--ok    { color: var(--ok-tx); }
@@ -1423,7 +1381,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   display: flex; align-items: center; gap: var(--sp-2); font-size: 12px; color: var(--t1); margin-top: var(--sp-3);
 }
 .threshold-checkbox-static__box {
-  width: 14px; height: 14px; border-radius: 4px; background: var(--celeste); color: var(--color-white);
+  width: 14px; height: 14px; border-radius: 4px; background: var(--celeste); color: var(--on-celeste);
   display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0;
 }
 .threshold-note { font-size: 11px; color: var(--t3); margin: var(--sp-2) 0 0; }
@@ -1444,8 +1402,8 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 .ctrl-filter:hover { border-color: var(--celeste-border); color: var(--ink); }
 .ctrl-filter:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
 .ctrl-filter b { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--t3); font-weight: 700; }
-.ctrl-filter.is-active { background: var(--celeste); border-color: var(--celeste); color: var(--color-white); }
-.ctrl-filter.is-active b { color: rgba(255, 255, 255, .75); }
+.ctrl-filter.is-active { background: var(--celeste); border-color: var(--celeste); color: var(--on-celeste); }
+.ctrl-filter.is-active b { color: var(--on-celeste); opacity: .75; }
 
 .ctrl-toolbar__end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); }
 .ctrl-toolbar__count {
@@ -1459,7 +1417,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   background: var(--color-surface); border: 1px solid var(--line);
   border-radius: var(--radius-full); padding: 0 12px; transition: all .22s cubic-bezier(.4, 0, .2, 1);
 }
-.ctrl-search-box:focus-within { border-color: var(--celeste); box-shadow: 0 0 0 3px rgba(0, 172, 212, .12); }
+.ctrl-search-box:focus-within { border-color: var(--celeste); box-shadow: var(--focus-ring); }
 .ctrl-search-box.is-filled { border-color: var(--celeste); }
 .ctrl-search-box__icon { color: var(--t3); flex-shrink: 0; }
 .ctrl-search {
@@ -1498,7 +1456,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   border: 1.5px solid var(--line); background: var(--color-surface);
   display: grid; place-items: center; color: transparent; font-size: 11px; font-weight: 700;
 }
-.ctrl-row--active .ctrl-row__box { background: var(--celeste); border-color: var(--celeste); color: var(--color-white); }
+.ctrl-row--active .ctrl-row__box { background: var(--celeste); border-color: var(--celeste); color: var(--on-celeste); }
 .ctrl-row__main { min-width: 0; }
 .ctrl-row__name { font-size: 13.5px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 /* El nombre va en su propio span: si el <mark> de la búsqueda queda como hijo
@@ -1598,7 +1556,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
    Easing único cubic-bezier(.4,0,.2,1), sin bounces.
    ══════════════════════════════════════════════════════════════ */
 @keyframes cardIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@keyframes pulseOk { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.45); } 100% { box-shadow: 0 0 0 14px rgba(34,197,94,0); } }
+@keyframes pulseOk { 0% { box-shadow: 0 0 0 0 var(--ok-pulse); } 100% { box-shadow: 0 0 0 14px var(--ok-pulse-out); } }
 
 .anim-card-in { animation: cardIn 0.45s cubic-bezier(.4,0,.2,1) both; }
 
@@ -1940,7 +1898,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   border-color: var(--celeste);
   border-style: dashed;
   background: var(--celeste-dim);
-  box-shadow: 0 0 0 3px rgba(0, 172, 212, .12);
+  box-shadow: var(--focus-ring);
 }
 /* Procesando, aviso y cargado no se clickean: la acción está en sus botones. */
 .dropzone--loading,
@@ -1960,7 +1918,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   color: var(--celeste-deeper);
 }
 .dropzone--warn   .dropzone__icon { background: transparent; color: var(--error-tx); font-size: 17px; }
-.dropzone--loaded .dropzone__icon { background: rgba(34, 197, 94, .18); color: var(--ok-tx); font-weight: 700; }
+.dropzone--loaded .dropzone__icon { background: var(--ok-soft-bg); color: var(--ok-tx); font-weight: 700; }
 
 .dropzone__body  { flex: 1; min-width: 0; }
 .dropzone__title {
@@ -2188,7 +2146,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 }
 .seg__btn:hover { color: var(--ink); }
 .seg__btn:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
-.seg__btn.is-active { background: var(--celeste); color: var(--color-white); }
+.seg__btn.is-active { background: var(--celeste); color: var(--on-celeste); }
 
 /* ── Agrupación de conceptos: toolbar + buckets + chips ────────────────────── */
 .grouping-toolbar {

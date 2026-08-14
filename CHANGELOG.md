@@ -7,6 +7,16 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: los tres temas se resuelven en un solo archivo, y se arreglan tres cosas que no se leían — 2026-08-14
+
+- **Última tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 9). Es sólo la piel: no cambia ningún control, ningún cálculo, ningún archivo que se descarga ni cómo se navega.
+- **Se recorrieron las 10 pantallas en los tres temas** (Sobrio, Intenso y Oscuro) en un navegador real, comparando Intenso contra los screenshots de referencia y midiendo, en cada pantalla, si el texto se lee arriba de su fondo.
+- **En Intenso, "📌 Marcar como definitivo" era invisible.** En el cartelito de "Detalles del run", el botón salía casi del mismo color que el fondo blanco del cartel: estaba tomando el color pensado para la barra azul oscura de arriba. Ahora se lee igual que en los otros temas.
+- **En Intenso, el veredicto de arriba a la derecha costaba leerse.** La línea que dice "1 de 2 controles en rojo — 23 de 514 legajos con diferencia" salía en un rojo oscuro arriba de la barra azul oscura. Ahora sale en el naranja claro que muestra el diseño de referencia.
+- **En Oscuro, lo blanco arriba del celeste se veía lavado.** El chip de filtro elegido, el tilde del control marcado, la burbuja del paso actual y el botón de orden elegido tenían letra blanca sobre un celeste que en modo oscuro es más claro. Ahora esa letra se da vuelta a oscura y se lee.
+- **El número grande de las tarjetas de resultados dejó de salir en la tipografía con serifas** en Sobrio y en Oscuro: esa tipografía es sólo de Intenso, como el resto de los títulos.
+- **Por dentro:** todo el color de la app se decide en un solo archivo (`css/tokens.css`). Quedaban colores fijos repartidos en las otras hojas de estilo —el anillo que marca el campo donde estás escribiendo, el velo gris detrás de las ventanitas, el destello del semáforo en verde— que por eso no seguían al tema elegido. Hay un test que ahora falla si vuelve a aparecer uno. Decisiones en D-058.
+
 ### feat: una sola barra arriba, y la pantalla deja de scrollear entera — 2026-08-13
 
 - **Segunda tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 2). Sigue siendo sólo la piel: no cambia ningún control, ningún cálculo, ningún archivo que se descarga ni cómo se navega.

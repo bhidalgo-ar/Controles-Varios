@@ -957,7 +957,10 @@ function renderPanel(container, ctx) {
         const n = conteo.get(`${de}|${a}`) || 0;
         const t = n === 0 ? 0 : Math.sqrt(n / max);
         const bg = n === 0 ? 'transparent' : `color-mix(in srgb, var(--color-primary) ${Math.round(12 + t * 76)}%, var(--color-surface))`;
-        const fg = t > 0.62 ? '#fff' : 'inherit';
+        // Cuando la celda ya está bastante teñida de celeste, el texto se da
+        // vuelta. Sale del token y no de un '#fff' cableado: en Oscuro el
+        // celeste es más claro y el blanco encima deja de leerse.
+        const fg = t > 0.62 ? 'var(--on-celeste)' : 'inherit';
         const diag = de === a ? 'outline:2px solid var(--color-border);outline-offset:-1px;' : '';
         tabla += `<td style="width:52px;height:36px;text-align:center;border:1px solid var(--color-border);border-radius:var(--radius-sm);font-weight:700;font-variant-numeric:tabular-nums;background:${bg};color:${fg};${diag}" title="${n} legajo${n === 1 ? '' : 's'} de ${de}% a ${a}%">${n || '—'}</td>`;
       }
