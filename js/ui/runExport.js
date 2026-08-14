@@ -38,6 +38,9 @@ const DIFF_COLOR  = 'FFCC0000';
  * @param {string} [run.createdAtLabel]
  * @param {string} [run.estadoLabel]  - "Borrador" / "Definitivo" / "Ejecución rápida"
  * @param {string} [run.notes]
+ * @param {string[]} [run.warnings] - los avisos registrados al ejecutar (ver
+ *   js/ui/runWarnings.js). Van al export porque el archivo que se manda por mail
+ *   tiene que decir con qué se corrió, no sólo qué dio.
  * @param {object[]} run.controles - uno por control, ya con el veredicto resuelto:
  *   `{ controlId, label, tier, unitLabel, unitsTotal, unitsWithDiff, diffTotalAmount,
  *      headline, results }`
@@ -128,6 +131,25 @@ async function exportRunSummaryXlsx(run) {
     }
   }
 
+  // Los avisos de la corrida, abajo de la tabla: con qué se corrió, no sólo qué
+  // dio. Sin avisos también se dice — un bloque ausente no distingue "no hubo"
+  // de "no se miró".
+  const avisos = (run.warnings || []).filter(Boolean);
+  ws.addRow([]);
+  const avisosHdr = ws.addRow([
+    avisos.length === 0 ? 'Avisos de la corrida' : `Avisos de la corrida (${avisos.length})`,
+  ]);
+  avisosHdr.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+  if (avisos.length === 0) {
+    ws.addRow(['Sin avisos.']).getCell(1).font = { name: 'Calibri', size: 10 };
+  } else {
+    for (const w of avisos) {
+      const r = ws.addRow([w]);
+      r.getCell(1).font = { name: 'Calibri', size: 10 };
+      r.getCell(1).alignment = { wrapText: true };
+    }
+  }
+
   await downloadWorkbook(wb, `Corrida_${fileBase(run)}.xlsx`);
 }
 
@@ -141,6 +163,7 @@ function exportRunJson(run) {
       ejecutadaEl: run.createdAtLabel ?? null,
       estado:      run.estadoLabel ?? null,
       nota:        run.notes ?? null,
+      avisos:      (run.warnings || []).filter(Boolean),
     },
     controles: run.controles.map(c => ({
       controlId:       c.controlId,

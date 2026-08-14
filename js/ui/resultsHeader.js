@@ -165,6 +165,9 @@ function buildRunDetailsNode(run) {
  * @param {string} [run.periodNote]
  * @param {boolean} run.isQuickRun
  * @param {boolean} [run.isDefinitive]
+ * @param {string[]} [run.warnings] - los avisos que quedaron registrados al
+ *   ejecutar (ver js/ui/runWarnings.js). Un run guardado antes de que el campo
+ *   existiera no los trae: la sección sale vacía, no rota.
  * @param {() => void} [run.onToggleDefinitive] - sólo si !isQuickRun
  * @param {() => void} [run.onReconfigure]
  * @param {() => void} [run.onRerun]
@@ -188,6 +191,7 @@ function renderRunPopover(el, run) {
       </div>
     ` : ''}
     <div class="results-popover__status results-popover__status--${statusTone}">${statusHtml}</div>
+    ${runWarningsHtml(run.warnings)}
     <div class="results-popover__actions">
       ${!isQuickRun && run.onToggleDefinitive ? `
         <button type="button" class="btn btn--ghost btn--sm" data-run-toggle-def>
@@ -202,6 +206,29 @@ function renderRunPopover(el, run) {
   el.querySelector('[data-run-toggle-def]')?.addEventListener('click', run.onToggleDefinitive);
   el.querySelector('[data-run-reconfigure]')?.addEventListener('click', run.onReconfigure);
   el.querySelector('[data-run-rerun]')?.addEventListener('click', run.onRerun);
+}
+
+/**
+ * "N avisos de esta corrida" — los avisos de "avisa, no traba" (D-036) que el
+ * analista pasó por alto en el Paso 2 y que quedaron guardados con el run.
+ *
+ * Sin avisos NO se omite la sección: "esta corrida no tuvo avisos" es un dato,
+ * y un espacio en blanco se lee igual que "todavía no lo miré". Los runs
+ * viejos, que no tienen el campo, caen en la misma línea.
+ */
+function runWarningsHtml(warnings) {
+  const items = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+  if (items.length === 0) {
+    return `<div class="run-warnings run-warnings--empty">Sin avisos en esta corrida.</div>`;
+  }
+  return `
+    <div class="run-warnings">
+      <div class="run-warnings__label">${items.length} aviso${items.length === 1 ? '' : 's'} de esta corrida</div>
+      <ul class="run-warnings__list">
+        ${items.map(w => `<li>⚠ ${esc(w)}</li>`).join('')}
+      </ul>
+    </div>
+  `;
 }
 
 /** "Ejecutado el 13/08/2026 14:02 · Borrador" — el meta de la barra de solapas. */

@@ -24,6 +24,7 @@ import {
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { columnValues, columnHintHtml } from './columnHints.js';
+import { collectRunWarnings } from './runWarnings.js';
 import { initFileUploadStep, matchLevel, matchSelectStyle, wireColumnHints } from './fileUpload.js';
 import { autoDetectFor, extraFieldGroupsFor, conceptCodeToKeyFor, fileTypeLabel, flowFor } from './fileTypes.js';
 import { tabFieldParts, necessityHelp, fieldBadgeHtml } from './fieldHelp.js';
@@ -1891,6 +1892,7 @@ function renderInlineResults(container, state, root) {
     run: {
       createdAtLabel: new Date().toLocaleString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       isQuickRun: true,
+      warnings: state.lastRunWarnings || [],
       onReconfigure: () => { state.step = 1; render(root, state); },
       onRerun: () => {
         state.lastRunResults = null;
@@ -2003,11 +2005,19 @@ async function executeControls(state, container, root) {
       }
     }
 
+    // Los avisos que el analista pasó por alto ("avisa, no traba", D-036)
+    // viajan CON el run (aditivo 2): se arman con lo que había en pantalla al
+    // ejecutar, que es la única oportunidad de verlos completos — los de las
+    // columnas del Paso 2 no quedan en el mapeo que se guarda de cada archivo.
+    // La corrida rápida no se guarda, pero los muestra igual en su pantalla.
+    const runWarnings = collectRunWarnings(runWarningSources(state));
+    state.lastRunWarnings = runWarnings;
+
     // El run en sí se crea sólo si NO es quickRun
     let runId = null;
     if (!quickRun) {
       runId = await createControlRun(
-        state.client.code, state.period, state.selectedControls, state.notes
+        state.client.code, state.period, state.selectedControls, state.notes, runWarnings,
       );
       if (tab) {
         await saveControlRunFile(
@@ -2220,6 +2230,46 @@ function runFilesUsed(state) {
     if (!ctrl) continue;
     for (const f of ctrl.additionalFiles) push(f.label, state.controlFiles[id]?.[f.key]);
   }
+  return files;
+}
+
+/**
+ * Los archivos de la corrida, con lo que `collectRunWarnings` necesita mirar:
+ * si la sigla del nombre no coincidía y qué columna quedó mapeada a cada clave.
+ */
+function runWarningSources(state) {
+  const files = [];
+  const push = (fileType, fileData) => {
+    if (!fileData) return;
+    files.push({
+      fileType:      fileType || fileData.fileType,
+      fileName:      fileData.fileName ?? null,
+      siglaMismatch: fileData.siglaMismatch === true,
+      parsedRows:    fileData.parsedRows,
+      mapping:       fileData.mapping,
+    });
+  };
+
+  push('tab_control', state.tab);
+  for (const id of state.selectedControls) {
+    const ctrl = CONTROL_REGISTRY[id];
+    if (!ctrl) continue;
+    for (const f of ctrl.additionalFiles) push(f.fileType, state.controlFiles[id]?.[f.key]);
+  }
+
+  // Las columnas que se eligen en el Paso 2 (SUELDO, GTOS_PERSONALES, los 18
+  // conceptos de NR…) no están en `tab.mapping`: viajan aparte en
+  // `tabExtraConfig`, y por eso su aviso es justamente el que la pantalla de
+  // resultados no puede recalcular después. Entran acá como un mapeo más sobre
+  // las mismas filas del Tabulado.
+  if (state.tab?.parsedRows && state.tabExtraConfig) {
+    files.push({
+      fileType:   'tab_control',
+      parsedRows: state.tab.parsedRows,
+      mapping:    state.tabExtraConfig,
+    });
+  }
+
   return files;
 }
 
