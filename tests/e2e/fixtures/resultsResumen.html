@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- Fixture de la pantalla de Resultados — solapa Resumen (rediseño, pantalla 6).
+     NO es una pantalla de la app: monta el hero, las tarjetas por control, la
+     barra superior y las solapas con datos inventados, sin IndexedDB ni los CDN
+     de index.html, para poder verlo en un navegador real.
+     ?caso=verde (default) | rojo -->
+<html lang="es" data-theme="sobrio"><head><meta charset="utf-8">
+<title>Resultados — Resumen</title>
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+
+<header class="app-header">
+  <span class="app-header__app-name">Controles Nómina</span>
+  <span class="app-header__divider" aria-hidden="true"></span>
+  <nav class="app-header__nav" id="js-header-nav"></nav>
+  <div class="app-header__context" id="js-header-context"></div>
+  <div class="app-header__steps" id="js-header-steps"></div>
+  <span class="app-header__spacer"></span>
+  <div class="app-header__hint" id="js-header-hint"></div>
+  <div class="app-header__tools" id="js-header-tools"></div>
+  <div class="app-header__primary" id="js-header-primary"></div>
+</header>
+
+<main class="app-main" id="js-app-root">
+  <div id="js-results-tabs"></div>
+  <div class="page-content">
+    <div id="js-tab-resumen" class="results-column">
+      <div id="js-hero"></div>
+      <div id="js-ctrl-cards" class="results-ctrl-cards"></div>
+    </div>
+    <div id="js-tab-detalle" hidden>
+      <div id="js-control-sections">
+        <div class="control-card control-card--tier-error" data-control-id="brutos">
+          <div class="control-card__summary"><div class="control-card__row">
+            <span class="status-dot status-dot--error"></span>
+            <h3 class="control-card__name">Brutos — Controlar</h3>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { buildHeroHtml, buildCtrlCardsHtml } from '../../../js/ui/controlsResults.js';
+import { mountResultsHeader, renderResultsTabs, runMetaLabel } from '../../../js/ui/resultsHeader.js';
+import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from '../../../js/ui/runExport.js';
+
+const caso = new URLSearchParams(location.search).get('caso') || 'verde';
+
+const mk = (controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra = {}) => ({
+  row:  { controlId, results: { rows: [] } },
+  ctrl: { label },
+  tier,
+  summary: {
+    unit, unitsTotal, unitsWithDiff, status: tier === 'ok' ? 'ok' : tier,
+    diffTotalAmount: 0, worstCase: null, contextNote: null, headline: '', ...extra,
+  },
+});
+
+// Los mismos dos casos del prototipo: 1 de 1 en verde / 1 de 2 en rojo.
+const summaries = caso === 'rojo'
+  ? [
+      mk('brutos', 'Brutos — Controlar', 'legajo', 514, 23, 'error', {
+        diffTotalAmount: 184230.5,
+        contextNote: '2 legajos solo en un archivo',
+      }),
+      mk('gsPers', 'GS Pers — Controlar', 'legajo', 512, 0, 'ok', {
+        headline: 'Reporte de GS Pers vs Tabulado',
+      }),
+    ]
+  : [mk('brutos', 'Brutos — Controlar', 'legajo', 514, 0, 'ok', { headline: 'Reporte de Brutos vs Tabulado' })];
+
+const tabFile = {
+  fileType: 'tab_control',
+  mapping: { empleadoColumn: 'LEGAJO' },
+  parsedRows: Array.from({ length: 514 }, (_, i) => ({ LEGAJO: String(i + 1) })),
+};
+
+const { html, overallTier } = buildHeroHtml(summaries, [tabFile], 2);
+document.getElementById('js-hero').innerHTML = html;
+document.getElementById('js-ctrl-cards').innerHTML = buildCtrlCardsHtml(summaries, {}, true);
+
+const verdict = caso === 'rojo'
+  ? '1 de 2 controles en rojo — 23 de 514 legajos con diferencia (4,5%).'
+  : '1 de 1 control en verde — sin diferencias.';
+
+mountResultsHeader({
+  tier: overallTier,
+  cliente: 'Cliente Demo',
+  periodo: 'Agosto 2026',
+  verdictLine: verdict,
+  back: { label: '← Volver a los controles', onClick: () => {} },
+  run: { createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false, onToggleDefinitive: () => {} },
+  exportItems: buildRunExportItems({
+    clienteName: 'Cliente Demo', clienteCode: 'DEMO', periodo: 'Agosto 2026', period: '2026-08',
+    createdAtLabel: '13 ago 2026, 14:02', estadoLabel: 'Borrador',
+    controles: summaries.map(s => ({
+      controlId: s.row.controlId, label: s.ctrl.label, tier: s.tier, unitLabel: 'legajos',
+      unitsTotal: s.summary.unitsTotal, unitsWithDiff: s.summary.unitsWithDiff,
+      diffTotalAmount: s.summary.diffTotalAmount, headline: s.summary.headline, results: s.row.results,
+    })),
+  }),
+  exportNote: EXPORT_PRIVACY_NOTE,
+});
+
+renderResultsTabs(document.getElementById('js-results-tabs'), {
+  tabs: [
+    { id: 'resumen', label: 'Resumen', panel: document.getElementById('js-tab-resumen') },
+    { id: 'detalle', label: 'Detalle', panel: document.getElementById('js-tab-detalle') },
+  ],
+  meta: runMetaLabel({ createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false }),
+});
+</script>
+</body></html>

@@ -49,7 +49,7 @@ import {
 import { nombreCoincideConMetadata } from '../parsers/tabuladoHtml.js';
 import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
-import { renderResultsContextBar } from './resultsHeader.js';
+import { mountResultsHeader }      from './resultsHeader.js';
 import { setHeader }               from './appHeader.js';
 
 // ── Caché de sesión del Tabulado ─────────────────────────────────────────────
@@ -340,13 +340,13 @@ function syncWizardHeader(root, state) {
 function render(root, state) {
   const showResultsPage = state.step === 2 && !!state.lastRunResults;
 
-  // Pantalla de resultados (1C): barra de veredicto + contenido, sin el shell
-  // del wizard (título/card/nav) — mismo criterio que controlsResults.js. La
-  // barra superior la reescribe renderResultsContextBar.
+  // Pantalla de resultados (1C): sólo el contenido, sin el shell del wizard
+  // (título/card/nav) — mismo criterio que controlsResults.js. El contexto, el
+  // veredicto y el "Detalles del run" van a la barra superior
+  // (mountResultsHeader), que ya no tiene una segunda franja propia.
   if (showResultsPage) {
     if (root.dataset.wizardView !== 'results') {
       root.innerHTML = `
-        <div id="js-results-ctx-bar"></div>
         <div class="page-content"><div id="js-inline-results-page"></div></div>
       `;
       root.dataset.wizardView = 'results';
@@ -1882,8 +1882,7 @@ function renderInlineResults(container, state, root) {
           return n > 0 ? `${n} en ${t === 'error' ? 'rojo' : t === 'warn' ? 'amarillo' : 'verde'}` : null;
         }).filter(Boolean).join(' · ') + '.';
 
-  const ctxBarEl = root.querySelector('#js-results-ctx-bar');
-  renderResultsContextBar(ctxBarEl, {
+  mountResultsHeader({
     tier: overallTier,
     cliente: state.client.name,
     periodo: periodToLabel(state.period),

@@ -39,8 +39,9 @@ const SLOT_IDS = {
  * @param {object|string} [opts.hint] - `'Texto'` o `{ text, tone: 'muted'|'warn' }`
  * @param {Node|Node[]} [opts.tools] - controles secundarios de la pantalla, a la izquierda de la
  *   primaria (ej. el menú "Datos ▾" del inicio). La pantalla los arma y les cuelga sus handlers.
- * @param {object}   [opts.primary] - `{ label, href|onClick, disabled, id, title, variant }`
- *   (`variant: 'secondary'` para cuando la acción de la pantalla no es la de más peso)
+ * @param {object|Node} [opts.primary] - `{ label, href|onClick, disabled, id, title, variant }`
+ *   (`variant: 'secondary'` para cuando la acción de la pantalla no es la de más peso), o un
+ *   elemento ya armado por la pantalla (ej. el menú "⬇ Exportar ▾" de resultados)
  */
 export function setHeader({ back, context, steps, hint, tools, primary } = {}) {
   renderBack(slot('back'), back);
@@ -124,6 +125,10 @@ function renderHint(el, hint) {
 
 function renderPrimary(el, primary) {
   if (!el) return;
+  // Una pantalla puede traer su propia acción ya armada en vez de la
+  // descripción de un botón: resultados cuelga acá el menú "⬇ Exportar ▾",
+  // que es un dropdown con sus handlers puestos, no un botón suelto.
+  if (primary instanceof Node) { renderNodes(el, primary); return; }
   el.innerHTML = '';
   if (!primary) return;
   const variant = primary.variant === 'secondary' ? 'btn--secondary' : 'btn--primary';

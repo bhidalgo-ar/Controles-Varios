@@ -1486,3 +1486,59 @@ cada uno. Al terminar, la pantalla navegaba sola a los resultados.
 **Lo que queda afuera:** la sección "N avisos" del panel (screenshot 15) necesita que los avisos de
 archivo/columna viajen en el run — eso es la tarea 7 (agregado [ADITIVO] 2 de `CAMBIOS_TECNICOS.md`) y
 todavía no existe el campo. Se prefirió no mostrar una sección vacía antes que inventar avisos.
+
+## D-057 — Resultados: el veredicto vive en la barra única, y el Resumen es un hero con tarjetas
+
+**Fecha:** 2026-08-14
+**Contexto:** Séptima tarea del rediseño Fase 1 (`docs/rediseno/README.md` → pantalla 6 "Resultados —
+Resumen", screenshots 10, 11 y 13; `CAMBIOS_TECNICOS.md` §10). La pantalla tenía dos franjas fijas
+apiladas —la barra superior de 54px y su propia `.results-ctx-bar` de 46px con el veredicto y "Detalles
+del run"— y abajo un hero de 380px de ancho con un medidor circular (`% de legajos OK`) más una fila por
+control, y debajo otra vez las mismas fichas desplegables. El mismo control se nombraba tres veces en la
+misma pantalla, y el número grande era un porcentaje que había que interpretar antes de saber si había
+algo que revisar.
+
+**Decisión:**
+
+1. **La barra de contexto se funde con la barra única.** `mountResultsHeader()` (ex
+   `renderResultsContextBar`) ya no renderiza un contenedor propio: cuelga el ● + "Cliente · Período" +
+   el veredicto en una línea del slot de contexto, "Detalles del run" del de herramientas y el menú
+   "⬇ Exportar ▾" del de la primaria. El veredicto se pinta con el color del tier (verde/ámbar/rojo) y
+   el dot pulsa **sólo en verde**. Para que la primaria pueda ser un dropdown ya armado y no la
+   descripción de un botón, `setHeader({ primary })` acepta también un `Node` — el mismo trato que ya
+   tenía `context` para el selector de mes del inicio.
+2. **Debajo queda una zona fija de solapas Resumen / Detalle** con, a la derecha, cuándo se ejecutó el
+   run y en qué estado quedó. **El Detalle es exactamente el de hoy** (las fichas `.control-card`): su
+   rediseño es otra tarea. Al llegar siempre abre en Resumen, incluso en rojo — "errores primero" es el
+   orden de las tarjetas, no la solapa.
+3. **El Resumen es un hero centrado + una tarjeta por control.** El medidor circular se fue: el número
+   grande ahora es el título en palabras ("Sin diferencias" / "23 legajos con diferencia"), que nombra
+   la unidad que el control verificó de verdad, con los KPIs abajo (30px/700 celeste, **en rojo los que
+   hay que ir a mirar**: unidades con diferencia y Δ acumulada). Cada tarjeta lleva su dot, su meta en
+   una línea y "Ver detalle →" / "Ver los 23 →", que cambia de solapa, abre la ficha de ese control y la
+   trae a la vista. El control en rojo va primero y con borde de error.
+4. **El porcentaje del hero se mide contra el control más grande, no contra la suma.** Brutos sobre 514
+   legajos y GS Pers sobre 512 son los mismos empleados mirados dos veces, no 1026: con el denominador
+   sumado, 23 diferencias daban 2,2% en el hero y 4,5% en la tarjeta del control, y el número chico es
+   el que se lee como "no pasa nada". Es el mismo `unitsMax` que ya usaba la frase "514 legajos
+   verificados en 2 controles".
+5. **El color lo sigue decidiendo `computeSemaforoStatus`** (verde 0% · amarillo ≤2% · rojo >2%):
+   `js/controls/semaforo.js` no se tocó, y la leyenda del umbral quedó al pie del hero para que el color
+   se pueda explicar sin salir de la pantalla.
+6. **La acción primaria es "⬇ Exportar ▾"**, con dos ítems y el recordatorio de privacidad al pie
+   (CLAUDE.md §Privacidad). **Excel es el veredicto de la corrida —una fila por control—, no una hoja
+   por control:** la hoja completa de cada control la arma cada control con su contrato de export
+   (`js/exports/contracts.js`) y esa lógica vive adentro de `js/controls/**`, que esta tarea no toca.
+   El detalle fila por fila se sigue exportando desde la tabla de cada control, en la solapa Detalle. El
+   JSON sí lleva la corrida entera —con datos de empleados—, y por eso el aviso.
+7. **`setCompactHeader` ya no existía**: se había ido con D-054 junto con `.app-header--compact`. Quedó
+   sólo la nota en `base.css`, actualizada.
+
+**Verificación:** `npm run test:unit` en verde (121 asserts). Los dos tests que fijaban el hero se
+actualizaron al markup nuevo conservando cada regla, y se les sumó una sección que fija que **la tarjeta
+de cada control nombra su propia unidad** aunque el hero mida otra. La pantalla se verificó en Chromium
+en verde y en rojo, y en Sobrio / Intenso / Oscuro, sobre un fixture nuevo
+(`tests/e2e/fixtures/resultsResumen.html`) con su spec (`tests/e2e/resultsResumen.spec.js`, 4 tests): no
+hay dos franjas, el rojo va primero, el link cambia de solapa y el menú de export avisa lo que avisa. Los
+e2e que levantan la app entera no corren en este entorno (los CDN de `index.html` están bloqueados,
+D-048): quedan para CI.

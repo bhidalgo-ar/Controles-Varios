@@ -65,13 +65,13 @@ const brutosOk = {
 
 /** El número que quedó en el KPI "Legajos cruzados" del hero. */
 function kpiLegajosCruzados(html) {
-  const m = html.match(/hero-kpi__value[^>]*>([^<]+)<\/span>\s*<span class="hero-kpi__label">Legajos cruzados/);
+  const m = html.match(/results-hero__kpi-value[^>]*>([^<]+)<\/span>\s*<span class="results-hero__kpi-label">Legajos cruzados/);
   return m ? m[1].trim() : null;
 }
 
 // ── 1. El legajo con doble liquidación cuenta una sola vez ───────────────────
 {
-  const hero = buildHeroHtml([brutosOk], [tabFile], 5, {});
+  const hero = buildHeroHtml([brutosOk], [tabFile], 5);
   assert('el Tabulado de 5 filas y 4 empleados muestra 4, no 5',
     kpiLegajosCruzados(hero.html) === '4');
   assert('el 5 crudo de parsedRows.length no llega a la pantalla',
@@ -81,8 +81,8 @@ function kpiLegajosCruzados(html) {
 // ── 2. Las dos ramas del KPI dan el mismo número ─────────────────────────────
 // Era la prueba de que el número estaba mal: con Tabulado 5, sin Tabulado 4.
 {
-  const conTab = buildHeroHtml([brutosOk], [tabFile], 5, {});
-  const sinTab = buildHeroHtml([brutosOk], [],        5, {});
+  const conTab = buildHeroHtml([brutosOk], [tabFile], 5);
+  const sinTab = buildHeroHtml([brutosOk], [],        5);
   assert('con Tabulado y sin Tabulado dan el MISMO número para el mismo dato',
     kpiLegajosCruzados(conTab.html) === kpiLegajosCruzados(sinTab.html));
   assert('y ese número es 4', kpiLegajosCruzados(sinTab.html) === '4');
@@ -93,15 +93,15 @@ function kpiLegajosCruzados(html) {
   const rowsConCeros = [{ LEGAJO: '007' }, { LEGAJO: '7' }, { LEGAJO: '8' }];
   const tabCeros = { ...tabFile, parsedRows: rowsConCeros, parseMetadata: { totalRows: 3 } };
 
-  const sinCeros = buildHeroHtml([brutosOk], [tabCeros], 5, {}, LEGAJO_KEY_MODES.SIN_CEROS);
+  const sinCeros = buildHeroHtml([brutosOk], [tabCeros], 5, LEGAJO_KEY_MODES.SIN_CEROS);
   assert('modo sin_ceros: «007» y «7» son el mismo empleado → 2',
     kpiLegajosCruzados(sinCeros.html) === '2');
 
-  const trim = buildHeroHtml([brutosOk], [tabCeros], 5, {}, LEGAJO_KEY_MODES.TRIM);
+  const trim = buildHeroHtml([brutosOk], [tabCeros], 5, LEGAJO_KEY_MODES.TRIM);
   assert('modo trim: «007» y «7» son empleados distintos → 3',
     kpiLegajosCruzados(trim.html) === '3');
 
-  const porDefecto = buildHeroHtml([brutosOk], [tabCeros], 5, {});
+  const porDefecto = buildHeroHtml([brutosOk], [tabCeros], 5);
   assert('sin modo configurado: gana el default del repo (sin_ceros)',
     kpiLegajosCruzados(porDefecto.html) === '2');
 
@@ -113,7 +113,7 @@ function kpiLegajosCruzados(html) {
 {
   const rowsHuecos = [{ LEGAJO: '1' }, { LEGAJO: '' }, { LEGAJO: null }, { LEGAJO: '  ' }, { LEGAJO: '2' }];
   const tabHuecos = { ...tabFile, parsedRows: rowsHuecos, parseMetadata: { totalRows: 5 } };
-  const hero = buildHeroHtml([brutosOk], [tabHuecos], 5, {});
+  const hero = buildHeroHtml([brutosOk], [tabHuecos], 5);
   assert('las filas sin legajo no cuentan como empleados',
     kpiLegajosCruzados(hero.html) === '2');
 }
@@ -121,12 +121,12 @@ function kpiLegajosCruzados(html) {
 // ── 5. Sin columna de empleado mapeada no se muestra un 0 inventado ──────────
 {
   const tabSinCol = { ...tabFile, mapping: {} };
-  const hero = buildHeroHtml([brutosOk], [tabSinCol], 5, {});
+  const hero = buildHeroHtml([brutosOk], [tabSinCol], 5);
   assert('sin columna de empleado: cae al fallback (4), no muestra 0',
     kpiLegajosCruzados(hero.html) === '4');
 
   const tabSinRows = { ...tabFile, parsedRows: undefined };
-  const heroSinRows = buildHeroHtml([brutosOk], [tabSinRows], 5, {});
+  const heroSinRows = buildHeroHtml([brutosOk], [tabSinRows], 5);
   assert('sin filas guardadas: cae al fallback (4), no muestra 0',
     kpiLegajosCruzados(heroSinRows.html) === '4');
 }
@@ -157,7 +157,7 @@ function kpiLegajosCruzados(html) {
   assert('el botón de ejecutar dice "sobre 4 legajos", no 5',
     executeCtaLabel(state) === '▶ Ejecutar 3 controles sobre 4 legajos');
 
-  const hero = buildHeroHtml([brutosOk], [tabFile], 5, {}, LEGAJO_KEY_MODES.SIN_CEROS);
+  const hero = buildHeroHtml([brutosOk], [tabFile], 5, LEGAJO_KEY_MODES.SIN_CEROS);
   assert('el wizard y el hero coinciden para el mismo archivo',
     executeCtaLabel(state).includes(kpiLegajosCruzados(hero.html)));
 
@@ -174,7 +174,7 @@ function kpiLegajosCruzados(html) {
 {
   assert('el dato del parser no cambió de significado: 5 filas',
     tabFile.parseMetadata.totalRows === 5);
-  const hero = buildHeroHtml([brutosOk], [tabFile], 5, {});
+  const hero = buildHeroHtml([brutosOk], [tabFile], 5);
   assert('...y el KPI ya no lo usa', kpiLegajosCruzados(hero.html) === '4');
 }
 
