@@ -1121,150 +1121,9 @@
    en toda la app; estas 3 pantallas rediseñadas piden pill siempre). */
 .btn--pill { border-radius: var(--radius-full); }
 
-/* ── Hero de resultados — veredicto + gauge (pantalla 1b) ─────── */
-.hero-verdict {
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  background: var(--color-surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--sh-tool);
-  margin-bottom: var(--sp-6);
-  font-family: var(--font-tool);
-  overflow: hidden;
-}
-.hero-verdict__gauge-col {
-  border-right: 1px solid var(--line);
-  padding: var(--sp-6);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-/* Corrida de un solo control: el gauge resume varios controles en un número, y
-   con uno solo ese número ya está en la barra de contexto y en la card de
-   abajo. Queda una banda de una línea con el veredicto y el KPI de contexto
-   (ver buildHeroHtml en js/ui/controlsResults.js). */
-.hero-verdict--compact {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  padding: var(--sp-4) var(--sp-5);
-}
-.hero-verdict--compact .hero-verdict__subline {
-  text-align: left;
-  flex: 1;
-  min-width: 220px;
-}
-.hero-verdict__compact-kpi {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  padding-left: var(--sp-4);
-  border-left: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.hero-verdict__compact-kpi .hero-kpi__value { font-size: 22px; }
-@media (max-width: 700px) {
-  .hero-verdict__compact-kpi { border-left: none; padding-left: 0; }
-}
-.hero-gauge { position: relative; width: 190px; height: 190px; flex-shrink: 0; }
-.hero-gauge__ring-bg { fill: none; stroke: var(--line-soft); stroke-width: 14; }
-.hero-gauge__ring-fill {
-  fill: none;
-  stroke-width: 14;
-  stroke-linecap: round;
-  transform: rotate(-90deg);
-  transform-origin: center;
-  /* A2: el arco se anima cuadro a cuadro por rAF (js/ui/controlsResults.js),
-     sincronizado con el número — sin transition CSS para no duplicar el easing. */
-}
-.hero-gauge__ring-fill--ok    { stroke: var(--ok); }
-.hero-gauge__ring-fill--warn  { stroke: var(--warn); }
-.hero-gauge__ring-fill--error { stroke: var(--error); }
-.hero-gauge__center {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-.hero-gauge__pct {
-  font-family: var(--serif);
-  font-size: 42px;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-/* El nombre de la unidad medida (legajos, centros de costo, cuentas contables):
-   acotado para que no se meta debajo del anillo y pase a dos líneas si hace falta. */
-.hero-gauge__label {
-  font-size: 12px; color: var(--t2); margin-top: 4px;
-  max-width: 120px; text-align: center; line-height: 1.25;
-}
-
-.hero-verdict__badge {
-  display: inline-flex; align-items: center; gap: var(--sp-2);
-  border-radius: var(--radius-full);
-  padding: 6px 18px;
-  font-size: 13px; font-weight: 700;
-  border: 1px solid var(--line);
-}
-.hero-verdict__badge--ok    { border-color: var(--ok-bd);    background: var(--ok-bg);    color: var(--ok-tx); }
-.hero-verdict__badge--warn  { border-color: var(--warn-bd);  background: var(--warn-bg);  color: var(--warn-tx); }
-.hero-verdict__badge--error { border-color: var(--error-bd); background: var(--error-bg); color: var(--error-tx); }
-
-.hero-verdict__subline { font-size: 13px; color: var(--t2); text-align: center; line-height: 1.5; margin: 0; }
-.hero-verdict__subline strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-
-.hero-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); width: 100%; }
-.hero-kpi { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; text-align: center; }
-.hero-kpi__value {
-  font-family: var(--serif); font-size: 24px; color: var(--ink);
-  font-variant-numeric: tabular-nums; display: block;
-}
-.hero-kpi__value--ok { color: var(--ok-tx); }
-.hero-kpi__label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--t3);
-}
-
-.hero-verdict__list-col { padding: var(--sp-5) var(--sp-6); min-width: 0; }
-.hero-ctrl-header { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-3); flex-wrap: wrap; }
-.hero-ctrl-header__label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--celeste);
-}
-.hero-ctrl-header__legend { font-size: 11px; color: var(--t3); margin-left: auto; }
-
-.hero-ctrl-rows { display: flex; flex-direction: column; }
-.hero-ctrl-row {
-  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  padding: 13px 14px; border-radius: 12px; margin-bottom: var(--sp-2);
-}
-.hero-ctrl-row--error { background: var(--error-bg); border: 1px solid var(--error-bd); }
-.hero-ctrl-row--warn  { background: var(--warn-bg);  border: 1px solid var(--warn-bd); }
-.hero-ctrl-row--ok,
-.hero-ctrl-row--neutral {
-  padding: 11px 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 0; border-radius: 0;
-}
-.hero-ctrl-row--neutral { opacity: 0.85; }
-.hero-ctrl-rows .hero-ctrl-row:last-child { border-bottom: none; }
-.hero-ctrl-row__name { font-size: 13px; font-weight: 600; color: var(--ink); width: 190px; flex-shrink: 0; }
-.hero-ctrl-row__count { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; width: 140px; flex-shrink: 0; }
-.hero-ctrl-row--error .hero-ctrl-row__count { color: var(--error-tx); }
-.hero-ctrl-row--warn  .hero-ctrl-row__count { color: var(--warn-tx); }
-.hero-ctrl-row--ok    .hero-ctrl-row__count { color: var(--ok-tx); }
-.hero-ctrl-row__context { font-size: 13px; color: var(--t2); font-variant-numeric: tabular-nums; flex: 1; min-width: 160px; }
-.hero-ctrl-row--ok .hero-ctrl-row__context,
-.hero-ctrl-row--neutral .hero-ctrl-row__context { color: var(--t3); }
-.hero-ctrl-row__link { font-size: 13px; font-weight: 700; white-space: nowrap; color: var(--celeste-deeper); cursor: pointer; background: none; border: none; padding: 0; font-family: var(--font-tool); }
-.hero-ctrl-row__link:hover { text-decoration: underline; }
-.hero-ctrl-row--ok .hero-ctrl-row__link,
-.hero-ctrl-row--neutral .hero-ctrl-row__link { color: var(--t3); font-weight: 400; }
-
-@media (max-width: 900px) {
-  .hero-verdict { grid-template-columns: 1fr; }
-  .hero-verdict__gauge-col { border-right: none; border-bottom: 1px solid var(--line); }
-  .hero-ctrl-row__name, .hero-ctrl-row__count { width: auto; }
-}
+/* El hero de resultados (gauge + filas por control) se rediseñó como card
+   centrada con icono de estado + KPIs y tarjetas por control: vive en
+   css/results.css (.results-hero / .results-ctrl-card). */
 
 /* ── Home — tabla de clientes (pantalla 1d) ───────────────────── */
 .month-selector {
@@ -1714,7 +1573,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 .ctrl-help__label:hover { text-decoration: underline; }
 
 /* Badge de origen — deliberadamente separado del semáforo de diferencias
-   (ok/warn/error, ver hero-ctrl-row): sólo dos variantes visuales, el texto
+   (ok/warn/error, ver results-ctrl-card): sólo dos variantes visuales, el texto
    específico (sistema/CCT/cliente) es lo que distingue el chip, no el color. */
 .origin-badge {
   display: inline-flex; align-items: center; font-size: 10px; font-weight: 700;
@@ -1852,7 +1711,7 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 
 @media (prefers-reduced-motion: reduce) {
   .anim-card-in,
-  .hero-ctrl-row,
+  .results-ctrl-card,
   .status-dot,
   .ctrl-detail-grid,
   .run-card__spinner,
@@ -1881,41 +1740,11 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Barra de veredicto de resultados (ver js/ui/resultsHeader.js)
-   Zona fija de .app-main, justo bajo la barra superior: no scrollea con el
-   contenido, así que no necesita `sticky`. El volver y el "Cliente · Período"
-   con su semáforo están arriba, en los slots de la barra.
+   Contenido del popover "Detalles del run" (ver js/ui/resultsHeader.js).
+   La barra de veredicto propia (.results-ctx-bar) ya no existe: se fundió
+   con la barra superior única, y el popover cuelga de ahí — su contenedor
+   (.run-details) vive en css/results.css.
    ══════════════════════════════════════════════════════════════ */
-.results-ctx-bar {
-  grid-row: 1;
-  z-index: 99;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  min-height: 46px;
-  padding: 0 var(--sp-10);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  font-family: var(--font-tool);
-}
-.results-ctx-bar__verdict { font-size: 12.5px; color: var(--t2); font-weight: var(--fw-semibold); }
-.results-ctx-bar__spacer { flex: 1 1 auto; }
-.results-ctx-bar__details { position: relative; }
-.results-ctx-bar__details > summary { list-style: none; cursor: pointer; }
-.results-ctx-bar__details > summary::-webkit-details-marker { display: none; }
-.results-ctx-bar__popover {
-  position: absolute;
-  top: calc(100% + var(--sp-2));
-  right: 0;
-  z-index: 50;
-  width: 320px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  padding: var(--sp-3) var(--sp-4);
-  text-align: left;
-}
 .results-popover__label {
   font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--color-primary); margin-bottom: var(--sp-2);
@@ -1929,10 +1758,6 @@ table.rb-grid tfoot > tr > :nth-child(2) {
 .results-popover__status--def   { border-color: var(--ok-bd);   background: var(--ok-bg);   color: var(--ok-tx); }
 .results-popover__actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
 .results-popover__actions .btn { flex: 1; }
-
-@media (max-width: 768px) {
-  .results-ctx-bar { padding: 0 var(--sp-4); }
-}
 
 /* ── Observaciones menores — sev:'minor' agrupadas por texto (ver renderIssues
    / renderMinorObservations en resultBlocks.js). Calidad de dato, no una

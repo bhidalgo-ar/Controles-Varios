@@ -297,8 +297,10 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 /* La cabecera comprimida de la pantalla de resultados (.app-header--compact,
-   44px) ya no existe: la barra es una sola y siempre mide lo mismo. La barra
-   de veredicto pasó a ser una zona más de .app-main (ver .results-ctx-bar). */
+   44px, con su setCompactHeader) ya no existe: la barra es una sola y siempre
+   mide lo mismo. Resultados tampoco tiene ya una barra de veredicto propia —
+   su contexto vive en los slots de acá arriba y abajo le queda la zona de
+   solapas Resumen/Detalle (.results-tabsbar, en css/results.css). */
 
 /* ── Pasos del wizard, dentro de la barra ────────────────────────
    Antes eran una tira suelta de 32px al tope de la pantalla (.wizard-steps);

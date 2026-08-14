@@ -1,0 +1,311 @@
+/* ══════════════════════════════════════════════════════════════
+   results.css — Pantalla de Resultados (Resumen)
+   Rediseño Fase 1, pantalla 6 de docs/rediseno/README.md
+   (screenshots 10-resultados-resumen-verde, 13-resumen-rojo,
+   11-estados-resultados).
+
+   Qué vive acá y qué no:
+   - Acá: la barra de solapas Resumen/Detalle, el hero de veredicto, las
+     tarjetas de resumen por control, el popover "Detalles del run" y el
+     menú "⬇ Exportar ▾" de la barra superior.
+   - En components.css: `.control-card` (las fichas desplegables del tab
+     Detalle) y los `.rb-*` de cada control, que son otro nivel.
+
+   El color de cada estado sale del tier que ya calculó
+   `computeSemaforoStatus` (js/controls/semaforo.js): acá sólo se pinta.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Locales de esta pantalla — no son tokens del sistema. */
+  --results-col-max:    880px;  /* ancho de lectura del Resumen (prototipo) */
+  --results-title-size: 25px;
+  --results-kpi-size:   30px;
+  --results-icon-size:  58px;
+}
+
+/* ── Veredicto en la barra superior ──────────────────────────────
+   El "Cliente · Período" con su semáforo y la línea de veredicto van
+   juntos al slot de contexto de la barra única (setHeader → context).
+   Antes eran una segunda franja propia (.results-ctx-bar, eliminada). */
+.results-header-ctx {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.results-header-ctx__verdict {
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--t2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.results-header-ctx__verdict--ok    { color: var(--ok-tx); }
+.results-header-ctx__verdict--warn  { color: var(--warn-tx); }
+.results-header-ctx__verdict--error { color: var(--error-tx); }
+
+/* Pulso suave del dot sólo en verde (README §Interacciones): en amarillo o
+   rojo el movimiento distrae de lo que hay que ir a mirar. */
+@keyframes dotpulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45); }
+  50%      { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+}
+.status-dot--pulse { animation: dotpulse 2.4s ease-out infinite; }
+
+/* ── "Detalles del run" — el mismo popover, ahora colgado de la barra ── */
+.run-details { position: relative; }
+.run-details > summary { list-style: none; cursor: pointer; }
+.run-details > summary::-webkit-details-marker { display: none; }
+.run-details__popover {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: 50;
+  width: 320px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+}
+
+/* ── Menú "⬇ Exportar ▾" (js/ui/exportMenu.js, variante con descripción) ──
+   Reusa .row-menu/.row-menu__panel para no romper el listener de
+   click-afuera que comparte con el menú "⋯" del home. */
+.export-menu__panel { min-width: 300px; }
+.export-menu__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  white-space: normal;
+  line-height: 1.35;
+}
+.export-menu__item-name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+}
+.export-menu__item-desc {
+  display: block;
+  font-size: 11px;
+  font-weight: var(--fw-regular);
+  color: var(--t3);
+  margin-top: 1px;
+}
+.export-menu__note {
+  border-top: 1px solid var(--line-soft);
+  margin-top: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) var(--sp-1);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--warn-tx);
+}
+
+/* ── Barra de solapas Resumen / Detalle ──────────────────────────
+   Zona fija de .app-main (fila 1): no scrollea con el contenido. A la
+   derecha, cuándo se ejecutó el run y en qué estado quedó. */
+.results-tabsbar {
+  grid-row: 1;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 46px;
+  padding: 0 var(--sp-10);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-tool);
+}
+.results-tabsbar__list {
+  display: flex;
+  gap: 2px;
+  align-self: stretch;
+}
+.results-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0 var(--sp-4);
+  font-family: var(--font-tool);
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--t3);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.results-tab:hover { color: var(--celeste-deeper); }
+.results-tab--active {
+  color: var(--celeste-deeper);
+  font-weight: var(--fw-bold);
+  border-bottom-color: var(--celeste);
+}
+.results-tab:focus-visible { outline: 2px solid var(--celeste); outline-offset: -2px; }
+.results-tabsbar__meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--t3);
+  white-space: nowrap;
+}
+
+/* El contenido del Resumen es una columna de lectura centrada, más angosta
+   que el ancho de la app: el veredicto se lee de un vistazo, no se barre. */
+.results-column {
+  max-width: var(--results-col-max);
+  margin: 0 auto;
+}
+
+/* ── Hero de veredicto ───────────────────────────────────────────
+   Icono circular de estado + título + subtítulo en prosa + KPIs. */
+.results-hero {
+  background: var(--color-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-8);
+  margin-bottom: var(--sp-4);
+  text-align: center;
+  font-family: var(--font-tool);
+}
+.results-hero--error { border-color: var(--error-bd); }
+.results-hero--warn  { border-color: var(--warn-bd); }
+
+.results-hero__icon {
+  width: var(--results-icon-size);
+  height: var(--results-icon-size);
+  border-radius: 50%;
+  margin: 0 auto var(--sp-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+.results-hero__icon--ok      { background: var(--ok-bg);      color: var(--ok-tx); }
+.results-hero__icon--warn    { background: var(--warn-bg);    color: var(--warn-tx); }
+.results-hero__icon--error   { background: var(--error-bg);   color: var(--error-tx); }
+.results-hero__icon--neutral { background: var(--neutral-bg); color: var(--neutral-tx); }
+
+/* El título y los KPIs son "display": en Intenso salen en el serif H&A y en
+   Sobrio en la tipografía operativa — el tema lo resuelve la variable. */
+.results-hero__title {
+  font-family: var(--font-display);
+  font-size: var(--results-title-size);
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+.results-hero__subline {
+  font-size: 13px;
+  color: var(--t2);
+  line-height: 1.5;
+  margin: 0 0 var(--sp-5);
+}
+.results-hero__subline strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.results-hero__kpis {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4) 44px;
+}
+.results-hero__kpi-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--results-kpi-size);
+  font-weight: var(--fw-bold);
+  color: var(--celeste);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+/* Lo que hay que ir a revisar sale en rojo: diferencias y Δ acumulada. */
+.results-hero__kpi-value--diff { color: var(--error-tx); }
+.results-hero__kpi-label {
+  display: block;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+  margin-top: 3px;
+}
+.results-hero__legend {
+  margin: var(--sp-5) 0 0;
+  font-size: 10.5px;
+  color: var(--t3);
+}
+
+/* ── Tarjeta de resumen por control ──────────────────────────────
+   Una por control, en el orden que ya trae la pantalla: errores primero. */
+.results-ctrl-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.results-ctrl-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--color-surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-5);
+  font-family: var(--font-tool);
+  transition: all var(--transition);
+}
+.results-ctrl-card:hover {
+  border-color: var(--celeste);
+  box-shadow: var(--sh-tool);
+  transform: translateY(-1px);
+}
+.results-ctrl-card--error { border-color: var(--error-bd); }
+.results-ctrl-card--error:hover { border-color: var(--error-bd); }
+.results-ctrl-card--warn  { border-color: var(--warn-bd); }
+.results-ctrl-card--warn:hover  { border-color: var(--warn-bd); }
+.results-ctrl-card--neutral { opacity: 0.9; }
+
+.results-ctrl-card__body { flex: 1; min-width: 0; }
+.results-ctrl-card__name {
+  font-size: 14px;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+  margin-bottom: 1px;
+}
+.results-ctrl-card__meta {
+  font-size: 11.5px;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+.results-ctrl-card__meta strong { color: var(--error-tx); }
+
+/* Secundaria outline: la acción de la tarjeta, no la de la pantalla. */
+.results-ctrl-card__link {
+  flex-shrink: 0;
+  background: none;
+  border: 2px solid var(--celeste);
+  color: var(--celeste);
+  border-radius: var(--radius-full);
+  padding: 6px 16px;
+  font-family: var(--font-tool);
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+.results-ctrl-card__link:hover { background: var(--celeste-dim); }
+.results-ctrl-card--error .results-ctrl-card__link {
+  border-color: var(--error);
+  color: var(--error-tx);
+}
+.results-ctrl-card--error .results-ctrl-card__link:hover { background: var(--error-bg); }
+
+@media (max-width: 768px) {
+  .results-tabsbar { padding: 0 var(--sp-4); }
+  .results-tabsbar__meta { display: none; }
+  .results-hero { padding: var(--sp-5) var(--sp-4); }
+  .results-hero__kpis { gap: var(--sp-4) var(--sp-6); }
+  .results-ctrl-card { flex-wrap: wrap; }
+}

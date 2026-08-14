@@ -1,5 +1,5 @@
-// heroUnitNaming.test.js — El hero de resultados nombra la unidad que realmente
-// verificó cada control (no "legajos" para todo).
+// heroUnitNaming.test.js — El Resumen de resultados nombra la unidad que
+// realmente verificó cada control (no "legajos" para todo).
 // Correr desde la raíz del proyecto:
 //   node --input-type=module < tests/heroUnitNaming.test.js
 //
@@ -10,14 +10,17 @@
 //      verificados": dice cuántos centros de costo verificó.
 //   2. Ese mismo control con diferencias dice cuántos centros de costo tienen
 //      diferencia (antes decía "0 legajos con diferencia").
-//   3. El medidor mide la unidad que hay y la nombra. Con una corrida toda por
-//      centro de costo NO puede marcar 100% mientras el cartel dice "revisar":
-//      es el "semáforo miente en verde" de CLAUDE.md, en el número grande.
+//   3. El número grande mide la unidad que hay y la nombra, con su porcentaje.
+//      Con una corrida toda por centro de costo NO puede decir "sin diferencias"
+//      ni mostrar 0%: es el "semáforo miente en verde" de CLAUDE.md, en el
+//      título del veredicto. (Antes lo pintaba un gauge con un % OK; el
+//      rediseño lo dice en palabras, la regla es la misma.)
 //   4. Unidades distintas NUNCA se suman en un mismo porcentaje: si la corrida
 //      mezcla legajos y centros de costo, el medidor mide legajos y lo dice, y
 //      el subtítulo enumera las dos unidades por separado.
 //   5. Cada unidad concuerda en género y número ("1 cuenta contable verificada").
 //   6. El conteo de "Legajos cruzados" no cambia (ese arreglo es otro).
+//   7. La tarjeta de cada control nombra SU unidad, aunque el hero mida otra.
 
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
@@ -25,7 +28,7 @@ globalThis.Dexie = Dexie;
 globalThis.document = { addEventListener: () => {}, querySelector: () => null, querySelectorAll: () => [] };
 globalThis.window   = { matchMedia: () => ({ matches: false }), addEventListener: () => {} };
 
-const { buildHeroHtml } = await import('./js/ui/controlsResults.js');
+const { buildHeroHtml, buildCtrlCardsHtml } = await import('./js/ui/controlsResults.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -57,7 +60,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
 {
   const hero = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 24, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('sin diferencias: nombra los centros de costo, no legajos',
     hero.html.includes('24 centros de costo verificados sin diferencias'));
@@ -71,7 +74,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
 {
   const hero = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 24, 3, 'warn', { diffTotalAmount: 1500 })],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('con diferencias: cuenta los centros de costo con diferencia',
     hero.html.includes('3 centros de costo con diferencia'));
@@ -81,23 +84,25 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     hero.html.includes('dif. total'));
 }
 
-// ── 3. Dos controles por centro de costo: el medidor no puede mentir en verde ─
+// ── 3. Dos controles por centro de costo: el veredicto no miente en verde ────
 {
   const hero = buildHeroHtml(
     [
       mkCtrl('rendVsTabu',   'Rendimiento vs Tabulado', 'cc', 24, 3, 'warn'),
       mkCtrl('rendVsAsiento', 'Rendimiento vs Asiento', 'cc', 16, 2, 'warn'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
-  assert('multi-control por CC: se renderiza el medidor', hero.hasGauge === true);
-  assert('multi-control por CC: el medidor mide los centros de costo (35 de 40 OK)',
-    Math.abs(hero.pctOk - 87.5) < 0.001);
-  assert('multi-control por CC: el medidor NO marca 100%', hero.pctOk < 100);
-  assert('multi-control por CC: el medidor dice qué unidad mide',
-    hero.html.includes('centros de costo OK') && !hero.html.includes('legajos OK'));
-  assert('multi-control por CC: suma las diferencias de los dos controles',
-    hero.html.includes('5 centros de costo con diferencia'));
+  assert('multi-control por CC: el título cuenta los CC con diferencia, no legajos',
+    hero.html.includes('5 centros de costo con diferencias'));
+  assert('multi-control por CC: NO dice "sin diferencias"',
+    !hero.html.includes('Sin diferencias'));
+  // 5 sobre 24 (el control más grande), no sobre 24+16: sumar los universos de
+  // los dos controles cuenta dos veces al mismo CC y parte el porcentaje al medio.
+  assert('multi-control por CC: suma las diferencias de los dos controles y su %',
+    hero.html.includes('5 centros de costo con diferencia (20,8%)'));
+  assert('multi-control por CC: el % es el de los CC (5 de 24), no 0',
+    !hero.html.includes('(0,0%)'));
   assert('multi-control por CC: la leyenda del umbral también nombra la unidad',
     hero.html.includes('de centros de costo c/dif'));
 }
@@ -109,12 +114,13 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('brutos',     'Brutos',                  'legajo', 100, 1, 'warn'),
       mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc',      24, 3, 'warn'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
-  assert('mixta: el medidor mide legajos (99 de 100 OK), sin mezclar con CC',
-    Math.abs(hero.pctOk - 99) < 0.001);
-  assert('mixta: el medidor dice "legajos OK"',
-    hero.html.includes('legajos OK') && !hero.html.includes('centros de costo OK'));
+  assert('mixta: el título mide legajos (1 de 100), sin mezclar con los CC',
+    hero.html.includes('1 legajo con diferencia</h2>'));
+  assert('mixta: el KPI nombra los legajos, no los centros de costo',
+    hero.html.includes('legajos con diferencia<')
+    && !hero.html.includes('centros de costo con diferencia<'));
   assert('mixta: el subtítulo enumera las dos unidades por separado',
     hero.html.includes('1 legajo con diferencia') && hero.html.includes('3 centros de costo con diferencia'));
   assert('mixta: no aparece un total de 4 unidades sumadas',
@@ -128,11 +134,12 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('brutos',     'Brutos',                  'legajo', 100, 0, 'ok'),
       mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc',      24, 0, 'ok'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('mixta OK: enumera legajos y centros de costo, sin sumarlos',
     hero.html.includes('100 legajos verificados · 24 centros de costo verificados, sin diferencias.'));
-  assert('mixta OK: el medidor queda en 100% legajos', hero.pctOk === 100);
+  assert('mixta OK: el título es el veredicto, sin porcentajes inventados',
+    hero.html.includes('>Sin diferencias</h2>'));
 }
 
 // ── 4c. Varios controles sobre los MISMOS empleados no los cuentan dos veces ──
@@ -143,7 +150,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('brutos', 'Brutos',   'legajo', 4, 0, 'ok'),
       mkCtrl('nr',     'No Remun.', 'legajo', 4, 0, 'ok'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('dos controles sobre 4 empleados: "4 legajos verificados en 2 controles"',
     hero.html.includes('4 legajos verificados en 2 controles sin diferencias.'));
@@ -158,7 +165,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('brutos',     'Brutos',                  'legajo', 4, 0, 'ok'),
       mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc',    24, 0, 'ok'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('una unidad con un solo control: la frase queda sin "en 1 control"',
     hero.html.includes('4 legajos verificados · 24 centros de costo verificados, sin diferencias.'));
@@ -174,7 +181,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('nr',         'No Remun.',   'legajo',  40, 0, 'ok'),
       mkCtrl('variaciones', 'Variaciones', 'legajo', 100, 0, 'ok'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('tres controles: toma el mayor (100), no la suma (240)',
     hero.html.includes('100 legajos verificados en 3 controles sin diferencias.')
@@ -185,35 +192,35 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
 {
   const cuentas = buildHeroHtml(
     [mkCtrl('finadietAsiento', 'Asiento de Remuneraciones', 'cuenta', 18, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('cuentas contables: concuerda en femenino plural',
     cuentas.html.includes('18 cuentas contables verificadas sin diferencias'));
 
   const unaCuenta = buildHeroHtml(
     [mkCtrl('finadietAsiento', 'Asiento de Remuneraciones', 'cuenta', 1, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('una sola cuenta: femenino singular',
     unaCuenta.html.includes('1 cuenta contable verificada sin diferencias'));
 
   const listas = buildHeroHtml(
     [mkCtrl('acreditaciones', 'Acreditaciones', 'lista', 6, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('listados: masculino plural',
     listas.html.includes('6 listados verificados sin diferencias'));
 
   const unCc = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 1, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('un solo centro de costo: singular',
     unCc.html.includes('1 centro de costo verificado sin diferencias'));
 
   const unLegajo = buildHeroHtml(
     [mkCtrl('brutos', 'Brutos', 'legajo', 1, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('un solo legajo: sigue diciendo "1 legajo verificado"',
     unLegajo.html.includes('1 legajo verificado sin diferencias'));
@@ -230,7 +237,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
   };
   const hero = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 24, 0, 'ok')],
-    [tabFile], THRESHOLD, {},
+    [tabFile], THRESHOLD,
   );
   assert('el KPI "Legajos cruzados" sigue saliendo del Tabulado',
     hero.html.includes('>3<') && hero.html.includes('Legajos cruzados'));
@@ -243,19 +250,21 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
       mkCtrl('brutosReporte', 'Brutos — Generar Reporte', null, null, null, 'info'),
       mkCtrl('nrReporte',     'NR — Generar Reporte',     null, null, null, 'info'),
     ],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('sólo reportes: el subtítulo lo dice y no nombra legajos',
     hero.html.includes('sólo incluye controles de generación de reporte') && !hero.html.includes('legajo'));
-  assert('sólo reportes: el medidor no se atribuye una unidad que no verificó',
-    hero.html.includes('unidades OK'));
+  // Sin unidad verificada no hay KPI de diferencias ni leyenda de umbral: el
+  // veredicto no se atribuye una unidad que no verificó.
+  assert('sólo reportes: no aparece un conteo de unidades ni la leyenda del umbral',
+    !hero.html.includes('con diferencia') && !hero.html.includes('c/dif'));
 }
 
 // ── 8. Una unidad nueva sin etiqueta no se disfraza de legajos ───────────────
 {
   const hero = buildHeroHtml(
     [mkCtrl('futuro', 'Control futuro', 'sucursal', 7, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('unidad sin etiqueta: usa su propio nombre, no "legajos"',
     hero.html.includes('7 sucursals verificados') && !hero.html.includes('legajos verificados'));
@@ -265,10 +274,38 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
 {
   const hero = buildHeroHtml(
     [mkCtrl('raro', 'Control raro', '<img src=x>', 3, 0, 'ok')],
-    [], THRESHOLD, {},
+    [], THRESHOLD,
   );
   assert('el nombre de la unidad entra escapado al HTML',
     !hero.html.includes('<img src=x>') && hero.html.includes('&lt;img src=x&gt;'));
+}
+
+// ── 10. La tarjeta de cada control nombra su propia unidad ──────────────────
+// El hero mide UNA unidad (la principal de la corrida); cada tarjeta habla de
+// la suya, así que en una corrida mixta la del control por CC no puede decir
+// "legajos" sólo porque el hero mida legajos.
+{
+  const cards = buildCtrlCardsHtml(
+    [
+      mkCtrl('brutos',     'Brutos',                  'legajo', 100, 1, 'warn', { diffTotalAmount: 2500 }),
+      mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc',      24, 3, 'warn'),
+      mkCtrl('finadiet',   'Asiento de Remuneraciones', 'cuenta', 18, 0, 'ok'),
+      mkCtrl('brutosRep',  'Brutos — Generar Reporte', null, null, null, 'info', { headline: 'Reporte generado' }),
+    ],
+    {}, true,
+  );
+  assert('tarjeta por legajo: cuenta legajos evaluados y con diferencia',
+    cards.includes('100 legajos evaluados') && cards.includes('1 legajo con diferencia (1,0%)'));
+  assert('tarjeta por CC: cuenta centros de costo, no legajos',
+    cards.includes('24 centros de costo evaluados') && cards.includes('3 centros de costo con diferencia (12,5%)'));
+  assert('tarjeta femenina: concuerda ("18 cuentas contables evaluadas")',
+    cards.includes('18 cuentas contables evaluadas'));
+  assert('tarjeta sin diferencias: el link va al detalle, no a un conteo',
+    cards.includes('Ver detalle →'));
+  assert('tarjeta con diferencias: el link ofrece ir a las diferencias',
+    cards.includes('Ver la diferencia →') && cards.includes('Ver los 3 →'));
+  assert('tarjeta de Generar Reporte: no inventa unidades',
+    cards.includes('Reporte generado'));
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);

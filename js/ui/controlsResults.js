@@ -1,8 +1,18 @@
 // controlsResults.js — Pantalla de resultados de un control run
 //
-// Arriba: un hero-veredicto (gauge + badge + KPIs + lista de controles
-// ordenada errores-primero) que responde "¿está bien?" de un vistazo.
-// Abajo: las tarjetas de detalle existentes, una por control, colapsadas.
+// Dos solapas sobre la misma corrida:
+//   Resumen — el hero de veredicto (icono de estado + título + KPIs) y una
+//             tarjeta por control, errores primero. Responde "¿está bien?"
+//             de un vistazo.
+//   Detalle — las fichas desplegables de siempre, una por control, con la
+//             tabla que arma cada control.
+//
+// El contexto del cliente, el veredicto en una línea y la acción primaria
+// ("⬇ Exportar ▾") viven en la barra superior — ver js/ui/resultsHeader.js.
+//
+// El color de cada control sale de computeSemaforoStatus (js/controls/semaforo.js):
+// acá se ordena y se pinta, no se decide. El orden "errores primero" es de
+// presentación: no cambia ningún dato. Ver D-057.
 
 import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
@@ -13,7 +23,8 @@ import { periodToLabel }    from '../utils/dates.js';
 import { formatAmount }     from '../utils/currency.js';
 import { showToast }        from './toast.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
-import { renderResultsContextBar } from './resultsHeader.js';
+import { mountResultsHeader, renderResultsTabs, runMetaLabel } from './resultsHeader.js';
+import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from './runExport.js';
 import { columnValues, checkColumnType } from './columnHints.js';
 import { typeOfKey } from '../exports/contracts.js';
 import { fileTypeLabel } from './fileTypes.js';
@@ -52,25 +63,38 @@ export async function renderControlsResults(root, runId) {
   const backTarget = { label: '← Volver a los controles', href: `#/controls/${client?.id ?? ''}` };
 
   root.innerHTML = `
-    <div id="js-results-ctx-bar"></div>
+    <div id="js-results-tabs"></div>
     <div class="page-content">
-      <div id="js-hero"></div>
-      <div id="js-column-warnings"></div>
-      <div id="js-control-sections"></div>
+      <div id="js-tab-resumen" class="results-column">
+        <div id="js-hero"></div>
+        <div id="js-column-warnings"></div>
+        <div id="js-ctrl-cards" class="results-ctrl-cards"></div>
+      </div>
+      <div id="js-tab-detalle" hidden>
+        <div id="js-control-sections"></div>
+      </div>
     </div>
   `;
 
-  const ctxBarEl   = root.querySelector('#js-results-ctx-bar');
+  const tabsEl     = root.querySelector('#js-results-tabs');
+  const resumenEl  = root.querySelector('#js-tab-resumen');
+  const detalleEl  = root.querySelector('#js-tab-detalle');
   const heroEl     = root.querySelector('#js-hero');
+  const cardsEl    = root.querySelector('#js-ctrl-cards');
   const warningsEl = root.querySelector('#js-column-warnings');
   const sectionsEl = root.querySelector('#js-control-sections');
 
-  // Cabecera 1C: barra de contexto sticky (ver js/ui/resultsHeader.js) — el
-  // toggle Borrador/Definitivo re-renderiza sólo esta barra, no la pantalla.
+  // La barra superior la escribe esta pantalla entera al montar (setHeader
+  // define la barra completa en cada llamada): el toggle Borrador/Definitivo
+  // la vuelve a escribir, no re-renderiza el contenido.
   let isDefinitive = run.isDefinitive === true;
-  function mountCtxBar(tier, verdictLine) {
-    renderResultsContextBar(ctxBarEl, {
+  let tabsCtl = null;
+  function mountHeader(tier, verdictLine, exportItems) {
+    mountResultsHeader({
       tier, cliente: client?.name ?? 'Cliente', periodo: periodLabel, verdictLine, back: backTarget,
+      mountHelp: (el) => renderHelpPopover(el, CONTROL_HELP),
+      exportItems,
+      exportNote: exportItems?.length ? EXPORT_PRIVACY_NOTE : null,
       run: {
         createdAtLabel: createdAt,
         periodNote: run.notes || null,
@@ -81,7 +105,8 @@ export async function renderControlsResults(root, runId) {
           try {
             await updateControlRun(run.id, { isDefinitive: newValue });
             isDefinitive = newValue;
-            mountCtxBar(tier, verdictLine);
+            mountHeader(tier, verdictLine, exportItems);
+            tabsCtl?.setMeta(runMetaLabel({ createdAtLabel: createdAt, isQuickRun: false, isDefinitive }));
             showToast(newValue ? '✅ Marcado como definitivo' : '↩ Vuelto a borrador', 'success');
           } catch (err) {
             showToast(`Error: ${err.message}`, 'danger');
@@ -91,19 +116,19 @@ export async function renderControlsResults(root, runId) {
         onRerun:       () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
       },
     });
-    const helpSlot = ctxBarEl.querySelector('.results-ctx-bar__help');
-    if (helpSlot) renderHelpPopover(helpSlot, CONTROL_HELP);
   }
 
   if (resultsRows.length === 0) {
-    mountCtxBar('info', 'Sin resultados guardados.');
-    sectionsEl.innerHTML = `
+    mountHeader('info', 'Sin resultados guardados.');
+    tabsEl.remove();
+    resumenEl.innerHTML = `
       <div class="empty-state">
         <div class="empty-state__icon">📭</div>
         <div class="empty-state__title">Sin resultados</div>
         <p class="empty-state__text">Este run no tiene resultados guardados.</p>
       </div>
     `;
+    detalleEl.remove();
     return;
   }
 
@@ -133,16 +158,49 @@ export async function renderControlsResults(root, runId) {
 
   // El modo de clave de legajo es del CLIENTE (D-038): no viaja en tab.mapping,
   // sale del registro que esta pantalla ya cargó.
-  const { html: heroHtml, pctOk, overallTier, hasGauge } =
-    buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId, client?.legajoKeyMode);
+  const { html: heroHtml, overallTier } =
+    buildHeroHtml(controlSummaries, runFiles, thresholdPct, client?.legajoKeyMode);
   heroEl.innerHTML = heroHtml;
-  if (hasGauge) animateHeroGauge(heroEl, pctOk, overallTier);
+
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  cardsEl.innerHTML = buildCtrlCardsHtml(controlSummaries, prevTierByControlId, reduceMotion);
 
   warningsEl.innerHTML = buildColumnWarningsHtml(columnWarningsOf(runFiles));
 
-  mountCtxBar(overallTier === 'info' ? 'info' : overallTier, buildContextLine(controlSummaries));
+  mountHeader(
+    overallTier === 'info' ? 'info' : overallTier,
+    buildContextLine(controlSummaries),
+    buildRunExportItems({
+      clienteName: client?.name ?? 'Cliente',
+      clienteCode: client?.code ?? '',
+      periodo: periodLabel,
+      period: run.period,
+      createdAtLabel: createdAt,
+      estadoLabel: isDefinitive ? 'Definitivo' : 'Borrador',
+      notes: run.notes || null,
+      controles: controlSummaries.map(({ row, ctrl, summary, tier }) => ({
+        controlId: row.controlId,
+        label: ctrl.label,
+        tier,
+        unitLabel: summary.unit ? unitNames(summary.unit).many : null,
+        unitsTotal: summary.unitsTotal ?? null,
+        unitsWithDiff: summary.unitsWithDiff ?? null,
+        diffTotalAmount: summary.diffTotalAmount ?? null,
+        headline: summary.headline || '',
+        results: row.results,
+      })),
+    }),
+  );
 
-  // Una tarjeta colapsable por control (mismo orden que el hero: errores primero)
+  tabsCtl = renderResultsTabs(tabsEl, {
+    tabs: [
+      { id: 'resumen', label: 'Resumen', panel: resumenEl },
+      { id: 'detalle', label: 'Detalle', panel: detalleEl },
+    ],
+    meta: runMetaLabel({ createdAtLabel: createdAt, isQuickRun: false, isDefinitive }),
+  });
+
+  // Una tarjeta colapsable por control (mismo orden que el resumen: errores primero)
   for (const item of controlSummaries) {
     const { row, ctrl, summary, tier } = item;
 
@@ -193,12 +251,14 @@ export async function renderControlsResults(root, runId) {
     initCtrlToggle(card);
   }
 
-  // "Ir al detalle →" / "Detalle" del hero: abre y hace scroll a la tarjeta de abajo
-  heroEl.querySelectorAll('[data-hero-detail]').forEach(btn => {
+  // "Ver detalle →" de una tarjeta del Resumen: cambia de solapa, abre la
+  // ficha de ese control y la trae a la vista.
+  cardsEl.querySelectorAll('[data-hero-detail]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.heroDetail;
       const card = sectionsEl.querySelector(`[data-control-id="${CSS.escape(id)}"]`);
       if (!card) return;
+      tabsCtl.setActive('detalle');
       openCtrlToggle(card);
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -265,10 +325,6 @@ async function getPrevTierByControlId(run, thresholdPct) {
   return prevTierByControlId;
 }
 
-// ── A2 — Gauge SVG: constantes compartidas con animateHeroGauge ─────────────
-const GAUGE_R = 82;
-const GAUGE_CIRC = 2 * Math.PI * GAUGE_R;
-
 // ── Avisos de columna de la corrida ─────────────────────────────────────────
 //
 // El aviso de "esta columna no trae lo que acá va" se ve al elegirla (ver
@@ -331,7 +387,7 @@ function buildColumnWarningsHtml(avisos) {
 // `summary.unit` es el identificador interno de lo que cuentan `unitsTotal` /
 // `unitsWithDiff` (ver la regla en CLAUDE.md); acá vive su nombre para el
 // analista. Si sumás un control con una unidad nueva, agregala también acá:
-// el hero nombra la unidad, y nombrarla mal es peor que no nombrarla — un
+// el resumen nombra la unidad, y nombrarla mal es peor que no nombrarla — un
 // control por centro de costo mostraba "0 legajos verificados sin diferencias".
 // `fem` es el género del sustantivo, para concordar "verificado/verificada".
 const UNIT_NAMES = {
@@ -342,7 +398,7 @@ const UNIT_NAMES = {
 };
 
 // Corrida sin ninguna unidad medible (sólo modos "Generar Reporte"): no hay
-// unidad que nombrar, y el gauge no está midiendo nada concreto.
+// unidad que nombrar.
 const UNIT_NAMES_FALLBACK = { one: 'unidad', many: 'unidades', fem: true };
 
 function unitNames(unit) {
@@ -358,20 +414,26 @@ function fmtUnitCount(n, unit) {
   return `${fmtInt(n)} ${esc(n === 1 ? names.one : names.many)}`;
 }
 
-/** Participio concordado con la unidad: "verificados" / "verificada". */
-function fmtVerificado(n, unit) {
-  return `verificad${unitNames(unit).fem ? 'a' : 'o'}${n === 1 ? '' : 's'}`;
+/** Participio concordado con la unidad: "verificados" / "evaluada". */
+function fmtParticipio(raiz, n, unit) {
+  return `${raiz}${unitNames(unit).fem ? 'a' : 'o'}${n === 1 ? '' : 's'}`;
+}
+
+/** "23 legajos con diferencia (4,5%)" — el número que no puede mentir en verde. */
+function fmtDiffCount(n, total, unit) {
+  const pct = total > 0 ? (n / total) * 100 : 0;
+  return `${fmtUnitCount(n, unit)} con diferencia (${fmtPct1(pct)}%)`;
 }
 
 // ── Unidades de la corrida: agrupadas, nunca sumadas entre sí ────────────────
 // Un porcentaje que mezcle 100 legajos con 3 centros de costo no significa
-// nada, así que el gauge mide UNA unidad y la nombra. 'legajo' gana siempre que
-// haya al menos un control por legajo (es la unidad de casi toda la batería y
-// el significado que el número grande tuvo siempre); si no hay ninguno, gana la
-// unidad con más controles, a igualdad la que más unidades verificó, y a
-// igualdad el orden de esta lista. El resto de las unidades no desaparece: se
-// enumeran en el subtítulo, cada una con su propio conteo.
-const GAUGE_UNIT_ORDER = ['legajo', 'cc', 'cuenta', 'lista'];
+// nada, así que el título del hero mide UNA unidad y la nombra. 'legajo' gana
+// siempre que haya al menos un control por legajo (es la unidad de casi toda la
+// batería y el significado que el número grande tuvo siempre); si no hay
+// ninguno, gana la unidad con más controles, a igualdad la que más unidades
+// verificó, y a igualdad el orden de esta lista. El resto de las unidades no
+// desaparece: se enumeran en el subtítulo, cada una con su propio conteo.
+const UNIT_ORDER = ['legajo', 'cc', 'cuenta', 'lista'];
 
 const sumUnitsTotal    = ctrls => ctrls.reduce((s, c) => s + (c.summary.unitsTotal || 0), 0);
 const sumUnitsWithDiff = ctrls => ctrls.reduce((s, c) => s + (c.summary.unitsWithDiff || 0), 0);
@@ -386,8 +448,8 @@ function groupSummariesByUnit(controlSummaries) {
   }
 
   const rank = unit => {
-    const i = GAUGE_UNIT_ORDER.indexOf(unit);
-    return i < 0 ? GAUGE_UNIT_ORDER.length : i;
+    const i = UNIT_ORDER.indexOf(unit);
+    return i < 0 ? UNIT_ORDER.length : i;
   };
 
   return [...byUnit.entries()]
@@ -414,11 +476,13 @@ function groupSummariesByUnit(controlSummaries) {
     });
 }
 
-// ── Hero de resultados ──────────────────────────────────────────────────────
+// ── Hero del Resumen ────────────────────────────────────────────────────────
+//
+// Card centrada: icono circular de estado, el veredicto como título, el
+// subtítulo en prosa (una frase por unidad verificada) y los KPIs. Lo que hay
+// que ir a revisar —diferencias y Δ acumulada— sale en rojo.
 
-export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTierByControlId, legajoKeyMode) {
-  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
+export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, legajoKeyMode) {
   // "Legajos cruzados": EMPLEADOS del Tabulado de esta corrida, no filas. El
   // Tabulado trae una fila por liquidación, así que `parseMetadata.totalRows`
   // (que sigue significando filas, y está bien que lo haga) contaba dos veces al
@@ -434,15 +498,11 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
     ? empleadosTab
     : legajoCtrls.reduce((max, c) => Math.max(max, c.summary.unitsTotal), 0);
 
-  // % OK del gauge — una sola unidad, la que elige groupSummariesByUnit (nunca
-  // legajos sumados con centros de costo). Las demás unidades no se mezclan acá
-  // pero se enumeran en el subtítulo, y todas entran en el veredicto general.
+  // La unidad principal — una sola, la que elige groupSummariesByUnit (nunca
+  // legajos sumados con centros de costo). Las demás no se mezclan acá pero se
+  // enumeran en el subtítulo, y todas entran en el veredicto general.
   const unitGroups = groupSummariesByUnit(controlSummaries);
-  const gaugeGroup = unitGroups[0] || { unit: null, unitsTotal: 0, unitsWithDiff: 0 };
-  const gaugeUnit  = gaugeGroup.unit;
-  const pctOk = gaugeGroup.unitsTotal > 0
-    ? Math.max(0, 100 - (gaugeGroup.unitsWithDiff / gaugeGroup.unitsTotal) * 100)
-    : 100;
+  const mainGroup  = unitGroups[0] || null;
 
   // Controles "de verificación" (excluye los modos "Generar Reporte", que no cruzan nada)
   const checkedControls = controlSummaries.filter(c => c.tier !== 'info');
@@ -459,31 +519,23 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
 
   const totalDiffAmount = controlSummaries.reduce((sum, c) => sum + (c.summary.diffTotalAmount || 0), 0);
 
-  // ── Gauge SVG (A2 — arco y número animan juntos vía rAF, ver animateHeroGauge) ──
-  const ringClass = overallTier === 'error' ? 'hero-gauge__ring-fill--error'
-                  : overallTier === 'warn'  ? 'hero-gauge__ring-fill--warn'
-                  : 'hero-gauge__ring-fill--ok';
-  // Renderizamos SIEMPRE el valor final: así el gauge muestra el número correcto
-  // aunque la animación no llegue a correr (pestaña en segundo plano, JS lento,
-  // reduced-motion). animateHeroGauge, si puede animar, resetea a 0 y sube.
-  const finalFillLen = (pctOk / 100) * GAUGE_CIRC;
+  // ── Título: el veredicto en dos o tres palabras ────────────────────────────
+  // Con diferencias, el título ES el número que hay que ir a mirar, nombrando
+  // la unidad que se verificó ("23 legajos con diferencia", nunca "23 legajos"
+  // en una corrida por centro de costo). Si el control terminó en error sin
+  // diferencias que contar (falló el cruce), el título dice qué hacer.
+  const nDiffMain = mainGroup?.unitsWithDiff || 0;
+  const title = totalChecked === 0
+    ? 'Sin controles de verificación en esta corrida'
+    : overallTier === 'ok'
+      ? 'Sin diferencias'
+      : nDiffMain > 0
+        ? `${fmtUnitCount(nDiffMain, mainGroup.unit)} con diferencia${nDiffMain === 1 ? '' : 's'}`
+        : 'Revisar antes de cerrar el mes';
 
-  const gaugeSvg = `
-    <svg width="190" height="190" viewBox="0 0 190 190">
-      <circle class="hero-gauge__ring-bg" cx="95" cy="95" r="${GAUGE_R}"></circle>
-      <circle class="hero-gauge__ring-fill ${ringClass}" data-gauge-fill cx="95" cy="95" r="${GAUGE_R}"
-        stroke-dasharray="${finalFillLen.toFixed(1)} ${GAUGE_CIRC.toFixed(1)}"></circle>
-    </svg>
-  `;
+  const icon = { ok: '✓', warn: '!', error: '!', info: '·' }[overallTier];
 
-  // ── Badge + subtítulo de veredicto ───────────────────────────────────────────
-  const badgeCopy = {
-    error: 'Revisar antes de cerrar el mes',
-    warn:  'Diferencias menores — revisar',
-    ok:    'Todo en orden — listo para marcar definitivo',
-    info:  'Sin controles de verificación en esta corrida',
-  }[overallTier];
-
+  // ── Subtítulo en prosa ─────────────────────────────────────────────────────
   let subline;
   if (totalChecked === 0) {
     subline = 'Esta corrida sólo incluye controles de generación de reporte (sin cruce de diferencias).';
@@ -494,7 +546,7 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
     // empleados dice "4 legajos verificados en 2 controles", no "8 legajos".
     const unitBits = unitGroups.map(g => {
       const n = g.unitsMax;
-      const frase = `${fmtUnitCount(n, g.unit)} ${fmtVerificado(n, g.unit)}`;
+      const frase = `${fmtUnitCount(n, g.unit)} ${fmtParticipio('verificad', n, g.unit)}`;
       return g.ctrls.length > 1 ? `${frase} en ${g.ctrls.length} controles` : frase;
     });
     subline = unitBits.length === 0 ? 'Sin diferencias.'
@@ -504,11 +556,18 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
     const bits = [];
     if (errorCount > 0) bits.push(`${errorCount} control${errorCount === 1 ? '' : 'es'} en rojo`);
     if (warnCount  > 0) bits.push(`${warnCount} control${warnCount === 1 ? '' : 'es'} en amarillo`);
-    // Cada unidad con su propio conteo de diferencias: así el amarillo del
-    // cartel se explica aunque el gauge esté midiendo otra unidad.
+    // Cada unidad con su propio conteo de diferencias y su porcentaje: así el
+    // amarillo se explica aunque el título esté nombrando otra unidad.
+    // El porcentaje se mide contra `unitsMax`, no contra la suma de los
+    // unitsTotal de cada control: dos controles sobre la misma nómina son 514
+    // empleados mirados dos veces, no 1026, y con el denominador inflado el
+    // porcentaje sale a la mitad — el "semáforo miente en verde" de CLAUDE.md,
+    // acá en el número. Es el mismo denominador que usa la frase de arriba
+    // ("514 legajos verificados en 2 controles") y el que muestra la tarjeta
+    // de cada control.
     const diffBits = unitGroups
       .filter(g => g.unitsWithDiff > 0)
-      .map(g => `${fmtUnitCount(g.unitsWithDiff, g.unit)} con diferencia`);
+      .map(g => fmtDiffCount(g.unitsWithDiff, g.unitsMax, g.unit));
     if (totalDiffAmount > 0) {
       diffBits.push(`dif. total <strong>$ ${formatAmount(totalDiffAmount)}</strong>`);
     }
@@ -516,91 +575,62 @@ export function buildHeroHtml(controlSummaries, runFiles, thresholdPct, prevTier
       + (diffBits.length > 0 ? `<br>${diffBits.join(' · ')}` : '');
   }
 
-  // ── Corrida de un solo control: banda compacta, sin gauge ──────────────────
-  // El gauge resume VARIOS controles en un número; con uno solo, ese número es
-  // el del propio control y ya lo dicen la barra de contexto ("1 de 1 control
-  // en verde") y la card de abajo. La columna de la derecha tampoco aporta:
-  // sería una fila que repite lo que dice la card que está justo debajo.
-  // Se conservan las piezas que sí agregan algo y que ya venían decididas: el
-  // badge de veredicto (con la acción "listo para marcar definitivo"), su
-  // subtítulo en prosa, y el KPI de legajos cruzados.
-  if (controlSummaries.length === 1) {
-    return {
-      html: `
-        <div class="hero-verdict hero-verdict--compact">
-          <span class="hero-verdict__badge hero-verdict__badge--${overallTier === 'info' ? 'ok' : overallTier}">
-            <span class="status-dot status-dot--${TIER_DOT[overallTier]}"></span>
-            ${esc(badgeCopy)}
-          </span>
-          <p class="hero-verdict__subline">${subline}</p>
-          <div class="hero-verdict__compact-kpi">
-            <span class="hero-kpi__value">${fmtInt(totalLegajosCruzados)}</span>
-            <span class="hero-kpi__label">Legajos cruzados</span>
-          </div>
-        </div>
-      `,
-      pctOk,
-      overallTier,
-      hasGauge: false,
-    };
+  // ── KPIs ───────────────────────────────────────────────────────────────────
+  // Sólo los que esta corrida puede afirmar: sin Tabulado ni controles por
+  // legajo no hay "legajos cruzados" que mostrar, y un 0 ahí se leería como
+  // "cruzó cero empleados" (CLAUDE.md: null no es 0).
+  const kpis = [];
+  if (totalLegajosCruzados > 0) {
+    kpis.push({ value: fmtInt(totalLegajosCruzados), label: 'Legajos cruzados' });
+  }
+  if (mainGroup) {
+    kpis.push({
+      value: fmtInt(mainGroup.unitsWithDiff),
+      label: `${unitNames(mainGroup.unit).many} con diferencia`,
+      diff: mainGroup.unitsWithDiff > 0,
+    });
+  }
+  if (totalDiffAmount > 0) {
+    kpis.push({ value: `$ ${formatAmount(totalDiffAmount)}`, label: 'Δ acumulada', diff: true });
+  }
+  if (totalChecked > 0) {
+    kpis.push({ value: `${okCount}/${totalChecked}`, label: 'Controles en verde' });
   }
 
-  // ── Filas por control (errores primero — ya vienen ordenadas) ──────────────
-  // A1/A4 — cascada de entrada (stagger errores-primero, capado a 6) + pulso
-  // de mejora respecto de la corrida anterior (ver getPrevTierByControlId).
-  const rowsHtml = controlSummaries
-    .map((item, i) => buildCtrlRowHtml(item, i, prevTierByControlId, reduceMotion))
-    .join('');
-
   const html = `
-    <div class="hero-verdict">
-      <div class="hero-verdict__gauge-col">
-        <div class="hero-gauge">
-          ${gaugeSvg}
-          <div class="hero-gauge__center">
-            <span class="hero-gauge__pct" data-gauge-pct>${fmtPct1(pctOk)}%</span>
-            <span class="hero-gauge__label">${esc(unitNames(gaugeUnit).many)} OK</span>
+    <div class="results-hero results-hero--${overallTier}">
+      <div class="results-hero__icon results-hero__icon--${TIER_DOT[overallTier]}" aria-hidden="true">${icon}</div>
+      <h2 class="results-hero__title">${title}</h2>
+      <p class="results-hero__subline">${subline}</p>
+      <div class="results-hero__kpis">
+        ${kpis.map(k => `
+          <div class="results-hero__kpi">
+            <span class="results-hero__kpi-value${k.diff ? ' results-hero__kpi-value--diff' : ''}">${esc(k.value)}</span>
+            <span class="results-hero__kpi-label">${esc(k.label)}</span>
           </div>
-        </div>
-        <div style="text-align:center;">
-          <span class="hero-verdict__badge hero-verdict__badge--${overallTier === 'info' ? 'ok' : overallTier}">
-            <span class="status-dot status-dot--${TIER_DOT[overallTier]}"></span>
-            ${esc(badgeCopy)}
-          </span>
-          <p class="hero-verdict__subline">${subline}</p>
-        </div>
-        <div class="hero-kpis">
-          <div class="hero-kpi">
-            <span class="hero-kpi__value">${fmtInt(totalLegajosCruzados)}</span>
-            <span class="hero-kpi__label">Legajos cruzados</span>
-          </div>
-          <div class="hero-kpi">
-            <span class="hero-kpi__value ${okCount === totalChecked && totalChecked > 0 ? 'hero-kpi__value--ok' : ''}">${okCount} / ${totalChecked}</span>
-            <span class="hero-kpi__label">Controles en verde</span>
-          </div>
-        </div>
+        `).join('')}
       </div>
-      <div class="hero-verdict__list-col">
-        <div class="hero-ctrl-header">
-          <span class="hero-ctrl-header__label">Controles · errores primero</span>
-          <span class="hero-ctrl-header__legend">verde 0% · amarillo ≤${thresholdPct}% · rojo &gt;${thresholdPct}% de ${esc(unitNames(gaugeUnit).many)} c/dif</span>
-        </div>
-        <div class="hero-ctrl-rows">
-          ${rowsHtml}
-        </div>
-      </div>
+      ${mainGroup ? `
+        <p class="results-hero__legend">verde 0% · amarillo ≤${thresholdPct}% · rojo &gt;${thresholdPct}% de ${esc(unitNames(mainGroup.unit).many)} c/dif</p>
+      ` : ''}
     </div>
   `;
 
-  return { html, pctOk, overallTier, hasGauge: true };
+  return { html, overallTier };
 }
 
-function buildCtrlRowHtml(item, index, prevTierByControlId, reduceMotion) {
+// ── Tarjeta de resumen por control (errores primero — ya vienen ordenadas) ───
+// A1/A4 — cascada de entrada (stagger capado a 6) + pulso de mejora respecto
+// de la corrida anterior (ver getPrevTierByControlId).
+
+export function buildCtrlCardsHtml(controlSummaries, prevTierByControlId, reduceMotion) {
+  return controlSummaries
+    .map((item, i) => buildCtrlCardHtml(item, i, prevTierByControlId, reduceMotion))
+    .join('');
+}
+
+function buildCtrlCardHtml(item, index, prevTierByControlId, reduceMotion) {
   const { row, ctrl, summary, tier } = item;
-  const rowClass = tier === 'error' ? 'hero-ctrl-row--error'
-                 : tier === 'warn'  ? 'hero-ctrl-row--warn'
-                 : tier === 'info'  ? 'hero-ctrl-row--neutral'
-                 : 'hero-ctrl-row--ok';
 
   // A4 — ¿mejoró respecto de la corrida anterior para este cliente/período?
   const prevTier = prevTierByControlId?.[row.controlId];
@@ -608,99 +638,57 @@ function buildCtrlRowHtml(item, index, prevTierByControlId, reduceMotion) {
 
   let animStyle = '';
   if (!reduceMotion) {
-    if (improved) {
-      // Re-entra con cardIn corto: refuerza "esto cambió" sin el stagger de montaje.
-      animStyle = `animation: cardIn 0.4s cubic-bezier(.4,0,.2,1) both;`;
-    } else {
-      const delay = Math.min(index, 5) * 0.13;
-      animStyle = `animation: cardIn 0.45s cubic-bezier(.4,0,.2,1) ${delay}s both;`;
-    }
+    // Si mejoró, re-entra con cardIn corto: refuerza "esto cambió" sin el
+    // stagger de montaje.
+    const delay = improved ? 0 : Math.min(index, 5) * 0.13;
+    animStyle = `animation: cardIn 0.45s cubic-bezier(.4,0,.2,1) ${delay}s both;`;
   }
-  const dotPulseClass = improved && tier === 'ok' ? 'status-dot--pulse-ok' : '';
+  const dotPulseClass = improved && tier === 'ok' ? ' status-dot--pulse-ok' : '';
 
-  let countText = '';
-  let contextText;
+  let metaHtml;
   let linkText;
 
   if (tier === 'info') {
-    contextText = summary.headline || 'Sin cruce de diferencias';
-    linkText = 'Detalle';
+    metaHtml = esc(summary.headline || 'Sin cruce de diferencias');
+    linkText = 'Ver detalle →';
   } else {
-    // El chip de conteo es angosto: para centro de costo se mantiene "CC", que
-    // es la abreviatura que ya venía. El resto usa su nombre completo.
-    const isCc = summary.unit === 'cc';
-    const names = unitNames(summary.unit);
-    const unitLabel = isCc ? 'CC' : (summary.unitsWithDiff === 1 ? names.one : names.many);
-    const hasDiff = summary.unitsWithDiff > 0;
+    const names   = unitNames(summary.unit);
+    const total   = summary.unitsTotal || 0;
+    const nDiff   = summary.unitsWithDiff || 0;
+    const hasDiff = nDiff > 0;
 
-    if (hasDiff) {
-      const pct = summary.unitsTotal > 0 ? (summary.unitsWithDiff / summary.unitsTotal) * 100 : 0;
-      countText = `${summary.unitsWithDiff} ${unitLabel} · ${fmtPct1(pct)}%`;
-    } else {
-      countText = isCc
-        ? `${summary.unitsTotal}/${summary.unitsTotal} CC OK`
-        : '0 diferencias';
-    }
+    const bits = [`${fmtUnitCount(total, summary.unit)} ${fmtParticipio('evaluad', total, summary.unit)}`];
+    bits.push(hasDiff
+      ? `<strong>${fmtDiffCount(nDiff, total, summary.unit)}</strong>`
+      : '0 con diferencias');
 
-    const amountText = summary.diffTotalAmount != null && summary.diffTotalAmount > 0
-      ? `$ ${formatAmount(summary.diffTotalAmount)}`
-      : null;
+    if (summary.diffTotalAmount > 0) bits.push(`Δ acumulada $ ${formatAmount(summary.diffTotalAmount)}`);
     const note = summary.contextNote
-      || (summary.worstCase ? `mayor: ${summary.worstCase.label} ($ ${formatAmount(summary.worstCase.amount)})` : null);
+      || (summary.worstCase ? `mayor: ${summary.worstCase.label} ($ ${formatAmount(summary.worstCase.amount)})` : null)
+      || summary.headline;
+    if (note) bits.push(esc(note));
 
-    contextText = hasDiff
-      ? [amountText, note].filter(Boolean).join(' · ')
-      : `${fmtInt(summary.unitsTotal)} ${summary.unitsTotal === 1 ? names.one : names.many} `
-        + fmtVerificado(summary.unitsTotal, summary.unit);
-
-    linkText = hasDiff ? 'Ir al detalle →' : 'Detalle';
+    metaHtml = bits.join(' · ');
+    linkText = !hasDiff ? 'Ver detalle →'
+             : nDiff === 1 ? 'Ver la diferencia →'
+             : `Ver ${names.fem ? 'las' : 'los'} ${fmtInt(nDiff)} →`;
   }
 
   return `
-    <div class="hero-ctrl-row ${rowClass}" style="${animStyle}">
-      <span class="status-dot status-dot--${TIER_DOT[tier]} ${dotPulseClass}"></span>
-      <strong class="hero-ctrl-row__name">${esc(ctrl.label)}</strong>
-      ${countText ? `<span class="hero-ctrl-row__count">${esc(countText)}</span>` : ''}
-      <span class="hero-ctrl-row__context">${esc(contextText)}</span>
-      <button type="button" class="hero-ctrl-row__link" data-hero-detail="${esc(row.controlId)}">${esc(linkText)}</button>
+    <div class="results-ctrl-card results-ctrl-card--${TIER_DOT[tier]}" style="${animStyle}">
+      <span class="status-dot status-dot--${TIER_DOT[tier]}${dotPulseClass}" aria-hidden="true"></span>
+      <div class="results-ctrl-card__body">
+        <div class="results-ctrl-card__name">${esc(ctrl.label)}</div>
+        <div class="results-ctrl-card__meta">${metaHtml}</div>
+      </div>
+      <button type="button" class="results-ctrl-card__link" data-hero-detail="${esc(row.controlId)}">${esc(linkText)}</button>
     </div>
   `;
 }
 
-// ── A2 — Entrada del veredicto: arco + número avanzan juntos vía rAF ────────
-// El hero ya renderiza el valor final (ver buildHeroHtml). Si podemos animar,
-// reseteamos a 0 y subimos hasta ese valor cuadro a cuadro. Si no (reduced-motion
-// o pestaña en segundo plano, donde rAF no dispara), lo dejamos en el valor final.
-function animateHeroGauge(heroEl, pctOk, overallTier) {
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-  if (document.hidden) return; // rAF no corre en pestañas ocultas: dejamos el valor final ya dibujado
-
-  const fillEl = heroEl.querySelector('[data-gauge-fill]');
-  const pctEl  = heroEl.querySelector('[data-gauge-pct]');
-  if (!fillEl || !pctEl) return;
-
-  const t0 = performance.now();
-  const DUR = 1400;
-
-  function tick(now) {
-    const p = Math.min(1, (now - t0) / DUR);
-    const e = 1 - Math.pow(1 - p, 3); // ease-out cúbico
-    const current = pctOk * e;
-    fillEl.setAttribute('stroke-dasharray', `${(current / 100 * GAUGE_CIRC).toFixed(1)} ${GAUGE_CIRC.toFixed(1)}`);
-    pctEl.textContent = `${fmtPct1(current)}%`;
-    if (p < 1) requestAnimationFrame(tick);
-  }
-
-  // Arrancamos desde 0 (el valor final ya está en el DOM como fallback seguro).
-  fillEl.setAttribute('stroke-dasharray', `0.0 ${GAUGE_CIRC.toFixed(1)}`);
-  pctEl.textContent = '0,0%';
-  requestAnimationFrame(tick);
-}
-
-// ── Línea de veredicto de la barra de contexto ───────────────────────────────
-// Condensa lo que antes mostraba el banner Borrador/Definitivo + el resumen
-// del hero en una sola oración — el hero de abajo (Opción B, sin tocar) sigue
-// siendo la fuente completa del detalle.
+// ── Línea de veredicto de la barra superior ──────────────────────────────────
+// Condensa el estado de la corrida en una sola oración, al lado del cliente y
+// el período — el Resumen de abajo sigue siendo la fuente completa del detalle.
 
 function buildContextLine(controlSummaries) {
   const checked = controlSummaries.filter(c => c.tier !== 'info');

@@ -106,6 +106,10 @@ test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y
 
   await page.waitForURL(/#\/control-results\/\d+/);
 
+  // Resultados abre en la solapa Resumen; las fichas por control viven en Detalle.
+  await expect(page.locator('.results-ctrl-card', { hasText: 'Cruce por Agrupadores' })).toBeVisible();
+  await page.click('.results-tab:has-text("Detalle")');
+
   const card = page.locator('.control-card[data-control-id="agrupadores"]');
   await expect(card).toBeVisible();
   await expect(card.locator('.control-card__name')).toHaveText('Cruce por Agrupadores');
