@@ -1518,18 +1518,6 @@ table.rb-grid tfoot > tr > :nth-child(2) {
    son una lista, no badges colgadas del borde de una card. */
 .wizard-onepane__side .ctrl-row__file { text-align: left; }
 
-.ctrl-help {
-  display: flex; align-items: center; gap: var(--sp-2);
-  margin-top: var(--sp-4); border-top: 1px solid var(--color-border); padding-top: var(--sp-4);
-}
-.ctrl-help .help-popover { margin-left: 0; }
-.ctrl-help .help-popover__panel { left: 0; right: auto; width: 270px; }
-.ctrl-help__label {
-  appearance: none; background: none; border: none; padding: 0; cursor: pointer; text-align: left;
-  font-family: var(--font-tool); font-size: 13px; font-weight: 700; color: var(--celeste-deeper);
-}
-.ctrl-help__label:hover { text-decoration: underline; }
-
 /* Badge de origen — deliberadamente separado del semáforo de diferencias
    (ok/warn/error, ver results-ctrl-card): sólo dos variantes visuales, el texto
    específico (sistema/CCT/cliente) es lo que distingue el chip, no el color. */
