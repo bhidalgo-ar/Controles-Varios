@@ -85,6 +85,16 @@ ese concepto sin ninguna vía de escape (ver el Paso 2 de `specs/contrato-export
 `canGoNext` no se toca salvo que la validación no sea "están todos los archivos requeridos" — el
 único caso hoy es `agrupadores` ("al menos uno de dos opcionales").
 
+**Si tu control pide columnas nuevas del Tabulado en el Paso 2** (`extraFieldGroups` de la ficha
+`tab_control`), cada clave nueva necesita además su entrada en `TAB_FIELD_LABELS`
+(`js/ui/fieldHelp.js`): nombre en criollo + código técnico y, si agrega algo, la explicación larga del
+"?". Es el único punto de integración condicional que quedó fuera de los 5, y tiene guard:
+`tests/fieldHelp.test.js` falla si una clave del panel no está en la tabla o no declara su `code`
+(D-055). **Es una tabla y no una derivación a propósito** — nada en el código sabe que `INDEM_ANT_DESP`
+es "Indemnización por antigüedad (despido)", y adivinarlo con reglas de texto da nombres plausibles y
+equivocados. Si no sabés qué nombra exactamente una columna, dejala sin `name`: se ve con su código, que
+es peor pero nunca miente. Preguntale a Willy y agregala después.
+
 ### 3 — el módulo del control
 
 **Consolidar por legajo, los dos lados.** El Tabulado trae una fila **por liquidación**, no por
@@ -177,6 +187,12 @@ Dos que no se deducen: `default()` devuelve una **copia nueva** (el editor la mu
 editor sin `mappingKey` es una config que el analista toca y el control nunca ve —
 `tests/controlConfigRegistry.test.js` lo prohíbe.
 
+**El editor de esa config va a `js/ui/<x>ConfigEditor.js`, no al módulo del control**: es pantalla, no
+cálculo, y ahí ya viven los otros (`rendVsAsientoConfigEditor.js`, `rendVsTabuConceptEditor.js`,
+`grouperEditor.js`, `variacionesConceptMap.js`). El del asiento vivía dentro de
+`js/controls/rendVsAsiento.js` y se mudó en el rediseño; el control lee la misma config, con la misma
+forma, y en el registry cambia sólo de qué archivo sale la función.
+
 ### 5 — el test
 
 Corre en Node, así que necesita el shim **antes** de importar el registry (que importa módulos de UI
@@ -202,6 +218,9 @@ presente de un solo lado; y cada rama de `{ error }`.
   a la pantalla de resultados, que la ve el analista (D-020).
 - **`esc()` en todo valor que entra a un template literal de HTML.** Los nombres de empleados vienen
   de un Excel de un tercero.
+- **Ningún color cableado en `js/`, y ningún módulo pregunta por el tema.** `css/tokens.css` es el
+  único lugar donde un tema cambia algo; `tests/themeSourceOfTruth.test.js` falla con un `#hex` en
+  cualquier módulo de `js/` (D-059). Detalle en `ui-resultados.md`.
 - **Consolidación por legajo, `null ≠ 0` y tolerancia 0,01.** Producen números incorrectos que el
   analista se lleva al cliente.
 
@@ -211,8 +230,9 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 
 ```
 [ ] parser · ficha en fileTypes.js · módulo · registry · test
+[ ] columnas nuevas del Tabulado → su entrada en TAB_FIELD_LABELS (js/ui/fieldHelp.js)
 [ ] test agregado a la cadena test:unit de package.json, y `npm run test:unit` pasa
-[ ] probado en el navegador con un archivo real (para servir la app, ver README.md)
+[ ] probado en el navegador con un archivo real, en los tres temas (para servir la app, ver README.md)
 [ ] CHANGELOG.md
 [ ] ARCHITECTURE.md / DECISIONS.md sólo si cambió un contrato o hubo una decisión no obvia
 ```

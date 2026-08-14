@@ -115,6 +115,41 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 
 ---
 
+## Pruebas pendientes de tu lado, por cliente (al 2026-08-14)
+
+Repaso hecho después de cerrar el rediseño visual (PRs #139-#150). Separado por cliente porque cada
+ítem se destraba con **un archivo distinto**, y ninguno se destraba programando. El rediseño visual no
+dejó ninguna prueba pendiente de tu lado: las 10 pantallas se recorrieron en los tres temas en un
+navegador real y lo que no se pudo correr en el sandbox (los e2e que levantan la app entera, que
+necesitan los CDN) lo cubre CI, que está en verde.
+
+| Cliente | Sistema | Qué falta probar | Con qué se destraba | Riesgo si no se hace |
+|---|---|---|---|---|
+| **FINADIET** | Meta4 | Correr el Asiento de Remuneraciones contra el excel real y que **Gaby** compare el resultado contra un mes ya cerrado armado a mano | El excel "FINADIET CONCEPTOS" de un mes cerrado | **Alto.** Es el control más nuevo y el único que nunca se comparó contra un resultado hecho a mano. Los alias de encabezado del parser se escribieron de los nombres documentados, no de un archivo en mano. Es el caso de "número mal pero coherente", el que no detecta nadie |
+| **Marval** | Meta4 | Confirmar el código de 8 de los 18 conceptos de NR | Un Tabulado de un mes **con indemnizaciones liquidadas** | Bajo mientras tanto: los 8 se piden a mano en el Paso 2 y el toggle ⊘ los saltea. No se inventan por analogía (D-039) |
+| **Plastic Omnium Pilar (POP)** | Axton | Correr Acumuladores Ganancias **end-to-end en el navegador** con el `.xlsx` real | El crudo `repacumuladores` que ya usaste para la spec | Medio. La verificación que hay fue contra los números ya conocidos de la spec, no corriendo el control en la app |
+| **OPmobility Florida (POF)** | Meta4 | Validar el concepto `1000` (los mensuales) en Variación entre períodos | Un Tabulado que **tenga** mensuales — en los dos de muestra los 71 empleados liquidan por `899999` | Bajo. La lógica está y suma sola cuando el concepto exista, pero nunca corrió con datos |
+| **OPmobility Florida (POF)** | Meta4 | Cerrar **con el cliente** qué quincena compara contra cuál | Una respuesta del cliente, no un archivo | Medio, y es lo que traba el "subir un solo archivo por mes". Hoy comparás los dos que subís y el reporte dice exactamente qué comparó — que es lo correcto mientras la regla no esté cerrada |
+| **Sportline / IFSA** | Meta4 | Que **Meli** confirme dos cosas antes de que el Control de Netos se pueda codear: cómo entra el "neto acordado" por legajo (archivo aparte vs. columna) y qué conceptos no remunerativos pagan obra social | Una conversación con Meli | Es un bloqueo de diseño, no una prueba: sin eso el control arranca sobre una suposición |
+| **Cliente piloto de Tasa de Provisiones** | Meta4 | La eval manual: sobre el mes de referencia el control tiene que marcar **exactamente los dos legajos** del análisis previo y ninguno más | La Contabilidad Desglosada de ese mes (fuera del repo) | El control **todavía no está implementado** — la prueba es parte de su condición de salida |
+| **Merz** | Axton | El piloto del adaptador Axton | — | Ninguno hoy: vos mismo lo pusiste como "a futuro, no afecta lo actual" (2026-08-13) |
+
+**Decisiones tuyas pendientes, que no son pruebas** (ninguna traba nada hoy):
+
+1. **Las fechas inventadas** (`fmtDate` en `gsPers.js`, `nr.js`, `catXEmpleados.js`): qué mostrar cuando
+   un número no es una fecha creíble — vacío, el número crudo, o un aviso en la fila. El rango correcto
+   ya está escrito y probado en `js/ui/columnHints.js`; falta sólo tu criterio. Ver el detalle en el
+   parking lot de abajo.
+2. **Dónde viven los códigos de concepto por defecto de Tasa de Provisiones**: en el módulo (como hace
+   hoy `rendVsAsiento.js`) o vacíos en el código y cargados por cliente vía el seed. La segunda es más
+   consistente con tu instrucción de privacidad pero cambia el precedente del repo y obliga al analista
+   a cargarlos la primera vez. Ver `specs/control-tasa-provisiones.md` § "Ítem abierto".
+3. **Los títulos de página salen en celeste** y los screenshots 18 y 20 del rediseño los muestran en
+   ink. Es igual en los tres temas, así que no es una deriva de tema; cambiarlo mueve todas las
+   pantallas y por eso quedó como su propia tarea.
+
+---
+
 ## v3 — Escalar adaptador Axton + consolidación de equipo
 
 | # | Feature | Prio | Esfuerzo | Notas |
@@ -128,6 +163,8 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 | 3.6 | Export a Excel multi-hoja | 3 | M | Pendiente de v1 |
 | 3.7 | Export/import JSON de sesión | 4 | M | Pendiente de v1 |
 | 3.8 | Control de escala salarial por convenio (Comercio: COELSA, Red Bull, TIM, Sportline, Carrier) | 5 | M | Primer control real de `scope: convenio` |
+| 3.10 | **Control de Tasa de Provisiones** (desvíos de tasa por legajo, un solo archivo) | 2 | M | Diseño **cerrado y confirmado** por Guillermo el 2026-08-05, spec completa con evals declaradas: `specs/control-tasa-provisiones.md`. Estaba escrito y sin entrar acá — de ahí que no apareciera en ninguna lista de "qué viene". Ve un defecto que **ningún cruce puede ver** (el error está en los dos lados y la diferencia da cero). Falta: decidir dónde viven los códigos por defecto (§ "Ítem abierto") y la eval manual contra el mes de referencia |
+| 3.11 | Acreditaciones — **modo "Controlar"** (cruzar las acreditaciones contra el Tabulado) | 5 | M | Declarado como "pendiente, sin definir todavía" en `specs/control-acreditaciones-axton.md` § Modos desde el 2026-08-05. El modo "Generar Reporte" está hecho y verificado. Falta el diseño: qué se compara contra qué y con qué unidad |
 
 ---
 

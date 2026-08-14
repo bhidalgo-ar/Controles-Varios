@@ -154,5 +154,8 @@ español, Conventional Commits.
 - `ARCHITECTURE.md` — identidad de cliente, ciclo de vida, seed, los tres niveles del control.
 - `DECISIONS.md` — por qué algo está como está; los módulos citan estas entradas (D-0xx).
 - `ROADMAP.md` — lo que viene, incluido el plan de escalabilidad por fases.
-- `.claude/skills/nuevo-control/` — los 6 puntos de integración para sumar un control o una variante.
+- `.claude/skills/nuevo-control/` — los 5 puntos de integración para sumar un control o una variante
+  (más el condicional: las columnas nuevas del Tabulado necesitan su nombre en criollo en `fieldHelp.js`).
 - `specs/` — una spec por control o feature grande; cada una declara su estado en la primera línea.
+- `docs/traspaso-controles-equipo.md` — cómo traer al repo un control que el equipo prototipó en Claude
+  Chat como HTML standalone: los prompts de arranque y de cierre, y la ficha de traspaso que viaja.
