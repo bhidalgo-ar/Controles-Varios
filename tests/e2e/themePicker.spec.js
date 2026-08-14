@@ -75,6 +75,50 @@ test('Intenso sale sólo de variables: la barra y sus tokens cambian sin reglas 
     });
     expect(vacios, `tokens sin valor en el tema ${tema}`).toEqual([]);
   }
+
+  // Los tokens que se sumaron en la pasada de verificación de temas: si alguno
+  // queda sin valor en un tema, el componente que lo usa se dibuja sin color.
+  for (const tema of TEMAS) {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), tema);
+    const vacios = await page.evaluate(() => {
+      const cs = getComputedStyle(document.documentElement);
+      return ['--on-celeste', '--focus-ring', '--overlay-bg', '--ok-pulse', '--ok-soft-bg',
+              '--header-ok-fg', '--header-warn-fg', '--header-error-fg', '--header-hint-fg',
+              '--swatch-sobrio-bg', '--swatch-intenso-bar', '--swatch-oscuro-bg']
+        .filter((t) => cs.getPropertyValue(t).trim() === '');
+    });
+    expect(vacios, `tokens sin valor en el tema ${tema}`).toEqual([]);
+  }
+});
+
+test('el texto sobre el celeste se da vuelta en Oscuro, donde el celeste se aclara', async ({ page }) => {
+  // El chip de filtro activo del Paso 1 tiene fondo celeste sólido. En los temas
+  // claros el texto es blanco; en Oscuro el celeste sube a #1FBEE0 y el blanco
+  // encima cae a 2,2:1 — ilegible. Lo resuelve `--on-celeste`, no una regla por
+  // tema: si alguien vuelve a escribir `color: var(--color-white)` ahí, este
+  // test lo marca.
+  await page.goto('/');
+  await page.locator('#js-first-client-btn, #js-new-client-btn').first().click();
+  await page.fill('#js-client-name', 'Cliente Tema E2E');
+  await page.click('#js-confirm-create');
+  await page.locator('.home-table__row', { hasText: 'Cliente Tema E2E' }).locator('.js-run-btn').click();
+
+  const chip = page.locator('.ctrl-filter.is-active').first();
+  await expect(chip).toBeVisible();
+
+  // El chip tiene `transition: color .14s`: leído de inmediato, getComputedStyle
+  // devuelve un valor intermedio de la animación y el test flaquea.
+  const colorEn = async (tema) => {
+    await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), tema);
+    await page.waitForTimeout(300);
+    return chip.evaluate((el) => getComputedStyle(el).color);
+  };
+
+  expect(await colorEn('sobrio')).toBe('rgb(255, 255, 255)');
+  expect(await colorEn('intenso')).toBe('rgb(255, 255, 255)');
+  // En Oscuro deja de ser blanco: pasa al tono oscuro que sí se lee arriba del
+  // celeste claro del tema.
+  expect(await colorEn('oscuro')).not.toBe('rgb(255, 255, 255)');
 });
 
 test('la app ya no tiene footer institucional, pero el banner de privacidad sigue', async ({ page }) => {
