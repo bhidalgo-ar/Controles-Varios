@@ -1,15 +1,35 @@
 // rendVsTabuConceptEditor.js — Editor de agrupación de conceptos para Control 5 RendvsTabu
+//
+// Pantalla 10 del rediseño. Un grupo del Rendimiento (Precio, Asig. estímulo,
+// Cargas SS, Prov. mes, Prov. CCSS mes) se arma sumando y restando conceptos del
+// Tabulado. Cada concepto es un chip `SIGNO código · nombre ✕`:
+//
+//   - el **signo** es lo que decide si ese concepto suma o resta dentro del
+//     grupo, y un clic lo invierte. Es la funcionalidad central de la pantalla:
+//     no es decoración ni un estado visual.
+//   - el ✕ lo saca del grupo.
+//   - "+ N más…" es **sólo colapso visual**: los conceptos escondidos siguen en
+//     el grupo y siguen sumando o restando igual.
 
 import { DEFAULT_CONCEPT_CONFIG } from '../controls/rendVsTabu.js';
 import { showConfirm }            from './toast.js';
+import { renderHelpPopover }      from './helpPopover.js';
 
+// `key` es la clave de la agrupación que viaja al control — no se toca. `name`
+// es cómo lo diría un analista; en la tabla de resultados y en el export las
+// mismas columnas se siguen llamando PRECIO, ASIG. ESTÍMULO, CARGAS SS,
+// PROV. MES y PROV. CCSS MES (eso lo declara `rendVsTabu.js`, no esta pantalla).
 const CAT_META = [
-  { key: 'precio',   label: 'PRECIO',          hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)' },
-  { key: 'estimulo', label: 'ASIG. ESTÍMULO',  hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)' },
-  { key: 'cargas',   label: 'CARGAS SS',       hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)' },
-  { key: 'provMes',  label: 'PROV. MES',       hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)' },
-  { key: 'provCcss', label: 'PROV. CCSS MES',  hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)' },
+  { key: 'precio',   name: 'Precio' },
+  { key: 'estimulo', name: 'Asig. estímulo' },
+  { key: 'cargas',   name: 'Cargas SS' },
+  { key: 'provMes',  name: 'Prov. mes' },
+  { key: 'provCcss', name: 'Prov. CCSS mes' },
 ];
+
+// Cuántos chips se ven antes de plegar el resto. Un grupo de 18 conceptos ocupa
+// media pantalla y tapa a los otros cuatro; con el corte entran todos a la vez.
+const CHIPS_VISIBLES = 10;
 
 function buildColByCode(sampleRow) {
   const colByCode = {};
@@ -32,12 +52,44 @@ function esc(str) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** '1003-SUELDO' → 'SUELDO'. El código ya va en su propio tramo del chip. */
+function nombreDeColumna(col, code) {
+  const s   = String(col ?? '').trim();
+  const pre = String(code ?? '');
+  if (pre && s.startsWith(pre)) {
+    const resto = s.slice(pre.length).replace(/^[-_\s]+/, '');
+    if (resto) return resto;
+  }
+  return s;
+}
+
+const AYUDA_AGRUPACION = {
+  label: 'Agrupación de conceptos',
+  bodyHtml: `
+    <p style="margin:0 0 var(--sp-2);">
+      Cada grupo del Rendimiento (Precio, Asig. estímulo, Cargas SS…) se calcula sumando y restando
+      conceptos del Tabulado. Este panel dice cuáles entran en cada uno.
+    </p>
+    <p style="margin:0 0 var(--sp-2);">
+      El <b style="color:var(--ok-tx);">+</b> del chip suma ese concepto y el
+      <b style="color:var(--error-tx);">−</b> lo resta; un clic en el signo lo invierte.
+      El ✕ lo saca del grupo.
+    </p>
+    <p class="help-popover__note" style="margin:0;">
+      Un concepto marcado con ⚠ está en el grupo pero este Tabulado no lo trae: suma 0,00 este mes
+      y no traba la corrida. Se guarda por cliente y se aplica al ejecutar.
+    </p>
+  `,
+};
+
 export function renderConceptGroupingEditor(container, tabRows, currentGrouping, onChange) {
   const colByCode = buildColByCode(tabRows[0] || {});
   const allCodes  = Object.keys(colByCode).sort((a, b) => Number(a) - Number(b));
 
   let grouping = currentGrouping ? deepClone(currentGrouping) : deepClone(DEFAULT_CONCEPT_CONFIG);
-  let uiState  = { sort: 'num', hideNotFound: false };
+  // `expanded` es puramente visual: qué grupos muestran todos sus chips. No
+  // toca la agrupación ni lo que se guarda.
+  let uiState  = { sort: 'num', hideNotFound: false, expanded: new Set() };
 
   function getAssignedCodes() {
     const s = new Set();
@@ -65,6 +117,7 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
     const assignedCodes = getAssignedCodes();
     const orphanCodes   = allCodes.filter(c => !assignedCodes.has(c));
     const { total: assignedTotal, matched: assignedMatched } = countMatchedAssigned();
+    const fueraDelTab   = assignedTotal - assignedMatched;
 
     // Aviso fuerte si no se encontró (casi) ningún concepto preconfigurado
     const lowMatch = assignedTotal > 0 && assignedMatched <= Math.min(2, assignedTotal - 1);
@@ -77,8 +130,10 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
         Verificá el archivo cargado más arriba y, si hace falta, tocá <strong>"Cambiar"</strong> para subir el Tabulado correcto.
       </div>` : '';
 
-    const categorySections = CAT_META.map(cat => {
-      const entries = grouping[cat.key] || [];
+    const buckets = CAT_META.map(cat => {
+      const entries    = grouping[cat.key] || [];
+      const noEstan    = entries.filter(e => !colByCode[e.code]).length;
+      const expandido  = uiState.expanded.has(cat.key);
 
       let displayEntries = entries.map((e, i) => ({ ...e, originalIdx: i }));
       if (uiState.hideNotFound) displayEntries = displayEntries.filter(e => colByCode[e.code]);
@@ -88,104 +143,135 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
         displayEntries.sort((a, b) => (colByCode[a.code] || a.code).localeCompare(colByCode[b.code] || b.code, 'es'));
       }
 
-      const chips = displayEntries.map(entry => {
-        const found    = colByCode[entry.code];
-        const label    = found ? esc(found) : esc(entry.code);
-        const notFound = !found
-          ? ` <span title="No encontrado en Tabulado" style="color:var(--color-warning);">⚠</span>`
+      // Colapso visual: los conceptos que no se dibujan siguen en el grupo.
+      const ocultos  = expandido ? 0 : Math.max(0, displayEntries.length - CHIPS_VISIBLES);
+      const visibles = ocultos > 0 ? displayEntries.slice(0, CHIPS_VISIBLES) : displayEntries;
+
+      const chips = visibles.map(entry => {
+        const found     = colByCode[entry.code];
+        const suma      = entry.sign === 1;
+        const signLabel = suma ? '+' : '−';
+        const signTitle = suma
+          ? `${entry.code} suma en ${cat.name} — clic para que reste`
+          : `${entry.code} resta en ${cat.name} — clic para que sume`;
+        const nombre = found
+          ? `<span class="concept-chip__sep">·</span><span class="concept-chip__name">${esc(nombreDeColumna(found, entry.code))}</span>`
           : '';
-        const signLabel = entry.sign === 1 ? '+' : '−';
-        const signColor = entry.sign === 1 ? 'var(--color-success)' : 'var(--color-danger)';
         return `
-          <span style="display:inline-flex;align-items:center;gap:3px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:4px;padding:2px 5px;font-size:11px;margin:2px;">
-            <button type="button" data-sign="${cat.key}:${entry.originalIdx}"
-              style="border:none;background:none;cursor:pointer;font-weight:700;padding:0 1px;color:${signColor};"
-              title="Cambiar signo">${signLabel}</button>
-            <span>${label}${notFound}</span>
-            <button type="button" data-remove="${cat.key}:${entry.originalIdx}"
-              style="border:none;background:none;cursor:pointer;color:var(--color-danger);padding:0 1px;font-size:13px;line-height:1;"
-              title="Quitar">×</button>
+          <span class="concept-chip${found ? '' : ' concept-chip--warn'}">
+            <button type="button" class="concept-chip__sign concept-chip__sign--${suma ? 'plus' : 'minus'}"
+              data-sign="${esc(cat.key)}:${entry.originalIdx}"
+              title="${esc(signTitle)}" aria-label="${esc(signTitle)}">${signLabel}</button>
+            ${found ? '' : '<span title="No está en este Tabulado" aria-label="no está en este Tabulado">⚠</span>'}
+            <span class="concept-chip__code">${esc(entry.code)}</span>
+            ${nombre}
+            <button type="button" class="concept-chip__x" data-remove="${esc(cat.key)}:${entry.originalIdx}"
+              title="Quitar de ${esc(cat.name)}" aria-label="Quitar ${esc(entry.code)} de ${esc(cat.name)}">✕</button>
           </span>`;
       }).join('');
 
+      const masChip = ocultos > 0
+        ? `<button type="button" class="concept-chip concept-chip--more" data-expand="${esc(cat.key)}">+ ${ocultos} más…</button>`
+        : (expandido && displayEntries.length > CHIPS_VISIBLES
+            ? `<button type="button" class="concept-chip concept-chip--more" data-collapse="${esc(cat.key)}">Ver menos</button>`
+            : '');
+
       const availableCodes = allCodes.filter(c => !entries.some(e => e.code === c));
-      const addOpts = availableCodes
-        .map(c => `<option value="${esc(c)}">${esc(colByCode[c] || c)}</option>`)
-        .join('');
+      const addChip = availableCodes.length > 0 ? `
+        <label class="concept-chip concept-chip--add">
+          ＋ Agregar del Tabulado…
+          <select class="concept-chip__select" data-add-to="${esc(cat.key)}"
+                  aria-label="Agregar un concepto del Tabulado a ${esc(cat.name)}">
+            <option value="">＋ Agregar del Tabulado…</option>
+            ${availableCodes.map(c => `<option value="${esc(c)}">${esc(colByCode[c] || c)}</option>`).join('')}
+          </select>
+        </label>` : '';
 
       return `
-        <div style="padding:var(--sp-3);border:1px solid var(--color-border);border-radius:var(--radius-md);background:${cat.bg};">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-2);">
-            <strong style="font-size:var(--text-sm);">${esc(cat.label)}</strong>
-            <span style="font-size:11px;color:var(--color-muted);">${entries.length} concepto${entries.length !== 1 ? 's' : ''}</span>
+        <div class="bucket">
+          <div class="bucket__head">
+            <span class="bucket__name">${esc(cat.name)}</span>
+            <span class="bucket__meta">
+              ${entries.length} concepto${entries.length !== 1 ? 's' : ''}${noEstan > 0 ? ` · ${noEstan} fuera de este Tabulado` : ''}
+            </span>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:2px;min-height:24px;margin-bottom:var(--sp-2);">
-            ${chips || '<span style="font-size:11px;color:var(--color-muted);font-style:italic;">Sin conceptos asignados</span>'}
+          <div class="bucket__chips">
+            ${chips || '<span class="bucket__empty">Sin conceptos asignados</span>'}
+            ${masChip}
+            ${addChip}
           </div>
-          ${availableCodes.length > 0 ? `
-            <select class="form-select" data-add-to="${cat.key}"
-              style="font-size:11px;height:26px;padding:2px 6px;width:100%;">
-              <option value="">+ Agregar concepto del Tabulado...</option>
-              ${addOpts}
-            </select>` : ''}
         </div>`;
     }).join('');
 
     const orphanRows = orphanCodes.map(c => {
       const catOpts = CAT_META.map(cat =>
-        `<option value="${cat.key}">${esc(cat.label)}</option>`
+        `<option value="${cat.key}">${esc(cat.name)}</option>`
       ).join('');
       return `
-        <div style="display:flex;align-items:center;gap:4px;padding:2px 6px;border:1px solid var(--color-border);border-radius:4px;background:var(--color-bg);min-width:0;">
-          <span style="flex:1;font-size:11px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(colByCode[c])}">${esc(colByCode[c])}</span>
-          <label style="display:flex;align-items:center;gap:2px;font-size:10px;white-space:nowrap;color:var(--color-text-muted);">
+        <div class="grouping-orphan">
+          <span class="grouping-orphan__name" title="${esc(colByCode[c])}">${esc(colByCode[c])}</span>
+          <label class="grouping-orphan__neg">
             <input type="checkbox" data-orphan-neg="${esc(c)}" style="margin:0;width:11px;height:11px;">−
           </label>
           <select class="form-select" data-assign-orphan="${esc(c)}"
-            style="width:auto;max-width:120px;font-size:10px;height:22px;padding:1px 4px;">
+            style="width:auto;max-width:120px;font-size:10px;height:22px;padding:1px 4px;"
+            aria-label="Asignar ${esc(colByCode[c])} a un grupo">
             <option value="">→ ...</option>
             ${catOpts}
           </select>
         </div>`;
     }).join('');
 
+    const segButtons = ['none', 'num', 'alpha'].map(mode => {
+      const labels = { none: 'Sin ordenar', num: 'Por número', alpha: 'Alfabético' };
+      return `<button type="button" class="seg__btn${uiState.sort === mode ? ' is-active' : ''}"
+        data-sort="${mode}" aria-pressed="${uiState.sort === mode}">${labels[mode]}</button>`;
+    }).join('');
+
     container.innerHTML = `
-      <div style="margin-top:var(--sp-3);padding:var(--sp-3) var(--sp-4);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-2);gap:var(--sp-3);">
-          <h4 style="margin:0;font-size:var(--text-base);">Agrupación de conceptos — Rendimiento vs Tabulado</h4>
-          <button type="button" id="js-rtv-restore" class="btn btn--ghost btn--sm" style="white-space:nowrap;flex-shrink:0;">
-            ↺ Restaurar defaults
-          </button>
+      <div class="wizard-panel">
+        <div class="wizard-panel__head">
+          <h4 class="wizard-panel__title">Agrupación de conceptos</h4>
+          <span data-grouping-help></span>
+          <div class="wizard-panel__end">
+            ${fueraDelTab > 0
+              ? `<span class="wizard-panel__warn">⚠ ${fueraDelTab} concepto${fueraDelTab !== 1 ? 's' : ''} fuera del Tabulado</span>`
+              : ''}
+            <button type="button" id="js-rtv-restore" class="btn btn--ghost btn--sm" style="white-space:nowrap;">
+              ↺ Restaurar defaults
+            </button>
+          </div>
         </div>
+        <p class="wizard-panel__sub">
+          Qué conceptos del Tabulado suma cada grupo del Rendimiento. Se guarda por cliente.
+        </p>
         ${warningBanner}
-        <div style="display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3);flex-wrap:wrap;">
-          <span style="font-size:12px;color:var(--color-muted);">Ordenar:</span>
-          ${['none','num','alpha'].map(mode => {
-            const labels = { none: 'Sin ordenar', num: 'Por número', alpha: 'Alfabético' };
-            const active = uiState.sort === mode;
-            return `<button type="button" data-sort="${mode}" class="btn btn--ghost btn--sm"
-              style="${active ? 'font-weight:700;border-color:var(--color-primary);' : ''}">${labels[mode]}</button>`;
-          }).join('')}
-          <label style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;">
+        <div class="grouping-toolbar">
+          <span class="grouping-toolbar__label">Ordenar:</span>
+          <div class="seg" role="group" aria-label="Orden de los conceptos">${segButtons}</div>
+          <label class="grouping-toolbar__check">
             <input type="checkbox" id="js-rtv-hide-notfound" ${uiState.hideNotFound ? 'checked' : ''}>
-            Ocultar no encontrados en Tabulado
+            Ocultar los que no están en este Tabulado
           </label>
+          <span class="grouping-legend">
+            <span class="grouping-legend__plus">+</span> suma ·
+            <span class="grouping-legend__minus">−</span> resta (un clic en el signo lo invierte) ·
+            <span class="grouping-legend__warn">⚠</span> no está en este Tabulado
+          </span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--sp-3);">
-          ${categorySections}
-        </div>
+        <div class="bucket-grid">${buckets}</div>
         ${orphanCodes.length > 0 ? `
-          <details style="margin-top:var(--sp-3);padding-top:var(--sp-3);border-top:1px solid var(--color-border);" open>
-            <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:600;margin-bottom:var(--sp-2);list-style:none;display:flex;align-items:center;gap:var(--sp-2);">
-              <span class="js-orph-arrow">▾</span>
+          <details class="grouping-orphans">
+            <summary class="grouping-orphans__summary">
+              <span class="grouping-orphans__caret" aria-hidden="true">▸</span>
               Sin asignar — ${orphanCodes.length} concepto${orphanCodes.length !== 1 ? 's' : ''} del Tabulado
-              <span class="text-muted" style="font-weight:400;font-size:11px;">(− = resta, → asigná a una categoría)</span>
+              <span class="grouping-orphans__hint">(− = resta, → asigná a un grupo)</span>
             </summary>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px;">
-              ${orphanRows}
-            </div>
+            <div class="grouping-orphans__grid">${orphanRows}</div>
           </details>` : ''}
       </div>`;
+
+    renderHelpPopover(container.querySelector('[data-grouping-help]'), AYUDA_AGRUPACION);
 
     // ── Eventos ──────────────────────────────────────────────────────────────
 
@@ -250,6 +336,21 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
     container.querySelector('#js-rtv-hide-notfound')?.addEventListener('change', e => {
       uiState.hideNotFound = e.target.checked;
       renderEditor();
+    });
+
+    // Plegar/desplegar un grupo no toca la agrupación: sólo cambia cuántos chips
+    // se dibujan, así que no llama a `onChange`.
+    container.querySelectorAll('[data-expand]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        uiState.expanded.add(btn.dataset.expand);
+        renderEditor();
+      });
+    });
+    container.querySelectorAll('[data-collapse]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        uiState.expanded.delete(btn.dataset.collapse);
+        renderEditor();
+      });
     });
   }
 

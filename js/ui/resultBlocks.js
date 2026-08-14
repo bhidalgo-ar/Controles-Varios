@@ -190,6 +190,12 @@ export function renderMinorObservations(container, items) {
 // ── Chequeos de coherencia ──────────────────────────────────────────────────
 // Se verifican siempre; se muestran discretos si dan bien y en amarillo si no.
 // items: [{ label, detail?, ok }]
+//
+// OJO: `detail` va en TEXTO PLANO — se escapa acá abajo. Es al revés que el
+// `right` de renderIssues(), que se inserta crudo. Mandar `formatDiff()` (que
+// devuelve un <span>) a un `detail` no pinta nada: el analista termina viendo
+// la etiqueta escrita como texto en la tarjeta. Para eso está `formatDiffText()`
+// en js/utils/currency.js — el color del chip ya sale de `ok`.
 
 export function renderChecks(container, { heading, items } = {}) {
   sectionHeading(container, heading);

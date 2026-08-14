@@ -2109,3 +2109,264 @@ table.rb-grid tfoot > tr > :nth-child(2) {
   font-size: 12px; font-weight: 700; color: var(--t2);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+
+/* ── Pantallas de Rendimiento — vs Asiento y vs Tabulado (pantallas 9 y 10) ──
+   Las dos son la misma pantalla de archivos del Paso 2 con un panel denso
+   abajo: la clasificación por cuenta contable en un caso, la agrupación de
+   conceptos en el otro. Comparten el molde `.wizard-panel` para que el
+   analista que pasa de un control al otro reconozca dónde está parado. */
+
+.wizard-panel {
+  margin-top: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--color-surface);
+  font-family: var(--font-tool);
+}
+.wizard-panel__head {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  flex-wrap: wrap; margin-bottom: 2px;
+}
+.wizard-panel__title {
+  margin: 0; font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em;
+}
+.wizard-panel__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px; color: var(--t3); letter-spacing: .02em; text-transform: uppercase;
+}
+.wizard-panel__end { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); }
+.wizard-panel__sub { margin: 0 0 var(--sp-3); font-size: 12.5px; color: var(--t2); }
+/* El recuento de lo que no cerró, arriba a la derecha: es lo primero que se
+   mira al abrir el panel y lo que el checklist del costado resume. */
+.wizard-panel__warn {
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  color: var(--warn-tx); background: var(--warn-bg); border: 1px solid var(--warn-bd);
+  border-radius: var(--radius-full); padding: 2px 9px;
+}
+
+/* ── "Análisis del Tabulado": una tira de una línea ────────────────────────
+   Antes eran tres acordeones anidados que ocupaban media pantalla antes de
+   llegar a lo que hay que tocar. El detalle sigue estando: se abre con "Ver
+   las N", no antes. */
+.tab-analysis {
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--color-surface); margin-bottom: var(--sp-3);
+  font-family: var(--font-tool);
+}
+.tab-analysis__bar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: 10px var(--sp-4); cursor: pointer; list-style: none; user-select: none;
+}
+.tab-analysis__bar::-webkit-details-marker { display: none; }
+.tab-analysis__bar:focus-visible { outline: 3px solid var(--celeste); outline-offset: -3px; border-radius: 12px; }
+.tab-analysis__title { font-size: 13px; font-weight: 700; color: var(--t1); }
+.tab-analysis__total { font-weight: 400; color: var(--t3); }
+.tab-analysis__stat { font-size: 12.5px; color: var(--t3); font-variant-numeric: tabular-nums; }
+.tab-analysis__stat--ok   { color: var(--ok-tx);    font-weight: 600; }
+.tab-analysis__stat--warn { color: var(--warn-tx);  font-weight: 600; }
+.tab-analysis__stat--miss { color: var(--error-tx); font-weight: 600; }
+.tab-analysis__more {
+  margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--celeste-deeper);
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.tab-analysis__caret { transition: transform .22s cubic-bezier(.4, 0, .2, 1); display: inline-block; }
+.tab-analysis[open] .tab-analysis__caret { transform: rotate(180deg); }
+.tab-analysis__panel {
+  border-top: 1px solid var(--line-soft);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+
+/* ── Segmented (orden de la agrupación de conceptos) ───────────────────────── */
+.seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--line); border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+.seg__btn {
+  appearance: none; border: none; background: none; cursor: pointer;
+  font-family: var(--font-tool); font-size: 12px; font-weight: 700; color: var(--t2);
+  padding: 4px 11px; border-radius: var(--radius-full);
+  transition: all .22s cubic-bezier(.4, 0, .2, 1);
+}
+.seg__btn:hover { color: var(--ink); }
+.seg__btn:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
+.seg__btn.is-active { background: var(--celeste); color: var(--color-white); }
+
+/* ── Agrupación de conceptos: toolbar + buckets + chips ────────────────────── */
+.grouping-toolbar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.grouping-toolbar__label { font-size: 12px; color: var(--t3); }
+.grouping-toolbar__check {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--t2); cursor: pointer;
+}
+/* La leyenda de los signos: sin ella el "+" y el "−" del chip se leen como
+   decoración, y son la diferencia entre sumar y restar dentro del grupo. */
+.grouping-legend { margin-left: auto; font-size: 11.5px; color: var(--t3); max-width: 340px; }
+.grouping-legend__plus  { color: var(--ok-tx);    font-weight: 700; }
+.grouping-legend__minus { color: var(--error-tx); font-weight: 700; }
+.grouping-legend__warn  { color: var(--warn-tx);  font-weight: 700; }
+
+.bucket-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-3);
+}
+.bucket {
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: var(--sp-3); background: var(--color-bg); min-width: 0;
+}
+.bucket__head { display: flex; align-items: baseline; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.bucket__name { font-size: 13px; font-weight: 700; color: var(--ink); }
+.bucket__meta {
+  margin-left: auto; font-size: 11px; color: var(--t3);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.bucket__chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.bucket__empty { font-size: 11.5px; color: var(--t3); font-style: italic; }
+
+.concept-chip {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  border: 1px solid var(--line); border-radius: var(--radius-full);
+  background: var(--color-surface); color: var(--t1);
+  padding: 3px 6px 3px 4px; font-size: 11.5px; font-family: var(--font-tool);
+  transition: all .22s cubic-bezier(.4, 0, .2, 1);
+}
+.concept-chip:hover { border-color: var(--celeste-border); }
+/* El concepto que este Tabulado no trae sigue en el grupo — se avisa, no se
+   borra: el mes que viene puede volver a liquidarse (D-036). */
+.concept-chip--warn { border-color: var(--warn-bd); background: var(--warn-bg); color: var(--warn-tx); }
+.concept-chip__sign {
+  appearance: none; border: none; cursor: pointer; flex-shrink: 0;
+  width: 17px; height: 17px; border-radius: 50%;
+  font-family: var(--font-tool); font-size: 12px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.concept-chip__sign--plus  { color: var(--ok-tx);    background: var(--ok-bg); }
+.concept-chip__sign--minus { color: var(--error-tx); background: var(--error-bg); }
+.concept-chip__sign:focus-visible { outline: 2px solid var(--celeste); outline-offset: 1px; }
+.concept-chip__code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.concept-chip__sep  { color: var(--t3); flex-shrink: 0; }
+.concept-chip__name {
+  color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px;
+}
+.concept-chip__x {
+  appearance: none; border: none; background: none; cursor: pointer; flex-shrink: 0;
+  color: var(--t3); font-size: 11px; line-height: 1; padding: 0 1px;
+}
+.concept-chip__x:hover { color: var(--error-tx); }
+.concept-chip__x:focus-visible { outline: 2px solid var(--celeste); outline-offset: 1px; }
+/* "+ N más…" es sólo colapso visual: los conceptos ocultos siguen en el grupo
+   y siguen sumando o restando exactamente igual. */
+.concept-chip--more {
+  cursor: pointer; border-style: dashed; padding: 3px 10px;
+  color: var(--t2); font-weight: 700;
+}
+.concept-chip--more:hover { color: var(--celeste-deeper); border-color: var(--celeste-border); }
+.concept-chip--add {
+  position: relative; border-style: dashed; border-color: var(--celeste-border);
+  color: var(--celeste-deeper); font-weight: 700; cursor: pointer; padding: 3px 10px;
+}
+.concept-chip--add:hover { background: var(--celeste-dim); }
+/* El <select> nativo cubre el chip: se conserva el picker del sistema y el
+   teclado, y se ve como un chip dashed. */
+.concept-chip__select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; font-family: var(--font-tool);
+}
+
+/* Lo que quedó sin asignar a ningún grupo — plegado: la tira de arriba ya dice
+   cuántos son, acá se resuelven de a uno. */
+.grouping-orphans { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+.grouping-orphans__summary {
+  cursor: pointer; list-style: none; font-size: 12.5px; font-weight: 700; color: var(--t1);
+  display: flex; align-items: center; gap: var(--sp-2); user-select: none;
+}
+.grouping-orphans__summary::-webkit-details-marker { display: none; }
+.grouping-orphans__caret { transition: transform .22s cubic-bezier(.4, 0, .2, 1); display: inline-block; }
+.grouping-orphans[open] .grouping-orphans__caret { transform: rotate(90deg); }
+.grouping-orphans__hint { font-weight: 400; font-size: 11.5px; color: var(--t3); }
+.grouping-orphans__grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 5px; margin-top: var(--sp-2);
+}
+.grouping-orphan {
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+  border: 1px solid var(--line); border-radius: 8px; padding: 3px 7px; background: var(--color-bg);
+}
+.grouping-orphan__name {
+  flex: 1; min-width: 0; font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.grouping-orphan__neg {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; color: var(--t3); white-space: nowrap;
+}
+
+/* ── Clasificación por cuenta contable (pantalla 9) ────────────────────────── */
+/* Tres columnas: las cinco clasificaciones entran en dos filas y "＋ Agregar
+   clasificación…" cierra la segunda. `align-items:start` para que el renglón
+   dashed no se estire al alto del campo más largo de su fila. */
+.rva-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4); align-items: start;
+}
+@media (max-width: 860px) { .rva-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .rva-grid { grid-template-columns: 1fr; } }
+
+/* El código de cuenta es un dato para comparar carácter por carácter contra la
+   Contabilidad, no prosa: va en mono, como el nombre del archivo cargado. */
+.rva-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.rva-input--ok   { border-color: var(--ok-bd); }
+.rva-input--warn { border-color: var(--warn-bd); }
+
+.rva-add {
+  border: 1px dashed var(--celeste-border); border-radius: 12px;
+  padding: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2);
+  min-height: 74px; justify-content: center;
+}
+.rva-add__open {
+  appearance: none; background: none; border: none; cursor: pointer; width: 100%;
+  font-family: var(--font-tool); font-size: 12.5px; font-weight: 700; color: var(--celeste-deeper);
+}
+.rva-add__open:hover { text-decoration: underline; }
+.rva-add__row { display: flex; gap: var(--sp-2); align-items: center; }
+.rva-add__row .form-select { flex: 1; min-width: 0; }
+.rva-add__row .form-input  { flex: 1; min-width: 0; }
+
+/* Redirects de centro de costo: una línea por redirección, formato CONTA →
+   Rendimiento. No es una clasificación, así que no entra en la grilla. */
+.rva-redirects { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
+.rva-redirects__area {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  width: 100%; resize: vertical;
+}
+
+/* ── Carga multi-archivo de la Contabilidad Desglosada ─────────────────────── */
+/* El casillero cargado lista los archivos que se sumaron: cada uno con su ✕,
+   porque sumar de más es el error frecuente (el mismo mes dos veces). */
+.dropzone__files { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dropzone__fileitem { display: inline-flex; align-items: center; gap: 3px; }
+.dropzone__fileitem-x {
+  appearance: none; border: none; background: none; cursor: pointer;
+  color: var(--t3); font-size: 10px; line-height: 1; padding: 0 1px;
+}
+.dropzone__fileitem-x:hover { color: var(--error-tx); }
+.dropzone__sep { color: var(--t3); }
+.dropzone__note { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+.dropzone__count {
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  color: var(--celeste-deeper); background: var(--celeste-dim);
+  border-radius: var(--radius-full); padding: 2px 8px; margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}

@@ -48,6 +48,15 @@
     setTimeout(res, 600);
   });
 
-  window.__dropText = () => document.querySelector('#host .file-drop__text')?.textContent.replace(/\s+/g,' ').trim();
+  // La Contabilidad ya usa el casillero `.dropzone` del Paso 2; Acumuladores
+  // sigue con `.file-drop`. El helper lee el que haya, así el spec pide el texto
+  // sin saber cuál de los dos moldes le tocó al tipo de archivo.
+  window.__dropText = () => {
+    const host = document.querySelector('#host');
+    const viejo = host.querySelector('.file-drop__text');
+    if (viejo) return viejo.textContent.replace(/\s+/g,' ').trim();
+    const zona = host.querySelector('.dropzone__body');
+    return zona?.textContent.replace(/\s+/g,' ').trim();
+  };
   out.textContent = 'listo';
 </script>
