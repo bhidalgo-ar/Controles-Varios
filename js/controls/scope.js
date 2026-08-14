@@ -69,6 +69,12 @@ export function controlAppliesToClient(ctrl, client, config) {
   if (config?.status === FORCED_OFF) return false;
   if (config?.status === NOT_APPLIC) return false;
 
+  // 1.5. `hidden` saca al control de circulación para todo el mundo, incluso
+  // dentro de su scope — está anotado pero todavía no se ofrece a nadie
+  // (ej. agrupadores: falta definir el archivo de Nómina Maestra estándar).
+  // Un forzado_activo puntual desde #/admin lo puede volver a mostrar igual.
+  if (ctrl.hidden) return false;
+
   // 2. Scope declarativo.
   if (!scopeMatchesClient(ctrl, client)) return false;
 
