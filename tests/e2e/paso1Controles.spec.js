@@ -3,13 +3,20 @@
 // coincidencia resaltada, el estado "sin resultados" con salida y el panel
 // lateral "Vas a ejecutar".
 //
-// Un cliente nuevo ve un solo control ("Cruce por Agrupadores"), así que acá se
-// prueba lo que se puede probar con uno: el resto de los estados (N ocultos por
+// Un cliente nuevo veía un solo control ("Cruce por Agrupadores"), así que acá se
+// probaba lo que se podía probar con uno: el resto de los estados (N ocultos por
 // la búsqueda) vive en clientes con varios controles.
+//
+// PAUSADO (2026-08-14, Willy): "Cruce por Agrupadores" era el único control
+// general y quedó `hidden` (pendiente hasta definir el archivo de Nómina
+// Maestra estándar, ver js/controls/registry.js). Un cliente nuevo ya no ve
+// ningún control, así que esta prueba no tiene sobre qué correr. Reactivar
+// cuando el control se muestre de nuevo, o reescribir contra otro fixture
+// (ej. un cliente Axton, que sí ve un control por scope de sistema).
 
 import { test, expect } from '@playwright/test';
 
-test('Paso 1: card con badges de archivos, panel lateral y búsqueda con salida', async ({ page }) => {
+test.skip('Paso 1: card con badges de archivos, panel lateral y búsqueda con salida', async ({ page }) => {
   await page.goto('/');
   await page.locator('#js-first-client-btn, #js-new-client-btn').first().click();
   await page.fill('#js-client-name', 'Cliente Paso1 E2E');

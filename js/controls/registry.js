@@ -540,6 +540,10 @@ export const CONTROL_REGISTRY = {
     scope:       'general',
     scopeMeta:   {},
     appliesWhen: () => true,
+    // PENDIENTE (2026-08-14, Willy): no se muestra todavía en el Paso 1 — no
+    // hay un archivo de Nómina Maestra predeterminado para ningún cliente
+    // todavía. Sacar `hidden` cuando eso esté definido. Ver scope.js.
+    hidden:      true,
     description: 'Cruza la Nómina Maestra contra un archivo Resumen del mismo período, sumando los '
       + 'conceptos de cada agrupador configurado para el cliente y marcando las diferencias por legajo. '
       + 'No usa el Tabulado como pivote (a diferencia del resto de los controles).',

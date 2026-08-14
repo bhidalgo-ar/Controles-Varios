@@ -3,9 +3,10 @@
 //   node --input-type=module < tests/controlsScope.test.js
 //
 // Ver specs/segmentacion-controles-por-cliente.md. Confirma que:
-//   - Marval (MARVAL, meta4) ve los 11 controles de Meta4.
-//   - Un cliente Meta4 nuevo ve sólo "agrupadores".
-//   - Un cliente Axton ve "agrupadores" + Acreditaciones (D-021) + Acumuladores Ganancias.
+//   - Marval (MARVAL, meta4) ve los 10 controles de Meta4.
+//   - Un cliente Meta4 nuevo no ve ninguno ("agrupadores" está `hidden`, ver
+//     scope.js — pendiente hasta definir el archivo de Nómina Maestra estándar).
+//   - Un cliente Axton ve Acreditaciones (D-021) + Acumuladores Ganancias.
 //   - scope 'sistema' aplica por sourceSystem, no por cliente puntual.
 //   - el override de admin (controlConfigs.status) gana por sobre el scope.
 
@@ -28,19 +29,20 @@ const nuevoAx = { code: 'NUEVOAX', sourceSystem: 'axton', ccts: [], attributes: 
 
 // ── Clasificación actual (decisión de Guillermo, 2026-07-31) ────────────────
 
-assert('Marval ve los 11 controles de Meta4 (no el de Axton)',
+assert('Marval ve los 10 controles de Meta4 (no el de Axton, no agrupadores — está `hidden`)',
   filterControlsForClient(allControls, marval).map(c => c.id).join(',').includes('acreditaciones_reporte') === false
-  && filterControlsForClient(allControls, marval).length === 11);
+  && filterControlsForClient(allControls, marval).length === 10);
 
-assert('un cliente Meta4 nuevo ve sólo "agrupadores"',
-  filterControlsForClient(allControls, nuevoM4).map(c => c.id).join(',') === 'agrupadores');
+assert('un cliente Meta4 nuevo no ve ningún control ("agrupadores" es el único general y está `hidden`)',
+  filterControlsForClient(allControls, nuevoM4).map(c => c.id).join(',') === '');
 
 // D-021: el reporte de Acreditaciones es el primer control con scope 'sistema'
 // para Axton; acumuladores_ganancias es el segundo (ver
-// specs/control-acumuladores-ganancias.md) — un cliente Axton ya no ve sólo "agrupadores".
-assert('un cliente Axton ve "agrupadores" + Acreditaciones + Acumuladores Ganancias',
+// specs/control-acumuladores-ganancias.md). "agrupadores" queda afuera por
+// `hidden`, no por scope.
+assert('un cliente Axton ve Acreditaciones + Acumuladores Ganancias (no agrupadores, está `hidden`)',
   filterControlsForClient(allControls, nuevoAx).map(c => c.id).sort().join(',')
-    === 'acreditaciones_reporte,acumuladores_ganancias,agrupadores');
+    === 'acreditaciones_reporte,acumuladores_ganancias');
 
 assert('los 10 controles de Marval son scope "cliente"',
   allControls
