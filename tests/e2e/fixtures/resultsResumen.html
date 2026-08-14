@@ -39,6 +39,14 @@
             <span class="status-dot status-dot--error"></span>
             <h3 class="control-card__name">Brutos — Controlar</h3>
           </div></div>
+          <!-- La ficha desplegable con la tabla real adentro: es la estructura
+               que tiene que dejar que las solapas y la barra de herramientas del
+               Detalle se peguen arriba al scrollear la pantalla. -->
+          <div class="ctrl-detail-grid is-open">
+            <div class="ctrl-detail-grid__inner">
+              <div class="control-card__detail" id="js-ctrl-brutos"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -49,6 +57,7 @@
 import { buildHeroHtml, buildCtrlCardsHtml } from '../../../js/ui/controlsResults.js';
 import { mountResultsHeader, renderResultsTabs, runMetaLabel } from '../../../js/ui/resultsHeader.js';
 import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from '../../../js/ui/runExport.js';
+import { renderBrutosResults } from '../../../js/controls/brutos.js';
 
 const caso = new URLSearchParams(location.search).get('caso') || 'verde';
 
@@ -95,7 +104,17 @@ mountResultsHeader({
   periodo: 'Agosto 2026',
   verdictLine: verdict,
   back: { label: '← Volver a los controles', onClick: () => {} },
-  run: { createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false, onToggleDefinitive: () => {} },
+  run: {
+    createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false, onToggleDefinitive: () => {},
+    // Los avisos que quedaron registrados al ejecutar (aditivo 2). El caso
+    // verde no tiene ninguno: así se ve también la sección vacía.
+    warnings: caso === 'rojo'
+      ? [
+          'Reporte de Brutos: la sigla del nombre no coincide — lo usaste bajo tu criterio.',
+          '«1003-SUELDO» en Tabulado: Los valores de esta columna no parecen importes — revisá si es la columna correcta.',
+        ]
+      : [],
+  },
   exportItems: buildRunExportItems({
     clienteName: 'Cliente Demo', clienteCode: 'DEMO', periodo: 'Agosto 2026', period: '2026-08',
     createdAtLabel: '13 ago 2026, 14:02', estadoLabel: 'Borrador',
@@ -115,5 +134,22 @@ renderResultsTabs(document.getElementById('js-results-tabs'), {
   ],
   meta: runMetaLabel({ createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false }),
 });
+
+// La tabla real del control adentro de su ficha: 60 legajos para que la
+// pantalla tenga scroll y se pueda ver si la barra de herramientas se pega.
+const filas = Array.from({ length: 60 }, (_, i) => {
+  const sal = 1000000 + i * 1000;
+  const dif = i % 10 === 0 ? -15000 : 0;
+  return {
+    legajo: String(800 + i), nombre: `EMPLEADO ${i + 1}`,
+    salBase: sal, aCuFutAumen: 200000,
+    tabValSal: sal + dif, tabValAcu: 200000,
+    ctrlSalBase: dif, ctrlACuFutAumen: 0,
+  };
+});
+renderBrutosResults(
+  { rows: filas, summary: { total: filas.length, conDifSalario: 6, conDifACuFutAumen: 0, sinTabData: 0 }, period: '2026-08' },
+  document.getElementById('js-ctrl-brutos'),
+);
 </script>
 </body></html>

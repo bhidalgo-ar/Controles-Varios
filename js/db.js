@@ -539,10 +539,20 @@ export async function setConfig(key, value) {
 // ── CONTROL RUNS ────────────────────────────────────────────────────────────
 // Un "control run" es una ejecución de uno o más controles para un cliente/período.
 
-export async function createControlRun(clientCode, period, selectedControls, notes = '') {
+/**
+ * @param {string[]} [warnings] - los avisos de "avisa, no traba" que el analista
+ *   pasó por alto al ejecutar (ver js/ui/runWarnings.js). **Campo aditivo:** no
+ *   está indexado, así que no hace falta subir la versión de Dexie, y un run
+ *   guardado antes de que existiera simplemente no lo trae — la pantalla lo lee
+ *   como "sin avisos" en vez de romperse.
+ */
+export async function createControlRun(clientCode, period, selectedControls, notes = '', warnings = []) {
   const now = new Date().toISOString();
   return db.controlRuns.add({
     clientCode, period, selectedControls, notes,
+    warnings: Array.isArray(warnings)
+      ? warnings.filter(w => typeof w === 'string' && w.trim() !== '')
+      : [],
     isDefinitive: false, createdAt: now, updatedAt: now,
   });
 }

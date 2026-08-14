@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: el total de abajo es el de lo que estás mirando, y los avisos quedan guardados con la corrida — 2026-08-14
+
+- **Octava tarea del rediseño** (`docs/rediseno/README.md` → pantallas 7 "Resultados — Detalle" y 8 "Detalles del run"). Cambia cómo se ve y qué se guarda de la corrida; no cambia ningún control, ningún cálculo ni el semáforo.
+- **El TOTAL de abajo dejó de mentir.** Antes, al filtrar o buscar un legajo, la tabla mostraba una fila y abajo seguía diciendo "TOTAL — 514 legajos" con la suma de todos. Ahora el total es **el de lo que quedó en pantalla** y lo dice: "TOTAL de la selección — 23 legajos". Ojo con una distinción a propósito: mostrar 50 filas de 514 con "Mostrar todas" **no** achica el total — no cambiaste lo que estás mirando, sólo cuánto entra en la pantalla.
+- **Los filtros son botones, no un desplegable.** "Sólo con diferencia (23)" y "Todos los evaluados (514)" quedan a la vista, con su número, y el que está activo se ve. **Cuando el control terminó con diferencias, arranca en "sólo con diferencia" —como hasta ahora— y al lado dice por qué**, para que no parezca que estás viendo toda la tabla. Al lado, a la derecha, cuántas filas hay y cuántas tienen diferencia.
+- **La barra de arriba de la tabla (filtros, buscador, exportar) queda pegada** mientras scrolleás: con 500 legajos ya no hay que volver arriba para cambiar el filtro o bajarse el Excel.
+- **El encabezado de dos filas ya no se tapa a sí mismo** al scrollear, y los dos grupos de columnas ("Salario Base" / "A Cta Fut Aumen") salen del mismo par de colores en todos los controles — antes cada control elegía el suyo.
+- **La diferencia se ve como una pastilla roja**, el cero en gris discreto, y lo que **no se pudo comparar** (el legajo que está en un archivo y no en el otro) sale en amarillo diciendo "sin comparar" — antes era un guioncito que se leía igual que "dio cero".
+- **Los avisos con los que corriste quedan guardados con la corrida.** Los dos que hasta ahora se veían y se perdían: el archivo cuyo nombre no traía la sigla ("lo usaste bajo tu criterio") y la columna cuyo contenido no parecía lo que ahí va. Se ven en **"Detalles del run"** y salen en el **export** (en el Excel abajo del resumen y en el JSON), así el que abre la corrida un mes después sabe con qué se corrió. **Incluye los avisos de las columnas del Paso 2**, que antes no se podían recuperar. Si no hubo avisos, también lo dice. **Las corridas viejas se siguen abriendo igual**: muestran la sección vacía.
+- **Sin cambios**: los tres estados del run (⚡ rápida / 📝 borrador / ✅ definitivo) y el estado mensual, el semáforo y cómo se cuentan los legajos con diferencia.
+- **Verificado en Chromium** (`tests/e2e/detalleTabla.spec.js` nuevo + `resultsResumen.spec.js`): el total baja al buscar un legajo y vuelve al limpiar, el filtro arranca donde tiene que arrancar, los avisos aparecen en el popover y la barra queda a la vista al scrollear. `npm run test:unit` en verde, con `tests/runWarnings.test.js` nuevo. Decisiones en D-058.
+
 ### feat: una sola barra arriba, y la pantalla deja de scrollear entera — 2026-08-13
 
 - **Segunda tarea del rediseño** (`docs/rediseno/README.md` → "Orden sugerido", punto 2). Sigue siendo sólo la piel: no cambia ningún control, ningún cálculo, ningún archivo que se descarga ni cómo se navega.

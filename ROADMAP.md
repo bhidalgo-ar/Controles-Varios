@@ -170,10 +170,12 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
   columna se recalcula de lo que la corrida guarda (`controlRunFiles`: filas + mapeo por archivo), y ahí
   está el mapeo del **archivo** pero no las columnas que se eligen en el **Paso 2** (`tabExtraConfig`:
   los 18 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN / GTOS_PERSONALES / DTO_COCHERA y las
-  3 de fecha) — viajan al control pero no al registro del archivo. Efecto para el analista: el aviso de
-  esas columnas se ve al elegirlas, pero no se repite en la pantalla de resultados. Arreglarlo es guardar
-  el mapeo del Tabulado ya mergeado en la corrida; es chico, pero es una decisión sobre qué se persiste
-  (y de paso deja la corrida auto-descriptiva: hoy no queda registro de con qué columnas se corrió).
+  3 de fecha) — viajan al control pero no al registro del archivo.
+  **Parcialmente resuelto por D-058:** el run guarda ahora sus **avisos** (`warnings`, texto ya redactado),
+  armados al ejecutar, así que el aviso de esas columnas sí se ve después — en "Detalles del run" y en el
+  export. Lo que sigue pendiente es lo otro que este punto pedía: guardar el **mapeo** del Tabulado ya
+  mergeado, para que la corrida sea auto-descriptiva (con qué columna corrió cada concepto, no sólo qué
+  avisos hubo). Sigue siendo una decisión sobre qué se persiste.
 - **Los 8 conceptos NR sin semilla de código** — verificado en el código el 2026-08-13: siguen siendo
   exactamente estos 8, y los otros 10 los resuelve sola la app. `INDEM_ANT_FALLE`, `INDM_MATERNIDAD`,
   `GRAT_VAC`, `GRA_VACNOG_SAC`, `INDEM_FUER_MAY`, `INDEM_EMBARAZO`, `ASIG_PAS` e `INCREMENTO_ST` no
