@@ -5,6 +5,13 @@
 // Flujo: crear cliente → configurar un agrupador → desde #/controls/:clientId
 // seleccionar "Cruce por Agrupadores" → cargar Nómina Maestra + Resumen (formato
 // Largo) → ejecutar → ver el resultado en #/control-results/:runId.
+//
+// PAUSADO (2026-08-14, Willy): el control quedó `hidden` en el registry —
+// pendiente hasta definir el archivo de Nómina Maestra estándar (ver
+// js/controls/registry.js) — así que ya no se lo puede seleccionar desde
+// #/controls/:clientId. La lógica de cálculo (run/summarize) se sigue
+// probando en tests/agrupadoresControl.test.js, sin pasar por la pantalla.
+// Reactivar este e2e cuando el control se vuelva a mostrar.
 
 import { test, expect } from '@playwright/test';
 import * as XLSX from '../../node_modules/xlsx/xlsx.mjs';
@@ -32,7 +39,7 @@ const resumenBuffer = buildXlsxBuffer([
   ['2', '200', 300],
 ]);
 
-test('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y ejecutar', async ({ page }) => {
+test.skip('Cruce por Agrupadores: configurar un agrupador, cargar Nómina + Resumen y ejecutar', async ({ page }) => {
   await page.goto('/');
   await page.locator('#js-first-client-btn, #js-new-client-btn').first().click();
   await page.fill('#js-client-name', 'Cliente Agrupadores E2E');
