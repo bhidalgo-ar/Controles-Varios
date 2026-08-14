@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8"><title>rendimiento</title>
+<link rel="stylesheet" href="/css/tokens.css"><link rel="stylesheet" href="/css/components.css">
+<script src="/node_modules/dexie/dist/dexie.js"></script>
+<script src="/node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<div id="grouping"></div>
+<div id="rva"></div>
+<pre id="out">—</pre>
+<script type="module">
+  const { renderConceptGroupingEditor }      = await import('../../../js/ui/rendVsTabuConceptEditor.js');
+  const { renderRendVsAsientoConfigEditor }  = await import('../../../js/ui/rendVsAsientoConfigEditor.js');
+  const { DEFAULT_CONCEPT_CONFIG }           = await import('../../../js/controls/rendVsTabu.js');
+
+  // Datos inventados (regla del repo): una fila de Tabulado con unas pocas
+  // columnas de concepto, y una Contabilidad donde sólo una cuenta matchea.
+  const TAB_ROWS = [{
+    LEGAJO: '1',
+    '1003-SUELDO': 100,
+    '1004-DIAS_NO_TRABAJ': 0,
+    '1017-A_CTA_FUT_AUMEN': 0,
+    '1006-ASIG_ESTIMULO': 50,
+    '9999-CONCEPTO_SUELTO': 7,
+  }];
+
+  // El editor arranca del default y sólo llama a onChange cuando el analista
+  // toca algo — el wizard hace lo mismo: el state parte del default guardado.
+  window.__grouping = JSON.parse(JSON.stringify(DEFAULT_CONCEPT_CONFIG));
+  window.__cambios  = 0;
+  renderConceptGroupingEditor(
+    document.getElementById('grouping'),
+    TAB_ROWS,
+    null,
+    (g) => { window.__grouping = g; window.__cambios++; },
+  );
+
+  window.__rva = null;
+  renderRendVsAsientoConfigEditor(document.getElementById('rva'), {
+    accountStats: { '5208001': { rows: 1240, names: ['SUELDOS AGO', 'SUELDOS JUL'] } },
+    conceptStats: {},
+    contaCargada: true,
+    onChange: (c) => { window.__rva = c; },
+  });
+
+  // Signo de un concepto dentro de un grupo, leído del state que viaja al control.
+  window.__signo = (cat, code) =>
+    (window.__grouping?.[cat] || []).find(e => e.code === code)?.sign ?? null;
+  window.__cuantos = (cat) => (window.__grouping?.[cat] || []).length;
+
+  document.getElementById('out').textContent = 'listo';
+</script>
