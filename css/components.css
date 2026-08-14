@@ -1188,8 +1188,59 @@
 /* Planilla con superpoderes: scroll acotado + sticky header/footer/columnas.
    Selectores por posición (no por clase por celda) para sobrevivir a un
    control que reconstruye el <tbody> al ordenar (ver rendVsAsiento.js). */
-.rb-grid-wrap { max-height: 62vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--color-surface); }
+/* Una planilla de control pide más ancho del que hay (la de Acumuladores mide
+   ~1680px): siempre va a scrollear en horizontal en una pantalla chica, así que
+   lo que NO puede pasar es que el analista no se entere de que hay columnas a la
+   derecha. Dos cosas lo avisan, las dos sin JS (ver D-060):
+   - la sombra de los bordes, que se apaga sola al llegar a la punta (truco de
+     4 fondos: los dos "tapa" viajan con el contenido —`local`— y las dos
+     sombras quedan fijas al recuadro —`scroll`—, y las tapas se pintan encima);
+   - la barra de scroll, declarada a 10px: la overlay del sistema mide 2px y es
+     transparente hasta que le pasás el mouse, o sea que no avisa nada. */
+.rb-grid-wrap {
+  max-height: 62vh; overflow: auto;
+  border: 1px solid var(--line); border-radius: var(--radius-md);
+  background:
+    linear-gradient(to right,  var(--color-surface), var(--color-surface)) 0 0 / 24px 100% no-repeat local,
+    linear-gradient(to left,   var(--color-surface), var(--color-surface)) 100% 0 / 24px 100% no-repeat local,
+    linear-gradient(to right,  var(--scroll-shadow), transparent) 0 0 / 18px 100% no-repeat scroll,
+    linear-gradient(to left,   var(--scroll-shadow), transparent) 100% 0 / 18px 100% no-repeat scroll,
+    var(--color-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.rb-grid-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+.rb-grid-wrap::-webkit-scrollbar-track { background: transparent; }
+.rb-grid-wrap::-webkit-scrollbar-thumb {
+  background: var(--color-border); border-radius: 5px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+.rb-grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--t3); background-clip: padding-box; }
+/* Barra del botón "Ampliar" — sólo se muestra si a la planilla le falta ancho
+   de verdad (ver enhanceWidthEscape en resultBlocks.js). */
+.rb-grid-bar { display: flex; justify-content: flex-end; margin-bottom: var(--sp-2); }
+
+/* Planilla ampliada a toda la pantalla. No es un modal: no hay fondo que tape la
+   app ni foco atrapado — es la MISMA tabla, con su filtro y su orden intactos,
+   ocupando toda la ventana. Se sale con el botón o con Escape; el hueco de
+   arriba es para ese botón. */
+.rb-grid-wrap--full {
+  position: fixed; z-index: 60;
+  inset: calc(var(--sp-4) + 40px) var(--sp-4) var(--sp-4);
+  max-height: none; max-width: none;
+  box-shadow: var(--popover-shadow);
+}
+body.has-rb-grid-full .rb-grid-bar:has(.js-rb-expand[aria-pressed="true"]) {
+  position: fixed; z-index: 61;
+  top: var(--sp-4); right: var(--sp-4);
+  margin: 0;
+}
 table.rb-grid { border-collapse: separate; border-spacing: 0; width: 100%; }
+/* Ningún importe se dibuja en una caja más angosta que él: sin esto, una columna
+   apretada parte el número o lo deja pisando el de al lado, y "0,00" seguido de
+   "36.857.323,85" se lee como un solo número. La planilla ya scrollea: que la
+   tabla sea más ancha es barato, que un número se lea mal no. */
+table.rb-grid > * > tr > * { white-space: nowrap; }
 /* El encabezado de una grid es neutro, no el teal de `.data-table thead`: los
    controles pintan sus columnas con tintes translúcidos (rgba …, 0.18) que sólo
    se leen como tinte sobre un fondo neutro. Por eso va también el `color`: sin
@@ -1246,6 +1297,22 @@ table.rb-grid thead tr:first-child > :nth-child(2),
 table.rb-grid tfoot > tr > :first-child,
 table.rb-grid tfoot > tr > :nth-child(2) {
   z-index: 4; background: var(--color-bg-subtle);
+}
+/* La fila de TOTAL arranca con un rótulo que ocupa las DOS columnas fijas
+   (`colspan="2"`, en 9 controles). Ahí las reglas por posición de arriba mienten:
+   `:nth-child(2)` no es la 2ª columna, es el PRIMER IMPORTE — y quedaba clavado
+   a 74px del borde, montado encima de los importes que pasaban por debajo al
+   scrollear (los números "pegados" que se veían en Acumuladores). Se corrige por
+   atributo y no en JS para que sobreviva a los controles que reconstruyen la
+   fila de totales al filtrar (ver initSelectionTotals en tableTools.js). D-060.
+   - el rótulo se fija igual, pero mide lo que ocupan las dos columnas juntas;
+   - el primer importe deja de fijarse en horizontal (`left: auto`) y conserva el
+     sticky vertical del pie, que sí lo queremos. */
+table.rb-grid tfoot > tr > [colspan]:not([colspan="1"]):first-child {
+  width: auto; min-width: 0; max-width: none;
+}
+table.rb-grid.rb-grid--stick2 tfoot > tr > [colspan]:not([colspan="1"]):first-child + * {
+  left: auto; z-index: 2; box-shadow: 0 -1px 0 var(--line);
 }
 
 .rb-magcell { position: relative; }

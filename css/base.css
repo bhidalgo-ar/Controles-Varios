@@ -124,6 +124,16 @@ img { max-width: 100%; height: auto; display: block; }
   width: 100%;
 }
 
+/* El Detalle de los controles usa el ancho de la ventana, no el tope de 1280px
+   (D-060). Las planillas piden hasta ~1700px: con el tope, en un monitor de
+   1920 quedaban ~600px de columnas afuera de la vista y la app desperdiciaba
+   640px de pantalla. El Resumen —texto y tarjetas— mantiene el tope, porque
+   una línea de texto de 1800px no se lee. */
+.page-content--wide {
+  max-width: none;
+  padding-inline: var(--sp-6);
+}
+
 .app-main > .page-content {
   grid-row: 3;
   overflow-y: auto;

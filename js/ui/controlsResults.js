@@ -63,7 +63,7 @@ export async function renderControlsResults(root, runId) {
 
   root.innerHTML = `
     <div id="js-results-tabs"></div>
-    <div class="page-content">
+    <div class="page-content" id="js-results-page">
       <div id="js-tab-resumen" class="results-column">
         <div id="js-hero"></div>
         <div id="js-column-warnings"></div>
@@ -195,13 +195,20 @@ export async function renderControlsResults(root, runId) {
     }),
   );
 
+  // El Detalle usa el ancho de la ventana y el Resumen mantiene el tope de
+  // 1280px (D-060): las planillas necesitan el ancho, el texto no lo quiere.
+  const pageEl = root.querySelector('#js-results-page');
+  const applyWidth = (tabId) => pageEl.classList.toggle('page-content--wide', tabId === 'detalle');
+
   tabsCtl = renderResultsTabs(tabsEl, {
     tabs: [
       { id: 'resumen', label: 'Resumen', panel: resumenEl },
       { id: 'detalle', label: 'Detalle', panel: detalleEl },
     ],
     meta: runMetaLabel({ createdAtLabel: createdAt, isQuickRun: false, isDefinitive }),
+    onChange: applyWidth,
   });
+  applyWidth('resumen');
 
   // Una tarjeta colapsable por control (mismo orden que el resumen: errores primero)
   for (const item of controlSummaries) {
