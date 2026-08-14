@@ -64,7 +64,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
         () => {});
       return;
     }
-    initMultiUpload(container, { fileType, existingData, onComplete });
+    initMultiUpload(container, { fileType, existingData, onComplete, required });
     return;
   }
 
@@ -206,7 +206,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
 // si dos archivos distintos comparten filas idénticas, señal de una carga
 // duplicada por error.
 
-function initContaMultiUpload(container, { fileType, existingData, onComplete }) {
+function initContaMultiUpload(container, { fileType, existingData, onComplete, required }) {
   let entries = existingData?.entries ? [...existingData.entries] : [];
 
   const commit = (newEntries) => {
@@ -255,6 +255,12 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete })
     commit([...entries, ...newEntries]);
   };
 
+  // El casillero de la Contabilidad es el mismo `.dropzone` que el resto de los
+  // archivos del Paso 2 (pantalla 9 del rediseño): vacío es una zona de drop
+  // igual a la de al lado, y cargado es la caja verde con el chip "N archivos",
+  // los nombres en mono y "+ Sumar" para agregarle otro mes. La lista por
+  // archivo no se fue: cada nombre lleva su ✕, porque sumar de más —el mismo
+  // mes dos veces— es el error que este flujo tiene que dejar deshacer.
   function render(data) {
     const dupWarningsHtml = (data?.parseMetadata?.duplicates || []).map(d => `
       <div class="alert alert--warning" style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
@@ -263,58 +269,103 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete })
       </div>
     `).join('');
 
-    const entriesHtml = entries.map((e, i) => {
-      const desc = e.parseMetadata?.descartadasSinCC ?? 0;
-      return `
-        <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--color-match-exact);background:var(--color-match-exact-bg);border-radius:var(--radius-md);font-size:var(--text-sm);">
-          <span style="color:var(--color-match-exact);font-weight:600;">✓</span>
-          <strong style="flex-shrink:0;">${escHtml(e.fileName)}</strong>
-          <span style="color:var(--color-text-muted);flex:1;">
-            ${e.parseMetadata?.totalRows ?? e.parsedRows.length} filas con CC
-            ${desc > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${desc} sin CC descartadas</span>` : ''}
-          </span>
-          <button type="button" class="btn btn--ghost btn--sm" data-conta-remove="${i}" style="flex-shrink:0;">✕ Quitar</button>
+    const label = dropLabelFor(fileType);
+    const tag   = required === true ? 'OBLIGATORIO' : required === false ? 'OPCIONAL' : '';
+    const tagCls = required === false ? ' dropzone__tag--optional' : '';
+
+    if (entries.length === 0) {
+      container.innerHTML = `
+        <div class="dropzone dropzone--empty" id="js-conta-drop" role="button" tabindex="0"
+             aria-label="Cargar ${escHtml(label)}">
+          <span class="dropzone__icon" aria-hidden="true">⬆</span>
+          <div class="dropzone__body">
+            <div class="dropzone__title">Arrastrá la ${escHtml(label)}${escHtml(dropHintFor(fileType))}</div>
+            <div class="dropzone__hint">o hacé clic para buscarla — .xlsx. Podés soltar varios meses juntos.</div>
+          </div>
+          <span class="dropzone__tag${tagCls}" ${tag ? '' : 'hidden'}>${escHtml(tag)}</span>
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
         </div>
       `;
-    }).join('');
+    } else {
+      const descartadas = entries.reduce((n, e) => n + (e.parseMetadata?.descartadasSinCC ?? 0), 0);
+      const filas = data?.parseMetadata?.totalRows ?? 0;
+      const archivosHtml = entries.map((e, i) => `
+        <span class="dropzone__fileitem">
+          <span class="dropzone__file">${escHtml(e.fileName)}</span>
+          <button type="button" class="dropzone__fileitem-x" data-conta-remove="${i}"
+            title="Quitar ${escHtml(e.fileName)}" aria-label="Quitar ${escHtml(e.fileName)}">✕</button>
+        </span>
+      `).join('<span class="dropzone__sep" aria-hidden="true">·</span>');
 
-    const totalHtml = entries.length > 1
-      ? `<p class="text-muted" style="font-size:var(--text-sm);margin:var(--sp-1) 0 var(--sp-2);">Total combinado: ${data?.parseMetadata?.totalRows ?? 0} filas de ${entries.length} archivos.</p>`
-      : '';
-
-    container.innerHTML = `
-      ${entries.length ? `<div style="display:flex;flex-direction:column;gap:var(--sp-2);margin-bottom:var(--sp-2);">${entriesHtml}</div>${totalHtml}${dupWarningsHtml}` : ''}
-      <div class="file-drop" id="js-conta-drop">
-        <div class="file-drop__icon">📂</div>
-        <div class="file-drop__text">
-          <strong>${escHtml(dropLabelFor(fileType))}</strong> — arrastrá uno o varios .xlsx${escHtml(dropHintFor(fileType))}, o hacé clic para elegir
-          ${entries.length ? ' (se suman a los ya cargados)' : ''}
+      container.innerHTML = `
+        <div class="dropzone dropzone--loaded">
+          <span class="dropzone__icon" aria-hidden="true">✓</span>
+          <div class="dropzone__body">
+            <div class="dropzone__title">
+              ${escHtml(fileTypeLabel(fileType))}
+              <span class="dropzone__count">${entries.length} archivo${entries.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="dropzone__meta dropzone__files">
+              ${archivosHtml}
+            </div>
+            <div class="dropzone__meta">
+              <span>${filas} fila${filas !== 1 ? 's' : ''} con CC</span>
+              ${descartadas > 0
+                ? `<span>·</span><span class="dropzone__warnchip">${descartadas} sin CC descartadas</span>`
+                : ''}
+            </div>
+            <div class="dropzone__note">
+              Podés soltar varios meses juntos — se avisa si dos comparten filas idénticas.
+            </div>
+          </div>
+          <div class="dropzone__actions">
+            <button type="button" class="btn btn--secondary btn--sm" id="js-conta-drop">+ Sumar</button>
+          </div>
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
         </div>
-        <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
-      </div>
-    `;
+        ${dupWarningsHtml}
+      `;
+    }
 
     const dropZone  = container.querySelector('#js-conta-drop');
     const fileInput = container.querySelector('#js-conta-file-input');
 
     dropZone.addEventListener('click', () => fileInput.click());
+    // Con la Contabilidad cargada el disparador es el botón "+ Sumar", que ya
+    // hace click con Enter y Espacio solo: agregarle el handler abriría el
+    // explorador dos veces.
+    if (dropZone.tagName !== 'BUTTON') {
+      dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+      });
+    }
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length) addFiles(e.target.files);
       fileInput.value = '';
     });
-    dropZone.addEventListener('dragover', (e) => {
+
+    // Soltar archivos vale en todo el casillero, no sólo sobre el botón: con la
+    // Contabilidad ya cargada, "+ Sumar" es un botón chico y el gesto natural es
+    // arrastrar el mes nuevo encima de la caja verde.
+    const zonaDrop = container.querySelector('.dropzone');
+    zonaDrop.addEventListener('dragover', (e) => {
       e.preventDefault();
-      dropZone.classList.add('file-drop--dragover');
+      zonaDrop.classList.add('dropzone--dragover');
     });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('file-drop--dragover'));
-    dropZone.addEventListener('drop', (e) => {
+    zonaDrop.addEventListener('dragleave', (e) => {
+      if (!zonaDrop.contains(e.relatedTarget)) zonaDrop.classList.remove('dropzone--dragover');
+    });
+    zonaDrop.addEventListener('drop', (e) => {
       e.preventDefault();
-      dropZone.classList.remove('file-drop--dragover');
+      zonaDrop.classList.remove('dropzone--dragover');
       if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
     });
 
     container.querySelectorAll('[data-conta-remove]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        // El ✕ vive adentro del casillero, que abre el selector de archivos al
+        // clickearse: sin esto, quitar un archivo abriría el explorador.
+        e.stopPropagation();
         const idx = Number(btn.dataset.contaRemove);
         commit(entries.filter((_, j) => j !== idx));
       });

@@ -123,9 +123,10 @@ import {
   runRendVsAsiento,
   renderRendVsAsientoResults,
   summarizeRendVsAsiento,
-  renderRendVsAsientoConfigEditor,
   DEFAULT_RVA_CONFIG,
 } from './rendVsAsiento.js';
+
+import { renderRendVsAsientoConfigEditor } from '../ui/rendVsAsientoConfigEditor.js';
 
 import {
   runRendXEe,
@@ -474,20 +475,25 @@ export const CONTROL_REGISTRY = {
       { key: 'rva_config', stateKey: 'rvaConfig', mappingKey: 'rvaConfig',
         default: () => JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG)),
         editor: renderRendVsAsientoConfigEditor,
-        openByDefault: true,
-        // Con la CONTA cargada, el editor muestra el nombre de cada cuenta y
-        // concepto al lado de su código.
+        // Con la CONTA cargada, cada clasificación puede decir cuántas filas
+        // matchea de verdad ("✓ 1.240 filas" / "⚠ sin match") y mostrar hasta
+        // dos nombres reales de cuenta como muestra. Sin CONTA no se cuenta
+        // nada: el editor lo dice en vez de mostrar un 0 que parecería un
+        // código equivocado.
         editorProps: (state) => {
-          const accountNames = {}, conceptNames = {};
-          for (const r of (state.controlFiles?.rend_vs_asiento?.conta?.parsedRows || [])) {
-            const cc = String(r.cuenta_contab || '').trim();
-            const cn = String(r.n_cuenta_contable || '').trim();
-            if (cc && cn && !accountNames[cc]) accountNames[cc] = cn;
-            const co = String(r.id_concepto || '').trim();
-            const nl = String(r.nombre_largo || '').trim();
-            if (co && nl && !conceptNames[co]) conceptNames[co] = nl;
+          const contaRows = state.controlFiles?.rend_vs_asiento?.conta?.parsedRows || [];
+          const accountStats = {}, conceptStats = {};
+          const sumar = (stats, code, name) => {
+            if (!code) return;
+            const st = stats[code] || (stats[code] = { rows: 0, names: [] });
+            st.rows++;
+            if (name && st.names.length < 2 && !st.names.includes(name)) st.names.push(name);
+          };
+          for (const r of contaRows) {
+            sumar(accountStats, String(r.cuenta_contab || '').trim(), String(r.n_cuenta_contable || '').trim());
+            sumar(conceptStats, String(r.id_concepto || '').trim(),   String(r.nombre_largo || '').trim());
           }
-          return { accountNames, conceptNames };
+          return { accountStats, conceptStats, contaCargada: contaRows.length > 0 };
         },
       },
     ],

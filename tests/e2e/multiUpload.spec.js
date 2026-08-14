@@ -22,7 +22,7 @@ test('CONTA: la pantalla multi-archivo sale de la ficha y concatena', async ({ p
   await page.evaluate(() => window.__mount('conta_file'));
 
   expect(await page.evaluate(() => window.__dropText()))
-    .toBe('Contabilidad Desglosada — arrastrá uno o varios .xlsx, o hacé clic para elegir');
+    .toBe('Arrastrá la Contabilidad Desglosada o hacé clic para buscarla — .xlsx. Podés soltar varios meses juntos.');
 
   await page.evaluate(() => window.__drop('conta_file', ['abril.xlsx', 'mayo.xlsx']));
   const d = await page.evaluate(() => window.__completes.at(-1));
@@ -30,6 +30,25 @@ test('CONTA: la pantalla multi-archivo sale de la ficha y concatena', async ({ p
   expect(d.parsedRows.length).toBe(4);              // 2 archivos × 2 filas con CC (la de "Null" se descarta)
   expect(d.fileName).toContain('2 archivos');
   expect(await page.locator('#host').textContent()).toContain('sin CC descartadas');
+  // El casillero cargado dice cuántos archivos se sumaron y deja quitar cada uno.
+  await expect(page.locator('#host .dropzone__count')).toHaveText('2 archivos');
+  await expect(page.locator('#host [data-conta-remove]')).toHaveCount(2);
+  expect(errores).toEqual([]);
+});
+
+test('CONTA: quitar un archivo del casillero deja el otro cargado', async ({ page }) => {
+  await page.goto('/tests/e2e/fixtures/multiUpload.html');
+  await expect(page.locator('#out')).toHaveText('listo', { timeout: 15000 });
+  await page.evaluate(() => window.__mount('conta_file'));
+  await page.evaluate(() => window.__drop('conta_file', ['abril.xlsx', 'mayo.xlsx']));
+
+  await page.locator('#host [data-conta-remove]').first().click();
+
+  const d = await page.evaluate(() => window.__completes.at(-1));
+  expect(d.parsedRows.length).toBe(2);
+  expect(d.fileName).toBe('mayo.xlsx');
+  // El ✕ no abre el selector de archivos: el casillero sigue mostrando el que quedó.
+  await expect(page.locator('#host [data-conta-remove]')).toHaveCount(1);
   expect(errores).toEqual([]);
 });
 

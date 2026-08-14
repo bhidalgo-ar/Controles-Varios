@@ -126,31 +126,37 @@ export function renderTabuladoAnalysis(container, tabData, catalogRows, selected
     : '<p class="text-sm text-muted" style="margin:0;">— Todos los conceptos esperados están presentes.</p>';
 
   // ── Render del panel completo ──────────────────────────────────────────────
-  // Reconocidas se colapsa por defecto (lo más largo). Huérfanas/faltantes se abren solo si hay algo.
-  const summaryCounts = `
-    <span style="color:var(--color-match-exact);font-weight:600;">✓ ${nRec}</span>
-    <span style="color:var(--color-text-muted);">·</span>
-    <span style="color:${nOrph > 0 ? 'var(--color-warning)' : 'var(--color-text-muted)'};font-weight:${nOrph > 0 ? '600' : 'normal'};">⚠ ${nOrph} huérfanas</span>
-    <span style="color:var(--color-text-muted);">·</span>
-    <span style="color:${nMiss > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)'};font-weight:${nMiss > 0 ? '600' : 'normal'};">✗ ${nMiss} faltantes</span>
-  `;
-
-  const isAllGood = nOrph === 0 && nMiss === 0;
+  //
+  // Una tira de una línea (pantalla 10 del rediseño). Antes eran tres acordeones
+  // anidados que ocupaban media pantalla antes de llegar a lo que hay que tocar:
+  // el analista abre esto para mirar un número, no para leer 101 filas. El
+  // detalle no se fue a ningún lado — sigue detrás de "Ver las N".
+  //
+  // Los tres números son del CATÁLOGO, no de la agrupación de conceptos de
+  // Rendimiento vs Tabulado: "huérfana" acá es una columna que ningún concepto
+  // del catálogo reconoce. Los conceptos que no alimentan ningún grupo los
+  // cuenta el editor de agrupación, más abajo en la misma pantalla.
+  //
+  // "Ver las N": N es lo que hay para revisar (huérfanas + faltantes); si no hay
+  // nada que revisar, N son las reconocidas, que es lo único que queda por mirar.
+  const nRevisar = nOrph + nMiss;
+  const nVer     = nRevisar > 0 ? nRevisar : nRec;
 
   container.innerHTML = `
-    <details style="margin-bottom:var(--sp-3);">
-
-      <summary style="
-        cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);
-        color:var(--color-primary);list-style:none;display:flex;align-items:center;
-        gap:var(--sp-2);user-select:none;flex-wrap:wrap;
-      ">
-        <span>▸</span> 📊 Análisis del Tabulado (${total} cols)
-        <span style="margin-left:var(--sp-2);display:flex;gap:var(--sp-2);align-items:center;font-size:var(--text-sm);font-weight:400;">
-          ${summaryCounts}
+    <details class="tab-analysis">
+      <summary class="tab-analysis__bar">
+        <span class="tab-analysis__title">
+          Análisis del Tabulado
+          <span class="tab-analysis__total">(${total} columna${total !== 1 ? 's' : ''})</span>
         </span>
+        <span class="tab-analysis__stat tab-analysis__stat--ok">✓ ${nRec} reconocida${nRec !== 1 ? 's' : ''}</span>
+        <span class="tab-analysis__stat${nOrph > 0 ? ' tab-analysis__stat--warn' : ''}">
+          ${nOrph > 0 ? '⚠ ' : ''}${nOrph} huérfana${nOrph !== 1 ? 's' : ''} — no están en el catálogo
+        </span>
+        <span class="tab-analysis__stat${nMiss > 0 ? ' tab-analysis__stat--miss' : ''}">${nMiss} faltante${nMiss !== 1 ? 's' : ''}</span>
+        <span class="tab-analysis__more">Ver las ${nVer} <span class="tab-analysis__caret" aria-hidden="true">▾</span></span>
       </summary>
-      <div style="margin-top:var(--sp-2);padding:var(--sp-3);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:var(--sp-3);">
+      <div class="tab-analysis__panel">
 
         <details>
           <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);list-style:none;display:flex;gap:var(--sp-2);align-items:center;">

@@ -114,14 +114,17 @@ async function reloadGroupers(root, clientCode) {
 }
 
 function renderGrouperCard(grouper, concepts) {
+  // Mismo chip que la agrupación de conceptos de Rendimiento vs Tabulado — acá
+  // sin signo, porque un agrupador suma todo lo que tiene adentro.
   const pillsHtml = concepts.length
     ? concepts.map(c => `
-        <span class="pill pill--active" style="gap:var(--sp-1);">
-          ${escHtml(c.conceptCode)}
-          ${c.conceptLabel ? `<small style="opacity:.7;">${escHtml(c.conceptLabel)}</small>` : ''}
-          <button class="js-remove-concept" data-code="${escHtml(c.conceptCode)}"
-            style="background:none;border:none;color:rgba(255,255,255,.8);cursor:pointer;font-size:12px;padding:0 0 0 var(--sp-1);"
-            title="Quitar concepto">✕</button>
+        <span class="concept-chip">
+          <span class="concept-chip__code">${escHtml(c.conceptCode)}</span>
+          ${c.conceptLabel
+            ? `<span class="concept-chip__sep">·</span><span class="concept-chip__name">${escHtml(c.conceptLabel)}</span>`
+            : ''}
+          <button class="concept-chip__x js-remove-concept" data-code="${escHtml(c.conceptCode)}"
+            title="Quitar concepto" aria-label="Quitar el concepto ${escHtml(c.conceptCode)}">✕</button>
         </span>
       `).join('')
     : `<span class="text-sm text-muted">Sin conceptos aún</span>`;
