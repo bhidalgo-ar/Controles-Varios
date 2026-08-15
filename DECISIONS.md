@@ -1760,3 +1760,56 @@ arreglo (verificado).
 del listado de controles y para comparar dos controles hay que abrir y cerrar), y elegir qué columnas
 mirar. Con el ancho de la ventana entran casi todas las planillas; si alguna sigue molestando, ahí se
 evalúa el selector de columnas.
+
+## D-061 — Alta y Baja del reporte de variaciones salen de las fechas, no de que el legajo aparezca en un archivo
+
+**Fecha:** 2026-08-14
+**Contexto:** el control de Variación entre quincenas de POP (`specs/control-variacion-quincenas-pop.md`)
+marca, por legajo, si hubo un alta o una baja entre las dos quincenas comparadas. El prototipo que llegó
+con la ficha de traspaso lo resolvía **por presencia**: si el legajo está en el Tabulado de la quincena
+actual y no en el de la anterior es un alta, y al revés una baja. La ficha lo declaraba como ASUMIDO y
+pedía confirmarlo.
+
+Verificado contra los archivos reales de julio 2026: hay un legajo que liquidó **sólo en la 1ª
+quincena** y que **no tiene fecha de egreso** en ninguno de los dos Tabulados. Por presencia sale
+`Baja = S`; el reporte real de Axton no lo marca ni alta ni baja (pone `-`). No se fue: no liquidó horas
+en la 2ª quincena. O sea que el criterio por presencia le avisa a HR del cliente de una baja que no
+existió — y el archivo lo recibe HR, no el analista, así que el error sale del estudio.
+
+**Decisión (Willy, 2026-08-14):** Alta y Baja salen de las **fechas** del Tabulado. Alta = la fecha de
+`Ingreso` cae dentro de la quincena actual; Baja = la de `Egreso` cae dentro de la quincena actual. La 1ª
+quincena es del 1 al 15 y la 2ª del 16 al último día del mes, y el mes y la quincena salen de la columna
+`liquidacion` del propio archivo.
+
+Con eso, los legajos que liquidaron en una sola de las dos quincenas **se listan aparte** —"liquidó sólo
+en la quincena anterior"— sin llamarlos ni alta ni baja. Es la información que el analista necesita para
+ir a mirar, sin afirmar una baja que el archivo no dice.
+
+**Las tres respuestas, y por qué la celda vacía no significa lo mismo en las dos columnas:**
+
+| | Celda vacía | Columna ausente del archivo |
+|---|---|---|
+| **Alta** (`Ingreso`) | `—` — todo empleado tiene fecha de ingreso, así que una vacía es un dato que falta | `—` + aviso |
+| **Baja** (`Egreso`) | `N` — en Axton un empleado activo no tiene fecha de egreso: vacío es "no se fue" | `—` + aviso |
+
+Esa asimetría es lo que obligó a que el parser del Tabulado de Axton **omita la clave** de una columna
+que el archivo no trae, en vez de emitirla vacía: con una clave vacía siempre, "no sé si hubo bajas" y
+"no hubo bajas" se leen igual, y una de las dos miente. Es el mismo `null ≠ 0` de CLAUDE.md aplicado a
+una marca S/N en vez de a un importe.
+
+**Sin período legible no se calculan:** si no se pudo leer la quincena del Tabulado actual, las dos
+columnas salen `—` con su aviso, en vez de evaluarse contra un mes inventado.
+
+**Efecto medido:** contra el reporte real de Axton de la 2ª quincena de julio 2026, el criterio por
+fechas baja de 2 campos con diferencia a 1 en ese legajo (el `Alta = N` ahora coincide con Axton; queda
+la `Baja`, donde Axton pone `-` porque no evalúa a quien no liquidó en la quincena). El total de legajos
+con alguna diferencia contra Axton sigue siendo 9 de 203.
+
+**Lo que NO se hizo:** copiar el `-` de Axton para el legajo que no liquidó en la quincena actual. Sería
+inventar una regla a partir de un solo caso observado para que el control coincida con el archivo que
+está controlando, que es exactamente al revés de para qué existe el control. Queda como el ASUMIDO
+abierto del §8 de la spec, junto con el criterio de exclusión de legajos de Axton.
+
+**Escrito como assert:** `tests/popVariacionesControl.test.js` — el legajo que liquidó sólo en la
+quincena anterior y sin fecha de egreso no es baja; el egreso y el ingreso dentro de la quincena sí
+marcan; un ingreso de la 1ª quincena no es alta de la 2ª; y sin la columna de egreso la marca sale `—`.

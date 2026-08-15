@@ -74,6 +74,8 @@ import {
 } from '../parsers/finadietAsientoParser.js';
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
+import { parseTabAxton, detectHeaders as detectHeadersTabAxton } from '../parsers/tabAxtonParser.js';
+import { parseVariacAxton, detectHeaders as detectHeadersVariacAxton } from '../parsers/popVariacParser.js';
 
 // ── Líneas de metadata ───────────────────────────────────────────────────────
 // Lo que se muestra al lado del nombre del archivo una vez cargado. Son tres
@@ -81,6 +83,12 @@ import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 // conceptos, y dos tienen su propio detalle.
 
 const metaRegistros = (m) => `${m?.totalRows ?? 0} registros`;
+
+// Las líneas de metadata son HTML: lo que salga de un archivo de cliente se
+// escapa antes de entrar (el período del Tabulado de Axton es texto libre del
+// export).
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const metaLegajosConceptos = (m) =>
   `${m?.uniqueLegajos ?? 0} legajos · ${m?.detectedConcepts?.length ?? 0} conceptos`;
@@ -90,6 +98,13 @@ const metaCatEmpleados = (m) => {
   return `${m?.activos ?? 0} activos de ${m?.total ?? 0} filas`
     + (filtradas > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${filtradas} sumatorias excluidas</span>` : '');
 };
+
+// El Tabulado de Axton informa además el período que leyó del propio archivo: es
+// lo que le permite al analista ver que no subió dos veces la misma quincena
+// antes de ejecutar (los dos archivos se llaman casi igual).
+const metaTabAxton = (m) =>
+  `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos`
+  + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`;
 
 const metaConceptCatalog = (m) =>
   `${m?.totalRows ?? 0} conceptos`
@@ -444,6 +459,40 @@ export const FILE_TYPES = {
     fields: [],
   },
 
+  // Tabulado de Axton (.xlsx real) — el de la quincena ACTUAL del control de
+  // Variación entre quincenas. **No es el mismo archivo que `tab_control`**: ése
+  // es el Tabulado de Meta4 (HTML disfrazado de .xls, una columna por concepto) y
+  // este trae un PAR de columnas por concepto (Cant / Imp) con los
+  // subencabezados en la fila 2. Los dos parsers no son intercambiables.
+  //
+  // `fields: []` y **sin `fixedFormat`, a propósito**: no hay columnas que mapear
+  // —el parser las resuelve por nombre y los conceptos por código— pero sí pasa
+  // por la vista previa + "Confirmar y procesar", que es lo único que le muestra
+  // al analista que subió la quincena que quería (los dos archivos del mes se
+  // llaman casi igual). Mismo criterio que `acreditaciones_file`.
+  tab_axton_file: {
+    label: 'Tabulado de Axton — quincena actual',
+    siglas: ['TABULADO', 'TAB'],
+    parse: parseTabAxton,
+    detectHeaders: detectHeadersTabAxton,
+    autoDetect: null,
+    meta: metaTabAxton,
+    fields: [],
+  },
+
+  // El reporte de variaciones que exporta Axton: el archivo CONTRA el que se
+  // controla lo generado. Es opcional en el control — sin él, el control genera
+  // el reporte y no compara nada.
+  pop_variac_file: {
+    label: 'Reporte de variaciones de Axton',
+    siglas: ['VARIAC', 'VARIACIONES'],
+    parse: parseVariacAxton,
+    detectHeaders: detectHeadersVariacAxton,
+    autoDetect: null,
+    meta: metaRegistros,
+    fields: [],
+  },
+
   // Conceptos liquidados de FINADIET (excel "FINADIET CONCEPTOS" de Meta4). Las
   // 4 primeras son requeridas: sin los dos códigos de cuenta, el importe y el
   // centro de costo no hay asiento posible, y completarlas con nada sería
@@ -481,6 +530,18 @@ FILE_TYPES.tab_prev_file = {
   ...FILE_TYPES.tab_control,
   label: 'Tabulado del período anterior',
   aliasOf: 'tab_control',
+};
+
+// Tabulado de Axton de la quincena ANTERIOR (control de Variación entre
+// quincenas de POP): el MISMO archivo que el de la quincena actual, de la
+// quincena de antes. Comparte la ficha por el mismo motivo que `tab_prev_file`
+// comparte la de `tab_control`, y existe como tipo aparte porque la zona de drop
+// se rotula con la etiqueta del TIPO: con un solo tipo, los dos casilleros
+// dirían lo mismo y el analista no sabría cuál es cuál.
+FILE_TYPES.tab_axton_prev_file = {
+  ...FILE_TYPES.tab_axton_file,
+  label: 'Tabulado de Axton — quincena anterior',
+  aliasOf: 'tab_axton_file',
 };
 
 // ── Accesos ──────────────────────────────────────────────────────────────────

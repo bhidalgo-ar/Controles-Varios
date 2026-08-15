@@ -174,6 +174,15 @@ import {
   renderFinadietAsientoConfigEditor,
 } from './finadietAsiento.js';
 
+import {
+  runPopVariaciones,
+  summarizePopVariaciones,
+  renderPopVariacionesResults,
+  DEFAULT_POP_VARIACIONES_CONFIG,
+} from './popVariaciones.js';
+
+import { renderPopVariacionesConfigEditor } from '../ui/popVariacionesConfigEditor.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -192,6 +201,15 @@ const POF_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POF'] } };
 // promueve a 'sistema' cuando un segundo cliente pida el mismo asiento y la
 // tabla de cuentas ya viva entera en `controlConfigs` (mismo camino que D-015).
 const FINADIET_ONLY = { scope: 'cliente', scopeMeta: { clients: ['FINADIET'] } };
+
+// OPmobility / Plastic Omnium **Pilar** (Axton), el otro OPmobility: el equipo lo
+// trata como cliente independiente de Florida (POF, Meta4) — ver D-024. El
+// código de concepto del valor hora (1010) es de la liquidación de Pilar, y la
+// lógica de valor hora también: el parser del Tabulado de Axton serviría para
+// cualquier cliente Axton con ese layout, pero el concepto hay que confirmarlo
+// contra el archivo real de ese cliente antes de ofrecérselo. Se promueve a
+// 'sistema' cuando eso pase (mismo camino que D-015).
+const POP_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POP'] } };
 
 export const CONTROL_REGISTRY = {
 
@@ -754,6 +772,73 @@ export const CONTROL_REGISTRY = {
     run:           runVariacionesConceptos,
     summarize:     summarizeVariacionesConceptos,
     renderResults: renderVariacionesConceptosResults,
+  },
+
+  // Variación entre quincenas de OPmobility Pilar. Segundo control del repo que
+  // compara un Tabulado contra otro de otro período (el primero es Variaciones
+  // de POF) y el único que lo hace con el Tabulado de Axton, que es otro archivo
+  // y otro parser. No usa el Tabulado como pivote: los dos archivos del cruce
+  // son additionalFiles, así que `tabRequired: false`.
+  //
+  // **Un solo control y no dos variantes agrupadas**, a diferencia de Brutos /
+  // GS Pers / NR: acá el reporte generado es el entregable en los dos casos, y
+  // controlarlo contra Axton es el mismo cálculo con un archivo más. Como dos
+  // entradas, seleccionar las dos generaría el reporte dos veces y el analista
+  // tendría que elegir de antemano si va a tener el archivo de Axton a mano.
+  // Por eso el reporte de Axton es un `additionalFile` opcional: sin él el
+  // control genera y no compara (status 'info'), con él además controla.
+  pop_variaciones: {
+    id:          'pop_variaciones',
+    label:       'Variación entre quincenas',
+    ...POP_ONLY,
+    appliesWhen: () => true,
+    description: 'Compara dos Tabulados de Axton —quincena anterior vs actual— y arma el reporte de '
+      + 'variaciones: valor hora de cada legajo (importe ÷ cantidad del concepto de horas normales), '
+      + 'variación en $ y en %, cambio de CBU, altas, bajas y neto. Si se sube el reporte de variaciones '
+      + 'de Axton, lo controla campo a campo contra lo generado.',
+    help: {
+      what: 'Reemplaza el reporte de variaciones que hoy sale de Axton: deriva el valor hora de cada '
+        + 'legajo desde los dos Tabulados (importe ÷ cantidad de horas normales, sumando las liquidaciones '
+        + 'de cada legajo) y arma el archivo que recibe HR del cliente. Alta y Baja salen de las fechas de '
+        + 'ingreso y egreso del Tabulado, no de que el legajo aparezca en un archivo y no en el otro. '
+        + 'Puesto y MOD Puesto no se generan: no vienen en el Tabulado. Si además cargás el reporte de '
+        + 'Axton, el control te dice legajo por legajo dónde difiere de lo generado.',
+      how: [
+        'Bajá de Axton el Tabulado de la quincena anterior y el de la actual (.xlsx). Pueden ser de meses distintos.',
+        'Cargá los dos en el Paso 2 — el período de cada uno sale del propio archivo, no del selector de la app.',
+        'Revisá en «Concepto del valor hora» que el código sea el que liquida las horas normales.',
+        '(Opcional) Cargá el reporte de variaciones de Axton de la quincena actual para controlar lo generado contra él.',
+        'Ejecutá y descargá el .xlsx desde el resultado.',
+      ],
+    },
+    tabRequired: false,
+    additionalFiles: [
+      // El orden es el de la pantalla y el del reporte: anterior → actual. El
+      // primero es además el `primaryRows` que recibe `run()`.
+      { key: 'tab_prev', label: 'Tabulado de Axton — quincena anterior', fileType: 'tab_axton_prev_file',
+        rerenderOnLoad: true },
+      { key: 'tab_act',  label: 'Tabulado de Axton — quincena actual',   fileType: 'tab_axton_file',
+        rerenderOnLoad: true },
+      // Sin él el control genera el reporte y no compara nada.
+      { key: 'variac',   label: 'Reporte de variaciones de Axton (opcional)', fileType: 'pop_variac_file',
+        optional: true },
+    ],
+    // `rerenderOnLoad` en los dos Tabulados: el panel de abajo muestra si el
+    // código de concepto matchea una columna en CADA archivo cargado, así que al
+    // cargar uno cambia lo que ese panel puede decir.
+    config: [{ key: 'pop_variaciones_config', stateKey: 'popVariacionesConfig',
+               mappingKey: 'popVariacionesConfig',
+               default: () => ({ ...DEFAULT_POP_VARIACIONES_CONFIG }),
+               mappingValue: (state) => state.popVariacionesConfig || { ...DEFAULT_POP_VARIACIONES_CONFIG },
+               editor: renderPopVariacionesConfigEditor,
+               editorProps: (state) => ({
+                 rowsAnterior: state.controlFiles?.pop_variaciones?.tab_prev?.parsedRows || [],
+                 rowsActual:   state.controlFiles?.pop_variaciones?.tab_act?.parsedRows  || [],
+               }),
+               openByDefault: false }],
+    run:           runPopVariaciones,
+    summarize:     summarizePopVariaciones,
+    renderResults: renderPopVariacionesResults,
   },
 
   // Tercer control de generación del proyecto, después de acreditaciones (D-021)

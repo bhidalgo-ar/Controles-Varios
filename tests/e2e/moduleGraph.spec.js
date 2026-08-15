@@ -23,5 +23,11 @@ test('el wizard y la ficha cargan juntos en un navegador real, sin ciclo de mód
   expect(r.wizardCargo).toBe(true);
   expect(r.autoDetectTabPrev).toBe(true);
   expect(r.conAutoDetect).toBe(9);
-  expect(r.specs).toEqual(['rend_vs_asiento.conta','variaciones_conceptos.tab_prev','variaciones_sueldos.tab_prev']);
+  // Misma lista que fija `tests/fileTypes.test.js`: los 2 de pop_variaciones se
+  // sumaron con el control de Variación entre quincenas (su panel del Paso 2
+  // depende de qué Tabulados estén cargados).
+  expect(r.specs).toEqual([
+    'pop_variaciones.tab_act', 'pop_variaciones.tab_prev',
+    'rend_vs_asiento.conta', 'variaciones_conceptos.tab_prev', 'variaciones_sueldos.tab_prev',
+  ]);
 });

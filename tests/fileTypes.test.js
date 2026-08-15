@@ -164,8 +164,13 @@ for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
     if (f.rerenderOnLoad) assert(`${controlId}.${f.key}: rerenderOnLoad es booleano`, f.rerenderOnLoad === true);
   }
 }
-assert(`redibujan el paso o tienen hueco propio exactamente los 3 de siempre (hoy: ${specsDeclarados.sort().join(', ')})`,
-  specsDeclarados.sort().join(', ') === 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
+// Los 2 de `pop_variaciones` se sumaron con el control de Variación entre
+// quincenas: su panel del Paso 2 dice si el código del concepto matchea una
+// columna en CADA Tabulado cargado, así que cargar uno cambia lo que ese panel
+// puede mostrar.
+assert(`redibujan el paso o tienen hueco propio exactamente los 5 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
+  specsDeclarados.sort().join(', ') === 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
+    + 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
 
 // El hueco del Tabulado anterior es el que existe en el layout de Variaciones.
 // Si alguien renombra el id en el HTML y no acá, el archivo cae a la lista de
