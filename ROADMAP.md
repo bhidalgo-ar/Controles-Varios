@@ -1,6 +1,8 @@
 # ROADMAP — Controles Nómina
 
-> **Última actualización:** 13 de agosto de 2026 (después del PR #130 — ver "Estado al 2026-08-13")
+> **Última actualización:** 17 de agosto de 2026 (la familia contable se posterga —D-062— y Epiroc
+> reemplaza a POP como cliente de prueba de Acumuladores Ganancias —D-063—; el resto del estado sigue
+> siendo el del PR #130, ver "Estado al 2026-08-13")
 > Reescrito: la v1 (18-may) quedó desactualizada frente al código real (registry de controles ya construido). Este documento parte de lo que existe hoy y prioriza el rediseño multi-cliente.
 
 ---
@@ -106,16 +108,17 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 
 | # | Qué | Por qué primero / qué lo traba |
 |---|---|---|
-| 1 | **Asiento de FINADIET contra el archivo real, y que Gaby lo compare contra un mes ya cerrado** (3.9) | Es el control más nuevo y el único que nunca se verificó contra un resultado armado a mano. Riesgo de "número mal pero coherente", que es el que no detecta nadie. **Pendiente de prueba** (Willy, 2026-08-13) — depende de pedir el archivo, no de programar |
+| 1 | **Las tres definiciones del SAC teórico de Acumuladores Ganancias, para poder verificar con Epiroc** | Es la verificación activa contra un armado manual y hoy no cierra: `1101`, `1137` y `1103` (**D-063**). Las contestás vos; hasta entonces no se toca `calcDoceava`. La verificación va de a un caso completo, no con un conteo agregado (**D-064**) |
 | 2 | **Que se vea qué columna eligió el analista, y avisar si el contenido no es del tipo esperado** (el mis-mapeo) | **Opciones 1 y 2 hechas** (2026-08-13): la muestra de valores reales debajo de cada columna elegida y el aviso de tipo, en las dos pantallas, más el aviso anotado en los resultados de la corrida. Ver `specs/muestra-y-aviso-de-columna.md` y D-053. **Queda la opción 3** — arreglar la prioridad de las palabras clave de la auto-detección (`autoDetectTabExtraConfig` recorre los encabezados por fuera y las palabras por dentro, así que gana el primer encabezado del archivo que contenga cualquiera). Va aparte a propósito: mueve mapeos que hoy salen bien por casualidad, y con la muestra ya visible el analista puede ver qué cambió |
 | 3 | **Los 8 conceptos de NR sin semilla de código** | Trabajo chico, bloqueado sólo por un archivo: hace falta un Tabulado de un mes con indemnizaciones liquidadas. No se inventan por analogía (D-039). **Pendiente de prueba** (Willy, 2026-08-13). Mientras tanto se piden en el Paso 2, con el toggle ⊘ como salida — que es el comportamiento correcto |
 | 4 | **Los códigos de Rend vs Tabulado, a `tabCodes.js`** | Consistencia, no corrección: los ~56 códigos de `DEFAULT_CONCEPT_CONFIG` (`js/controls/rendVsTabu.js`) **sí** son semilla y **sí** se pueden editar por cliente desde el Paso 2 (`js/ui/rendVsTabuConceptEditor.js`, guardados en `controlConfigs`), así que una renumeración del cliente no necesita un commit. Lo único desalineado es que esa lista no vive junto a las otras semillas |
 | 5 | **Lo que espera un caso real, y no por olvido** | Override de clave de legajo por corrida (F1 · D-038 punto 2); NR derivado del catálogo del cliente en vez de los 18 cableados (recién es requisito cuando un 2º cliente pida NR); las pantallas que le faltan a Variaciones (editor de conceptos y de ausencias, reuso de la corrida anterior, concepto `1000` sin validar). Los tres necesitan un archivo o un cliente concreto: decidirlos en el aire sale mal |
 | 6 | **Deuda de proceso, sin urgencia** | `tests/rendVsAsientoDrill.test.js` fuera de la cadena de CI (necesita fixtures anonimizados); relevar los `controlConfigs` reales de los 21 clientes fuera de Marval (2.9); y los pendientes de v1 (insights mes a mes parcial, export Excel multi-hoja, export/import JSON de sesión) |
+| 7 | **Asiento de FINADIET contra el archivo real** (3.9) | **Postergado el 2026-08-17** (D-062): la familia contable sale del foco. Sigue construido y disponible para FINADIET; lo que se posterga es verificarlo y generalizarlo |
 
 ---
 
-## Pruebas pendientes de tu lado, por cliente (al 2026-08-14)
+## Pruebas pendientes de tu lado, por cliente (al 2026-08-17)
 
 Repaso hecho después de cerrar el rediseño visual (PRs #139-#150). Separado por cliente porque cada
 ítem se destraba con **un archivo distinto**, y ninguno se destraba programando. El rediseño visual no
@@ -125,9 +128,9 @@ necesitan los CDN) lo cubre CI, que está en verde.
 
 | Cliente | Sistema | Qué falta probar | Con qué se destraba | Riesgo si no se hace |
 |---|---|---|---|---|
-| **FINADIET** | Meta4 | Correr el Asiento de Remuneraciones contra el excel real y que **Gaby** compare el resultado contra un mes ya cerrado armado a mano | El excel "FINADIET CONCEPTOS" de un mes cerrado | **Alto.** Es el control más nuevo y el único que nunca se comparó contra un resultado hecho a mano. Los alias de encabezado del parser se escribieron de los nombres documentados, no de un archivo en mano. Es el caso de "número mal pero coherente", el que no detecta nadie |
+| **FINADIET** | Meta4 | **Postergado (2026-08-17).** La familia contable sale del foco: es muy customizada por cliente y entrega menos valor con más esfuerzo que la familia de novedades — ver **D-062** | — | Ninguno hoy, por decisión. Al retomar, la primera pregunta es cuál es el archivo de entrada real: el de cierre que sí existe en SharePoint no tiene el layout que pide el parser (detalle en D-062) |
 | **Marval** | Meta4 | Confirmar el código de 8 de los 18 conceptos de NR | Un Tabulado de un mes **con indemnizaciones liquidadas** | Bajo mientras tanto: los 8 se piden a mano en el Paso 2 y el toggle ⊘ los saltea. No se inventan por analogía (D-039) |
-| **Plastic Omnium Pilar (POP)** | Axton | Correr Acumuladores Ganancias **end-to-end en el navegador** con el `.xlsx` real | El crudo `repacumuladores` que ya usaste para la spec | Medio. La verificación que hay fue contra los números ya conocidos de la spec, no corriendo el control en la app |
+| **Epiroc** (era POP) | Axton | Correr Acumuladores Ganancias **end-to-end en el navegador** con el `.xlsx` real, y comparar contra la columna **AG** (`IG_CMASIS_REMU`, "SAC TEORICO") de `EPIR Control IG Nuevo MM-2026.xlsx`, tab `IMPGAN` — de a un legajo y con el caso completo, no con un conteo (**D-064**) | Los crudos `repacumuladores` de `Empresas/Epiroc/Ganancias/2026/MM` — Epiroc reemplaza a POP como cliente de prueba porque es el único Axton con serie mensual completa (04 a 07/2026); en POP sólo hay extractos de un legajo | **Medio, y hay tres definiciones ANTES de la prueba:** reconstruido el cálculo desde el crudo de 05/2026, la columna AG **no reconcilia** con `calcDoceava`. Las tres preguntas y por qué no se toca el código todavía, en **D-063** |
 | **OPmobility Florida (POF)** | Meta4 | Validar el concepto `1000` (los mensuales) en Variación entre períodos | Un Tabulado que **tenga** mensuales — en los dos de muestra los 71 empleados liquidan por `899999` | Bajo. La lógica está y suma sola cuando el concepto exista, pero nunca corrió con datos |
 | **OPmobility Florida (POF)** | Meta4 | Cerrar **con el cliente** qué quincena compara contra cuál | Una respuesta del cliente, no un archivo | Medio, y es lo que traba el "subir un solo archivo por mes". Hoy comparás los dos que subís y el reporte dice exactamente qué comparó — que es lo correcto mientras la regla no esté cerrada |
 | **Sportline / IFSA** | Meta4 | Que **Meli** confirme dos cosas antes de que el Control de Netos se pueda codear: cómo entra el "neto acordado" por legajo (archivo aparte vs. columna) y qué conceptos no remunerativos pagan obra social | Una conversación con Meli | Es un bloqueo de diseño, no una prueba: sin eso el control arranca sobre una suposición |
@@ -148,6 +151,11 @@ necesitan los CDN) lo cubre CI, que está en verde.
    ink. Es igual en los tres temas, así que no es una deriva de tema; cambiarlo mueve todas las
    pantallas y por eso quedó como su propia tarea.
 
+4. **Los tres puntos abiertos del SAC teórico de Acumuladores Ganancias**, que traban la verificación con
+   Epiroc y que ninguno se resuelve programando: si `1101` entra en la doceava, si `1137` se resta, y si
+   `1103` va en el juego base de acumuladores. Las tres preguntas, los números de la diferencia y el
+   corolario para D-026 están en **D-063** — no se toca la fórmula antes de que las contestes.
+
 ---
 
 ## v3 — Escalar adaptador Axton + consolidación de equipo
@@ -159,7 +167,7 @@ necesitan los CDN) lo cubre CI, que está en verde.
 | 3.3 | Jerarquía cliente → entidad operable (Sportline, Carrier, Lowsedo, Poincenot) | 4 | L | Solo si un caso real lo exige |
 | 3.4 | Control de Netos (Sportline) — implementación | 2 | M | Diseño ya validado, ver `specs/spec-control-netos.md` |
 | 3.5 | Gross-up calculator (AFA, concepto 1017) reemplazando goal-seek de Excel | 3 | M | Segundo control nuevo priorizado, ver `specs/spec-gross-up.md` |
-| 3.9 | Asiento de Remuneraciones (FINADIET) | 2 | M | hecho ✅ (2026-08-12) — control `finadiet_asiento`, ver `specs/finadiet-asiento-remuneraciones.md` y D-046. **Pendiente de prueba** (confirmado con Willy el 2026-08-13, es el ítem 1 de "Estado al 2026-08-13"): correrlo contra el archivo real del cliente y confirmar con Gaby que da lo mismo que el armado a mano de un mes ya cerrado |
+| 3.9 | Asiento de Remuneraciones (FINADIET) | 5 | M | hecho ✅ (2026-08-12) — control `finadiet_asiento`, ver `specs/finadiet-asiento-remuneraciones.md` y D-046. **Pendiente de prueba** (confirmado con Willy el 2026-08-13): correrlo contra el archivo real del cliente y confirmar con Gaby que da lo mismo que el armado a mano de un mes ya cerrado. **Postergado el 2026-08-17** (decisión de Willy, ver D-062): la familia contable sale del foco por relación esfuerzo/valor. Prioridad baja de 2 a 5 |
 | 3.6 | Export a Excel multi-hoja | 3 | M | Pendiente de v1 |
 | 3.7 | Export/import JSON de sesión | 4 | M | Pendiente de v1 |
 | 3.8 | Control de escala salarial por convenio (Comercio: COELSA, Red Bull, TIM, Sportline, Carrier) | 5 | M | Primer control real de `scope: convenio` |

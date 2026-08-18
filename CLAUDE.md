@@ -20,6 +20,29 @@ cliente —qué encabezados trae, contra qué se cruza, qué concepto es cuál�
 adivina, y un control construido sobre una suposición se descubre recién cuando ya salió al cliente.
 Mostrar algo funcionando temprano vale más que un plan largo.
 
+### Verificar contra un armado manual: un caso, revisado, y después generalizar
+
+Cuando un control se verifica contra un armado manual —una planilla del analista, un mes ya cerrado, un
+reporte del sistema del cliente— **no traigas un veredicto agregado.** Analizá **un** caso, pasalo
+completo y esperá la confirmación de Willy antes de extrapolar al resto de la nómina. Un caso bien armado
+tiene cuatro partes, en este orden:
+
+1. **Los datos crudos del caso**, tal como salen del archivo de origen, línea por línea y con el código de
+   cada componente. Sin resumir.
+2. **El cruce de control:** dos o tres valores del armado manual reproducidos exactos desde esos crudos.
+   Es lo que prueba que estás mirando el archivo correcto y el caso correcto. Sin esto, el resto no se
+   puede leer.
+3. **El cálculo por las dos vías**, la del repo y la del armado manual, con la diferencia.
+4. **La descomposición de la diferencia** en sus componentes con nombre y código. Una diferencia que no se
+   puede descomponer no está entendida.
+
+**Ante una diferencia, el armado manual no es la fuente de verdad.** Primero se confirma el criterio con
+quien lo define, después se decide qué lado se corrige: nunca ajustes el código hasta que dé lo mismo que
+la planilla. El caso que originó la regla y el por qué están en D-063 y D-064.
+
+Del caso participa el **número de legajo** —es lo que le permite a Willy encontrar la fila en su archivo—
+y los códigos de concepto y de acumulador, que son configuración. Nombre, CUIL y CBU no.
+
 ---
 
 ## Gotchas — lo que cuesta caro si no lo sabés de antemano

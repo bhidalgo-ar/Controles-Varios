@@ -1,7 +1,9 @@
 # Asiento de Remuneraciones — FINADIET
 
 **Estado:** implementado — control `finadiet_asiento` del `CONTROL_REGISTRY`, cubierto por
-`tests/finadietAsientoControl.test.js`. Pendiente de correr contra el archivo real del cliente (ver §7).
+`tests/finadietAsientoControl.test.js`. **Verificación postergada el 2026-08-17 (D-062):** la familia
+contable sale del foco por relación esfuerzo/valor. El control sigue construido y disponible para FINADIET;
+lo que se posterga es correrlo contra el archivo real y generalizarlo (ver §7).
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza dos
 archivos, arma uno. A partir del excel mensual de conceptos liquidados de FINADIET ("FINADIET CONCEPTOS",
@@ -191,7 +193,9 @@ serlo). Si el asiento no cierra, `unitsWithDiff` = todas: el reporte entero es s
 Acreditaciones cuando no cierra contra el archivo de origen. `status: 'error'` queda para lo que no produce
 asiento (sin archivo, tabla vacía, nada clasificable).
 
-**Pendiente antes de usarlo en producción:** correrlo contra el excel real de FINADIET. Los alias de
+**Pendiente antes de usarlo en producción, hoy postergado (D-062):** correrlo contra el excel real de
+FINADIET — y la primera pregunta al retomar es **cuál es ese archivo**, porque el de cierre que sí existe en
+SharePoint no tiene el layout que pide el parser (detalle en D-062). Los alias de
 encabezado del parser están escritos a partir de los nombres documentados de las columnas, no de un archivo
 real en mano; si alguno no coincide, el Paso 2 lo pide a mano (así que el control corre igual) y sumar el
 alias es una línea en `ALIASES`. Lo que sí conviene confirmar con Gaby es que el asiento generado cierre y

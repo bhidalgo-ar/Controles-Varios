@@ -1813,3 +1813,105 @@ abierto del §8 de la spec, junto con el criterio de exclusión de legajos de Ax
 **Escrito como assert:** `tests/popVariacionesControl.test.js` — el legajo que liquidó sólo en la
 quincena anterior y sin fecha de egreso no es baja; el egreso y el ingreso dentro de la quincena sí
 marcan; un ingreso de la 1ª quincena no es alta de la 2ª; y sin la columna de egreso la marca sale `—`.
+
+---
+
+## D-062 — La familia contable se posterga: el foco pasa a novedades
+
+**Fecha:** 2026-08-17. **Decisión de:** Willy.
+
+**Qué se decidió.** Los dos controles contables construidos —`finadiet_asiento` (I3) y
+`rend_vs_asiento` (I4)— salen del lote de verificación y bajan de prioridad. El foco de
+construcción y verificación pasa a la familia de **novedades y trazabilidad**.
+
+**Por qué.** El asiento contable es muy customizado por cliente: el plan de cuentas, los centros de
+costo y el formato del reporte de origen cambian caso por caso, y el propio proveedor está dando de
+baja el reporte contable vigente de FINADIET. Generalizar un control así cuesta mucho y sirve para
+pocos clientes. La familia de novedades es la que se repite igual en toda la cartera.
+
+**Qué NO cambia.** Ninguno de los dos controles se borra ni se marca como roto. Siguen construidos y
+disponibles para el cliente que los tiene configurado. Lo que se posterga es **verificarlos y
+generalizarlos**.
+
+**Consecuencia técnica no obvia.** Queda sin resolver la promoción de scope de los dos: `finadiet_asiento`
+sigue `scope: 'cliente'` de FINADIET y `rend_vs_asiento` sigue `scope: 'cliente'` de MARVAL. La nota del
+registry sobre promover a `sistema: meta4` cuando aparezca un 2º cliente sigue válida, sólo que ya no es
+un pendiente activo.
+
+**El archivo de entrada de I3 no está definido, y eso es lo primero al retomar.** El archivo de cierre que
+sí existe en SharePoint (`Finadiet Ctrol Fin MM-AAAA.xlsx`, hoja `Conta_desgl.`) **no tiene el layout que
+`finadietAsientoParser.js` pide**: trae una sola columna de cuenta (`CUENTA_CONTAB`) con marcador
+`DEBE_HABER` por fila, no dos códigos, y **no trae columna de Centro de Costo**, que el parser declara
+obligatoria. Mapear a ojo contra ese archivo produce exactamente el "número mal pero coherente" que nadie
+detecta.
+
+**Pista que quedó registrada y conviene no perder.** Esa misma hoja `Conta_desgl.` tiene el **mismo
+layout** que el `conta_file` de MARVAL (`ID_EMPLEADO`, `FEC_PAGO`, `ID_CONCEPTO`, `NOMBRE_LARGO`,
+`CUENTA_CONTAB`, `DEBE_HABER`, `DEBE`, `HABER`). Si se confirma, I3 e I4 podrían compartir parser en vez
+de tener dos. Evaluarlo cuando se retome, no antes.
+
+**Dónde vive el detalle.** Updates de los ítems **I3** e **I4** del tablero *Catálogo de Controles de
+Payroll* (board `18426712423`, workspace Operaciones).
+
+---
+
+## D-063 — SAC teórico de Epiroc: la planilla manual no reconcilia, y hay tres definiciones antes de tocar código
+
+**Fecha:** 2026-08-17. **Estado:** abierto — las tres preguntas las contesta Willy, ninguna se resuelve
+programando.
+
+**Contexto.** Epiroc reemplaza a POP como cliente de prueba de Acumuladores Ganancias: es el único Axton
+con serie mensual completa (04 a 07/2026), mientras que de POP sólo hay extractos de un legajo. La
+verificación es contra la columna **AG** (rotulada `IG_CMASIS_REMU`, comentada "SAC TEORICO") de
+`EPIR Control IG Nuevo MM-2026.xlsx`, tab `IMPGAN`. Reconstruido el cálculo desde el crudo de 05/2026,
+esa columna **no reconcilia** con `calcDoceava` (`js/controls/acumuladoresGanancias.js:496`).
+
+**Las tres definiciones abiertas:**
+
+1. **¿`1101` (No Remunerativo gravado por IIGG) entra en la doceava?** El repo lo suma. La planilla
+   manual de Epiroc no.
+2. **¿`1137` (Excluye del SAC teorico) se resta?** El repo lo resta. La planilla manual no. En un legajo
+   con `1137` acumulado del orden de $1,1M la diferencia en el SAC teórico es de unos $92.000. El
+   acumulador se llama literalmente "Excluye del SAC teorico" y el repo hace lo que el nombre dice, así
+   que la sospecha inicial es sobre la planilla — pero es sospecha, no conclusión, y **no hay que
+   "corregir" la fórmula al rótulo antes de confirmarlo**.
+3. **¿`1103` (Bruto para Ganancias Prorrateado) entra en el juego de acumuladores, y en qué columna del
+   entregable?** No está en los 10 códigos de `ACUMULADORES` — la spec se armó sobre el crudo de POP, que
+   no lo trae. El crudo de Epiroc sí, y la planilla manual lo usa: es uno de los componentes de su
+   `TOT_CON_IMP`. Con el default actual se ignora en silencio. El override por cliente de D-026 no
+   alcanza: hay que decidir si va en el juego base.
+
+**Ante la diferencia, no se ajusta el código a la planilla.** El intento de verificación arrancó tratando
+el armado manual como fuente de verdad y salió al revés: el defecto estaba en la planilla. Primero se
+confirma el criterio con quien lo define, después se decide qué lado se corrige. Es lo que originó el
+método de D-064.
+
+**Corolario para D-026 y para la referencia de la skill `relevamiento-controles`:** **"en Axton el
+`repacumuladores` es igual para todos" vale para los encabezados, no para el juego de acumuladores
+presentes.** El caso de `1103` es la prueba: mismo layout, distinto juego de códigos.
+
+**Dónde vive el detalle.** Update del ítem **F3** del tablero *Catálogo de Controles de Payroll*
+(board `18426712423`, workspace Operaciones).
+
+---
+
+## D-064 — Un control se verifica contra un armado manual de a un caso, no de a un veredicto agregado
+
+**Fecha:** 2026-08-17. **Instrucción de:** Willy. **Aplica a:** todo control que se verifique contra un
+armado manual (planilla del analista, mes ya cerrado, reporte del sistema del cliente).
+
+**Qué se decidió.** No se trae un veredicto agregado. Se analiza **un** caso, se pasa completo, y se
+espera la confirmación de Willy antes de generalizar al resto de la nómina. La forma exacta que tiene que
+tener el caso —las cuatro partes y su orden— está en `CLAUDE.md` § "Cómo trabajar con Willy", que es lo
+que se lee antes de verificar; acá queda el por qué.
+
+**Por qué.** Un conteo agregado ("15 de 20 legajos coinciden") no permite decidir nada: no dice qué lado
+está mal ni por qué. El caso individual sí, y además Willy lo audita en su propio archivo en dos minutos.
+Es la misma lógica del "número mal pero coherente" de `CLAUDE.md`: un porcentaje de coincidencia alto es
+justamente lo que hace pasar desapercibido un criterio equivocado.
+
+**Caso que originó la regla.** El SAC teórico de Epiroc (D-063): la verificación arrancó tratando el
+armado manual como fuente de verdad y el defecto estaba en la planilla. De ahí el corolario que ahora es
+regla: **ante una diferencia contra un armado manual, primero se confirma el criterio con quien lo
+define, después se decide qué lado se corrige. Nunca ajustar el código hasta que dé lo mismo que la
+planilla.**

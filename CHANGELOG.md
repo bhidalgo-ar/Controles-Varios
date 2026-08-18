@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs: la familia contable se posterga, Epiroc pasa a ser el cliente de prueba de Ganancias, y se escribe cómo se verifica contra un armado manual — 2026-08-17
+
+- **Ningún cambio de código.** Es documentación de tres decisiones de Willy del 2026-08-17.
+- **La familia contable sale del foco** (**D-062**): el asiento de FINADIET y Rend vs Asiento dejan de estar en el lote de verificación y bajan de prioridad (la 3.9 pasa de prio 2 a 5). Los dos controles siguen construidos y disponibles para el cliente que los tiene configurado — lo que se posterga es verificarlos y generalizarlos. Queda anotado que el archivo de cierre de FINADIET que hay en SharePoint **no tiene el layout que pide el parser**, así que al retomar la primera pregunta es cuál es el archivo de entrada real.
+- **Epiroc reemplaza a POP como cliente de prueba de Acumuladores Ganancias** (**D-063**): es el único Axton con serie mensual completa. Y la verificación no arranca hasta que estén contestadas tres preguntas que no se resuelven programando —si `1101` entra en la doceava, si `1137` se resta y si `1103` va en el juego base de acumuladores—, porque la columna de SAC teórico de la planilla del cliente no reconcilia con el cálculo del repo. **La fórmula no se ajusta a la planilla antes de confirmar el criterio.**
+- **Cómo se verifica contra un armado manual, escrito como regla** (**D-064**, y la parte operativa en `CLAUDE.md`): un caso, con sus crudos, el cruce de control, el cálculo por las dos vías y la diferencia descompuesta — y recién con eso confirmado se generaliza. Un conteo agregado ("15 de 20 coinciden") no permite decidir nada.
+
 ### feat: control de Variación entre quincenas de Plastic Omnium Pilar (POP · Axton) — 2026-08-14
 
 - **Primer control que cruza dos Tabulados de Axton entre sí.** Se suben el Tabulado de la quincena anterior y el de la actual (pueden ser de meses distintos) y sale el reporte de variaciones que hoy se saca de Axton: **valor hora de cada legajo** —importe dividido cantidad del concepto de horas normales, sumando todas las liquidaciones del legajo antes de dividir—, cuánto varió en pesos y en porcentaje, si le cambió el CBU, altas, bajas y neto. El período y la quincena de cada archivo salen del **propio archivo**, no del selector de la app. Se descarga como Excel de 11 columnas y lo recibe HR del cliente.
