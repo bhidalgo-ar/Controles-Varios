@@ -240,4 +240,6 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 ```
 
 Un control que nunca vio un archivo real no está verificado — si no lo tenés, pedíselo a Willy.
+Y si la verificación es contra un armado manual, va de a un caso completo antes de generalizar: el
+formato de ese caso está en `CLAUDE.md` § "Verificar contra un armado manual" (D-064).
 Y el ciclo de git de CLAUDE.md: commit → PR contra `main` → merge con CI en verde.

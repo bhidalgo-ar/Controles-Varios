@@ -80,6 +80,12 @@ Matchear por **`Nro`, no por el texto** del acumulador: el origen mezcla
 acentuación (`Retencion` vs `Retención`, `teorico` sin tilde). El texto sirve
 como fallback y para el rótulo.
 
+**Ese juego de 10 es el del crudo de POP, no el de todo Axton.** El crudo de Epiroc trae además `1103`
+(Bruto para Ganancias Prorrateado), que la planilla manual del cliente usa y que hoy se ignora en
+silencio. Si entra en el juego base o no es una de las tres definiciones abiertas de **D-063** — y el
+corolario que quedó escrito ahí es que "en Axton el `repacumuladores` es igual para todos" vale para los
+encabezados, no para los acumuladores presentes.
+
 **Decisión (D-026):** los códigos van **hardcodeados como default**
 (`ACUMULADORES` en `acumuladoresGanancias.js`), con **override por cliente**
 persistido en `controlConfigs` (`acumuladores_config`, igual mecanismo que
@@ -277,8 +283,14 @@ Corriendo con el crudo de julio de POP (RG 4030, un solo mes):
   test de la consolidación por legajo, cubierto en
   `tests/acumuladoresGananciasControl.test.js`).
 
-**Pendiente:** verificar en el navegador con el archivo real de POP (esta
-verificación de arriba fue contra los números ya conocidos de la spec; falta
-correr el control end-to-end con el `.xlsx` real y confirmar que el resultado
-coincide antes de dar el control por completamente cerrado — ver checklist de
-`nuevo-control`: "un control que nunca vio un archivo real no está verificado").
+**Pendiente, y ahora con Epiroc en vez de POP:** falta correr el control
+end-to-end en el navegador con el `.xlsx` real y comparar contra el armado
+manual del cliente (la verificación de arriba fue contra los números ya
+conocidos de la spec — ver checklist de `nuevo-control`: "un control que nunca
+vio un archivo real no está verificado"). El cliente de prueba pasa a ser
+**Epiroc**, el único Axton con serie mensual completa (04 a 07/2026); de POP
+sólo hay extractos de un legajo. Y **la comparación no arranca hasta que estén
+contestadas las tres definiciones de D-063** (`1101`, `1137`, `1103`): hoy la
+columna AG de la planilla de Epiroc no reconcilia con `calcDoceava`, y la
+fórmula no se ajusta a la planilla antes de confirmar el criterio. La
+verificación se pasa de a un caso completo, no como conteo agregado (D-064).
