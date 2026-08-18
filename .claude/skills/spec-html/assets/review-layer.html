@@ -1,0 +1,234 @@
+<!--
+CAPA DE REVISIÓN — pegar tal cual en cualquier mockup.
+
+Uso:
+  1. En cada bloque revisable, agregar data-rev="id-semantico".
+     Opcional: data-rev-label="Nombre legible" para que aparezca en la salida.
+     <section data-rev="kpi-cobertura" data-rev-label="KPI de cobertura"> ... </section>
+  2. Pegar este bloque completo antes de </body>.
+  3. Los estilos usan las variables de hya-brand §10. Si el mockup no las
+     define, la capa cae a valores neutros y sigue funcionando.
+
+No requiere librerías. No guarda nada. No manda nada a ningún servidor.
+-->
+
+<style>
+  :root {
+    --rv-celeste: var(--celeste, #00ACD4);
+    --rv-line: var(--line, #E3E8ED);
+    --rv-ink: var(--ink, #14181C);
+    --rv-t3: var(--t3, #8A949C);
+    --rv-white: var(--white, #FFFFFF);
+    --rv-ok: var(--ok-tx, #177A50);
+    --rv-warn: var(--warn-tx, #9A5A0B);
+    --rv-err: var(--error-tx, #C0420F);
+  }
+
+  [data-rev] { position: relative; }
+  [data-rev].rv-on { outline: 1.5px solid var(--rv-celeste); outline-offset: 4px; }
+  [data-rev].rv-ok { outline-color: var(--rv-ok); }
+  [data-rev].rv-cambiar { outline-color: var(--rv-warn); }
+  [data-rev].rv-sacar { outline-color: var(--rv-err); }
+  [data-rev].rv-sacar > *:not(.rv-ctl) { opacity: 0.45; }
+  [data-rev].rv-duda { outline-color: var(--rv-celeste); outline-style: dashed; }
+
+  .rv-ctl {
+    display: none; gap: 6px; align-items: center; flex-wrap: wrap;
+    margin-top: 10px; padding: 9px 11px;
+    background: var(--rv-white); border: 1px solid var(--rv-line);
+    border-radius: var(--r, 12px);
+  }
+  body.rv-mode .rv-ctl { display: flex; }
+  .rv-id {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--rv-t3);
+    margin-right: 4px; font-variant-numeric: tabular-nums;
+  }
+  .rv-b {
+    border: 1px solid var(--rv-line); background: transparent;
+    color: var(--rv-ink); cursor: pointer;
+    padding: 4px 13px; border-radius: var(--r-full, 999px);
+    font: inherit; font-size: 0.71rem; font-weight: 700;
+  }
+  .rv-b:hover { border-color: var(--rv-celeste); }
+  .rv-b[aria-pressed="true"] { background: var(--rv-celeste); border-color: var(--rv-celeste); color: #fff; }
+  .rv-why {
+    flex: 1 1 220px; min-width: 160px;
+    border: 1px solid var(--rv-line); border-radius: var(--r-sm, 8px);
+    padding: 5px 10px; font: inherit; font-size: 0.79rem;
+    background: transparent; color: var(--rv-ink);
+  }
+  .rv-why::placeholder { color: var(--rv-t3); }
+
+  .rv-bar {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; display: flex; align-items: center; gap: 14px;
+    background: var(--rv-white); border: 1px solid var(--rv-line);
+    border-radius: var(--r-full, 999px); padding: 9px 10px 9px 18px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.13);
+  }
+  .rv-count { font-size: 0.79rem; color: var(--rv-t3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rv-count b { color: var(--rv-ink); font-weight: 800; }
+  .rv-bar .rv-b.rv-primary { background: var(--rv-celeste); border-color: var(--rv-celeste); color: #fff; padding: 6px 17px; font-size: 0.78rem; }
+  .rv-out {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    background: rgba(0,0,0,0.42); padding: 5vh 20px;
+  }
+  .rv-out.rv-show { display: block; }
+  .rv-out-in {
+    max-width: 720px; margin: 0 auto; background: var(--rv-white);
+    border-radius: var(--r, 12px); padding: 20px; max-height: 88vh;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .rv-out textarea {
+    width: 100%; flex: 1; min-height: 300px; resize: vertical;
+    border: 1px solid var(--rv-line); border-radius: var(--r-sm, 8px);
+    padding: 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.78rem; line-height: 1.55; background: transparent; color: var(--rv-ink);
+  }
+  @media print { .rv-ctl, .rv-bar, .rv-out { display: none !important; } }
+</style>
+
+<div class="rv-bar" role="toolbar" aria-label="Revisión">
+  <span class="rv-count" id="rvCount">Sin revisar</span>
+  <button class="rv-b" id="rvToggle" type="button">Revisar</button>
+  <button class="rv-b rv-primary" id="rvCopy" type="button">Copiar revisión</button>
+</div>
+
+<div class="rv-out" id="rvOut" role="dialog" aria-label="Revisión para copiar">
+  <div class="rv-out-in">
+    <strong style="font-size:0.95rem">Pegá esto en el chat</strong>
+    <textarea id="rvText" readonly></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="rv-b" type="button" onclick="document.getElementById('rvOut').classList.remove('rv-show')">Cerrar</button>
+      <button class="rv-b rv-primary" type="button" id="rvCopy2">Copiar al portapapeles</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var ESTADOS = ['OK', 'CAMBIAR', 'SACAR', 'DUDA'];
+  var bloques = Array.prototype.slice.call(document.querySelectorAll('[data-rev]'));
+  var estado = {};
+
+  bloques.forEach(function (el) {
+    var id = el.getAttribute('data-rev');
+    var ctl = document.createElement('div');
+    ctl.className = 'rv-ctl';
+
+    var tag = document.createElement('span');
+    tag.className = 'rv-id';
+    tag.textContent = id;
+    ctl.appendChild(tag);
+
+    ESTADOS.forEach(function (e) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rv-b';
+      b.textContent = e;
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        var actual = estado[id] && estado[id].e;
+        marcar(el, id, actual === e ? null : e);
+        pintar();
+      });
+      ctl.appendChild(b);
+    });
+
+    var why = document.createElement('input');
+    why.type = 'text';
+    why.className = 'rv-why';
+    why.placeholder = 'Por qué (opcional en OK, necesario en el resto)';
+    why.addEventListener('input', function () {
+      if (!estado[id]) estado[id] = { e: null, why: '' };
+      estado[id].why = why.value.trim();
+      pintar();
+    });
+    ctl.appendChild(why);
+
+    el.appendChild(ctl);
+  });
+
+  function marcar(el, id, e) {
+    ESTADOS.forEach(function (x) { el.classList.remove('rv-' + x.toLowerCase()); });
+    el.classList.remove('rv-on');
+    if (!estado[id]) estado[id] = { e: null, why: '' };
+    estado[id].e = e;
+    if (e) { el.classList.add('rv-on', 'rv-' + e.toLowerCase()); }
+  }
+
+  function pintar() {
+    bloques.forEach(function (el) {
+      var id = el.getAttribute('data-rev');
+      var st = estado[id] || {};
+      Array.prototype.forEach.call(el.querySelectorAll('.rv-ctl > .rv-b'), function (b) {
+        b.setAttribute('aria-pressed', String(st.e === b.textContent));
+      });
+    });
+    var n = Object.keys(estado).filter(function (k) { return estado[k].e; }).length;
+    document.getElementById('rvCount').innerHTML = n
+      ? '<b>' + n + '</b> de ' + bloques.length + ' bloques'
+      : 'Sin revisar · ' + bloques.length + ' bloques';
+  }
+
+  function salida() {
+    var t = (document.title || 'Mockup').trim();
+    var f = new Date().toISOString().slice(0, 10);
+    var L = ['REVISIÓN · ' + t + ' · ' + f];
+    var oks = [], sin = [];
+
+    bloques.forEach(function (el) {
+      var id = el.getAttribute('data-rev');
+      var st = estado[id] || {};
+      if (!st.e) { sin.push(id); return; }
+      if (st.e === 'OK' && !st.why) { oks.push(id); }
+    });
+
+    if (oks.length) { L.push('', 'OK (no tocar): ' + oks.join(', ')); }
+
+    ESTADOS.forEach(function (e) {
+      var filas = bloques.filter(function (el) {
+        var st = estado[el.getAttribute('data-rev')] || {};
+        return st.e === e && !(e === 'OK' && !st.why);
+      });
+      if (!filas.length) return;
+      L.push('', e);
+      filas.forEach(function (el) {
+        var id = el.getAttribute('data-rev');
+        var st = estado[id];
+        var label = el.getAttribute('data-rev-label');
+        L.push('  ' + id + (label ? ' (' + label + ')' : '') + ' · ' + (st.why || '[sin motivo]'));
+      });
+    });
+
+    if (sin.length) { L.push('', 'SIN REVISAR: ' + sin.join(', ')); }
+    return L.join('\n');
+  }
+
+  function copiar() {
+    var txt = document.getElementById('rvText');
+    txt.value = salida();
+    document.getElementById('rvOut').classList.add('rv-show');
+    txt.select();
+    if (navigator.clipboard) { navigator.clipboard.writeText(txt.value).catch(function () {}); }
+  }
+
+  document.getElementById('rvToggle').addEventListener('click', function () {
+    var on = document.body.classList.toggle('rv-mode');
+    this.textContent = on ? 'Ocultar controles' : 'Revisar';
+  });
+  document.getElementById('rvCopy').addEventListener('click', copiar);
+  document.getElementById('rvCopy2').addEventListener('click', function () {
+    var txt = document.getElementById('rvText');
+    txt.select();
+    if (navigator.clipboard) { navigator.clipboard.writeText(txt.value); }
+    else { document.execCommand('copy'); }
+    this.textContent = 'Copiado';
+  });
+
+  document.body.classList.add('rv-mode');
+  document.getElementById('rvToggle').textContent = 'Ocultar controles';
+  pintar();
+})();
+</script>
