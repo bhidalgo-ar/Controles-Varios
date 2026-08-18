@@ -41,8 +41,8 @@ function xlsxDe(sheetName, aoa) {
 
 const meta4h = xlsxDe('tabulado_h', [
   ['ID_EMPLEADO', 'FEC_PAGO', 'APPELIDO Y NOMBRE', 'CUIL', '1003-SUELDO', '401-DIAS_TRAB', 'NETO'],
-  ['1', '2026-07-31', 'Perez', '00-00000000-0', 100, 30, 100],
-  ['2', '2026-07-31', 'Gomez', '00-00000000-0', 200, 30, 200],
+  ['1', '2026-07-31', 'Perez', '(cuil inventado)', 100, 30, 100],
+  ['2', '2026-07-31', 'Gomez', '(cuil inventado)', 200, 30, 200],
   [null, null, null, null, null, null, null],
   [null, null, null, null, 300, 60, 300],
 ]);
@@ -60,7 +60,7 @@ const meta4h = xlsxDe('tabulado_h', [
 const axtonFull = xlsxDe('Liquidaciones.20260728.035742.6', [
   ['Legajo', 'Apellido y Nombre', 'CUIL', 'Bruto', null, '1000 - Sueldo Basico', null],
   [null, null, null, 'Cant', 'Imp', 'Cant', 'Imp'],
-  ['1', 'Perez', '00-00000000-0', 30, 100, 30, 100],
+  ['1', 'Perez', '(cuil inventado)', 30, 100, 30, 100],
   ['TOTAL GENERAL', null, null, 30, 100, 30, 100],
 ]);
 
@@ -80,8 +80,8 @@ const axtonImp = xlsxDe('Liquidaciones.20260730.114122.4', [
   ['TOTAL GENERAL', null, null, null, 300, 300],
   ['Legajo', 'Apellido y Nombre', 'CUIL', 'Recibo', '999 - Sueldo Basico', '1000 - Sueldo Basico'],
   [null, null, null, 'Imp', 'Imp', 'Imp'],
-  ['1', 'Perez', '00-00000000-0', null, 100, null],
-  ['2', 'Gomez', '00-00000000-0', null, null, 200],
+  ['1', 'Perez', '(cuil inventado)', null, 100, null],
+  ['2', 'Gomez', '(cuil inventado)', null, null, 200],
   ['TOTAL GENERAL', null, null, null, 300, 300],
 ]);
 
@@ -105,7 +105,7 @@ const axtonImp = xlsxDe('Liquidaciones.20260730.114122.4', [
 {
   const r = classifyTabulado({
     sheetName: 'Hoja1',
-    rows: [['ID_EMPLEADO', 'CUIL', '1003-SUELDO'], ['1', '00-00000000-0', 100]],
+    rows: [['ID_EMPLEADO', 'CUIL', '1003-SUELDO'], ['1', '(cuil inventado)', 100]],
   });
   assert('hoja renombrada + fila 1 con ID_EMPLEADO y código pegado → meta4_h', r.format === 'meta4_h');
 }
