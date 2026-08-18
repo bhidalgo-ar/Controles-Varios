@@ -18,11 +18,17 @@ Cómo leerlo: cada control dice QUÉ cruza y CONTRA qué. La condición de falla
 
 ## Pieza común T — Lector de tabulado
 
-Consumida por A1, B2, C1–C4, G1–G6, H2, I1. No tiene pantalla propia.
+Consumida por A1, B2, C1–C4, G1–G6, H2, I1. No tiene pantalla propia. Detector de formato construido el
+2026-08-18 (`js/parsers/tabFormatDetector.js`), todavía sin cablear a ningún control — detalle en
+`specs/lector-tabulado-formatos.md` y D-065.
+- Detecta el formato por la firma del archivo (Meta4 horizontal / Axton completo / Axton sólo-Imp), nunca
+  por el cliente.
 - Ubica campos por nombre y conceptos por código, nunca por posición (en POP el tabulado pasó de 116 a 128 columnas entre quincenas del mismo mes).
 - Compara layouts entre dos archivos y avisa qué columnas entraron o salieron.
 - Si un campo esperado falta, corta con error claro, no devuelve un número mal.
-- Normaliza unidades (horas jornalizados / días mensualizados).
+- **No normaliza unidades**: entrega las cantidades tal como vienen, con su código de concepto; la
+  conversión (horas jornalizadas / días mensualizados) es responsabilidad del control que las consume
+  (D-065 — corrige lo que decía esta versión del catálogo).
 
 ---
 

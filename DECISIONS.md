@@ -1915,3 +1915,46 @@ armado manual como fuente de verdad y el defecto estaba en la planilla. De ahí 
 regla: **ante una diferencia contra un armado manual, primero se confirma el criterio con quien lo
 define, después se decide qué lado se corrige. Nunca ajustar el código hasta que dé lo mismo que la
 planilla.**
+
+---
+
+## D-065 — Pieza T (Lector de Tabulado): tres formatos en alcance, el lector no convierte unidades, y una cantidad ausente nunca se completa por inferencia
+
+**Fecha:** 2026-08-18. **Instrucción de:** Willy, entrevista de captura registrada en el ítem "T — Lector
+de tabulado" del tablero monday *Catálogo de Controles de Payroll* (board `18426712423`).
+
+**Contexto.** Antes de construir el detector de formato (`js/parsers/tabFormatDetector.js`), había que
+cerrar tres preguntas de alcance y de criterio que no se resuelven programando.
+
+**1. Qué formatos entran y cuál queda afuera.** Entran los tres que hoy manda la cartera: Meta4
+horizontal (hoja `tabulado_h` — Finadiet, POF), Axton completo con pares Cant/Imp (hoja
+`Liquidaciones.AAAAMMDD.HHMMSS.n` — Epiroc, POP) y Axton reducido a sólo importes (misma hoja, subencabezado
+sólo `Imp`, preámbulo `EA: …`, `TOTAL GENERAL` duplicado — SIASA; se acepta aunque venga posiblemente
+retocado a mano antes de enviarse). **Queda afuera el Tabulado Vertical de Toyota/TASA — no por
+incompatibilidad, sino porque todavía no se relevó.** El formato se decide siempre por la firma del
+archivo, nunca por el cliente: un cliente puede migrar de sistema de un período a otro (POF exportaba la
+familia `EA:` en 2025 — lo que documentan como "OPmobility" los comentarios de `tabuladoControl.js` y
+`tabuladoHtml.js` — y hoy manda `tabulado_h`).
+
+**2. El lector no convierte unidades (opción 1 de las presentadas).** Entrega las cantidades tal como
+vienen en el archivo, con su código de concepto. **Se descartó que el lector normalice unidades por su
+cuenta** (horas jornalizadas → días mensualizados o viceversa). La conversión, cuando hace falta, queda del
+lado del control que consume esos datos, porque ahí es donde se sabe qué convenio rige al empleado (tabla
+de parámetros D7). Si un cruce mezcla unidades sin convertir, avisa en vez de calcular con ellas mezcladas.
+Corrige lo que documentaba la v1.0 del catálogo maestro (`normaliza unidades`, en
+`.claude/skills/relevamiento-controles/references/catalogo-controles.md`), que quedó describiendo un plan
+anterior a esta decisión.
+
+**3. Una cantidad ausente (variante Axton sólo-Imp) nunca se completa por inferencia.** El lector avisa y
+pide re-subir el export con cantidades. Si el analista sigue sin conseguirlas, la cantidad queda "no
+visible" y el control que la necesitaba sale **INCIERTO**, no aprobado — nunca se infiere a partir del
+importe o de una tarifa. Es la misma regla del "default silencioso es un bug" de `CLAUDE.md`: un número
+inferido y coherente es peor que un hueco declarado, porque nadie lo vuelve a cuestionar.
+
+**Verificado contra 6 archivos reales de 4 clientes (07/2026, no entran al repo):** el no-liquidado viene
+con `0` explícito en Meta4 (no distinguible de "liquidado en cero") y con celda vacía en Axton (sí
+distinguible); fila por liquidación en los dos sistemas; el CBU puede venir tipado como float; los códigos
+de concepto no vienen ordenados; en SIASA conviven `999` y `1000`, ambos rotulados "Sueldo Basico" — de ahí
+que los conceptos se matcheen siempre por código, nunca por nombre.
+
+**Dónde vive el detalle.** `specs/lector-tabulado-formatos.md`.
