@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: detector de formato del Tabulado (pieza T, lote 2) — 2026-08-18
+
+- **Sin cambio visible todavía para el analista en ningún control**: es la pieza base, y por ahora ningún control la llama. Lo que sí queda visible ya mismo es que el Paso 2 reconoce dos encabezados más al auto-detectar la columna de legajo y la de nombre: `ID_EMPLEADO` (legajo) y `APPELIDO Y NOMBRE`, el typo literal —doble P— que trae el export Meta4 de Finadiet y de POF.
+- **Lo que se construyó por dentro** (**D-065**): antes de leer un Tabulado, se identifica de qué formato es mirando sólo la firma del archivo —nombre de hoja, preámbulo, subencabezados—, nunca el cliente: Meta4 horizontal (`tabulado_h` — Finadiet, POF), Axton completo con cantidad e importe (`Liquidaciones.AAAAMMDD.HHMMSS.n` — Epiroc, POP) o Axton reducido a sólo importes (misma hoja, sin columna de cantidad — SIASA). Un archivo sin firma reconocida, cifrado con contraseña, o HTML sin el preámbulo `EA:` corta con un aviso que dice qué se buscó y qué se encontró, en vez de intentar leerlo igual. Queda afuera del alcance, sin relevar todavía, el Tabulado Vertical de Toyota/TASA.
+- **El lector no convierte horas ni días** (**D-065**): entrega las cantidades tal como vienen en el archivo, con su código; convertir queda del lado del control que las use. Si a un cliente le falta la columna de cantidad (la variante de sólo importes) y no la puede re-subir, esa cantidad queda "no visible" y el control que la necesitaba sale **incierto**, nunca aprobado por default.
+- También queda armada —sin pantalla todavía que la muestre— la comparación de dos Tabulados para saber qué columnas entraron y cuáles salieron entre uno y otro.
+
 ### docs: la familia contable se posterga, Epiroc pasa a ser el cliente de prueba de Ganancias, y se escribe cómo se verifica contra un armado manual — 2026-08-17
 
 - **Ningún cambio de código.** Es documentación de tres decisiones de Willy del 2026-08-17.
