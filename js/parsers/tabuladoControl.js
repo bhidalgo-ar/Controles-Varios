@@ -19,8 +19,11 @@ import {
 // mayúsculas con guión bajo, y el de los sistemas que exportan HTML (OPmobility)
 // los trae en formato título ("Legajo", "Apellido y Nombre").
 const TAB_STD_COLS = {
-  empleadoColumn:       ['EMPLEADO', 'LEGAJO'],
-  apellidoNombreColumn: ['APELLIDO Y NOMBRE'],
+  empleadoColumn:       ['EMPLEADO', 'LEGAJO', 'ID_EMPLEADO'],
+  // 'APPELIDO' con doble P es literal del export Meta4 de Finadiet y POF — el
+  // typo viene del sistema y matchearlo es más barato que explicárselo al
+  // analista cada mes. No "corregirlo".
+  apellidoNombreColumn: ['APELLIDO Y NOMBRE', 'APPELIDO Y NOMBRE'],
   puestoColumn:         ['PUESTO'],
   idCCColumn:           ['ID_CENTRO_COSTO'],
   ccColumn:             ['CENTRO_COSTO'],
@@ -48,7 +51,7 @@ const TAB_REQUIRED_KEYS = ['empleadoColumn'];
 // parece de encabezados, así los otros 11 controles (Excel normal, encabezados
 // en la fila 1) siguen por la rama de siempre.
 
-const TAB_PRIMERA_COLUMNA = /^(legajo|empleado)$/i;
+const TAB_PRIMERA_COLUMNA = /^(legajo|empleado|id_empleado)$/i;
 
 // Hasta dónde buscar la fila de encabezados. El preámbulo real son 2 filas;
 // el margen cubre variantes sin obligar a recorrer un archivo entero.
