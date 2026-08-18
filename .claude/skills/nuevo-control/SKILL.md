@@ -24,8 +24,10 @@ Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va
 
 1. Contra qué se cruza: el Tabulado (el caso normal) u otro reporte — `rend_vs_asiento` cruza
    Rendimiento contra CONTA.
-2. Los encabezados **exactos** del reporte. Sin el archivo real o los headers literales, el parser y
-   la auto-detección son adivinanza. Pedilos.
+2. Los encabezados **exactos** del reporte. Si tenés el archivo real, pasáselo al agente
+   `inspector-archivo` antes de escribir una línea: te devuelve encabezados literales, fila
+   de arranque, columnas de concepto por código y si hay una fila por liquidación o por
+   empleado. Si no lo tenés, pedilo — sin eso el parser es adivinanza.
 3. Qué conceptos se comparan y el signo de la diferencia. La convención es `Tabulado − Reporte`;
    `rend_vs_asiento` usa `CONTA − Rend`. Confirmá cuál aplica.
 4. Si hace falta la variante "Generar Reporte" (armar el archivo desde el Tabulado en vez de

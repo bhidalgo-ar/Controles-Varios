@@ -152,10 +152,18 @@ el cambio sólo se puede verificar en el navegador y no lo pudiste abrir, dejá 
 — no mergees a ciegas. Si `gh` no está disponible, avisá en vez de adivinar la ruta. Commits en
 español, Conventional Commits.
 
+Un cambio no está terminado si `ESTADO.md` sigue describiendo el mundo anterior: antes de
+mergear, pasale el diff al agente `documentalista` y dejá que actualice estado, changelog,
+decisiones y la spec del frente. Vale lo mismo que el CI en verde — es lo único que ven
+Cowork y Chat cuando retomás el trabajo desde ahí.
+
 ---
 
 ## Dónde está el resto
 
+- `ESTADO.md` — dónde estamos hoy, un bloque por frente abierto. Leelo primero.
+- `.claude/agents/` — relevador (recolección), auditor (refutar hallazgos), documentalista
+  (dejar la doc al día), inspector-archivo (radiografía de un archivo real de cliente).
 - `README.md` — cómo levantar la app y qué hace cada control, para el equipo.
 - `ARCHITECTURE.md` — identidad de cliente, ciclo de vida, seed, los tres niveles del control.
 - `DECISIONS.md` — por qué algo está como está; los módulos citan estas entradas (D-0xx).
