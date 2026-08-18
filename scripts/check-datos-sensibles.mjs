@@ -11,6 +11,12 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 const ALLOWLIST = new Set([
   // Plantilla vacía del catálogo de conceptos: no trae datos de nadie.
   'Catalogo_Conceptos_Plantilla.xlsx',
+  // Skill del plugin hya-toolkit: CUIT/CBU de ejemplo en docstrings de los
+  // validadores (módulo 11 / módulo 10), no son datos de ningún empleado.
+  '.claude/skills/payroll-recon-ar/src/parsers/parseCSV.js',
+  '.claude/skills/payroll-recon-ar/src/parsers/parseExcel.js',
+  '.claude/skills/payroll-recon-ar/src/validators/validateCBU.js',
+  '.claude/skills/payroll-recon-ar/src/validators/validateCUIT.js',
 ]);
 
 // Archivos que no tiene sentido escanear por contenido (hashes, minificados).
