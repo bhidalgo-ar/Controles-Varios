@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!--
+    CSP: connect-src 'none' bloquea cualquier fetch/XHR/WebSocket post-load.
+    Los scripts de CDN se cargan en el momento del load inicial.
+    Garantía técnica: los datos del usuario NO salen del navegador.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.sheetjs.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; font-src 'self' data:;">
+  <title>{{TITLE}}</title>
+  <style>
+    :root {
+      --bg: #f6f7f9; --card: #fff; --border: #e2e5ea; --text: #1a1f2b;
+      --muted: #6b7280; --primary: #2563eb; --primary-dark: #1d4ed8;
+      --success: #059669; --warning: #d97706; --danger: #dc2626;
+      --match-bg: #ecfdf5; --diff-bg: #fef2f2; --only-a-bg: #fffbeb; --only-b-bg: #f3f4f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); font-size: 14px;
+    }
+    header {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    .privacy-badge {
+      font-size: 12px; color: var(--success); background: var(--match-bg);
+      padding: 4px 10px; border-radius: 12px; font-weight: 500;
+    }
+    main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px; margin-bottom: 16px;
+    }
+    .drop-zones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: 8px; padding: 32px;
+      text-align: center; cursor: pointer; transition: all 0.2s;
+      background: var(--card);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--primary); background: #eff6ff;
+    }
+    .drop-zone.has-file { border-style: solid; border-color: var(--success); background: var(--match-bg); }
+    .drop-zone h3 { margin: 0 0 8px; font-size: 15px; }
+    .drop-zone p { margin: 4px 0; color: var(--muted); font-size: 13px; }
+    .drop-zone input[type=file] { display: none; }
+    .file-info { font-size: 12px; color: var(--muted); margin-top: 8px; word-break: break-all; }
+    button {
+      background: var(--primary); color: white; border: none;
+      padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
+    }
+    button:hover:not(:disabled) { background: var(--primary-dark); }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    button.secondary { background: #e5e7eb; color: var(--text); }
+    button.secondary:hover:not(:disabled) { background: #d1d5db; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 16px 0; }
+    .progress-bar { height: 100%; background: var(--primary); transition: width 0.2s; width: 0; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .stat {
+      padding: 12px; border-radius: 6px; background: var(--bg);
+      border-left: 3px solid var(--primary);
+    }
+    .stat.match { border-left-color: var(--success); }
+    .stat.diff { border-left-color: var(--danger); }
+    .stat.only-a { border-left-color: var(--warning); }
+    .stat.only-b { border-left-color: var(--muted); }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+    .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .filter-chip {
+      padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border);
+      background: var(--card); cursor: pointer; font-size: 12px; user-select: none;
+    }
+    .filter-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .search-input {
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+      width: 100%; max-width: 300px; font-size: 13px;
+    }
+    .table-wrap { overflow: auto; max-height: 600px; border: 1px solid var(--border); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { background: var(--bg); position: sticky; top: 0; font-weight: 600; z-index: 1; }
+    tr.match { background: var(--match-bg); }
+    tr.diff { background: var(--diff-bg); }
+    tr.only-a { background: var(--only-a-bg); }
+    tr.only-b { background: var(--only-b-bg); }
+    .badge {
+      display: inline-block; padding: 2px 6px; border-radius: 4px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge.match { background: var(--success); color: white; }
+    .badge.diff { background: var(--danger); color: white; }
+    .badge.only-a { background: var(--warning); color: white; }
+    .badge.only-b { background: var(--muted); color: white; }
+    .hidden { display: none; }
+    .error-panel {
+      background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+      padding: 12px; border-radius: 6px; margin-top: 12px;
+    }
+    .warning-panel {
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      padding: 12px; border-radius: 6px; margin-top: 12px;
+    }
+    footer {
+      text-align: center; padding: 24px; color: var(--muted); font-size: 12px;
+    }
+    footer strong { color: var(--success); }
+    details { margin-top: 12px; }
+    summary { cursor: pointer; font-weight: 500; padding: 8px 0; }
+    .diff-cell { font-weight: 600; }
+    .diff-old { color: var(--danger); text-decoration: line-through; opacity: 0.7; }
+    .diff-new { color: var(--success); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>{{TITLE}}</h1>
+  <span class="privacy-badge">🔒 100% local</span>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2 style="margin-top:0;font-size:16px">1. Cargar archivos</h2>
+    <div class="drop-zones">
+      <label class="drop-zone" id="dropA">
+        <h3>Archivo A</h3>
+        <p>{{LABEL_A}}</p>
+        <p style="font-size:11px">Arrastrá o click para seleccionar</p>
+        <p style="font-size:11px">.xls · .xlsx · .csv · .txt · .pdf</p>
+        <input type="file" id="fileA" accept=".xls,.xlsx,.xlsb,.csv,.txt,.pdf">
+        <div class="file-info" id="infoA"></div>
+      </label>
+      <label class="drop-zone" id="dropB">
+        <h3>Archivo B</h3>
+        <p>{{LABEL_B}}</p>
+        <p style="font-size:11px">Arrastrá o click para seleccionar</p>
+        <p style="font-size:11px">.xls · .xlsx · .csv · .txt · .pdf</p>
+        <input type="file" id="fileB" accept=".xls,.xlsx,.xlsb,.csv,.txt,.pdf">
+        <div class="file-info" id="infoB"></div>
+      </label>
+    </div>
+    <div class="actions">
+      <button id="runBtn" disabled>Reconciliar</button>
+      <button class="secondary" id="resetBtn">Limpiar</button>
+    </div>
+    <div class="progress hidden" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div id="statusMsg" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+  </div>
+
+  <div class="card hidden" id="resultsCard">
+    <h2 style="margin-top:0;font-size:16px">2. Resultados</h2>
+    <div class="stats" id="statsPanel"></div>
+    <div id="warnings"></div>
+
+    <div style="margin-top:20px">
+      <div class="filters" id="filters">
+        <span class="filter-chip active" data-filter="all">Todos</span>
+        <span class="filter-chip" data-filter="match">✓ Match</span>
+        <span class="filter-chip" data-filter="diff">✗ Diferencias</span>
+        <span class="filter-chip" data-filter="only-a">⚠ Solo en A</span>
+        <span class="filter-chip" data-filter="only-b">⬜ Solo en B</span>
+      </div>
+      <input type="search" class="search-input" id="searchInput" placeholder="Buscar en resultados...">
+      <div class="table-wrap" style="margin-top:12px">
+        <table id="resultsTable">
+          <thead id="resultsHead"></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+      <div id="paginationInfo" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
+    <div class="actions">
+      <button id="exportBtn">Exportar XLSX</button>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <p><strong>🔒 Procesamiento 100% local</strong> — los datos no salen de tu navegador.</p>
+  <p>⚠️ No subas archivos con datos personales reales a ninguna IA mientras diseñás herramientas. Usá siempre datos anonimizados para probar.</p>
+</footer>
+
+<!-- CDNs -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<!-- Worker inline -->
+<script id="reconWorker" type="javascript/worker">
+  importScripts('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js');
+  importScripts('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js');
+
+  // ============================================================
+  // MÓDULOS INLINEADOS (generados por Claude según el caso de uso)
+  // Placeholder: reemplazar por el contenido real de los módulos
+  // necesarios de src/ (normalizers, validators, parsers, reconcilers).
+  // ============================================================
+  // {{INLINE_MODULES_WORKER}}
+
+  // ============================================================
+  // ROUTER DE ARCHIVOS (detecta formato por magic bytes)
+  // ============================================================
+  function detectFileType(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer.slice(0, 16));
+    // ZIP (XLSX/XLSB/ODS)
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) {
+      return 'xlsx';
+    }
+    // OLE2 (XLS legacy)
+    if (bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
+      return 'xls';
+    }
+    // PDF
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+      return 'pdf';
+    }
+    // Asumir texto (CSV/TXT)
+    return 'text';
+  }
+
+  async function parseFile(arrayBuffer, fileName) {
+    const type = detectFileType(arrayBuffer);
+    const ext = (fileName || '').toLowerCase().split('.').pop();
+
+    if (type === 'xlsx' || type === 'xls' || ['xlsx', 'xls', 'xlsb'].includes(ext)) {
+      return { type: 'excel', ...parseExcelBuffer(arrayBuffer) };
+    }
+    if (type === 'pdf' || ext === 'pdf') {
+      throw new Error('PDF requiere carga de PDF.js. Ver template para setup. Archivo: ' + fileName);
+    }
+    // Default: CSV/TXT
+    const result = await parseCSVBuffer(arrayBuffer);
+    return { type: 'csv', ...result };
+  }
+
+  // ============================================================
+  // PIPELINE PRINCIPAL
+  // ============================================================
+  async function runReconciliation({ fileA, fileB, nameA, nameB, adapterA, adapterB, compareConfig }) {
+    self.postMessage({ type: 'progress', phase: 'Parseando archivo A', pct: 10 });
+    const parsedA = await parseFile(fileA, nameA);
+
+    self.postMessage({ type: 'progress', phase: 'Parseando archivo B', pct: 25 });
+    const parsedB = await parseFile(fileB, nameB);
+
+    self.postMessage({ type: 'progress', phase: 'Mapeando headers', pct: 40 });
+    // Si viene adapter, usar su headerMap explícito. Sino, auto-map con fuzzy.
+    const mappedA = applyAdapter(parsedA.rows, adapterA);
+    const mappedB = applyAdapter(parsedB.rows, adapterB);
+
+    self.postMessage({ type: 'progress', phase: 'Normalizando valores', pct: 60 });
+    const normalizedA = mappedA.map(row => normalizeRow(row, adapterA));
+    const normalizedB = mappedB.map(row => normalizeRow(row, adapterB));
+
+    self.postMessage({ type: 'progress', phase: 'Validando', pct: 75 });
+    const validationA = validateRows(normalizedA);
+    const validationB = validateRows(normalizedB);
+
+    self.postMessage({ type: 'progress', phase: 'Reconciliando', pct: 90 });
+    const result = reconcile(normalizedA, normalizedB, {
+      keyField: compareConfig.keyField || 'cuil',
+      compareFields: compareConfig.compareFields || null,
+      normalizers: compareConfig.normalizers || {}
+    });
+
+    self.postMessage({ type: 'progress', phase: 'Listo', pct: 100 });
+
+    return {
+      ...result,
+      metaA: parsedA.meta,
+      metaB: parsedB.meta,
+      validationA,
+      validationB
+    };
+  }
+
+  // ============================================================
+  // HELPERS DE ADAPTER (básicos - si hay adapter específico, override)
+  // ============================================================
+  function applyAdapter(rows, adapter) {
+    if (!adapter || !adapter.headerMap) return rows;
+    const inverseMap = {};
+    for (const [canonical, synonyms] of Object.entries(adapter.headerMap)) {
+      for (const syn of synonyms) {
+        inverseMap[syn.toLowerCase()] = canonical;
+      }
+    }
+    return rows.map(row => {
+      const out = {};
+      for (const [key, val] of Object.entries(row)) {
+        const normalized = key.trim().toLowerCase();
+        const canonical = inverseMap[normalized];
+        if (canonical) {
+          out[canonical] = val;
+        } else {
+          out[`__extra_${key}`] = val;
+        }
+      }
+      return out;
+    });
+  }
+
+  function normalizeRow(row, adapter) {
+    if (!adapter || !adapter.transforms) return row;
+    const out = { ...row };
+    for (const [field, fn] of Object.entries(adapter.transforms)) {
+      if (field in out) {
+        try { out[field] = fn(out[field]); } catch (e) { /* silent */ }
+      }
+    }
+    return out;
+  }
+
+  function validateRows(rows) {
+    const errors = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.cuil && typeof validateCUIT === 'function') {
+        const v = validateCUIT(r.cuil);
+        if (!v.valid) errors.push({ row: i, field: 'cuil', value: r.cuil, reason: v.reason });
+      }
+      if (r.dni && typeof validateDNI === 'function') {
+        const v = validateDNI(r.dni);
+        if (!v.valid) errors.push({ row: i, field: 'dni', value: r.dni, reason: v.reason });
+      }
+      if (r.cbu && typeof validateCBU === 'function') {
+        const v = validateCBU(r.cbu);
+        if (!v.valid) errors.push({ row: i, field: 'cbu', value: r.cbu, reason: v.reason });
+      }
+    }
+    return { errors, totalRows: rows.length };
+  }
+
+  // ============================================================
+  // MESSAGE HANDLER
+  // ============================================================
+  self.onmessage = async (e) => {
+    const { cmd, payload } = e.data;
+    try {
+      if (cmd === 'RECONCILE') {
+        const result = await runReconciliation(payload);
+        self.postMessage({ type: 'done', result });
+      }
+    } catch (err) {
+      self.postMessage({ type: 'error', message: err.message, stack: err.stack });
+    }
+  };
+</script>
+
+<!-- Script principal (UI) -->
+<script>
+  const $ = sel => document.querySelector(sel);
+  const fileA = $('#fileA'), fileB = $('#fileB');
+  const dropA = $('#dropA'), dropB = $('#dropB');
+  const runBtn = $('#runBtn'), resetBtn = $('#resetBtn'), exportBtn = $('#exportBtn');
+
+  // Estado global de la UI
+  const state = {
+    fileA: null, fileB: null, result: null,
+    filter: 'all', search: '', currentPage: 0, pageSize: 100
+  };
+
+  // ============================================================
+  // UI: DROP ZONES
+  // ============================================================
+  function updateFileInfo(which, file) {
+    const info = $('#info' + which);
+    const drop = $('#drop' + which);
+    if (file) {
+      info.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      drop.classList.add('has-file');
+      state['file' + which] = file;
+    } else {
+      info.textContent = '';
+      drop.classList.remove('has-file');
+      state['file' + which] = null;
+    }
+    runBtn.disabled = !(state.fileA && state.fileB);
+  }
+
+  ['A', 'B'].forEach(which => {
+    const input = $('#file' + which);
+    const drop = $('#drop' + which);
+    input.addEventListener('change', e => {
+      if (e.target.files[0]) updateFileInfo(which, e.target.files[0]);
+    });
+    ['dragenter', 'dragover'].forEach(ev => {
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(ev => {
+      drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag-over'); });
+    });
+    drop.addEventListener('drop', e => {
+      const f = e.dataTransfer.files[0];
+      if (f) { input.files = e.dataTransfer.files; updateFileInfo(which, f); }
+    });
+  });
+
+  resetBtn.addEventListener('click', () => {
+    fileA.value = ''; fileB.value = '';
+    updateFileInfo('A', null); updateFileInfo('B', null);
+    $('#resultsCard').classList.add('hidden');
+    $('#statusMsg').textContent = '';
+    $('#progressWrap').classList.add('hidden');
+    $('#progressBar').style.width = '0%';
+    state.result = null;
+  });
+
+  // ============================================================
+  // WORKER SPAWN
+  // ============================================================
+  function spawnWorker() {
+    const code = document.getElementById('reconWorker').textContent;
+    const blob = new Blob([code], { type: 'application/javascript' });
+    return new Worker(URL.createObjectURL(blob));
+  }
+
+  runBtn.addEventListener('click', async () => {
+    try {
+      runBtn.disabled = true;
+      $('#progressWrap').classList.remove('hidden');
+      $('#statusMsg').textContent = 'Procesando...';
+
+      const [abA, abB] = await Promise.all([
+        state.fileA.arrayBuffer(), state.fileB.arrayBuffer()
+      ]);
+
+      const worker = spawnWorker();
+      worker.onmessage = e => {
+        const { type } = e.data;
+        if (type === 'progress') {
+          $('#progressBar').style.width = e.data.pct + '%';
+          $('#statusMsg').textContent = `${e.data.phase}...`;
+        } else if (type === 'done') {
+          state.result = e.data.result;
+          renderResults(state.result);
+          $('#progressBar').style.width = '100%';
+          $('#statusMsg').textContent = 'Listo.';
+          runBtn.disabled = false;
+          worker.terminate();
+        } else if (type === 'error') {
+          console.error(e.data);
+          $('#statusMsg').innerHTML = `<span style="color:var(--danger)">Error: ${e.data.message}</span>`;
+          runBtn.disabled = false;
+          worker.terminate();
+        }
+      };
+      worker.postMessage(
+        {
+          cmd: 'RECONCILE',
+          payload: {
+            fileA: abA,
+            fileB: abB,
+            nameA: state.fileA.name,
+            nameB: state.fileB.name,
+            adapterA: window.ADAPTER_A || null,    // definido por placeholder {{ADAPTER_A}}
+            adapterB: window.ADAPTER_B || null,
+            compareConfig: window.COMPARE_CONFIG || { keyField: 'cuil' }
+          }
+        },
+        [abA, abB]  // transferable: zero-copy
+      );
+    } catch (err) {
+      console.error(err);
+      $('#statusMsg').innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+      runBtn.disabled = false;
+    }
+  });
+
+  // ============================================================
+  // RENDER: STATS + TABLA
+  // ============================================================
+  function renderResults(result) {
+    $('#resultsCard').classList.remove('hidden');
+    renderStats(result);
+    renderWarnings(result);
+    renderTable();
+    attachFilterHandlers();
+  }
+
+  function renderStats(result) {
+    const s = result.stats;
+    $('#statsPanel').innerHTML = `
+      <div class="stat"><div class="stat-label">Total A</div><div class="stat-value">${s.totalA.toLocaleString()}</div></div>
+      <div class="stat"><div class="stat-label">Total B</div><div class="stat-value">${s.totalB.toLocaleString()}</div></div>
+      <div class="stat match"><div class="stat-label">Match exacto</div><div class="stat-value">${s.matchedEqual.toLocaleString()}</div></div>
+      <div class="stat diff"><div class="stat-label">Con diferencias</div><div class="stat-value">${s.matchedDiff.toLocaleString()}</div></div>
+      <div class="stat only-a"><div class="stat-label">Solo en A</div><div class="stat-value">${s.onlyInA.toLocaleString()}</div></div>
+      <div class="stat only-b"><div class="stat-label">Solo en B</div><div class="stat-value">${s.onlyInB.toLocaleString()}</div></div>
+      <div class="stat"><div class="stat-label">Match rate</div><div class="stat-value">${s.matchRate}%</div></div>
+    `;
+  }
+
+  function renderWarnings(result) {
+    const warnings = [];
+    if (result.stats.duplicatesA > 0)
+      warnings.push(`⚠ ${result.stats.duplicatesA} clave(s) duplicada(s) en archivo A`);
+    if (result.stats.duplicatesB > 0)
+      warnings.push(`⚠ ${result.stats.duplicatesB} clave(s) duplicada(s) en archivo B`);
+    if (result.validationA?.errors?.length > 0)
+      warnings.push(`⚠ ${result.validationA.errors.length} validación(es) fallidas en A (CUIL/DNI/CBU)`);
+    if (result.validationB?.errors?.length > 0)
+      warnings.push(`⚠ ${result.validationB.errors.length} validación(es) fallidas en B (CUIL/DNI/CBU)`);
+
+    const wDiv = $('#warnings');
+    if (warnings.length > 0) {
+      wDiv.innerHTML = `<div class="warning-panel">${warnings.join('<br>')}</div>`;
+    } else {
+      wDiv.innerHTML = '';
+    }
+  }
+
+  function getCombinedRows() {
+    const r = state.result;
+    if (!r) return [];
+    const all = [
+      ...r.matchedEqual.map(m => ({ ...m.a, __type: 'match', __key: m.key })),
+      ...r.matchedDiff.map(m => ({ ...m.a, __type: 'diff', __key: m.key, __diffs: m.diffs, __b: m.b })),
+      ...r.onlyInA.map(row => ({ ...row, __type: 'only-a' })),
+      ...r.onlyInB.map(row => ({ ...row, __type: 'only-b' }))
+    ];
+    return all;
+  }
+
+  function filterRows(rows) {
+    let filtered = rows;
+    if (state.filter !== 'all') {
+      filtered = filtered.filter(r => r.__type === state.filter);
+    }
+    if (state.search) {
+      const q = state.search.toLowerCase();
+      filtered = filtered.filter(r => {
+        for (const [k, v] of Object.entries(r)) {
+          if (k.startsWith('__')) continue;
+          if (String(v).toLowerCase().includes(q)) return true;
+        }
+        return false;
+      });
+    }
+    return filtered;
+  }
+
+  function renderTable() {
+    const all = getCombinedRows();
+    const filtered = filterRows(all);
+
+    // Determinar columnas: unión de claves no-privadas de filas de la muestra
+    const cols = new Set();
+    for (const r of filtered.slice(0, 50)) {
+      for (const k of Object.keys(r)) {
+        if (!k.startsWith('__')) cols.add(k);
+      }
+    }
+    const columns = [...cols];
+
+    // Paginación simple
+    const total = filtered.length;
+    const start = state.currentPage * state.pageSize;
+    const end = Math.min(start + state.pageSize, total);
+    const pageRows = filtered.slice(start, end);
+
+    const head = `<tr><th>Tipo</th>${columns.map(c => `<th>${c}</th>`).join('')}</tr>`;
+    const body = pageRows.map(r => {
+      const badge = {
+        match: '<span class="badge match">✓</span>',
+        diff: '<span class="badge diff">✗</span>',
+        'only-a': '<span class="badge only-a">A</span>',
+        'only-b': '<span class="badge only-b">B</span>'
+      }[r.__type] || '';
+      const cells = columns.map(c => {
+        const val = r[c];
+        if (r.__type === 'diff' && r.__diffs) {
+          const diff = r.__diffs.find(d => d.field === c);
+          if (diff) {
+            return `<td class="diff-cell"><span class="diff-old">${escapeHtml(diff.a)}</span><br><span class="diff-new">${escapeHtml(diff.b)}</span></td>`;
+          }
+        }
+        return `<td>${escapeHtml(val)}</td>`;
+      }).join('');
+      return `<tr class="${r.__type}">${`<td>${badge}</td>`}${cells}</tr>`;
+    }).join('');
+
+    $('#resultsHead').innerHTML = head;
+    $('#resultsBody').innerHTML = body || '<tr><td colspan="99" style="text-align:center;padding:24px;color:var(--muted)">Sin resultados con los filtros aplicados</td></tr>';
+    $('#paginationInfo').innerHTML = `Mostrando ${total === 0 ? 0 : start + 1}–${end} de ${total.toLocaleString()} filas. ${total > state.pageSize ? `<button class="secondary" id="prevPage" ${state.currentPage === 0 ? 'disabled' : ''}>« Anterior</button> <button class="secondary" id="nextPage" ${end >= total ? 'disabled' : ''}>Siguiente »</button>` : ''}`;
+
+    if ($('#prevPage')) $('#prevPage').addEventListener('click', () => { state.currentPage--; renderTable(); });
+    if ($('#nextPage')) $('#nextPage').addEventListener('click', () => { state.currentPage++; renderTable(); });
+  }
+
+  function escapeHtml(v) {
+    if (v == null) return '';
+    return String(v).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  function attachFilterHandlers() {
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.filter = chip.dataset.filter;
+        state.currentPage = 0;
+        renderTable();
+      });
+    });
+    let searchTimer;
+    $('#searchInput').addEventListener('input', e => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.search = e.target.value;
+        state.currentPage = 0;
+        renderTable();
+      }, 200);
+    });
+  }
+
+  // ============================================================
+  // EXPORT XLSX
+  // ============================================================
+  exportBtn.addEventListener('click', () => {
+    if (!state.result) return;
+    const wb = XLSX.utils.book_new();
+    const r = state.result;
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      r.matchedEqual.map(m => ({ key: m.key, ...m.a }))
+    ), 'Matched');
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      r.matchedDiff.map(m => ({
+        key: m.key,
+        campos_diff: m.diffs.map(d => d.field).join(', '),
+        ...Object.fromEntries(m.diffs.flatMap(d => [
+          [`${d.field}__A`, d.a], [`${d.field}__B`, d.b]
+        ]))
+      }))
+    ), 'Diffs');
+
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.onlyInA), 'OnlyInA');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.onlyInB), 'OnlyInB');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([r.stats]), 'Stats');
+
+    if (r.validationA?.errors?.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.validationA.errors), 'ValidacionA');
+    }
+    if (r.validationB?.errors?.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.validationB.errors), 'ValidacionB');
+    }
+
+    const ts = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `reconciliacion_${ts}.xlsx`);
+  });
+
+  // ============================================================
+  // ADAPTERS (definidos por placeholder según herramienta)
+  // ============================================================
+  // window.ADAPTER_A = {{ADAPTER_A}};
+  // window.ADAPTER_B = {{ADAPTER_B}};
+  // window.COMPARE_CONFIG = { keyField: 'cuil', compareFields: [...] };
+</script>
+</body>
+</html>
