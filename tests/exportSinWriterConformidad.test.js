@@ -91,9 +91,9 @@ const { buildAcreditacionesWorkbook } = await import('./js/controls/acreditacion
 // Mismo fixture que `tests/acreditacionesControl.test.js`: 4 listas más un grupo
 // SIN ASIGNAR, que es el caso que agrega una hoja extra al workbook.
 
-const CBU1 = '0720369388000032749018';
-const CBU2 = '0720514988000001436736';
-const CBU3 = '0170005340000038839937';
+const CBU1 = '0720000000000000000001';
+const CBU2 = '0720000000000000000002';
+const CBU3 = '0170000000000000000003';
 
 const ANTICIPO = 'Anticipo de sueldo (De carga) Julio 2026 (Anticipos 07-2026) (C)';
 const QUINC1   = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) (C)';

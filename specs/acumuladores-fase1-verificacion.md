@@ -148,7 +148,7 @@
   cualquier "fuera de patrón" de tributación — se muestra como dato a
   revisar, nunca como afirmación de error, porque sin las deducciones no se
   puede saber.
-- El caso puntual del legajo 137 (SENIA JORGE OMAR): **cerrado como "no
+- El caso puntual del legajo 137: **cerrado como "no
   resoluble sin el Tabulado".** Guillermo confirmó (2026-08-07): probablemente
   es una licencia sin goce, pero Acumuladores Ganancias no tiene ese dato —
   sólo lo tendría cruzando contra el Tabulado, y este control es
