@@ -106,6 +106,12 @@ repo, ni siquiera como fixture. El export JSON de sesión y el respaldo de base 
 personales — avisarlo donde se descargan. El banner de privacidad de `index.html` es requisito del
 negocio: no se saca.
 
+**Antes de commitear corre un chequeo automático** (`scripts/check-datos-sensibles.mjs`): frena
+planillas (`.xlsx`, `.csv`, `.xls`) y textos con CBU o CUIT. Se activa una sola vez por máquina con
+`npm run hooks:install`; CI lo repite sobre los archivos del PR, así que si alguien no lo instaló, el
+PR sale en rojo. No cubre nombres ni sueldos —eso no se detecta por patrón—: para una captura de
+pantalla o un ejemplo en una spec, los datos se inventan siempre, aunque el repo sea privado.
+
 ---
 
 ## Código

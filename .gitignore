@@ -28,3 +28,13 @@ desktop.ini
 node_modules/
 playwright-report/
 test-results/
+
+# Planillas de cliente (exports de Meta4/Axton, reportes, catálogos llenos).
+# Nunca van al repo: traen nómina de gente real. La única excepción es la
+# plantilla vacía del catálogo de conceptos, que no tiene datos de nadie.
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.tsv
+!Catalogo_Conceptos_Plantilla.xlsx
