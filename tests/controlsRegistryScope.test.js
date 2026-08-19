@@ -38,8 +38,11 @@ const controls = Object.values(CONTROL_REGISTRY);
 // Se agregó "pop_variaciones" (17º), la variación entre quincenas de OPmobility
 // Pilar: el primero que cruza dos Tabulados de AXTON entre sí — ver
 // specs/control-variacion-quincenas-pop.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP',
-  controls.length === 17);
+// Se agregó "conta_desglosada" (18º), la Contabilidad Desglosada + Asiento de
+// COTY: el primero que arma un asiento desde un Tabulado de AXTON — ver
+// specs/conta-desglosada-asiento.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP + la contabilidad desglosada de COTY',
+  controls.length === 18);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

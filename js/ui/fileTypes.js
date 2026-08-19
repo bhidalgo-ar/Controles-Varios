@@ -76,6 +76,14 @@ import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { parseTabAxton, detectHeaders as detectHeadersTabAxton } from '../parsers/tabAxtonParser.js';
 import { parseVariacAxton, detectHeaders as detectHeadersVariacAxton } from '../parsers/popVariacParser.js';
+import {
+  parseTotalesConcepto,
+  detectHeaders as detectHeadersTotalesConcepto,
+} from '../parsers/totalesConceptoParser.js';
+import {
+  parseCuentasRedefinicion,
+  detectHeaders as detectHeadersCuentasRedefinicion,
+} from '../parsers/cuentasRedefinicionParser.js';
 
 // ── Líneas de metadata ───────────────────────────────────────────────────────
 // Lo que se muestra al lado del nombre del archivo una vez cargado. Son tres
@@ -112,6 +120,16 @@ const metaConceptCatalog = (m) =>
   + (m?.noRemu       ? ` · ${m.noRemu} no_remu`              : '')
   + (m?.aporte       ? ` · ${m.aporte} aportes`              : '')
   + (m?.contribucion ? ` · ${m.contribucion} contribuciones` : '');
+
+// El "Totales de Concepto" informa además el período que declara el propio
+// archivo: es lo que le permite al analista ver que no subió el mes pasado antes
+// de generar un asiento con el mes equivocado.
+const metaTotalesConcepto = (m) =>
+  `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos`
+  + ` &nbsp;·&nbsp; ${m?.periodoTexto ? esc(m.periodoTexto) : '<span class="badge badge--warning">período no detectado</span>'}`;
+
+const metaCuentasRedefinicion = (m) =>
+  `${m?.cuentas ?? 0} cuentas · ${m?.nombresDistintos ?? 0} nombres distintos`;
 
 // ── Las fichas ───────────────────────────────────────────────────────────────
 
@@ -518,6 +536,38 @@ export const FILE_TYPES = {
       { key: 'nroConceptoColumn',       label: 'Columna de Código de concepto',      required: false },
       { key: 'conceptoColumn',          label: 'Columna de Concepto',                required: false },
     ],
+  },
+
+  // Totales de Concepto (Axton): el reporte largo con las cuentas contables de
+  // cada concepto, origen de la Contabilidad Desglosada. Baja como .xls que en
+  // realidad es HTML (~23 MB) o como .xlsx real; el parser reconoce los dos.
+  //
+  // No declara columnas a mapear —las resuelve por nombre de encabezado— pero
+  // **no** es `fixedFormat`: pasa por la pantalla de vista previa, que es lo
+  // único que le muestra al analista que subió el reporte correcto y del mes
+  // correcto antes de procesar 5.000 filas (mismo criterio que
+  // `acreditaciones_file`).
+  totales_concepto_file: {
+    label: 'Totales de Concepto (export de Axton)',
+    siglas: ['TOTALESCONCEPTO', 'TOTALES DE CONCEPTO', 'TOTALESDECONCEPTO'],
+    parse: parseTotalesConcepto,
+    detectHeaders: detectHeadersTotalesConcepto,
+    autoDetect: null,
+    meta: metaTotalesConcepto,
+    fields: [],
+  },
+
+  // Reporte de Cuentas de Redefinición: la tabla de equivalencias nombre de
+  // cuenta → código del plan de cuentas del cliente. Es lo que convierte la
+  // desglosada en asiento.
+  cuentas_redefinicion_file: {
+    label: 'Reporte de Cuentas de Redefinición del cliente',
+    siglas: ['REPORTECUENTASREDEFINICION', 'CUENTAS REDEFINICION', 'PLAN DE CUENTAS'],
+    parse: parseCuentasRedefinicion,
+    detectHeaders: detectHeadersCuentasRedefinicion,
+    autoDetect: null,
+    meta: metaCuentasRedefinicion,
+    fields: [],
   },
 };
 

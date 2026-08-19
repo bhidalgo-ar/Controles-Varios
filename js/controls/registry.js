@@ -183,6 +183,14 @@ import {
 
 import { renderPopVariacionesConfigEditor } from '../ui/popVariacionesConfigEditor.js';
 
+import {
+  runContaDesglosada,
+  summarizeContaDesglosada,
+  renderContaDesglosadaResults,
+} from './contaDesglosada.js';
+
+import { renderContaDesglosadaConfigEditor } from '../ui/contaDesglosadaConfigEditor.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -210,6 +218,13 @@ const FINADIET_ONLY = { scope: 'cliente', scopeMeta: { clients: ['FINADIET'] } }
 // contra el archivo real de ese cliente antes de ofrecérselo. Se promueve a
 // 'sistema' cuando eso pase (mismo camino que D-015).
 const POP_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POP'] } };
+
+// COTY (Axton). El Paso 1 —desdoblar el "Totales de Concepto" en DEBE/HABER— es
+// genérico de Axton, pero el asiento se arma con el plan de cuentas del cliente
+// y con su forma de nombrar las cuentas en la liquidación. Se promueve a
+// 'sistema' cuando un segundo cliente Axton pida el mismo asiento y se verifique
+// contra sus archivos (mismo camino que D-015).
+const COTY_ONLY = { scope: 'cliente', scopeMeta: { clients: ['COTY'] } };
 
 export const CONTROL_REGISTRY = {
 
@@ -885,6 +900,54 @@ export const CONTROL_REGISTRY = {
     run:           runFinadietAsiento,
     summarize:     summarizeFinadietAsiento,
     renderResults: renderFinadietAsientoResults,
+  },
+
+  // Contabilidad Desglosada + Asiento (COTY): convierte el "Totales de Concepto"
+  // de Axton en la desglosada DEBE/HABER y, con el reporte de cuentas del
+  // cliente, en el asiento contable. Verificado contra los dos archivos reales
+  // del período 05/2026 — ver specs/conta-desglosada-asiento.md y D-066.
+  conta_desglosada: {
+    id:          'conta_desglosada',
+    label:       'Contabilidad Desglosada + Asiento',
+    ...COTY_ONLY,
+    appliesWhen: () => true,
+    description: 'Desdobla el reporte "Totales de Concepto" de Axton en la Contabilidad Desglosada '
+      + '(una línea por cada lado del movimiento, con el neto a pagar de cada empleado en una sola fila) '
+      + 'y arma con ella el Asiento Contable agrupado por cuenta y centro de costo, controlando que '
+      + 'DEBE y HABER cierren.',
+    help: {
+      what: 'Reemplaza el armado a mano de la contabilidad del mes. Cada concepto liquidado trae en el '
+        + 'Tabulado su cuenta al Debe y su cuenta al Haber: el control genera una línea por cada lado, '
+        + 'descarta las que entran y salen de la misma cuenta, netea por empleado la cuenta de sueldos a '
+        + 'pagar y controla que el total del Debe sea igual al del Haber. Con el reporte de cuentas del '
+        + 'cliente le pone además el código a cada cuenta y agrupa el asiento. Una cuenta que no esté en '
+        + 'ese reporte no se resuelve sola: sale listada en los resultados.',
+      how: [
+        'Bajá de Axton el reporte "Totales de Concepto" del período, con las columnas contables incluidas.',
+        'Pedile al cliente el "Reporte de Cuentas de Redefinición" (el que trae nombre y código de cada cuenta).',
+        'Cargá los dos en el Paso 2. Sin el segundo, la desglosada se genera igual pero el asiento no.',
+        'Ejecutá, revisá que cierre y que no queden cuentas sin código, y descargá los .xlsx desde el resultado.',
+      ],
+    },
+    group:       { id: 'conta_desglosada', label: 'Contabilidad Desglosada + Asiento', mode: 'Generar Reporte', primary: true },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'totales_concepto', label: 'Totales de Concepto (export de Axton)', fileType: 'totales_concepto_file' },
+      { key: 'cuentas_ref',      label: 'Reporte de Cuentas de Redefinición del cliente (opcional)',
+        fileType: 'cuentas_redefinicion_file', optional: true },
+    ],
+    config: [{ key: 'conta_desglosada_config', stateKey: 'contaDesglosadaConfig',
+               mappingKey: 'contaDesglosadaConfig',
+               // `null` = nunca se configuró: el control cae a su semilla. No se
+               // manda el DEFAULT para que "sin configurar" y "configurado igual
+               // a la semilla" no se vuelvan indistinguibles (D-035).
+               default: () => null,
+               mappingValue: (state) => state.contaDesglosadaConfig || null,
+               editor: renderContaDesglosadaConfigEditor,
+               openByDefault: false }],
+    run:           runContaDesglosada,
+    summarize:     summarizeContaDesglosada,
+    renderResults: renderContaDesglosadaResults,
   },
 
 };
