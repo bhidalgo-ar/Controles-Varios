@@ -4,6 +4,13 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## Control de Netos (Sportline) — construido, falta probarlo en el navegador
+- Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
+- Punto: implementado y verificado contra la liquidación real de IFSA 05/2026 — **los 22 legajos cierran**, incluidos los 5 que el armado manual no explicaba (el 2% extra del afiliado y el tope de aportes, ver D-066). 37 asserts en `tests/controlNetosControl.test.js`, batería unitaria en verde.
+- Próximo paso: **abrirlo en el navegador con los archivos reales** — no se pudo en el entorno remoto (la política de red bloquea los CDN de los que la app carga sus librerías, así que ningún e2e corre ahí). Y contestar dos cosas: (1) si el control tiene que comparar además el neto teórico contra el del mes anterior, que es lo que detectaría un AFA mal ajustado tras una paritaria; (2) el legajo 12695 queda a −1,62 por redondeo acumulado de Meta4 en el adicional del mes — si la tolerancia de $1 se sube o se deja así.
+- Pendiente aparte, ya identificado: el **calculador de AFA** (automatizar el "buscar objetivo" con el que Meli llega al bruto). Comparte toda la fórmula del control pero corre antes de liquidar, sobre el Tabulado de prueba.
+- Detalle: `specs/spec-control-netos.md`, **D-066**.
+
 ## Lector de Tabulado — detector de formato (pieza T)
 - Qué es: reconocer si un Tabulado es Meta4 horizontal, Axton completo o Axton sólo-Imp por la firma del archivo (hoja, preámbulo, subencabezados), nunca por el cliente ni por posición de columna.
 - Punto: detector construido y testeado (`js/parsers/tabFormatDetector.js`, `tests/tabFormatDetector.test.js`, 2026-08-18); ningún control lo llama todavía.

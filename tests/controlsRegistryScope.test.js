@@ -38,8 +38,11 @@ const controls = Object.values(CONTROL_REGISTRY);
 // Se agregó "pop_variaciones" (17º), la variación entre quincenas de OPmobility
 // Pilar: el primero que cruza dos Tabulados de AXTON entre sí — ver
 // specs/control-variacion-quincenas-pop.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP',
-  controls.length === 17);
+// Se agregó "control_netos" (18º), el Control de Netos de Sportline: el primero
+// que reconstruye un recibo teórico en vez de cruzar dos archivos — ver
+// specs/spec-control-netos.md.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP + el Control de Netos',
+  controls.length === 18);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

@@ -1,3 +1,28 @@
+**Estado:** implementado y verificado contra la liquidación real de IFSA 05/2026 (los 22 legajos cierran) · falta probarlo en el navegador · el §3 y el §4 de este brief quedaron **superados por D-066**, ver la nota de abajo.
+
+> **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-066).** Este brief planteaba comparar
+> contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"
+> (§3.2 y §4 `variableBuckets`). Ninguna de las dos cosas quedó así:
+>
+> · El neto contra el que se compara es un **recibo teórico que el control calcula** desde el Tabulado,
+>   no un número que el analista pega. Es la columna W de la planilla de Meli, y todo lo que necesita
+>   está en el Tabulado (`sueldo + AFA` es invariante entre meses porque el AFA absorbe la paritaria).
+>   El analista sube el Tabulado y la escala del convenio, y nada más.
+>
+> · **No hay lista de conceptos perdonados** (Willy, 2026-08-19: *"cualquiera puede explicar la
+>   diferencia, si encontrás una diferencia con alguno tenés que marcarla"*). Se convierte a neto lo que
+>   se liquidó por encima del recibo teórico y se marca lo que sobra.
+>
+> · Se agregaron dos cosas que el armado manual no tenía y que explicaban sus 5 descuadres de mayo: el
+>   **2% extra del afiliado** al sindicato y el **tope de la base de aportes**.
+>
+> · Las dos preguntas que este brief dejaba abiertas para Meli (§7) están contestadas: el neto objetivo
+>   sale de la planilla de fórmula, y **qué no remunerativo paga obra social lo dice el código del
+>   concepto** —el Tabulado lo trae duplicado con y sin sufijo `_NO`/`_NOS`—, no una regla aparte.
+>
+> Lo que sigue vigente de este documento: el §0, el §1 (scope) y el §2 (qué resuelve). El resto se lee
+> como el diseño anterior. La implementación está en `js/controls/controlNetos.js`.
+
 # Control de Netos — brief para Claude Code
 
 > Documento de bajada al repo. Spec del **primer control de tipo `scope: 'cliente'`** para
