@@ -68,6 +68,12 @@
 //                                       rend_vs_asiento con la agrupación de
 //                                       conceptos: la usa, pero quien la edita y la
 //                                       persiste son Rend vs Tabulado y Rend x EE.
+//   ownThresholdNote — el control mide con una tolerancia propia y no con los
+//                     "Umbrales" del panel lateral. Apaga ese bloque y muestra
+//                     este texto en su lugar. Existe porque hoy los umbrales del
+//                     panel son una vista previa que ningún control lee, y dos
+//                     cifras distintas en la misma pantalla no dicen cuál mandó.
+//                     Se borra cuando los umbrales sean globales (ROADMAP 3.10).
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
@@ -79,6 +85,13 @@
 // "promueve" cambiándolo a `scope: 'sistema'` con `sourceSystems: ['meta4']`.
 // El único genuinamente general es `agrupadores` (nómina vs resumen, con los
 // agrupadores configurables por cliente).
+
+import {
+  runControlNetos,
+  renderControlNetosResults,
+  summarizeControlNetos,
+  DEFAULT_NETOS_CONFIG,
+} from './controlNetos.js';
 
 import {
   runCatXEmpleados,
@@ -182,6 +195,7 @@ import {
 } from './popVariaciones.js';
 
 import { renderPopVariacionesConfigEditor } from '../ui/popVariacionesConfigEditor.js';
+import { renderControlNetosConfigEditor } from '../ui/controlNetosConfigEditor.js';
 
 import {
   runContaDesglosada,
@@ -209,6 +223,14 @@ const POF_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POF'] } };
 // promueve a 'sistema' cuando un segundo cliente pida el mismo asiento y la
 // tabla de cuentas ya viva entera en `controlConfigs` (mismo camino que D-015).
 const FINADIET_ONLY = { scope: 'cliente', scopeMeta: { clients: ['FINADIET'] } };
+
+// Sportline (IFSA / FGRP / RLF). El Control de Netos es del convenio de Comercio
+// y de la mecánica de A CUENTA DE FUTUROS AUMENTOS con la que este cliente llega
+// a un neto acordado: las alícuotas, los códigos de concepto y el acuerdo no
+// remunerativo del mes son suyos. Se promueve a `scope: 'convenio'` (Comercio)
+// cuando un segundo cliente pida el mismo control y se confirme que la mecánica
+// del AFA es la misma — mismo camino que D-015.
+const SPORTLINE_ONLY = { scope: 'cliente', scopeMeta: { clients: ['SPORTLINE'] } };
 
 // OPmobility / Plastic Omnium **Pilar** (Axton), el otro OPmobility: el equipo lo
 // trata como cliente independiente de Florida (POF, Meta4) — ver D-024. El
@@ -948,6 +970,63 @@ export const CONTROL_REGISTRY = {
     run:           runContaDesglosada,
     summarize:     summarizeContaDesglosada,
     renderResults: renderContaDesglosadaResults,
+  },
+
+  control_netos: {
+    id:          'control_netos',
+    label:       'Control de Netos',
+    ...SPORTLINE_ONLY,
+    appliesWhen: () => true,
+    description: 'Reconstruye el recibo teórico de cada legajo desde el Tabulado y verifica que el '
+      + 'neto liquidado coincida, una vez descontados los conceptos variables del mes.',
+    help: {
+      what: 'El cliente pide un neto acordado por empleado y el bruto se ajusta a mano con el A CUENTA '
+        + 'DE FUTUROS AUMENTOS. Este control rearma el recibo que debería haber salido —básico + AFA, '
+        + 'antigüedad, presentismo, el acuerdo no remunerativo y las retenciones— y lo compara contra lo '
+        + 'liquidado. La diferencia se desarma en los conceptos del mes (feriados, vacaciones, '
+        + 'adicionales); lo que queda sin explicar es lo que hay que revisar. Reconoce el 2% extra del '
+        + 'afiliado al sindicato y el tope de la base de aportes.',
+      how: [
+        'Bajá de Meta4 el Tabulado definitivo del mes, uno por empresa del grupo.',
+        'Cargá el primero como Tabulado y los otros dos en sus casilleros, en la misma corrida.',
+        'Cargá la planilla de la escala salarial del convenio de Comercio.',
+        'En el panel de configuración indicá el acuerdo no remunerativo del mes y revisá el tope de aportes.',
+        'Ejecutá. Los legajos con diferencia sin explicar salen en la solapa Resumen, con el desglose en Detalle.',
+      ],
+    },
+    tabRequired: true,
+    // Este control mide con su propia tolerancia (editable en el panel del Paso
+    // 2), no con los "Umbrales" del panel lateral — que hoy son una vista previa
+    // que ningún control lee. Declararlo acá apaga ese bloque y explica de dónde
+    // sale el número, en vez de mostrar dos cifras distintas sin decir cuál mandó.
+    // Se borra cuando los umbrales sean globales de verdad (ROADMAP 3.10).
+    ownThresholdNote: 'El Control de Netos usa su propia tolerancia por legajo, '
+      + 'que se edita en "Datos del mes y alícuotas de retención".',
+    additionalFiles: [
+      { key: 'escala', label: 'Escala salarial del convenio de Comercio', fileType: 'escala_comercio_file' },
+      // Las otras dos razones sociales del grupo. Opcionales porque un mes puede
+      // controlarse de a una empresa; el control informa cuántos Tabulados entraron
+      // para que "sin diferencias" no se lea como "revisé a todos" (D-036).
+      { key: 'tab2', label: 'Tabulado — segunda empresa (opcional)', fileType: 'tab_empresa2_file', optional: true },
+      { key: 'tab3', label: 'Tabulado — tercera empresa (opcional)', fileType: 'tab_empresa3_file', optional: true },
+      // El mes anterior, para ver si el neto de acuerdo se movió. Opcional y por
+      // ahora informativo: se muestra, no marca diferencia — falta definir cuánto
+      // movimiento es normal (pedido de Willy, 2026-08-19).
+      { key: 'tab_prev', label: 'Tabulado del mes anterior (opcional)', fileType: 'tab_netos_prev_file', optional: true },
+    ],
+    config: [{ key: 'control_netos_config', stateKey: 'controlNetosConfig',
+               mappingKey: 'netosConfig',
+               // `null` no sirve acá: el control necesita las alícuotas para
+               // calcular y la semilla es un punto de partida legítimo. Lo que sí
+               // arranca sin valor es el acuerdo no remunerativo del mes, y ese
+               // bloquea la corrida desde `run()` con un mensaje que lo pide.
+               default: () => DEFAULT_NETOS_CONFIG(),
+               editor: renderControlNetosConfigEditor,
+               editorProps: (state) => ({ tabRows: state.tab?.parsedRows || [] }),
+               openByDefault: (state) => state.controlNetosConfig?.noRemuAcuerdo == null }],
+    run:           runControlNetos,
+    summarize:     summarizeControlNetos,
+    renderResults: renderControlNetosResults,
   },
 
 };

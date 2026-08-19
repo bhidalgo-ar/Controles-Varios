@@ -84,6 +84,10 @@ import {
   parseCuentasRedefinicion,
   detectHeaders as detectHeadersCuentasRedefinicion,
 } from '../parsers/cuentasRedefinicionParser.js';
+import {
+  parseEscalaComercio,
+  detectHeaders as detectHeadersEscalaComercio,
+} from '../parsers/escalaComercioParser.js';
 
 // ── Líneas de metadata ───────────────────────────────────────────────────────
 // Lo que se muestra al lado del nombre del archivo una vez cargado. Son tres
@@ -113,6 +117,13 @@ const metaCatEmpleados = (m) => {
 const metaTabAxton = (m) =>
   `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos`
   + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`;
+
+// La escala informa cuántas categorías leyó y de qué pestaña — con un libro de
+// varias hojas, saber cuál se usó es lo que confirma que no se leyó la equivocada.
+const metaEscalaComercio = (m) =>
+  `${m?.totalRows ?? 0} categorías`
+  + (m?.sheetName ? ` &nbsp;·&nbsp; hoja «${esc(m.sheetName)}»` : '')
+  + ` &nbsp;·&nbsp; ${m?.escalaColumns?.length ?? 0} columnas de básico`;
 
 const metaConceptCatalog = (m) =>
   `${m?.totalRows ?? 0} conceptos`
@@ -569,6 +580,32 @@ export const FILE_TYPES = {
     meta: metaCuentasRedefinicion,
     fields: [],
   },
+
+  // Escala salarial del convenio de Comercio: la planilla que el estudio
+  // mantiene con el básico por categoría, una columna por mes. La usa el Control
+  // de Netos para verificar que el básico liquidado sea el de la categoría.
+  //
+  // **Sin `fixedFormat`, a propósito**: no hay columnas que mapear —el parser
+  // resuelve la categoría y toma como escala toda columna con importes— pero sí
+  // pasa por la vista previa + "Confirmar y procesar", que es lo único que le
+  // muestra al analista que subió la planilla que quería. El archivo real trae
+  // varias pestañas (el cálculo de sueldos, los tabulados de prueba) y el parser
+  // elige la de la escala; ver esa confirmación es lo que evita que se controle
+  // contra una hoja equivocada. Mismo criterio que `acreditaciones_file`.
+  escala_comercio_file: {
+    label: 'Escala salarial del convenio de Comercio',
+    // La zona de drop arma su título como "Arrastrá el <label>", así que un
+    // nombre femenino queda mal concordado. Es el caso para el que existe
+    // `dropLabel`: el nombre del tipo se mantiene completo y sin abreviar
+    // (pedido de Willy, 2026-08-19) y la frase de la zona de drop se lee bien.
+    dropLabel: 'archivo de la escala salarial del convenio de Comercio',
+    siglas: ['ESCALA', 'FORMULA', 'SUELDOS'],
+    parse: parseEscalaComercio,
+    detectHeaders: detectHeadersEscalaComercio,
+    autoDetect: null,
+    meta: metaEscalaComercio,
+    fields: [],
+  },
 };
 
 // Tabulado del período anterior (control de Variaciones): es el MISMO archivo
@@ -592,6 +629,36 @@ FILE_TYPES.tab_axton_prev_file = {
   ...FILE_TYPES.tab_axton_file,
   label: 'Tabulado de Axton — quincena anterior',
   aliasOf: 'tab_axton_file',
+};
+
+// Tabulados de la segunda y tercera empresa del grupo (Control de Netos de
+// Sportline, que liquida por tres razones sociales). Es el MISMO archivo que el
+// Tabulado, de otra empresa: comparten la ficha por el mismo motivo que
+// `tab_prev_file` comparte la de `tab_control`, y existen como tipos aparte
+// porque la zona de drop se rotula con la etiqueta del TIPO — con un solo tipo,
+// los tres casilleros dirían lo mismo y el analista no sabría cuál es cuál.
+FILE_TYPES.tab_empresa2_file = {
+  ...FILE_TYPES.tab_control,
+  label: 'Tabulado — segunda empresa',
+  aliasOf: 'tab_control',
+};
+
+FILE_TYPES.tab_empresa3_file = {
+  ...FILE_TYPES.tab_control,
+  label: 'Tabulado — tercera empresa',
+  aliasOf: 'tab_control',
+};
+
+// Tabulado del mes anterior del Control de Netos. **No es `tab_prev_file`**: ése
+// es el del control de Variaciones y tiene su propio hueco en el layout de ese
+// paso (`#js-var-prev-upload`, que `tests/fileTypes.test.js` fija). Acá el
+// archivo va a la lista de abajo como cualquier otro, así que necesita un tipo
+// propio — y de paso una etiqueta en los términos de este control ("mes" y no
+// "período", que es como lo nombra el analista de Sportline).
+FILE_TYPES.tab_netos_prev_file = {
+  ...FILE_TYPES.tab_control,
+  label: 'Tabulado del mes anterior',
+  aliasOf: 'tab_control',
 };
 
 // ── Accesos ──────────────────────────────────────────────────────────────────

@@ -2011,3 +2011,80 @@ exactas las cinco anclas del prototipo — balance bruto 1.441.239.270,46, netea
 filas de asiento, 12 cuentas patrimoniales y 0 líneas sin código.
 
 **Dónde vive el detalle.** `specs/conta-desglosada-asiento.md`.
+
+---
+
+## D-067 — Control de Netos: se reconstruye el recibo teórico, y el armado manual se corrige en dos puntos
+
+**Fecha:** 2026-08-19. **Instrucción de:** Willy, sobre la liquidación real de IFSA 05/2026 y la
+planilla "Formula sueldos mayo 2026" con la que Meli calcula los brutos.
+
+**Contexto.** El brief original (`specs/spec-control-netos.md` §3) planteaba comparar el neto liquidado
+contra un **neto acordado pegado a mano**, y descontar de la diferencia una lista fija de conceptos
+"perdonados" (feriados, vacaciones, adicionales). Al bajarlo a código, esa lista resultó no ser
+necesaria y el neto acordado resultó no ser el número que la planilla usa.
+
+**1. El neto contra el que se compara es un recibo teórico, no el neto pactado.** La columna que Meli
+usa como objetivo del mes (`NETO ACORDADO final`) es la columna **W** de su planilla: el neto que
+resulta de la estructura salarial vigente —básico de escala + AFA, antigüedad, presentismo, el acuerdo
+no remunerativo y las retenciones—, no el neto que se pactó con el empleado. Para el legajo 10087 el
+pactado es 1.740.000 y la comparación va contra 1.795.943,68. El control lo **calcula**, no lo pide:
+todo lo que necesita está en el Tabulado, y `sueldo + AFA` es invariante entre meses porque el AFA
+absorbe exactamente lo que sube el básico por paritaria (verificado: 1.135.835 + 156.344,95 en mayo
+equivale a 1.117.925 + 174.254,95 de abril). Así el analista sube el Tabulado y la escala, y nada más.
+
+**2. No hay lista de conceptos "perdonados".** Willy (2026-08-19): *"cualquiera puede explicar la
+diferencia, si encontrás una diferencia con alguno tenés que marcarla"*. El control no decide de
+antemano qué concepto justifica qué: convierte a neto **lo que efectivamente se liquidó por encima del
+recibo teórico** y marca lo que sobra. Eso además elimina el coeficiente 1,0833 del armado manual (el
+presentismo estimado de cada concepto extra): el presentismo real ya viene liquidado en su propio
+concepto, así que se toma el número en vez de estimarlo.
+
+**3. El armado manual no cerraba en 5 de 22 legajos, y las dos causas se corrigieron del lado del
+modelo, no de la planilla** (aplicando D-064: primero se confirmó el criterio, después se decidió qué
+lado se corregía).
+
+- **El 2% extra del afiliado (4 legajos).** Al empleado con `678-AFILIADO_PORC = 2` se le retiene dos
+  veces el 2% sobre la misma base: `8522-C_SINDIC_VOL` (que el modelo ya contemplaba dentro del 2,5%
+  gremial) y `8520-RET_VOL` (que no). El residuo de esos 4 legajos era exactamente ese importe, con
+  signo. Willy confirmó que **el control tiene que reconocerlo**: es un descuento fijo de ese empleado,
+  no un error, así que entra en el recibo teórico y no en la lista de lo que se devuelve al neto.
+- **El tope de la base imponible (1 legajo).** Los cuatro aportes del 17% (jubilación, ley 19.032, obra
+  social, ANSSAL) se calculan hasta un tope; sindicato y FAECYS no lo tienen — verificado dividiendo
+  cada aporte por su alícuota. Al legajo 10815 el plus vacacional lo llevó por encima del tope: 71.879,63
+  quedaron sin aportar, y 71.879,63 × 17% = **12.219,54** contra el residuo de 12.219,53 de la planilla.
+  Willy pidió que el tope **se muestre siempre** y que el analista pueda cambiarlo y volver a ejecutar,
+  así que es configuración editable del Paso 2 y no una constante. El control además detecta del propio
+  archivo qué tope aplicó la liquidación y avisa si no coincide con el declarado.
+
+**4. Qué se suma de vuelta al neto.** Anticipo (`8500`), ganancias (`5010`), retención alimentaria
+(`8530`), retención judicial (`8540`), descuento de préstamo (`8820`) e impuesto adicional de obra
+social (`6031`). Los descuentos **sindicales no**: forman parte del neto acordado. Confirmado por Willy
+el 2026-08-19.
+
+**5. El aporte de obra social sobre lo no remunerativo lo dice el código del concepto, no una regla.**
+Era la pregunta que estaba esperando a Meli desde el brief original. El Tabulado la contesta solo: cada
+concepto no remunerativo viene duplicado en dos códigos —`4566`/`4567`, `4568`/`4569`, `4612`/`4613`,
+`4614`/`4615`, `4660`/`4661`, `4556`/`4558`— y el que **no** lleva sufijo `_NO`/`_NOS` se liquida
+únicamente cuando la obra social del empleado es la que cobra ese 3%. Verificado en los 22 legajos: el
+único con conceptos sin sufijo es el único con obra social `126205`.
+
+**Alcance.** `scope: 'cliente'` de SPORTLINE. Las alícuotas, el tope, el acuerdo no remunerativo del mes
+y los códigos de concepto son configuración del cliente (D-035/D-039) con semilla confirmada contra el
+Tabulado real; nada de eso es identidad. El control se promueve a `scope: 'convenio'` (Comercio) cuando
+un segundo cliente lo pida y se confirme que la mecánica del AFA es la misma.
+
+**Lo que queda afuera y por qué.** El **calculador de AFA** —automatizar el "buscar objetivo" con el que
+Meli llega al bruto— comparte toda esta fórmula pero corre en otro momento del circuito (sobre el
+Tabulado de prueba, antes de liquidar; el control corre sobre el definitivo). Se construye aparte.
+
+**6. La comparación con el mes anterior entra como casillero opcional, y por ahora sólo informa**
+(Willy, 2026-08-19: *"agreguemos un placeholder para subir el mes anterior como opcional por ahora"*).
+Si el analista sube el Tabulado del mes pasado, se le calcula el **mismo** recibo teórico y se muestra
+cuánto se movió el neto de acuerdo de cada legajo. No marca diferencia ni pinta el semáforo: cumplir un
+año de antigüedad mueve el neto de forma legítima —es lo que Willy justifica hoy a mano en la columna
+"DIF ABRIL MAYO" de su planilla— y cuánto movimiento es normal todavía no está definido. Que el cálculo
+sea el mismo de los dos lados no es un detalle de implementación: con dos fórmulas, la comparación entre
+meses mediría la diferencia entre ellas y no entre las liquidaciones. Por eso el recibo teórico vive en
+una función aparte (`reciboTeorico`) y no dentro del recorrido.
+
