@@ -1371,12 +1371,10 @@ function imprimirVariaciones(results, relevantes) {
     <div class="badge">${relevantes.length} empleados</div>
   </div>
   ${secciones}
-  <div class="foot">
-    Fuente: Tabulado de conceptos liquidados — ${esc(labelAnterior)} y ${esc(labelActual)}.
-    ${omitidos > 0 ? `<br>${omitidos} concepto${omitidos === 1 ? '' : 's'} sin datos en los dos períodos no `
-      + `se incluye${omitidos === 1 ? '' : 'n'} en este reporte.` : ''}
-    <br>Hidalgo &amp; Asociados · info_ar@bhidalgo.com.ar · +54 11 2284 2031 — documento con datos confidenciales de nómina.
-  </div>
+  ${omitidos > 0 ? `<div class="foot">
+    ${omitidos} concepto${omitidos === 1 ? '' : 's'} sin datos en los dos períodos no `
+      + `se incluye${omitidos === 1 ? '' : 'n'} en este reporte.
+  </div>` : ''}
 </body></html>`;
 
   const win = window.open('', '_blank');
@@ -1387,4 +1385,5 @@ function imprimirVariaciones(results, relevantes) {
   win.document.write(html);
   win.document.close();
   win.focus();
+  win.print();
 }
