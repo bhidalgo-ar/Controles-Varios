@@ -22,7 +22,11 @@ test('el wizard y la ficha cargan juntos en un navegador real, sin ciclo de mód
   expect(r.ok).toBe(true);
   expect(r.wizardCargo).toBe(true);
   expect(r.autoDetectTabPrev).toBe(true);
-  expect(r.conAutoDetect).toBe(9);
+  // 8 con autoDetect propio + tab_prev_file, tab_empresa2_file, tab_empresa3_file
+  // y tab_netos_prev_file, que lo heredan por `...FILE_TYPES.tab_control`: son el
+  // MISMO archivo (otra empresa, u otro mes) y tienen que auto-detectar la
+  // columna de legajo igual que el Tabulado principal.
+  expect(r.conAutoDetect).toBe(12);
   // Misma lista que fija `tests/fileTypes.test.js`: los 2 de pop_variaciones se
   // sumaron con el control de Variación entre quincenas (su panel del Paso 2
   // depende de qué Tabulados estén cargados).
