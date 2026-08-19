@@ -173,6 +173,48 @@ function sumCodes(group, codes, colByCode) {
 const sum0 = (group, codes, colByCode) => sumCodes(group, codes, colByCode) ?? 0;
 
 /**
+ * El neto teórico de un legajo, a partir de su estructura salarial.
+ *
+ * Se usa dos veces: para el mes que se controla y —cuando el analista sube el
+ * Tabulado del mes anterior— para ese otro mes, y así poder decir si el neto de
+ * acuerdo se movió de un mes al otro. Por eso está afuera del recorrido: la
+ * cuenta tiene que ser **la misma** de los dos lados, o la comparación entre
+ * meses mide la diferencia entre dos fórmulas y no entre dos liquidaciones.
+ */
+function reciboTeorico(group, colByCode, cfg, { obraSocial, afiliado }) {
+  const c = cfg.codigos;
+  const t = cfg.tasas;
+  const tasaAportes = pct(t.jubilacion) + pct(t.ley19032) + pct(t.obraSocial) + pct(t.anssal);
+  const tasaGremial = pct(t.sindicato) + pct(t.faecys);
+
+  const base   = sum0(group, c.sueldo, colByCode) + sum0(group, c.aCuentaFutAumen, colByCode);
+  const anios  = sumCodes(group, c.aniosAntiguedad, colByCode) ?? 0;
+
+  const antiguedad  = base * pct(cfg.antiguedadPorAnio) * anios;
+  const presentismo = (base + antiguedad) * pct(cfg.presentismo);
+  const remu        = base + antiguedad + presentismo;
+
+  const nrBase = toNum(cfg.noRemuAcuerdo) ?? 0;
+  const nrAnt  = nrBase * pct(cfg.antiguedadPorAnio) * anios;
+  const noRemu = nrBase + nrAnt + (nrBase + nrAnt) * pct(cfg.presentismo);
+
+  const tope = toNum(cfg.topeBaseImponible);
+  const baseImponible = tope === null ? remu : Math.min(remu, tope);
+  const aportaOsNoRemu = obraSocial === norm(cfg.obraSocialConAporteNoRemu);
+
+  const retenciones = baseImponible * tasaAportes
+    + (remu + noRemu) * tasaGremial
+    + (aportaOsNoRemu ? noRemu * pct(t.obraSocialNoRemu) : 0)
+    + (afiliado ? (remu + noRemu) * pct(t.afiliadoExtra) : 0);
+
+  return {
+    base, anios, antiguedad, presentismo, remu, noRemu,
+    baseImponible, retenciones, aportaOsNoRemu,
+    neto: remu + noRemu - retenciones,
+  };
+}
+
+/**
  * Detecta el tope de la base imponible mirando los aportes liquidados.
  *
  * Si a un legajo le retuvieron jubilación sobre una base menor que sus haberes
@@ -246,6 +288,31 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     if (e?.categoriaKey) escalaByCat.set(e.categoriaKey, e);
   }
 
+  // ── El mes anterior, si el analista lo subió ────────────────────────────────
+  //
+  // Es opcional y por ahora **informativo**: se calcula el mismo recibo teórico
+  // sobre el Tabulado del mes pasado y se muestra cuánto se movió el neto de
+  // acuerdo. Todavía NO marca diferencia ni pinta el semáforo — falta que Willy
+  // defina cuánto movimiento es normal (la antigüedad que cumple un año mueve el
+  // neto de forma legítima, y es él quien lo justifica hoy a mano en su planilla).
+  // Lo que este casillero permite ya mismo es tener el dato a la vista, que es lo
+  // que detecta un AFA mal ajustado después de una paritaria.
+  const prevRows = mapping?.tab_prevRows || [];
+  const netoPrevPorLegajo = new Map();
+  if (prevRows.length > 0) {
+    const prevColByCode = buildColByCode(prevRows[0]);
+    const prevHeaders   = Object.keys(prevRows[0] || {});
+    const prevOsCol     = prevHeaders.find(h => norm(h).toUpperCase() === 'OBRA_SOCIAL');
+    for (const [legajo, group] of groupRowsByLegajo(prevRows, legajoCol, { keyFn })) {
+      const fichaPrev = lastRow(group);
+      const t = reciboTeorico(group, prevColByCode, cfg, {
+        obraSocial: prevOsCol ? norm(fichaPrev?.[prevOsCol]) : '',
+        afiliado:   (sumCodes(group, cfg.codigos.afiliadoPorc, prevColByCode) ?? 0) > 0,
+      });
+      netoPrevPorLegajo.set(legajo, t.neto);
+    }
+  }
+
   const rows = [];
   const avisos = [];
 
@@ -296,14 +363,12 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       const afiliado   = (sumCodes(group, c.afiliadoPorc, colByCode) ?? 0) > 0;
 
       // ── El recibo teórico ──────────────────────────────────────────────────
-      const aniosAnt      = anios ?? 0;
-      const antiguedadTeo = base * pct(cfg.antiguedadPorAnio) * aniosAnt;
-      const presentismoTeo = (base + antiguedadTeo) * pct(cfg.presentismo);
-      const remuTeo       = base + antiguedadTeo + presentismoTeo;
-
-      const nrBase   = toNum(cfg.noRemuAcuerdo) ?? 0;
-      const nrAnt    = nrBase * pct(cfg.antiguedadPorAnio) * aniosAnt;
-      const noRemuTeo = nrBase + nrAnt + (nrBase + nrAnt) * pct(cfg.presentismo);
+      const teo = reciboTeorico(group, colByCode, cfg, { obraSocial, afiliado });
+      const aniosAnt       = teo.anios;
+      const antiguedadTeo  = teo.antiguedad;
+      const presentismoTeo = teo.presentismo;
+      const remuTeo        = teo.remu;
+      const noRemuTeo      = teo.noRemu;
 
       // ── Lo liquidado ───────────────────────────────────────────────────────
       const antiguedadLiq  = sum0(group, c.antiguedad, colByCode);
@@ -326,7 +391,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
                         + remuOtrosLiq;
       const noRemuExtra = (noRemuAcdoLiq - noRemuTeo) + noRemuOtrosLiq;
 
-      const aportaOsNoRemu = obraSocial === norm(cfg.obraSocialConAporteNoRemu);
+      const aportaOsNoRemu = teo.aportaOsNoRemu;
       const tasaNoRemu = tasaGremial
         + (aportaOsNoRemu ? pct(t.obraSocialNoRemu) : 0)
         + (afiliado ? pct(t.afiliadoExtra) : 0);
@@ -334,7 +399,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
 
       // ── Tope de la base imponible ──────────────────────────────────────────
       const tope = toNum(cfg.topeBaseImponible);
-      const baseImponibleTeo  = tope === null ? remuTeo : Math.min(remuTeo, tope);
+      const baseImponibleTeo  = teo.baseImponible;
       const baseImponibleReal = tope === null ? remuLiquidado : Math.min(remuLiquidado, tope);
       const excedenteTope     = remuLiquidado - baseImponibleReal;
       // Sólo la parte del excedente que aportan los conceptos del mes: la que ya
@@ -342,12 +407,8 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       // `retencionesTeo`, y contarla de nuevo acá la restaría dos veces.
       const excedenteExtra    = excedenteTope - (remuTeo - baseImponibleTeo);
 
-      const retencionesTeo = baseImponibleTeo * tasaAportes
-        + (remuTeo + noRemuTeo) * tasaGremial
-        + (aportaOsNoRemu ? noRemuTeo * pct(t.obraSocialNoRemu) : 0)
-        + (afiliado ? (remuTeo + noRemuTeo) * pct(t.afiliadoExtra) : 0);
-
-      const netoTeorico = remuTeo + noRemuTeo - retencionesTeo;
+      const retencionesTeo = teo.retenciones;
+      const netoTeorico    = teo.neto;
 
       // ── El cruce ───────────────────────────────────────────────────────────
       const devuelto = sum0(group, c.devolverAlNeto, colByCode);
@@ -372,8 +433,15 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
         }
       }
 
+      // Cuánto se movió el neto de acuerdo respecto del mes pasado. `null` = no se
+      // subió el mes anterior, o ese legajo no estaba en él (un alta): las dos
+      // cosas son «no hay con qué comparar», nunca cero.
+      const netoTeoricoPrev = netoPrevPorLegajo.has(legajo) ? netoPrevPorLegajo.get(legajo) : null;
+      const variacionMes    = netoTeoricoPrev === null ? null : netoTeorico - netoTeoricoPrev;
+
       rows.push({
         legajo, empresa: empresa.label, categoria, obraSocial, afiliado,
+        netoTeoricoPrev, variacionMes,
         aniosAntiguedad: aniosAnt,
         base, sueldoLiq,
         antiguedadTeo, antiguedadLiq,
@@ -405,9 +473,15 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     );
   }
 
+  if (prevRows.length === 0) {
+    avisos.push('No se cargó el Tabulado del mes anterior, así que no se comparó si el neto de '
+      + 'acuerdo de cada legajo se movió respecto del mes pasado.');
+  }
+
   return {
     rows,
     avisos,
+    tienePrev: prevRows.length > 0,
     empresas: empresas.map(e => e.label),
     config: cfg,
     topeUsado,
@@ -455,15 +529,27 @@ export function summarizeControlNetos(results) {
   const sinComparar = rows.filter(r => r.residuo === null).length;
   const fueraEscala = rows.filter(r => r.escalaOk === false).length;
 
-  const insights = [];
-  insights.push(`${rows.length} legajos controlados en ${results.empresas.length} `
-    + `${results.empresas.length === 1 ? 'empresa' : 'empresas'}.`);
-  insights.push(results.topeUsado === null
-    ? 'Sin tope de aportes declarado.'
-    : `Tope de aportes usado: ${fmt(results.topeUsado)}.`);
-  if (fueraEscala > 0) insights.push(`${fueraEscala} con el básico fuera de la escala del convenio.`);
-  if (sinComparar > 0) insights.push(`${sinComparar} sin neto para comparar.`);
-  for (const a of results.avisos) insights.push(a);
+  // La tarjeta colapsada pinta badges, no frases: cada insight es
+  // `{ type, label, value }` y un string suelto sale como "undefined undefined".
+  // Lo que necesita prosa (el tope usado, las empresas que faltaron, el mes
+  // anterior) va a los chequeos de la pantalla de resultados, que tienen lugar.
+  const insights = [
+    { type: unitsWithDiff > 0 ? 'warning' : 'success',
+      label: unitsWithDiff === 1 ? 'legajo con diferencia sin explicar'
+                                 : 'legajos con diferencia sin explicar',
+      value: unitsWithDiff },
+    { type: 'info',
+      label: rows.length === 1 ? 'legajo controlado' : 'legajos controlados',
+      value: rows.length },
+  ];
+  if (fueraEscala > 0) {
+    insights.push({ type: 'warning',
+      label: fueraEscala === 1 ? 'con el básico fuera de escala' : 'con el básico fuera de escala',
+      value: fueraEscala });
+  }
+  if (sinComparar > 0) {
+    insights.push({ type: 'warning', label: 'sin neto para comparar', value: sinComparar });
+  }
 
   const status = unitsWithDiff === 0 && fueraEscala === 0 ? 'success' : 'warning';
 
@@ -514,9 +600,10 @@ function renderResumen(results, host) {
   const conDif = rows.filter(r => r.residuo !== null && Math.abs(r.residuo) > tol);
   const fueraEscala = rows.filter(r => r.escalaOk === false);
   const topearon = rows.filter(r => r.excedenteTope > 0.01);
+  const movidos = rows.filter(r => r.variacionMes !== null && Math.abs(r.variacionMes) > tol);
 
   renderVerdict(host, {
-    tone: conDif.length === 0 && fueraEscala.length === 0 ? 'success' : 'warning',
+    tone: conDif.length === 0 && fueraEscala.length === 0 ? 'ok' : 'warn',
     title: conDif.length === 0
       ? `Los ${rows.length} netos cierran`
       : `${conDif.length} ${conDif.length === 1 ? 'legajo' : 'legajos'} con diferencia sin explicar`,
@@ -540,6 +627,13 @@ function renderResumen(results, host) {
           + ` · el archivo sugiere ${fmt(results.topeDetectado)}` },
     { label: 'Básico fuera de escala', value: String(fueraEscala.length),
       sub: fueraEscala.length === 0 ? 'todos coinciden con el convenio' : 'revisá la categoría' },
+    { label: 'Neto movido vs. mes anterior',
+      value: results.tienePrev ? String(movidos.length) : '—',
+      sub: results.tienePrev
+        ? (movidos.length === 0
+            ? 'ninguno cambió de un mes al otro'
+            : 'todavía informativo: no marca diferencia')
+        : 'cargá el Tabulado del mes anterior para verlo' },
   ]);
 
   if (conDif.length > 0) {
@@ -553,7 +647,7 @@ function renderResumen(results, host) {
           what: `Quedan ${fmt(r.residuo)} sin explicar`,
           why: `Neto liquidado ajustado ${fmt(r.netoAjustado)} contra teórico ${fmt(r.netoTeorico)}. `
             + `Los conceptos del mes explican ${fmt(r.explicado)}.`,
-          severity: 'warning',
+          sev: 'hi',
         })),
     });
   }
@@ -565,8 +659,25 @@ function renderResumen(results, host) {
         who: `Legajo ${r.legajo}`,
         what: `Sueldo liquidado ${fmt(r.sueldoLiq)}`,
         why: `La categoría "${r.categoria}" no tiene ese básico en ninguna columna de la escala.`,
-        severity: 'warning',
+        sev: 'hi',
       })),
+    });
+  }
+
+  if (movidos.length > 0) {
+    renderIssues(host, {
+      heading: 'El neto de acuerdo se movió respecto del mes anterior',
+      items: movidos
+        .slice()
+        .sort((a, b) => Math.abs(b.variacionMes) - Math.abs(a.variacionMes))
+        .map(r => ({
+          who: `Legajo ${r.legajo}`,
+          what: `${r.variacionMes > 0 ? '+' : ''}${fmt(r.variacionMes)}`,
+          why: `De ${fmt(r.netoTeoricoPrev)} a ${fmt(r.netoTeorico)}. Cumplir un año de antigüedad `
+            + 'lo mueve de forma legítima; un a cuenta de futuros aumentos mal ajustado tras una '
+            + 'paritaria, no. Por ahora esto se informa y no cuenta como diferencia.',
+          sev: 'lo',
+        })),
     });
   }
 
@@ -580,6 +691,12 @@ function renderResumen(results, host) {
           : `La liquidación aplicó ${fmt(results.topeDetectado)} y el control corrió sin tope.` },
     { label: 'Acuerdo no remunerativo del mes', ok: true,
       detail: `${fmt(results.config.noRemuAcuerdo)} por legajo, más antigüedad y presentismo.` },
+    { label: 'Comparación con el mes anterior',
+      ok: results.tienePrev,
+      detail: results.tienePrev
+        ? `${movidos.length} ${movidos.length === 1 ? 'legajo movió' : 'legajos movieron'} su neto de `
+          + 'acuerdo respecto del mes pasado. Se informa y todavía no cuenta como diferencia.'
+        : 'No se cargó el Tabulado del mes anterior (es opcional).' },
     { label: 'Escala del convenio',
       ok: fueraEscala.length === 0,
       detail: fueraEscala.length === 0
@@ -599,6 +716,7 @@ const COLUMNS = [
   { key: 'netoTeorico',     label: 'Neto teórico',      num: true  },
   { key: 'netoAjustado',    label: 'Neto liquidado ajustado', num: true },
   { key: 'explicado',       label: 'Explicado por el mes',    num: true },
+  { key: 'variacionMes',    label: 'Movió vs. mes anterior',  num: true },
 ];
 
 function renderDetalle(results, host) {
@@ -653,10 +771,13 @@ function tableHtml(rows, maxDiff) {
     const cells = COLUMNS.map(c => c.num
       ? `<td class="num">${fmt(r[c.key])}</td>`
       : `<td>${esc(r[c.key])}</td>`).join('');
+    // En una sola línea: con un renglón por concepto, un legajo con tres
+    // conceptos estira TODAS las filas de la planilla y la vuelve inmirable.
+    // La planilla ya scrollea para el costado, que es donde sobra lugar.
     const conceptos = r.detalle.length === 0
       ? '<span class="text-muted">—</span>'
       : r.detalle.map(d => `${esc(d.label)} <span class="text-muted">(${esc(d.code)})</span> ${fmt(d.importe)}`)
-          .join('<br>');
+          .join(' <span class="text-muted">·</span> ');
     return `<tr>${cells}${diffCellHtml(r.residuo, { max: maxDiff, absentLabel: 'sin comparar' })}`
       + `<td>${conceptos}</td></tr>`;
   }).join('');
@@ -687,6 +808,7 @@ const EXPORT_HEADERS = [
   'Remunerativo teórico', 'No remun. teórico', 'Retenciones teóricas', 'Neto teórico',
   'Neto liquidado', 'Devuelto al neto', 'Neto liquidado ajustado',
   'Explicado por el mes', 'Sin explicar', 'Excedente del tope', 'Básico en escala',
+  'Neto teórico mes anterior', 'Movió vs. mes anterior',
 ];
 
 const exportRows = (results) => results.rows.map(r => ([
@@ -695,6 +817,7 @@ const exportRows = (results) => results.rows.map(r => ([
   r.netoLiquidado, r.devuelto, r.netoAjustado,
   r.explicado, r.residuo, r.excedenteTope,
   r.escalaOk === null ? 'sin categoría en la escala' : r.escalaOk ? r.escalaMatch : 'fuera de escala',
+  r.netoTeoricoPrev, r.variacionMes,
 ]));
 
 function fileName(results, ext) {

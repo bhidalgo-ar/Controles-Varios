@@ -105,6 +105,14 @@ const rOk = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })], mapping
 assert('coincidencia total: un legajo controlado', rOk.rows.length === 1);
 assert('coincidencia total: residuo en cero', Math.abs(rOk.rows[0].residuo) < 0.01);
 assert('coincidencia total: summarize da success', summarizeControlNetos(rOk).status === 'success');
+// La tarjeta colapsada pinta cada insight como `{ type, label, value }`: un
+// string suelto sale en pantalla como "undefined undefined".
+const insightsOk = summarizeControlNetos(rOk).insights;
+assert('los insights tienen la forma que pinta la tarjeta (type/label/value)',
+  insightsOk.length > 0 && insightsOk.every(i =>
+    typeof i === 'object' && typeof i.type === 'string'
+    && typeof i.label === 'string' && i.value !== undefined));
+
 assert('coincidencia total: el semáforo cuenta en legajos',
   summarizeControlNetos(rOk).unit === 'legajo' && summarizeControlNetos(rOk).unitsTotal === 1);
 assert('coincidencia total: el básico coincide con la escala del convenio',
@@ -246,6 +254,40 @@ assert('avisa cuántas empresas del grupo se controlaron',
 assert('avisa si no llegó la escala',
   runControlNetos([], [fila('1', { NETO: NETO_TEO })], mapping)
     .avisos.some(a => a.includes('escala salarial')));
+
+// ── El Tabulado del mes anterior (opcional, por ahora informativo) ───────────
+//
+// Cuando se sube, se calcula el MISMO recibo teórico sobre el mes pasado y se
+// informa cuánto se movió el neto de acuerdo. Todavía no marca diferencia ni
+// pinta el semáforo: falta definir cuánto movimiento es normal (cumplir un año
+// de antigüedad lo mueve de forma legítima).
+
+const rSinPrev = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })], mapping);
+assert('sin el mes anterior: la variación es null, no cero',
+  rSinPrev.rows[0].variacionMes === null && rSinPrev.rows[0].netoTeoricoPrev === null);
+assert('sin el mes anterior: se avisa que no se comparó',
+  rSinPrev.avisos.some(a => a.includes('mes anterior')));
+
+// El mes pasado el mismo legajo tenía un año menos de antigüedad.
+const prevRows = [fila('1', { '1050-ANIOS_ANTI': 9, NETO: NETO_TEO })];
+const rConPrev = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })],
+  { ...mapping, tab_prevRows: prevRows });
+assert('con el mes anterior: se informa que lo tiene', rConPrev.tienePrev === true);
+assert('con el mes anterior: la variación se calcula y no es cero',
+  rConPrev.rows[0].variacionMes !== null && rConPrev.rows[0].variacionMes > 0);
+assert('con el mes anterior: el neto teórico del mes pasado queda a la vista',
+  rConPrev.rows[0].netoTeoricoPrev !== null
+  && rConPrev.rows[0].netoTeoricoPrev < rConPrev.rows[0].netoTeorico);
+assert('con el mes anterior: la variación NO cuenta como diferencia todavía',
+  summarizeControlNetos(rConPrev).unitsWithDiff === 0
+  && summarizeControlNetos(rConPrev).status === 'success');
+
+// Un alta del mes no estaba el mes pasado: no hay con qué comparar, y eso es
+// `null`, nunca cero.
+const rAlta = runControlNetos(escalaRows, [fila('2', { NETO: NETO_TEO })],
+  { ...mapping, tab_prevRows: prevRows });
+assert('un legajo que no estaba el mes pasado: variación null, no cero',
+  rAlta.rows[0].variacionMes === null);
 
 // ── Legajo presente de un solo lado ──────────────────────────────────────────
 //

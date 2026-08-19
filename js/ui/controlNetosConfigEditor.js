@@ -22,6 +22,7 @@
 //      puesta llega a un bruto y a un neto equivocados sin que nadie lo vea.
 
 import { DEFAULT_NETOS_CONFIG } from '../controls/controlNetos.js';
+import { toNum } from '../utils/currency.js';
 
 const TASA_LABELS = {
   jubilacion:       'Jubilación',
@@ -203,12 +204,12 @@ function sugerirTope(tabRows, cfg) {
 
   let tope = null;
   for (const row of tabRows) {
-    const jub = num(row[jubCol]);
+    const jub = toNum(row[jubCol]);
     if (jub === null || jub === 0) continue;
     const baseRetenida = jub / tasaJub;
     const remu = remuCodes.reduce((a, c) => {
       const col = colByCode[c];
-      return a + (col ? (num(row[col]) ?? 0) : 0);
+      return a + (col ? (toNum(row[col]) ?? 0) : 0);
     }, 0);
     if (baseRetenida >= remu - 1) continue;
     if (tope === null || baseRetenida > tope) tope = baseRetenida;
@@ -216,12 +217,17 @@ function sugerirTope(tabRows, cfg) {
   return tope === null ? null : Math.round(tope * 100) / 100;
 }
 
-/** Lee un número del formulario. `''` es "no declarado" (`null`), no cero. */
+/**
+ * Lee un número del formulario. `''` es "no declarado" (`null`), no cero.
+ *
+ * Usa el `toNum()` del repo y no un parser propio: el analista puede escribir
+ * `4.303.618,99` (es-AR) o `4303618.99`, y `toNum` distingue los dos casos. Un
+ * `replace(/\./g, '')` a mano toma el punto decimal por separador de miles y
+ * convierte el segundo en 430.361.899 — un tope cien veces más alto, que además
+ * no rompe nada visible: el control corre igual y nadie topea nunca.
+ */
 function num(value) {
-  const s = String(value ?? '').trim();
-  if (s === '') return null;
-  const n = Number(s.replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
+  return toNum(value);
 }
 
 function fmt(v) {

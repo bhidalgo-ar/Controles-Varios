@@ -934,6 +934,10 @@ export const CONTROL_REGISTRY = {
       // para que "sin diferencias" no se lea como "revisé a todos" (D-036).
       { key: 'tab2', label: 'Tabulado — segunda empresa (opcional)', fileType: 'tab_empresa2_file', optional: true },
       { key: 'tab3', label: 'Tabulado — tercera empresa (opcional)', fileType: 'tab_empresa3_file', optional: true },
+      // El mes anterior, para ver si el neto de acuerdo se movió. Opcional y por
+      // ahora informativo: se muestra, no marca diferencia — falta definir cuánto
+      // movimiento es normal (pedido de Willy, 2026-08-19).
+      { key: 'tab_prev', label: 'Tabulado del mes anterior (opcional)', fileType: 'tab_netos_prev_file', optional: true },
     ],
     config: [{ key: 'control_netos_config', stateKey: 'controlNetosConfig',
                mappingKey: 'netosConfig',

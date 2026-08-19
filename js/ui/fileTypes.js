@@ -544,6 +544,11 @@ export const FILE_TYPES = {
   // contra una hoja equivocada. Mismo criterio que `acreditaciones_file`.
   escala_comercio_file: {
     label: 'Escala salarial del convenio de Comercio',
+    // La zona de drop arma su título como "Arrastrá el <label>", así que un
+    // nombre femenino queda mal concordado. Es el caso para el que existe
+    // `dropLabel`: el nombre del tipo se mantiene completo y sin abreviar
+    // (pedido de Willy, 2026-08-19) y la frase de la zona de drop se lee bien.
+    dropLabel: 'archivo de la escala salarial del convenio de Comercio',
     siglas: ['ESCALA', 'FORMULA', 'SUELDOS'],
     parse: parseEscalaComercio,
     detectHeaders: detectHeadersEscalaComercio,
@@ -591,6 +596,18 @@ FILE_TYPES.tab_empresa2_file = {
 FILE_TYPES.tab_empresa3_file = {
   ...FILE_TYPES.tab_control,
   label: 'Tabulado — tercera empresa',
+  aliasOf: 'tab_control',
+};
+
+// Tabulado del mes anterior del Control de Netos. **No es `tab_prev_file`**: ése
+// es el del control de Variaciones y tiene su propio hueco en el layout de ese
+// paso (`#js-var-prev-upload`, que `tests/fileTypes.test.js` fija). Acá el
+// archivo va a la lista de abajo como cualquier otro, así que necesita un tipo
+// propio — y de paso una etiqueta en los términos de este control ("mes" y no
+// "período", que es como lo nombra el analista de Sportline).
+FILE_TYPES.tab_netos_prev_file = {
+  ...FILE_TYPES.tab_control,
+  label: 'Tabulado del mes anterior',
   aliasOf: 'tab_control',
 };
 

@@ -2023,7 +2023,15 @@ un segundo cliente lo pida y se confirme que la mecánica del AFA es la misma.
 
 **Lo que queda afuera y por qué.** El **calculador de AFA** —automatizar el "buscar objetivo" con el que
 Meli llega al bruto— comparte toda esta fórmula pero corre en otro momento del circuito (sobre el
-Tabulado de prueba, antes de liquidar; el control corre sobre el definitivo). Se construye aparte. Y
-falta cerrar con Willy si el control tiene que comparar además el neto teórico del mes contra el del mes
-anterior, que es lo que detectaría un AFA mal ajustado tras una paritaria — hoy no lo hace.
+Tabulado de prueba, antes de liquidar; el control corre sobre el definitivo). Se construye aparte.
+
+**6. La comparación con el mes anterior entra como casillero opcional, y por ahora sólo informa**
+(Willy, 2026-08-19: *"agreguemos un placeholder para subir el mes anterior como opcional por ahora"*).
+Si el analista sube el Tabulado del mes pasado, se le calcula el **mismo** recibo teórico y se muestra
+cuánto se movió el neto de acuerdo de cada legajo. No marca diferencia ni pinta el semáforo: cumplir un
+año de antigüedad mueve el neto de forma legítima —es lo que Willy justifica hoy a mano en la columna
+"DIF ABRIL MAYO" de su planilla— y cuánto movimiento es normal todavía no está definido. Que el cálculo
+sea el mismo de los dos lados no es un detalle de implementación: con dos fórmulas, la comparación entre
+meses mediría la diferencia entre ellas y no entre las liquidaciones. Por eso el recibo teórico vive en
+una función aparte (`reciboTeorico`) y no dentro del recorrido.
 
