@@ -4,7 +4,11 @@ Mockup interactivo para decidir por dónde seguir: los **42 controles** del cat�
 (familias A–I, los mismos que están cargados en el tablero *Catálogo de Controles de Payroll* de monday)
 y las **11 llaves** que los destraban. Tildás una llave y ves cuántos controles quedan al alcance.
 
-Publicado en: https://claude.ai/code/artifact/cbbeb11a-53de-498b-8439-a976e124dd94
+Dos formas de verlo:
+
+- **`mapa-de-fases.html`** — un solo archivo de 52 KB, sin dependencias. Se abre con doble clic, funciona
+  sin internet y se puede mandar por mail. Las tres pantallas son solapas. **Es la versión para repartir.**
+- Canvas anotable: https://claude.ai/code/artifact/cbbeb11a-53de-498b-8439-a976e124dd94
 
 ## Las tres pantallas
 
