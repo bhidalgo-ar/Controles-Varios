@@ -68,6 +68,12 @@
 //                                       rend_vs_asiento con la agrupación de
 //                                       conceptos: la usa, pero quien la edita y la
 //                                       persiste son Rend vs Tabulado y Rend x EE.
+//   ownThresholdNote — el control mide con una tolerancia propia y no con los
+//                     "Umbrales" del panel lateral. Apaga ese bloque y muestra
+//                     este texto en su lugar. Existe porque hoy los umbrales del
+//                     panel son una vista previa que ningún control lee, y dos
+//                     cifras distintas en la misma pantalla no dicen cuál mandó.
+//                     Se borra cuando los umbrales sean globales (ROADMAP 3.10).
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
@@ -927,6 +933,13 @@ export const CONTROL_REGISTRY = {
       ],
     },
     tabRequired: true,
+    // Este control mide con su propia tolerancia (editable en el panel del Paso
+    // 2), no con los "Umbrales" del panel lateral — que hoy son una vista previa
+    // que ningún control lee. Declararlo acá apaga ese bloque y explica de dónde
+    // sale el número, en vez de mostrar dos cifras distintas sin decir cuál mandó.
+    // Se borra cuando los umbrales sean globales de verdad (ROADMAP 3.10).
+    ownThresholdNote: 'El Control de Netos usa su propia tolerancia por legajo, '
+      + 'que se edita en "Datos del mes y alícuotas de retención".',
     additionalFiles: [
       { key: 'escala', label: 'Escala salarial del convenio de Comercio', fileType: 'escala_comercio_file' },
       // Las otras dos razones sociales del grupo. Opcionales porque un mes puede

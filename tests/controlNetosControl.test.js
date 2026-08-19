@@ -43,6 +43,15 @@ assert('se ofrece sólo a Sportline',
 assert('la config declara mappingKey (si no, el control nunca la ve)',
   entry.config[0].mappingKey === 'netosConfig');
 
+// El panel lateral muestra unos "Umbrales" que hoy ningún control lee. Este
+// control mide con su propia tolerancia, así que apaga ese bloque y dice de
+// dónde sale el número — sin esto la pantalla muestra "$ 1,00" al lado de un
+// control configurado en otra cifra, y no hay forma de saber cuál mandó.
+assert('declara que mide con su propia tolerancia, para apagar el panel de Umbrales',
+  typeof entry.ownThresholdNote === 'string' && entry.ownThresholdNote.length > 0);
+assert('esa nota dice dónde se edita la tolerancia',
+  entry.ownThresholdNote.includes('tolerancia'));
+
 // ── Armado de un caso ────────────────────────────────────────────────────────
 //
 // Un legajo con 10 años de antigüedad, básico 1.000.000 y AFA 200.000:

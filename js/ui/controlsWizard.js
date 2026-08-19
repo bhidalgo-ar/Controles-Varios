@@ -982,7 +982,7 @@ function buildWizardSidebarHtml(state) {
       <span class="wizard-section-label">${todoListo ? 'Todo listo para ejecutar' : 'Para ejecutar te falta'}</span>
       ${checklistHtml}
     </div>
-    ${thresholdsSectionHtml()}
+    ${thresholdsSectionHtml(state.selectedControls)}
   `;
 }
 
@@ -990,12 +990,34 @@ function buildWizardSidebarHtml(state) {
  * La sección "Umbrales" del panel lateral. La comparten el paso de archivos y
  * la pantalla de la corrida: con qué números se está midiendo tiene que decir
  * lo mismo antes y durante la ejecución.
+ *
+ * **Los valores de acá son una vista previa: ningún control los lee todavía.**
+ * Cada control trae su propia tolerancia cableada (los 0,01 repartidos por
+ * `js/controls/`), así que este bloque promete algo que no cumple.
+ *
+ * Mientras eso siga así, un control que declare `ownThresholdNote` en el
+ * registry apaga el bloque y dice de dónde sale de verdad su tolerancia — el
+ * caso del Control de Netos, que la tiene editable en su panel del Paso 2. Sin
+ * esto, la pantalla mostraría "$ 1,00" al lado de un control configurado en
+ * "$ 2,00" y no habría forma de saber cuál se usó (Willy, 2026-08-19).
+ *
+ * La nota se declara en el registry y no con un `if` por id de control: el día
+ * que los umbrales sean de verdad globales, se borra este parámetro y las notas,
+ * y ningún control queda con una rama especial escondida acá. Está anotado en el
+ * ROADMAP (3.10).
+ *
+ * @param {string[]} [selectedControls] ids elegidos para esta corrida
  */
-function thresholdsSectionHtml() {
+function thresholdsSectionHtml(selectedControls = []) {
+  const notas = selectedControls
+    .map(id => CONTROL_REGISTRY[id]?.ownThresholdNote)
+    .filter(Boolean);
+  const apagado = notas.length > 0;
+
   return `
-    <div>
+    <div${apagado ? ' class="is-disabled" aria-disabled="true"' : ''}>
       <span class="wizard-section-label">Umbrales</span>
-      <div class="threshold-grid">
+      <div class="threshold-grid"${apagado ? ' style="opacity:.45;"' : ''}>
         <div>
           <span class="threshold-field__label">Dif. absoluta &gt;</span>
           <div class="threshold-field__value">$ 1,00</div>
@@ -1005,11 +1027,13 @@ function thresholdsSectionHtml() {
           <div class="threshold-field__value">0,1 %</div>
         </div>
       </div>
-      <div class="threshold-checkbox-static">
+      <div class="threshold-checkbox-static"${apagado ? ' style="opacity:.45;"' : ''}>
         <span class="threshold-checkbox-static__box">✓</span>
         Marcar legajos presentes en un archivo y ausentes en el otro
       </div>
-      <p class="threshold-note">Vista previa — todavía no se pueden editar estos valores desde acá.</p>
+      ${apagado
+        ? notas.map(n => `<p class="threshold-note"><strong>No se usan en esta corrida.</strong> ${esc(n)}</p>`).join('')
+        : '<p class="threshold-note">Vista previa — todavía no se pueden editar estos valores desde acá.</p>'}
     </div>
   `;
 }
@@ -2336,7 +2360,7 @@ function renderRunScreen(container, state, ui, root) {
                 </p>`).join('')
             : '<p class="run-side__line run-side__line--muted">Estos controles no piden archivos.</p>'}
         </div>
-        ${thresholdsSectionHtml()}
+        ${thresholdsSectionHtml(state.selectedControls)}
       </div>
     </div>
   `;
