@@ -1,6 +1,6 @@
-**Estado:** implementado y verificado contra la liquidación real de IFSA 05/2026 (los 22 legajos cierran) · falta probarlo en el navegador · el §3 y el §4 de este brief quedaron **superados por D-066**, ver la nota de abajo.
+**Estado:** implementado y verificado contra la liquidación real de IFSA 05/2026 (los 22 legajos cierran) · falta probarlo en el navegador · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
 
-> **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-066).** Este brief planteaba comparar
+> **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-067).** Este brief planteaba comparar
 > contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"
 > (§3.2 y §4 `variableBuckets`). Ninguna de las dos cosas quedó así:
 >

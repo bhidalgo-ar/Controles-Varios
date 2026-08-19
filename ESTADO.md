@@ -4,13 +4,19 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
+- Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
+- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.
+- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista.
+- Detalle: `specs/conta-desglosada-asiento.md`, D-066.
+
 ## Control de Netos (Sportline) — construido y probado con archivos reales
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
-- Punto: implementado y verificado contra la liquidación real de IFSA 05/2026 — **los 22 legajos cierran**, incluidos los 5 que el armado manual no explicaba (el 2% extra del afiliado y el tope de aportes, ver D-066). Corrido de punta a punta en el navegador con los archivos reales: 22 cruzados, 1 con diferencia de $1,62. 44 asserts unitarios + 2 e2e; batería en verde.
+- Punto: implementado y verificado contra la liquidación real de IFSA 05/2026 — **los 22 legajos cierran**, incluidos los 5 que el armado manual no explicaba (el 2% extra del afiliado y el tope de aportes, ver D-067). Corrido de punta a punta en el navegador con los archivos reales: 22 cruzados, 1 con diferencia de $1,62. 44 asserts unitarios + 2 e2e; batería en verde.
 - **Cómo levantar la app acá:** el entorno remoto bloquea `unpkg.com` y `cdn.sheetjs.com`, de donde `index.html` carga Dexie y SheetJS, así que la app no arranca y ningún e2e corre. Se resuelve con `npm i --no-save dexie@4` y apuntando esos dos `<script>` a `node_modules/` — **parche local, no se commitea**. Sin eso, "no se puede probar en el navegador" es falso: sí se puede.
 - Próximo paso: dos decisiones de Willy. (1) La comparación con el mes anterior ya está construida (casillero opcional) pero **sólo informa**: falta definir cuánto movimiento del neto es normal para que pase a marcar diferencia. (2) El legajo 12695 queda a −1,62 por redondeo acumulado de Meta4 en el adicional del mes — si la tolerancia de $1 se sube o se deja así.
 - Pendiente aparte, ya identificado: el **calculador de AFA** (automatizar el "buscar objetivo" con el que Meli llega al bruto). Comparte toda la fórmula del control pero corre antes de liquidar, sobre el Tabulado de prueba.
-- Detalle: `specs/spec-control-netos.md`, **D-066**.
+- Detalle: `specs/spec-control-netos.md`, **D-067**.
 
 ## Lector de Tabulado — detector de formato (pieza T)
 - Qué es: reconocer si un Tabulado es Meta4 horizontal, Axton completo o Axton sólo-Imp por la firma del archivo (hoja, preámbulo, subencabezados), nunca por el cliente ni por posición de columna.
