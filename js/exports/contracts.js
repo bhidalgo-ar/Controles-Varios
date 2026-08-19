@@ -564,6 +564,71 @@ const finadietAsientoGral = {
   columns: finadietAsientoColumns(),
 };
 
+// ── COTY · Contabilidad Desglosada + Asiento ─────────────────────────────────
+//
+// Los tres archivos que genera el control (ver `js/controls/contaDesglosada.js`).
+// Todos nacen sobre `writeContractSheet`: son tablas planas de "encabezado + N
+// filas iguales" con una fila de TOTAL, que es exactamente lo que el writer
+// describe.
+//
+// **`from: []` en todas las columnas**: el reporte "Totales de Concepto" es de
+// formato fijo y sus columnas se resuelven por nombre de encabezado dentro del
+// parser, así que no hay clave de mapeo que el analista confirme y de la que
+// derivar obligatoriedad (mismo caso que Acreditaciones y que el asiento de
+// FINADIET).
+
+/** `audience: 'payroll'`: la desglosada es el papel de trabajo del analista —
+ * lleva legajo y fecha de ingreso, que es información de HR, y por eso NO es un
+ * entregable de Finanzas (D-020). El que va a Contaduría del cliente es el
+ * asiento, más abajo, que no lleva ni legajo. */
+const contaDesglosadaColumns = ({ conCodigo = false } = {}) => ([
+  { label: 'Legajo',          key: 'legajo',       from: [], necessity: NECESSITY.CLAVE,       type: 'txt', width: 10 },
+  { label: 'Ingreso',         key: 'ingreso',      from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 12, dataAlign: 'center' },
+  { label: 'Nro',             key: 'nro',          from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 10 },
+  { label: 'Concepto',        key: 'concepto',     from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 45 },
+  { label: 'Importe',         key: 'importe',      from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 16 },
+  // El centro de costo va como texto y no como número: en algunos clientes trae
+  // ceros a la izquierda, y como número Excel se los come.
+  { label: 'Centro de Costo', key: 'centro_costo', from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14, dataAlign: 'center' },
+  { label: 'Cuenta',          key: 'cuenta',       from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 40 },
+  ...(conCodigo
+    ? [{ label: 'Código', key: 'codigo', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 }]
+    : []),
+  { label: 'DEBE_HABER',      key: 'debe_haber',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 12, dataAlign: 'center' },
+  { label: 'DEBE',            key: 'debe',         from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+  { label: 'HABER',           key: 'haber',        from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+]);
+
+const contaDesglosada = {
+  exportId: 'conta_desglosada', sheet: 'Contabilidad Desglosada',
+  layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: contaDesglosadaColumns(),
+};
+
+/** La misma tabla, sin agrupar, con el código de cuenta de cada línea. */
+const contaDesglosadaConCodigo = {
+  exportId: 'conta_desglosada_codigo', sheet: 'Desglosada con Codigo',
+  layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: contaDesglosadaColumns({ conCodigo: true }),
+};
+
+/** `audience: 'finanzas'`: el asiento lo recibe Contaduría del cliente, así que
+ * no lleva NADA de HR — ni legajo, ni nombre de empleado, ni fecha de ingreso
+ * (D-020). Un asiento se lee por cuenta contable y centro de costo. */
+const contaAsiento = {
+  exportId: 'conta_asiento', sheet: 'Asiento Contable',
+  layout: LAYOUT_FIJO, audience: 'finanzas',
+  columns: [
+    { label: 'Nro Cuenta',       key: 'nro',          from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 16 },
+    { label: 'Nombre de cuenta', key: 'cuenta',       from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 45 },
+    { label: 'Centro de costo',  key: 'centro_costo', from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14, dataAlign: 'center' },
+    { label: 'DEBE',             key: 'debe',         from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'HABER',            key: 'haber',        from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'NETO DEBE',        key: 'neto_debe',    from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'NETO HABER',       key: 'neto_haber',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+  ],
+};
+
 export const EXPORT_CONTRACTS = {
   brutos:           brutosControlar,
   brutos_reporte:   brutosReporte,
@@ -588,6 +653,10 @@ export const EXPORT_CONTRACTS = {
   // `writeContractSheet`, así que declaran también su layout (D-046).
   finadiet_asiento_cc:    finadietAsientoPorCentro,
   finadiet_asiento_gral:  finadietAsientoGral,
+  // COTY · Contabilidad Desglosada + Asiento
+  conta_desglosada:        contaDesglosada,
+  conta_desglosada_codigo: contaDesglosadaConCodigo,
+  conta_asiento:           contaAsiento,
 };
 
 // ── Cómo se escribe cada export: por el writer, o a mano por diseño (D-051) ───
@@ -616,6 +685,9 @@ export const CON_WRITER = [
   // Una hoja, 11 columnas planas, sin grupos ni fila de TOTAL: nació sobre
   // `writeContractSheet` y no necesita nada que el writer no tenga.
   'pop_variaciones',
+  // Los 3 de la Contabilidad Desglosada: tablas planas con fila de TOTAL, todo
+  // lo que el writer ya sabe hacer.
+  'conta_desglosada', 'conta_desglosada_codigo', 'conta_asiento',
 ];
 
 /**
@@ -664,6 +736,11 @@ export const FINANZAS_ALLOWED_KEYS = new Set([
   'legajo', 'nombre', 'cuit', 'neto', 'fecha', 'banco', 'cbu',
   // asentar
   'cuenta', 'concepto', 'nro', 'debe', 'haber',
+  // asentar, agregado con el asiento de COTY: el centro de costo es imputación
+  // contable (a qué centro se carga el gasto), no un atributo del empleado, y el
+  // asiento se lee agrupado por él. Los dos netos son el mismo movimiento
+  // después de compensar Debe contra Haber.
+  'centro_costo', 'neto_debe', 'neto_haber',
 ]);
 
 /**

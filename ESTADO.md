@@ -4,6 +4,12 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
+- Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
+- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.
+- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista.
+- Detalle: `specs/conta-desglosada-asiento.md`, D-066.
+
 ## Lector de Tabulado — detector de formato (pieza T)
 - Qué es: reconocer si un Tabulado es Meta4 horizontal, Axton completo o Axton sólo-Imp por la firma del archivo (hoja, preámbulo, subencabezados), nunca por el cliente ni por posición de columna.
 - Punto: detector construido y testeado (`js/parsers/tabFormatDetector.js`, `tests/tabFormatDetector.test.js`, 2026-08-18); ningún control lo llama todavía.

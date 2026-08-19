@@ -1958,3 +1958,56 @@ de concepto no vienen ordenados; en SIASA conviven `999` y `1000`, ambos rotulad
 que los conceptos se matcheen siempre por código, nunca por nombre.
 
 **Dónde vive el detalle.** `specs/lector-tabulado-formatos.md`.
+
+---
+
+## D-066 — Contabilidad Desglosada de COTY: por nombre de encabezado, sin excepciones sembradas, y la desglosada no es un entregable de Finanzas
+
+**Fecha:** 2026-08-19 · **Contexto:** entrada al repo del control `conta_desglosada`, prototipado por el
+equipo en Claude Chat y traído con su ficha de traspaso (`docs/traspaso-controles-equipo.md`).
+
+**1. Las columnas del reporte se resuelven por nombre de encabezado, no por posición.** El prototipo leía
+el "Totales de Concepto" por índice fijo (Legajo=0, Importe=25, Cuenta Debe=31, Cuenta Haber=32) y ya
+había tenido que parchear la fecha de ingreso, que en un export cae en la columna 14 y en otro en la 15:
+la resolvía **votando** entre cuatro columnas candidatas cuál tiene forma de fecha. El parser del repo
+lee los encabezados —que el archivo trae siempre, en dos filas que se aplanan— y no necesita ninguna
+ventana de candidatas. Además **valida que el encabezado aplanado mida lo mismo que las filas de datos**:
+sin esa validación, una columna corrida cruza las cuentas contables (que están al final del reporte) y el
+archivo cierra igual, que es exactamente la clase de error que nadie detecta. Mismo criterio que
+`tabAxtonParser.js` ("nada se resuelve por posición").
+
+**2. Las dos excepciones cableadas del prototipo NO se sembraron.** La ficha las traía marcadas como
+supuestas, del instructivo y sin verificar: (`sac`, centro 60) → `710100143` y (`sindicato fuva a pagar`,
+cualquier centro) → `215100120`. Contra el archivo real de 05/2026 **ninguna se dispara**: el SAC de COTY
+liquida en los centros 656, 70 y 104 y el propio reporte de cuentas del cliente resuelve los tres, y
+"Sindicato FUVA a pagar" no aparece ni en el Tabulado ni en el reporte de cuentas. Sembrarlas sería
+inventar un código por analogía (D-039), con el agravante de que un código de cuenta equivocado produce un
+asiento que cierra. La tabla de excepciones nace **vacía** y se edita en el Paso 2; lo que no se resuelve
+sale listado como "sin código" en resultados, que es lo que hace que alguien lo resuelva.
+
+**3. El importe vacío no se completa con 0 en silencio.** El prototipo trataba un importe no parseable
+como `0` y su propia ficha lo marcaba como aviso ("si una fila tiene cuenta pero el importe vacío, cuenta
+como cero y no avisa"). Acá la línea se emite con el importe vacío —la celda del `.xlsx` queda en blanco,
+igual que antes— pero **se cuenta y se informa** en la pantalla de resultados. En el período verificado no
+hay ninguna; la diferencia es qué pasa el día que haya.
+
+**4. La desglosada es papel de trabajo del analista; el asiento es el entregable de Finanzas.** El asiento
+va `audience: 'finanzas'` y no lleva legajo ni nada del empleado (un asiento se lee por cuenta contable);
+la desglosada va `audience: 'payroll'` porque lleva legajo y fecha de ingreso, que es información de HR
+(D-020). Con el asiento se agregaron a `FINANZAS_ALLOWED_KEYS` el centro de costo —imputación contable, no
+atributo del empleado, y el asiento se lee agrupado por él— y las dos columnas de neto. **Queda por
+confirmar con Willy** si la desglosada sale del estudio: si se le manda a Contaduría del cliente, la fecha
+de ingreso tiene que salir.
+
+**5. El neto a pagar se consolida con la clave de legajo del cliente.** Es el único punto del control donde
+la unidad es el empleado y no la línea contable, y por eso va con `groupRowsByLegajo` y
+`makeLegajoKey(mapping.legajoKeyMode)` (D-038/D-042): un cliente que rellena legajos con ceros («007» y
+«7») emitiría dos líneas de neto para el mismo empleado y el asiento seguiría cerrando, mal. Los montos
+siempre se suman; el centro de costo y la fecha de ingreso de esa línea se toman de la primera liquidación
+del legajo, y si un legajo neteara en dos centros distintos el control lo avisa.
+
+**Verificado contra los dos archivos reales de COTY del período 05/2026** (no entran al repo): reproduce
+exactas las cinco anclas del prototipo — balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273
+filas de asiento, 12 cuentas patrimoniales y 0 líneas sin código.
+
+**Dónde vive el detalle.** `specs/conta-desglosada-asiento.md`.
