@@ -68,12 +68,24 @@
 //                                       rend_vs_asiento con la agrupación de
 //                                       conceptos: la usa, pero quien la edita y la
 //                                       persiste son Rend vs Tabulado y Rend x EE.
-//   ownThresholdNote — el control mide con una tolerancia propia y no con los
-//                     "Umbrales" del panel lateral. Apaga ese bloque y muestra
-//                     este texto en su lugar. Existe porque hoy los umbrales del
-//                     panel son una vista previa que ningún control lee, y dos
-//                     cifras distintas en la misma pantalla no dicen cuál mandó.
-//                     Se borra cuando los umbrales sean globales (ROADMAP 3.10).
+//   ownTolerance    — OPCIONAL. El control NO mide con el monto de diferencia
+//                     que el cliente puso en "Umbrales" (D-069). Un control
+//                     nuevo no declara nada y hereda ese monto sin escribir una
+//                     línea; esto es para los dos casos en que no corresponde:
+//                       (a) el control ya tiene su propio monto editable en su
+//                           panel del Paso 2 (Netos, Agrupadores) — declara
+//                           `from` y el panel lateral muestra ese número;
+//                       (b) el control no compara importes contra un umbral:
+//                           cuadra un asiento al centavo, compara campos de
+//                           texto, o verifica que la app haya leído bien un
+//                           archivo. Declara sólo `note` y el panel avisa que
+//                           el monto no lo toca.
+//                     Campos:
+//                       from(mapping) — OPCIONAL. De dónde sale su número.
+//                                       `null`/`undefined` = el analista no lo
+//                                       cargó, y ahí manda el del cliente.
+//                       note          — qué se le dice al analista en el panel
+//                                       lateral, en criollo.
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
@@ -252,6 +264,12 @@ export const CONTROL_REGISTRY = {
 
   cat_x_empleados: {
     id:          'cat_x_empleados',
+    // No compara importes: cruza quién está en cada archivo y tres campos de
+    // texto (puesto, centro de costo, departamento). Un monto de diferencia no
+    // tiene dónde aplicarse (D-069).
+    ownTolerance: {
+      note: 'Compara empleados y campos de texto (puesto, centro de costo, departamento), no importes.',
+    },
     label:       'EE x CATEG',
     ...MARVAL_ONLY,
     appliesWhen: () => true,
@@ -615,6 +633,16 @@ export const CONTROL_REGISTRY = {
       ],
     },
     tabRequired: false,
+    // El único control con umbral porcentual y con "marcar los que están de un
+    // lado y no del otro": tiene los dos lados del cruce fila a fila, así que el
+    // porcentaje tiene un "sobre cuánto" claro. Los tres se editan juntos en su
+    // panel — separar el monto del porcentaje dejaría media regla en cada lado
+    // (D-069).
+    ownTolerance: {
+      from: (mapping) => mapping?.agrupadoresConfig?.thresholds?.absoluteAmount,
+      note: 'El monto, el porcentaje y los legajos que faltan de un lado se editan '
+        + 'juntos en "Agrupadores y umbrales".',
+    },
     // El Resumen puede venir en 2 formatos distintos (a diferencia del resto de los
     // additionalFiles, que tienen un fileType fijo). En vez de un selector de tipo en
     // runtime (que el registry no soporta), se declaran los dos como additionalFiles
@@ -648,6 +676,11 @@ export const CONTROL_REGISTRY = {
   // control de un cliente puntual. Ver specs/control-acreditaciones-axton.md.
   acreditaciones_reporte: {
     id:          'acreditaciones_reporte',
+    // El reporte tiene que cerrar EXACTO contra el archivo de origen — es plata
+    // que el banco va a acreditar. Ese cuadre mide siempre al centavo (D-069).
+    ownTolerance: {
+      note: 'Cierra al centavo contra el archivo de origen: es lo que el banco va a acreditar.',
+    },
     label:       'Acreditaciones — Generar Reporte',
     scope:       'sistema',
     scopeMeta:   { sourceSystems: ['axton'] },
@@ -689,6 +722,11 @@ export const CONTROL_REGISTRY = {
   // specs/control-acumuladores-ganancias.md.
   acumuladores_ganancias: {
     id:          'acumuladores_ganancias',
+    // No es un cruce de dos archivos: lee los acumuladores y muestra chequeos de
+    // coherencia sobre un solo lado, cada uno con su propio criterio (D-069).
+    ownTolerance: {
+      note: 'No cruza dos archivos: son chequeos de coherencia sobre los acumuladores, cada uno con su criterio.',
+    },
     label:       'Acumuladores Ganancias',
     scope:       'sistema',
     scopeMeta:   { sourceSystems: ['axton'] },
@@ -826,6 +864,13 @@ export const CONTROL_REGISTRY = {
   // control genera y no compara (status 'info'), con él además controla.
   pop_variaciones: {
     id:          'pop_variaciones',
+    // En modo Controlar verifica que la app haya reconstruido bien el reporte de
+    // Axton, así que compara con el redondeo de ESE archivo (2 decimales en el
+    // valor hora, el peso en el neto). Subir ese margen taparía una
+    // reconstrucción mal hecha, que no es una diferencia a tolerar (D-069).
+    ownTolerance: {
+      note: 'Verifica la reconstrucción contra el reporte de Axton, con el redondeo de ese archivo.',
+    },
     label:       'Variación entre quincenas',
     ...POP_ONLY,
     appliesWhen: () => true,
@@ -884,6 +929,10 @@ export const CONTROL_REGISTRY = {
   // contra el Tabulado. Ver specs/finadiet-asiento-remuneraciones.md.
   finadiet_asiento: {
     id:          'finadiet_asiento',
+    // Igual que Contabilidad Desglosada: el asiento cuadra al centavo (D-069).
+    ownTolerance: {
+      note: 'Un asiento cuadra al centavo: DEBE contra HABER, sin margen.',
+    },
     label:       'Asiento de Remuneraciones',
     ...FINADIET_ONLY,
     appliesWhen: () => true,
@@ -930,6 +979,11 @@ export const CONTROL_REGISTRY = {
   // del período 05/2026 — ver specs/conta-desglosada-asiento.md y D-066.
   conta_desglosada: {
     id:          'conta_desglosada',
+    // Un asiento cuadra o no cuadra: DEBE contra HABER, al centavo. No hay
+    // margen que el analista pueda elegir (D-069).
+    ownTolerance: {
+      note: 'Un asiento cuadra al centavo: DEBE contra HABER, sin margen.',
+    },
     label:       'Contabilidad Desglosada + Asiento',
     ...COTY_ONLY,
     appliesWhen: () => true,
@@ -995,13 +1049,15 @@ export const CONTROL_REGISTRY = {
       ],
     },
     tabRequired: true,
-    // Este control mide con su propia tolerancia (editable en el panel del Paso
-    // 2), no con los "Umbrales" del panel lateral — que hoy son una vista previa
-    // que ningún control lee. Declararlo acá apaga ese bloque y explica de dónde
-    // sale el número, en vez de mostrar dos cifras distintas sin decir cuál mandó.
-    // Se borra cuando los umbrales sean globales de verdad (ROADMAP 3.10).
-    ownThresholdNote: 'El Control de Netos usa su propia tolerancia por legajo, '
-      + 'que se edita en "Datos del mes y alícuotas de retención".',
+    // Mide con su propia tolerancia por legajo, que el analista edita en el
+    // panel del Paso 2 junto con las alícuotas — el resto de los datos con los
+    // que se arma el recibo teórico están ahí, y el número se decide mirándolos.
+    // Declararlo acá es lo que hace que el panel "Umbrales" lo diga con el monto
+    // en vez de mostrar dos cifras sin decir cuál mandó (D-069).
+    ownTolerance: {
+      from: (mapping) => mapping?.netosConfig?.tolerancia,
+      note: 'Se edita en "Datos del mes y alícuotas de retención".',
+    },
     additionalFiles: [
       { key: 'escala', label: 'Escala salarial del convenio de Comercio', fileType: 'escala_comercio_file' },
       // Las otras dos razones sociales del grupo. Opcionales porque un mes puede

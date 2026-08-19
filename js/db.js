@@ -8,6 +8,7 @@
 /* global Dexie */
 
 import { DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode } from './utils/legajo.js';
+import { normalizeTolerance } from './controls/tolerance.js';
 
 const db = new Dexie('controles-nomina');
 
@@ -295,6 +296,11 @@ export async function createClient(name, notes = '', extra = {}) {
     legajoKeyMode: isValidLegajoKeyMode(extra.legajoKeyMode)
       ? extra.legajoKeyMode
       : DEFAULT_LEGAJO_KEY_MODE,
+    // De cuánto para arriba una diferencia es una diferencia, para TODOS los
+    // controles de este cliente (D-069). Se edita en el panel "Umbrales" del
+    // wizard. Sin valor, manda el default ($ 0,01, el redondeo de Excel) — un
+    // cliente viejo sin el campo mide exactamente como medía antes.
+    diffTolerance: normalizeTolerance(extra.diffTolerance),
     createdAt: now,
     updatedAt: now,
   });
@@ -546,10 +552,14 @@ export async function setConfig(key, value) {
  *   guardado antes de que existiera simplemente no lo trae — la pantalla lo lee
  *   como "sin avisos" en vez de romperse.
  */
-export async function createControlRun(clientCode, period, selectedControls, notes = '', warnings = []) {
+export async function createControlRun(clientCode, period, selectedControls, notes = '', warnings = [], diffTolerance = undefined) {
   const now = new Date().toISOString();
   return db.controlRuns.add({
     clientCode, period, selectedControls, notes,
+    // El monto de diferencia vigente al ejecutar. Se guarda con la corrida para
+    // que cambiar el del cliente hoy no reescriba lo que ya se revisó (D-069);
+    // el de cada control queda estampado además en sus propios resultados.
+    diffTolerance: normalizeTolerance(diffTolerance),
     warnings: Array.isArray(warnings)
       ? warnings.filter(w => typeof w === 'string' && w.trim() !== '')
       : [],

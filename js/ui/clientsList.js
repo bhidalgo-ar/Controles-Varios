@@ -8,6 +8,7 @@ import { getClients, getInactiveClients, createClient, hideClient, unhideClient,
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { summarizeWithTolerance } from '../controls/tolerance.js';
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
 import { downloadBlob } from '../utils/exportData.js';
@@ -372,7 +373,7 @@ async function buildClientRowData(client, period, thresholdPct) {
     const summaries = resultsRows.map(row => {
       const ctrl = CONTROL_REGISTRY[row.controlId];
       if (!ctrl) return null;
-      const summary = ctrl.summarize ? ctrl.summarize(row.results) : { status: 'info' };
+      const summary = ctrl.summarize ? summarizeWithTolerance(ctrl, row.results) : { status: 'info' };
       const tier = summary.status === 'error'
         ? 'error'
         : summary.unitsTotal == null

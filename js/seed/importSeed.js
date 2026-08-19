@@ -8,6 +8,7 @@
 // clientCatalogs — ver ARCHITECTURE.md §6).
 
 import { getClients, createClient, updateClient, getConfig, setConfig, getControlConfig, saveControlConfig } from '../db.js';
+import { normalizeTolerance } from '../controls/tolerance.js';
 import { DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode } from '../utils/legajo.js';
 
 export const SEED_SCHEMA_VERSION = 1;
@@ -132,6 +133,7 @@ export async function applySeed(seed) {
     const attrs = {
       sourceSystem: sc.sourceSystem,
       legajoKeyMode: isValidLegajoKeyMode(sc.legajoKeyMode) ? sc.legajoKeyMode : DEFAULT_LEGAJO_KEY_MODE,
+      diffTolerance: normalizeTolerance(sc.diffTolerance),
       team: sc.team || '',
       consultant: sc.consultant || '',
       ccts: sc.ccts || [],

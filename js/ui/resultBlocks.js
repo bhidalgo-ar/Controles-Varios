@@ -14,6 +14,7 @@
 
 import { initTabs } from './tabs.js';
 import { getViewPreference, setViewPreference } from './viewPreference.js';
+import { currentTolerance } from '../controls/tolerance.js';
 
 function esc(str) {
   return String(str ?? '')
@@ -563,9 +564,12 @@ export function magnitudeBarHtml(value, max) {
  * ("ausente en Tab"); sin eso, se dice lo único que se sabe.
  *
  * @param {number|null} value
+ * Sin `eps` explícito mide con el monto de diferencia de la corrida (D-069):
+ * lo que queda por debajo se pinta como "sin diferencia", no como hallazgo.
+ *
  * @param {{ max?: number, decimals?: number, eps?: number, absentLabel?: string }} [opts]
  */
-export function diffBadgeHtml(value, { max = 0, decimals = 2, eps = 0.01, absentLabel } = {}) {
+export function diffBadgeHtml(value, { max = 0, decimals = 2, eps = currentTolerance(), absentLabel } = {}) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return `<span class="rb-diffbadge rb-diffbadge--warn">${esc(absentLabel || 'sin comparar')}</span>`;
   }
@@ -582,7 +586,7 @@ export function diffBadgeHtml(value, { max = 0, decimals = 2, eps = 0.01, absent
  * @param {number|null} value
  * @param {{ max?: number, decimals?: number, eps?: number, background?: string, absentLabel?: string }} [opts]
  */
-export function diffCellHtml(value, { max = 0, decimals = 2, eps = 0.01, background = '', absentLabel } = {}) {
+export function diffCellHtml(value, { max = 0, decimals = 2, eps = currentTolerance(), background = '', absentLabel } = {}) {
   const bg = background ? `background:${background};` : '';
   const cls = (value === null || value === undefined) ? '' : ` ${mvClass(value, eps)}`;
   return `<td class="rb-magcell${cls}" style="text-align:right;${bg}">${diffBadgeHtml(value, { max, decimals, eps, absentLabel })}</td>`;

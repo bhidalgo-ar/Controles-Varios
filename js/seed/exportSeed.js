@@ -7,6 +7,7 @@
 // paralelo — ver guardrail de T6 en specs/plan-v2-t0-t6.md.
 
 import { getClients, getControlConfigsForClient, getConfig } from '../db.js';
+import { normalizeTolerance } from '../controls/tolerance.js';
 import { DEFAULT_LEGAJO_KEY_MODE } from '../utils/legajo.js';
 import { SEED_SCHEMA_VERSION } from './importSeed.js';
 
@@ -36,6 +37,10 @@ export async function buildSeedExport(updatedBy = 'admin') {
     // que la decisión se tome una vez y valga para todo el equipo, no una vez
     // por navegador.
     legajoKeyMode: c.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE,
+    // De cuánto para arriba una diferencia es una diferencia (D-069). Viaja por
+    // la misma razón que el modo de legajo: se decide una vez con el cliente y
+    // vale para todo el equipo, no una vez por navegador.
+    diffTolerance: normalizeTolerance(c.diffTolerance),
     active:       c.active !== undefined ? c.active : true,
     attributes:   c.attributes || {},
   }));

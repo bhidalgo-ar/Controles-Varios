@@ -43,14 +43,18 @@ assert('se ofrece sólo a Sportline',
 assert('la config declara mappingKey (si no, el control nunca la ve)',
   entry.config[0].mappingKey === 'netosConfig');
 
-// El panel lateral muestra unos "Umbrales" que hoy ningún control lee. Este
-// control mide con su propia tolerancia, así que apaga ese bloque y dice de
-// dónde sale el número — sin esto la pantalla muestra "$ 1,00" al lado de un
-// control configurado en otra cifra, y no hay forma de saber cuál mandó.
-assert('declara que mide con su propia tolerancia, para apagar el panel de Umbrales',
-  typeof entry.ownThresholdNote === 'string' && entry.ownThresholdNote.length > 0);
+// El monto de diferencia del panel "Umbrales" vale para los 19 controles
+// (D-069). Éste es uno de los dos que miden con el suyo, editable en su propio
+// panel: lo declara en el registry para que la pantalla muestre ESE número y no
+// dos cifras sin decir cuál mandó.
+assert('declara ownTolerance: mide con su propia tolerancia, no con la del cliente',
+  entry.ownTolerance && typeof entry.ownTolerance.note === 'string' && entry.ownTolerance.note.length > 0);
 assert('esa nota dice dónde se edita la tolerancia',
-  entry.ownThresholdNote.includes('tolerancia'));
+  entry.ownTolerance.note.includes('alícuotas'));
+assert('ownTolerance.from saca el número de la config del control',
+  entry.ownTolerance.from({ netosConfig: { tolerancia: 250 } }) === 250);
+assert('sin config cargada devuelve undefined y manda el monto del cliente',
+  entry.ownTolerance.from({}) === undefined);
 
 // ── Armado de un caso ────────────────────────────────────────────────────────
 //

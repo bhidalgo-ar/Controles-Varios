@@ -4,6 +4,12 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## Monto de diferencia — cerrado el 2026-08-19
+- Qué es: el número que el analista escribe en el panel "Umbrales" ("de acá para abajo no me interesa"). Hasta hoy era un `$ 1,00` escrito a mano que ningún control leía.
+- Punto: **hecho**. Se edita en el panel del wizard y en `#/admin`, se guarda por cliente (`clients.diffTolerance`), viaja en el seed, y lo leen los 19 controles desde `js/controls/tolerance.js`. Cada corrida guarda el monto con el que se midió, así que una corrida vieja no cambia de resultado sola. Un control nuevo lo hereda sin cablear nada. Verificado en navegador (claro y oscuro) y con 67 asserts nuevos + 2 e2e.
+- Próximo paso: que Willy lo pruebe con un archivo real y confirme el monto que quiere dejar por cliente. Abierto a definir: si Cruce por Agrupadores —que hoy conserva su monto, su porcentaje y su marcado de faltantes en su propio panel— debería pasar a usar el monto del cliente cuando salga de `hidden`.
+- Detalle: **D-069**, `tests/tolerance.test.js`, `tests/e2e/umbralDiferencia.spec.js`.
+
 ## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
 - Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
 - Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.

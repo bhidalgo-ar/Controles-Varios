@@ -1,5 +1,6 @@
 // gsPers.js — Controles de Gastos Personales y Cochera (GS Pers)
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -121,8 +122,8 @@ export function runGsPers(gsRows, tabRows, mapping) {
     };
   });
 
-  const conDifGtos  = rows.filter(r => r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01).length;
-  const conDifDto   = rows.filter(r => r.ctrlDto  !== null && Math.abs(r.ctrlDto)  > 0.01).length;
+  const conDifGtos  = rows.filter(r => isDiff(r.ctrlGtos)).length;
+  const conDifDto   = rows.filter(r => isDiff(r.ctrlDto)).length;
   const sinTabData  = rows.filter(r => r.tabValGtos === null && r.tabValDto === null).length;
 
   return {
@@ -140,11 +141,15 @@ const LILAC_HDR = 'rgba(130,80,200,0.20)';
 // Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
 // DTO_COCHERA en cualquiera de las dos fuentes — la mayoría de los legajos no
 // tienen ninguno de los dos (CLAUDE.md §11.1).
+// El monto de diferencia del cliente (D-069) no entra acá: la pregunta es si el
+// concepto se liquidó, no si difiere. Con el monto en $ 100, una cochera de
+// $ 50 haría desaparecer al legajo de la comparación en vez de marcarlo.
+const VALOR_REAL_EPS = 0.01;
 function gsPersHasAnyValue(r) {
-  return [r.gtos, r.dto, r.tabValGtos, r.tabValDto].some(v => v !== null && Math.abs(v) > 0.01);
+  return [r.gtos, r.dto, r.tabValGtos, r.tabValDto].some(v => v !== null && Math.abs(v) > VALOR_REAL_EPS);
 }
 function gsPersRowHasDiff(r) {
-  return (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) || (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01);
+  return isDiff(r.ctrlGtos) || isDiff(r.ctrlDto);
 }
 function gsPersDiffAmount(r) {
   return Math.abs(r.ctrlGtos ?? 0) + Math.abs(r.ctrlDto ?? 0);
@@ -211,10 +216,10 @@ export function renderGsPersResults(results, container) {
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
         evalGtos === 0
           ? { label: 'GTOS_PERSONALES', value: 'sin datos para comparar', tone: 'error' }
-          : { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: Math.abs(diffGtos) > 0.01 ? 'error' : 'ok' },
+          : { label: 'Dif. GTOS_PERSONALES', value: fmt(diffGtos), tone: isDiff(diffGtos) ? 'error' : 'ok' },
         evalDto === 0
           ? { label: 'DTO_COCHERA', value: 'sin datos para comparar', tone: 'error' }
-          : { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: Math.abs(diffDto) > 0.01 ? 'error' : 'ok' },
+          : { label: 'Dif. DTO_COCHERA', value: fmt(diffDto), tone: isDiff(diffDto) ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -223,8 +228,8 @@ export function renderGsPersResults(results, container) {
           heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
           items: top.map(r => {
             const bits = [];
-            if (r.ctrlGtos !== null && Math.abs(r.ctrlGtos) > 0.01) bits.push(`GTOS_PERSONALES ${fmt(r.ctrlGtos)}`);
-            if (r.ctrlDto !== null && Math.abs(r.ctrlDto) > 0.01) bits.push(`DTO_COCHERA ${fmt(r.ctrlDto)}`);
+            if (isDiff(r.ctrlGtos)) bits.push(`GTOS_PERSONALES ${fmt(r.ctrlGtos)}`);
+            if (isDiff(r.ctrlDto)) bits.push(`DTO_COCHERA ${fmt(r.ctrlDto)}`);
             const worst = Math.abs(r.ctrlGtos ?? 0) >= Math.abs(r.ctrlDto ?? 0) ? r.ctrlGtos : r.ctrlDto;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',
