@@ -70,12 +70,16 @@ const escalaRows = [
     basicos: { 'Basico mayo': 1000000, 'Basico abril': 980000 } },
 ];
 
-const mapping = { tab: { empleadoColumn: 'ID_EMPLEADO' }, netosConfig: CFG };
+const mapping = {
+  tab: { empleadoColumn: 'ID_EMPLEADO', apellidoNombreColumn: 'APELLIDO Y NOMBRE' },
+  netosConfig: CFG,
+};
 
 /** Una fila de Tabulado con los importes que se le pasen. */
 function fila(legajo, extra = {}) {
   return {
     ID_EMPLEADO: legajo,
+    'APELLIDO Y NOMBRE': 'Perez Juan',
     CATEGORIA: 'Vendedor B',
     OBRA_SOCIAL: '3009',
     '1003-SUELDO': 1000000,
@@ -310,6 +314,54 @@ assert('categoría ausente de la escala: el neto se controla igual',
   Math.abs(rSinCat.rows[0].residuo) < 0.01);
 assert('categoría ausente de la escala: no se marca como fuera de escala',
   rSinCat.rows[0].escalaOk === null);
+
+// ── El nombre del empleado se lee del propio Tabulado ────────────────────────
+//
+// Willy: en el detalle del run no aparecía el nombre. La columna la trae el
+// Tabulado (APELLIDO Y NOMBRE, o su typo APPELIDO en Finadiet/POF) y ya la
+// mapea el Paso 1 — el control sólo tenía que usarla.
+
+assert('el nombre sale de la columna que el analista mapeó',
+  rOk.rows[0].nombre === 'Perez Juan');
+
+const rSinMapeoNombre = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })],
+  { tab: { empleadoColumn: 'ID_EMPLEADO' }, netosConfig: CFG });
+assert('sin columna de nombre mapeada: vacío, no undefined ni un error',
+  rSinMapeoNombre.rows[0].nombre === '');
+
+// ── El nombre de la empresa lo pone el analista ──────────────────────────────
+//
+// Willy: "la empresa está tomando cualquier valor" — porque el Tabulado no
+// trae una columna que diga de qué razón social es. Sin nombre cargado, cae a
+// "Empresa 1" y no a un rótulo que no identifica a nadie ("Tabulado 1").
+
+const rSinNombreEmpresa = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })], mapping);
+assert('sin nombre de empresa cargado: cae a "Empresa 1", no a "Tabulado 1"',
+  rSinNombreEmpresa.rows[0].empresa === 'Empresa 1');
+
+const rConNombreEmpresa = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })],
+  { ...mapping, netosConfig: { ...CFG, empresaLabels: { tab: 'IFSA' } } });
+assert('con el nombre cargado: se usa tal cual',
+  rConNombreEmpresa.rows[0].empresa === 'IFSA');
+
+// ── La tolerancia del analista, no un margen fijo de $0,01 ───────────────────
+//
+// Willy pidió tres categorías: exacto al centavo, dentro del margen, y
+// diferencia mayor. La pantalla las arma con `categoriaDe()`, que no se
+// exporta — se prueba acá mirando cómo cae un residuo de prueba en las tres
+// franjas, con la misma regla que usa `tableHtml()`.
+
+function categoriaDe(residuo, tol) {
+  if (residuo === null) return null;
+  const abs = Math.abs(residuo);
+  if (abs <= 0.01) return 'exacto';
+  if (abs <= tol) return 'margen';
+  return 'diferencia';
+}
+assert('residuo 0,00 con tolerancia 100: exacto', categoriaDe(0, 100) === 'exacto');
+assert('residuo 0,79 con tolerancia 100: dentro del margen', categoriaDe(0.79, 100) === 'margen');
+assert('residuo 150 con tolerancia 100: diferencia mayor', categoriaDe(150, 100) === 'diferencia');
+assert('sin neto para comparar: ninguna de las tres', categoriaDe(null, 100) === null);
 
 console.log(`\n${ok} ok, ${fail} fail`);
 if (fail > 0) process.exit(1);

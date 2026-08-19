@@ -42,6 +42,8 @@ const TASA_LABELS = {
  * @param {boolean}  [opts.openByDefault]
  * @param {function} [opts.onChange]       recibe la config nueva completa
  * @param {object[]} [opts.tabRows]        filas del Tabulado, para sugerir el tope
+ * @param {object[]} [opts.tab2Rows]       filas del Tabulado de la segunda empresa, si se cargó
+ * @param {object[]} [opts.tab3Rows]       filas del Tabulado de la tercera empresa, si se cargó
  */
 export function renderControlNetosConfigEditor(container, opts = {}) {
   const {
@@ -49,15 +51,24 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     openByDefault = false,
     onChange = () => {},
     tabRows = [],
+    tab2Rows = [],
+    tab3Rows = [],
   } = opts;
 
   const base = DEFAULT_NETOS_CONFIG();
   const current = {
     ...base,
     ...config,
-    tasas:   { ...base.tasas,   ...(config.tasas   || {}) },
-    codigos: { ...base.codigos, ...(config.codigos || {}) },
+    tasas:         { ...base.tasas,         ...(config.tasas         || {}) },
+    codigos:       { ...base.codigos,       ...(config.codigos       || {}) },
+    empresaLabels: { ...base.empresaLabels, ...(config.empresaLabels || {}) },
   };
+
+  const empresaSlots = [
+    { key: 'tab',  label: 'Tabulado principal',  rows: tabRows },
+    { key: 'tab2', label: 'Segunda empresa',     rows: tab2Rows },
+    { key: 'tab3', label: 'Tercera empresa',     rows: tab3Rows },
+  ].filter(s => s.rows.length > 0);
 
   const sugerido = sugerirTope(tabRows, current);
 
@@ -97,16 +108,37 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
 
     <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
       <label style="display:block;">
-        <span class="form-label" style="font-size:var(--text-sm);">Tolerancia por legajo</span>
+        <span class="form-label" style="font-size:var(--text-sm);">Tolerancia por legajo, en pesos ($)</span>
         <input type="text" class="form-input form-input--sm" style="max-width:120px;"
                data-netos-tol inputmode="decimal" autocomplete="off"
                value="${esc(current.tolerancia ?? 1)}">
       </label>
       <p class="text-muted" style="font-size:var(--text-sm);max-width:52ch;margin:var(--sp-4) 0 0;">
-        Cuánto puede quedar sin explicar antes de marcar el legajo. Meta4 redondea cada concepto
-        a dos decimales, así que unos centavos de diferencia son redondeo y no un error.
+        Cuánto puede quedar sin explicar, <strong>en pesos</strong>, antes de marcar el legajo. Meta4
+        redondea cada concepto a dos decimales, así que unos centavos de diferencia son redondeo y no
+        un error.
       </p>
     </div>
+
+    ${empresaSlots.length ? `
+    <div style="margin-top:var(--sp-3);">
+      <span class="form-label" style="font-size:var(--text-sm);">Nombre de cada empresa</span>
+      <p class="text-muted" style="font-size:var(--text-sm);margin:2px 0 var(--sp-2);">
+        Ninguno de los Tabulados trae de qué empresa es — sin esto, el detalle del resultado
+        va a mostrar "Empresa 1", "Empresa 2", etc. en su lugar.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);">
+        ${empresaSlots.map(s => `
+          <label style="display:block;">
+            <span class="text-muted" style="font-size:var(--text-sm);">${esc(s.label)}</span>
+            <input type="text" class="form-input form-input--sm" style="max-width:140px;"
+                   data-netos-empresa="${esc(s.key)}" autocomplete="off"
+                   placeholder="ej. IFSA" value="${esc(current.empresaLabels[s.key] || '')}">
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
 
     <details style="margin-top:var(--sp-3);">
       <summary style="cursor:pointer;font-size:var(--text-sm);color:var(--color-primary);">
@@ -121,11 +153,12 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     </details>
   `;
 
-  const nrEl    = editor.querySelector('[data-netos-nr]');
-  const topeEl  = editor.querySelector('[data-netos-tope]');
-  const tolEl   = editor.querySelector('[data-netos-tol]');
-  const hintEl  = editor.querySelector('[data-netos-tope-hint]');
-  const tasasEl = editor.querySelector('[data-netos-tasas]');
+  const nrEl      = editor.querySelector('[data-netos-nr]');
+  const topeEl    = editor.querySelector('[data-netos-tope]');
+  const tolEl     = editor.querySelector('[data-netos-tol]');
+  const hintEl    = editor.querySelector('[data-netos-tope-hint]');
+  const tasasEl   = editor.querySelector('[data-netos-tasas]');
+  const empresaEls = editor.querySelectorAll('[data-netos-empresa]');
 
   tasasEl.innerHTML = Object.keys(TASA_LABELS).map(k => `
     <label style="display:block;">
@@ -159,12 +192,20 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     for (const el of tasasEl.querySelectorAll('[data-netos-tasa]')) {
       current.tasas[el.dataset.netosTasa] = num(el.value) ?? 0;
     }
+    for (const el of empresaEls) {
+      current.empresaLabels[el.dataset.netosEmpresa] = el.value.trim();
+    }
     pintarHint();
-    onChange({ ...current, tasas: { ...current.tasas }, codigos: { ...current.codigos } });
+    onChange({
+      ...current,
+      tasas: { ...current.tasas }, codigos: { ...current.codigos },
+      empresaLabels: { ...current.empresaLabels },
+    });
   };
 
   for (const el of [nrEl, topeEl, tolEl]) el.addEventListener('input', emitir);
   tasasEl.addEventListener('input', emitir);
+  for (const el of empresaEls) el.addEventListener('input', emitir);
 
   pintarHint();
   container.appendChild(editor);

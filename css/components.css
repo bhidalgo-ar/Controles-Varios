@@ -1714,6 +1714,14 @@ table.rb-grid.rb-grid--stick2 tfoot > tr > [colspan]:not([colspan="1"]):first-ch
 .ctrl-detail-grid {
   display: grid;
   grid-template-rows: 0fr;
+  /* Sin esto la única columna implícita se mide por el contenido (a lo
+     ancho): una tabla de muchas columnas con `white-space: nowrap` (ver
+     .rb-grid) la hacía crecer más allá de la pantalla y se llevaba puesta a
+     la barra de herramientas de la ficha —exportar incluido— (Willy,
+     2026-08-20, Control de Netos con "Todos los legajos"). `minmax(0, 1fr)`
+     fuerza el mínimo a 0 para que la tabla scrollee adentro de su propio
+     `.rb-grid-wrap` en vez de romper el ancho de la ficha. */
+  grid-template-columns: minmax(0, 1fr);
   transition: grid-template-rows 0.28s cubic-bezier(.4,0,.2,1);
 }
 .ctrl-detail-grid.is-open { grid-template-rows: 1fr; }

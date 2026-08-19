@@ -1022,7 +1022,11 @@ export const CONTROL_REGISTRY = {
                // bloquea la corrida desde `run()` con un mensaje que lo pide.
                default: () => DEFAULT_NETOS_CONFIG(),
                editor: renderControlNetosConfigEditor,
-               editorProps: (state) => ({ tabRows: state.tab?.parsedRows || [] }),
+               editorProps: (state) => ({
+                 tabRows:  state.tab?.parsedRows || [],
+                 tab2Rows: state.controlFiles?.control_netos?.tab2?.parsedRows || [],
+                 tab3Rows: state.controlFiles?.control_netos?.tab3?.parsedRows || [],
+               }),
                openByDefault: (state) => state.controlNetosConfig?.noRemuAcuerdo == null }],
     run:           runControlNetos,
     summarize:     summarizeControlNetos,
