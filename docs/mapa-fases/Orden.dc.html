@@ -1,0 +1,306 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap">
+  <style>
+    body { margin: 0; background: #EEF2F6; }
+    a { color: #0090B4; } a:hover { color: #007896; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1120px; background: #EEF2F6; font-family: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif; color: #15263D;">
+
+  <div style="height: 54px; background: #15263D; border-bottom: 3px solid #00ACD4; display: flex; align-items: center; gap: 12px; padding: 0 24px;">
+    <div style="width: 30px; height: 30px; border-radius: 9999px; background: #00ACD4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: -0.02em;">H&amp;A</div>
+    <span style="font-size: 15px; font-weight: 700; color: #FFFFFF;">Controles Nómina</span>
+    <span style="width: 1px; height: 20px; background: rgba(255,255,255,0.22);"></span>
+    <span style="font-size: 13px; color: #C7D5E4;">Por dónde seguir</span>
+  </div>
+
+  <div style="padding: 30px 32px 40px;">
+
+    <div style="max-width: 800px; margin-bottom: 26px;">
+      <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 34px; line-height: 1.15; color: #15263D;">Un orden posible</div>
+      <div style="font-size: 14px; color: #4A6080; margin-top: 10px; line-height: 1.6;">Cada escalón es una llave. A la derecha, cuántos controles quedan al alcance después de darla vuelta. Arranca en 7: lo que hoy no depende de ninguna definición pendiente.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; align-items: start;">
+
+      <!-- La escalera -->
+      <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 8px 0 12px;">
+        <sc-for list="{{ladder}}" as="s" hint-placeholder-count="12">
+          <div style="{{s.rowCss}}">
+            <div style="display: flex; gap: 14px; align-items: flex-start;">
+              <span style="{{s.numCss}}">{{s.num}}</span>
+              <div style="flex-grow: 1; min-width: 0;">
+                <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                  <span style="{{s.chipCss}}">{{s.id}}</span>
+                  <span style="font-size: 13.5px; font-weight: 700; color: #15263D; line-height: 1.3;">{{s.title}}</span>
+                  <span style="font-size: 10.5px; color: #8FA3BA;">{{s.owner}}</span>
+                </div>
+                <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px;">
+                  <sc-for list="{{s.opens}}" as="o" hint-placeholder-count="4">
+                    <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(0,172,212,0.10); color: #0090B4;">{{o}}</span>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex-shrink: 0; text-align: right; width: 84px;">
+                <div style="font-size: 11px; font-weight: 800; color: #00ACD4;">{{s.gain}}</div>
+                <div style="display: flex; align-items: baseline; gap: 3px; justify-content: flex-end; margin-top: 2px;">
+                  <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 26px; line-height: 1; color: #15263D; font-variant-numeric: tabular-nums;">{{s.total}}</span>
+                  <span style="font-size: 12px; color: #8FA3BA;">/ 42</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- Columna derecha -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+
+        <div style="background: rgba(0,172,212,0.10); border: 1px solid rgba(0,172,212,0.30); border-radius: 14px; padding: 18px 20px;">
+          <div style="font-size: 14px; font-weight: 800; color: #0090B4; margin-bottom: 8px;">Si hacés una sola cosa</div>
+          <div style="font-size: 12.5px; color: #1E3A5F; line-height: 1.6;">Cablear el lector de tabulado. Es la llave que más destraba —<strong>8 controles de un saque</strong>— es la única que no depende de que nadie conteste nada, y ya tenés hecha la mitad: el detector de formato está construido y testeado desde el 18 de agosto, sin conectar a ningún control todavía.</div>
+        </div>
+
+        <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 18px 20px 20px;">
+          <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 19px; color: #15263D; margin-bottom: 4px;">Rendimiento suelto</div>
+          <div style="font-size: 12px; color: #4A6080; margin-bottom: 14px; line-height: 1.5;">Cuántos controles destraba cada llave por sí sola, partiendo de hoy. Las de abajo sólo rinden combinadas.</div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <sc-for list="{{solo}}" as="k" hint-placeholder-count="11">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="{{k.chipCss}}">{{k.id}}</span>
+                <span style="flex-grow: 1; height: 9px; border-radius: 9999px; background: #EFEEEC; overflow: hidden; display: block;">
+                  <span style="{{k.barCss}}"></span>
+                </span>
+                <span style="{{k.numCss}}">{{k.gain}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 18px 20px 20px;">
+          <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 19px; color: #15263D; margin-bottom: 4px;">Ya especificados, fuera del catálogo</div>
+          <div style="font-size: 12px; color: #4A6080; margin-bottom: 14px; line-height: 1.5;">Tres controles del roadmap del repo con spec escrita. No entran en los 42.</div>
+          <div style="display: flex; flex-direction: column; gap: 9px;">
+            <sc-for list="{{extras}}" as="e" hint-placeholder-count="3">
+              <div style="{{e.css}}">
+                <div style="font-size: 12.5px; font-weight: 700; color: #15263D;">{{e.name}}</div>
+                <div style="{{e.noteCss}}">{{e.note}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Las tandas -->
+    <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 20px 22px 22px; margin-top: 20px;">
+      <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px;">
+        <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 20px; color: #15263D;">Las cuatro tandas del catálogo</span>
+        <span style="font-size: 12px; color: #8FA3BA;">el orden que revisaste el 15 de agosto</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px;">
+        <sc-for list="{{tandas}}" as="t" hint-placeholder-count="4">
+          <div style="{{t.css}}">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <span style="{{t.numCss}}">{{t.num}}</span>
+              <span style="font-size: 12px; font-weight: 700; color: #15263D;">{{t.tag}}</span>
+            </div>
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;">
+              <sc-for list="{{t.items}}" as="it" hint-placeholder-count="4">
+                <span style="{{t.itemCss}}">{{it}}</span>
+              </sc-for>
+            </div>
+            <div style="font-size: 11px; color: #4A6080; line-height: 1.5;">{{t.why}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+const CONTROLS = [
+  { id: 'A1',  needs: ['T', 'A0'] },
+  { id: 'A2',  needs: ['A0', 'B0'] },
+  { id: 'A3',  needs: ['A0', 'B0'] },
+  { id: 'A4',  needs: ['A0'] },
+  { id: 'A5',  needs: ['A0', 'PADRON'] },
+  { id: 'A6',  needs: ['A0'] },
+  { id: 'B1',  needs: ['PADRON'] },
+  { id: 'B2a', needs: ['B0', 'PADRON'] },
+  { id: 'B2b', needs: ['B0', 'T'] },
+  { id: 'B2c', needs: ['B0'] },
+  { id: 'C1',  needs: ['T', 'D7'] },
+  { id: 'C2',  needs: ['T', 'PADRON'] },
+  { id: 'C3',  needs: ['T', 'PADRON'] },
+  { id: 'C4',  needs: ['T', 'D7'] },
+  { id: 'D1',  needs: [] },
+  { id: 'D2',  needs: [] },
+  { id: 'D3',  needs: [] },
+  { id: 'D4',  needs: ['D7', 'TOPE'] },
+  { id: 'D5',  needs: ['BASES'] },
+  { id: 'D6',  needs: ['D7'] },
+  { id: 'D7',  needs: [] },
+  { id: 'E1',  needs: ['T'] },
+  { id: 'E2',  needs: ['OFICIOS'] },
+  { id: 'E3',  needs: ['OFICIOS'] },
+  { id: 'E4',  needs: ['D7'] },
+  { id: 'F1',  needs: ['T'] },
+  { id: 'F2',  needs: ['SIRADIG'] },
+  { id: 'F3',  needs: ['SAC'] },
+  { id: 'G1',  needs: [] },
+  { id: 'G2',  needs: ['T'] },
+  { id: 'G3',  needs: ['T'] },
+  { id: 'G4',  needs: ['T'] },
+  { id: 'G5',  needs: ['T'] },
+  { id: 'G6',  needs: ['T'] },
+  { id: 'H1',  needs: [] },
+  { id: 'H2',  needs: ['T'] },
+  { id: 'I1',  needs: ['T', 'A0'] },
+  { id: 'I2',  needs: ['T', 'A0'] },
+  { id: 'I3',  needs: ['CONTA'] },
+  { id: 'I4',  needs: ['CONTA'] },
+  { id: 'I5',  needs: ['A0'] },
+  { id: 'I6',  needs: [] }
+];
+
+const KEY_INFO = {
+  T:       { title: 'Cablear el lector de tabulado',           owner: 'repo' },
+  D7:      { title: 'Tabla de parámetros con vigencia',        owner: 'repo' },
+  A0:      { title: 'Jerarquía de fuentes por dato',           owner: 'Guille' },
+  PADRON:  { title: 'Padrón y manual de conceptos por cliente', owner: 'Guille + clientes' },
+  B0:      { title: 'Template de novedades por sistema',       owner: 'Guille + comercial' },
+  CONTA:   { title: 'Cuál es el reporte contable vigente',     owner: 'proveedor' },
+  OFICIOS: { title: 'Registro de oficios judiciales',          owner: 'Guille + cliente' },
+  BASES:   { title: 'Qué concepto pega en qué base',           owner: 'Guille + proveedor' },
+  SAC:     { title: 'Las tres definiciones del SAC teórico',   owner: 'Guille' },
+  TOPE:    { title: 'Criterio de tope imponible',              owner: 'Guille' },
+  SIRADIG: { title: 'El HTML del validador SIRADIG',           owner: 'Guille' }
+};
+
+const ORDER = ['T', 'D7', 'A0', 'PADRON', 'B0', 'CONTA', 'OFICIOS', 'BASES', 'SAC', 'TOPE', 'SIRADIG'];
+
+function openIds(on) {
+  return CONTROLS
+    .filter(function (c) { return c.needs.every(function (n) { return on[n]; }); })
+    .map(function (c) { return c.id; });
+}
+
+const TANDAS = [
+  { num: '1', tag: 'Cero decisión pendiente', items: ['T', 'G5', 'I6', 'H2'], why: 'T habilita al resto; G5 e I6 son chequeos de segundos con daño real documentado; H2 extiende H1, que ya está construido.' },
+  { num: '2', tag: 'Lo que atrapa la ticketera', items: ['D7', 'G3', 'G4', 'G6', 'C4'], why: 'D7 es la tabla que pediste como “muy valiosa”: C4, D4 y D6 cuelgan de ella. G3 y G4 atrapan lo que hoy aparece en tickets.' },
+  { num: '3', tag: 'Con A0 o D7 ya resueltas', items: ['A1', 'A5', 'A6', 'D6', 'C1', 'C2', 'C3', 'B1'], why: 'Necesitan la jerarquía de fuentes definida o la tabla de parámetros poblada. B1 espera la decisión del template sólo para su escalón 1.' },
+  { num: '4', tag: 'Bloqueados por definiciones', items: ['A2', 'A3', 'A4', 'B2', 'D4', 'D5', 'E', 'I1–I5', 'F'], why: 'Tope imponible, oficios, template por sistema, reporte contable vigente y el HTML de SIRADIG. Ninguno se destraba programando.' }
+];
+
+const EXTRAS = [
+  { name: 'Tasa de Provisiones', tone: 'ok',   note: 'Diseño cerrado el 5 de agosto. Ve un defecto que ningún cruce puede ver: el error está en los dos lados y la diferencia da cero. Falta decidir dónde viven los códigos por defecto y correr la eval contra el mes de referencia.' },
+  { name: 'Gross-up (AFA, concepto 1017)', tone: 'ok', note: 'Reemplaza el goal-seek de Excel. Diseño validado, spec escrita, sin definición pendiente.' },
+  { name: 'Control de Netos (Sportline)', tone: 'warn', note: 'Trabado hasta que Meli conteste dos cosas: cómo entra el neto acordado por legajo, y qué conceptos no remunerativos pagan obra social.' }
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    var on = {};
+    var prevSet = openIds(on);
+    var prevCount = prevSet.length;
+
+    var ladder = [{
+      num: '0',
+      id: 'HOY',
+      title: 'Lo que ya se puede construir sin destrabar nada',
+      owner: '',
+      opens: prevSet,
+      gain: 'punto de partida',
+      total: prevCount,
+      rowCss: 'padding:14px 20px; border-bottom:1px solid #EFEEEC; background:rgba(34,197,94,0.06);',
+      numCss: 'width:26px; height:26px; border-radius:9999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; background:#22C55E; color:#FFFFFF;',
+      chipCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; padding:2px 7px; border-radius:4px; background:rgba(34,197,94,0.14); color:#177A50;'
+    }];
+
+    ORDER.forEach(function (id, i) {
+      on[id] = true;
+      var set = openIds(on);
+      var added = set.filter(function (x) { return prevSet.indexOf(x) === -1; });
+      var isLead = i < 2;
+      ladder.push({
+        num: String(i + 1),
+        id: id,
+        title: KEY_INFO[id].title,
+        owner: '· ' + KEY_INFO[id].owner,
+        opens: added,
+        gain: '+' + added.length,
+        total: set.length,
+        rowCss: 'padding:14px 20px; border-bottom:1px solid #EFEEEC;' + (isLead ? ' background:rgba(0,172,212,0.06);' : ''),
+        numCss: 'width:26px; height:26px; border-radius:9999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; background:' + (isLead ? '#00ACD4' : '#EFEEEC') + '; color:' + (isLead ? '#FFFFFF' : '#4A6080') + ';',
+        chipCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; padding:2px 7px; border-radius:4px; background:rgba(21,38,61,0.07); color:#4A6080;'
+      });
+      prevSet = set;
+    });
+
+    var base = openIds({}).length;
+    var solo = ORDER.map(function (id) {
+      var probe = {};
+      probe[id] = true;
+      return { id: id, gain: openIds(probe).length - base };
+    }).sort(function (a, b) { return b.gain - a.gain; });
+
+    var max = solo[0].gain || 1;
+    solo = solo.map(function (k) {
+      var w = Math.round((k.gain / max) * 100);
+      return {
+        id: k.id,
+        gain: k.gain > 0 ? '+' + k.gain : '0',
+        chipCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; padding:2px 6px; border-radius:4px; width:66px; text-align:center; flex-shrink:0; background:rgba(21,38,61,0.07); color:#4A6080;',
+        barCss: 'display:block; height:9px; border-radius:9999px; width:' + Math.max(w, 3) + '%; background:' + (k.gain > 0 ? '#00ACD4' : '#D9DEE3') + ';',
+        numCss: 'font-size:12px; font-weight:800; width:26px; text-align:right; flex-shrink:0; color:' + (k.gain > 0 ? '#0090B4' : '#C9D3DD') + ';'
+      };
+    });
+
+    var TONES = {
+      ok:   { bg: 'rgba(0,172,212,0.10)',  bd: 'rgba(0,172,212,0.30)',  tx: '#0090B4' },
+      warn: { bg: 'rgba(245,158,11,0.12)', bd: 'rgba(245,158,11,0.32)', tx: '#9A5A0B' }
+    };
+
+    var extras = EXTRAS.map(function (e) {
+      var t = TONES[e.tone];
+      return {
+        name: e.name,
+        note: e.note,
+        css: 'border:1px solid ' + t.bd + '; background:' + t.bg + '; border-radius:8px; padding:11px 13px;',
+        noteCss: 'font-size:11px; margin-top:5px; line-height:1.5; color:' + t.tx + ';'
+      };
+    });
+
+    var tandas = TANDAS.map(function (t, i) {
+      var lead = i < 2;
+      return {
+        num: t.num,
+        tag: t.tag,
+        items: t.items,
+        why: t.why,
+        css: 'border:1px solid ' + (lead ? 'rgba(0,172,212,0.30)' : '#E7E6E6') + '; background:' + (lead ? 'rgba(0,172,212,0.10)' : '#FCFCFB') + '; border-radius:8px; padding:13px 15px;',
+        numCss: 'width:22px; height:22px; border-radius:9999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; background:' + (lead ? '#00ACD4' : '#E7E6E6') + '; color:' + (lead ? '#FFFFFF' : '#6B635C') + ';',
+        itemCss: 'font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:' + (lead ? 'rgba(255,255,255,0.75)' : '#FFFFFF') + '; border:1px solid ' + (lead ? 'rgba(0,172,212,0.30)' : '#E7E6E6') + '; color:' + (lead ? '#0090B4' : '#4A6080') + ';'
+      };
+    });
+
+    return { ladder: ladder, solo: solo, extras: extras, tandas: tandas };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap">
+  <style>
+    body { margin: 0; background: #EEF2F6; }
+    a { color: #0090B4; } a:hover { color: #007896; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; background: #EEF2F6; font-family: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif; color: #15263D;">
+
+  <!-- Barra superior — la misma franja de 54px de la app, tema Intenso -->
+  <div style="height: 54px; background: #15263D; border-bottom: 3px solid #00ACD4; display: flex; align-items: center; gap: 12px; padding: 0 24px;">
+    <div style="width: 30px; height: 30px; border-radius: 9999px; background: #00ACD4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: -0.02em;">H&amp;A</div>
+    <span style="font-size: 15px; font-weight: 700; color: #FFFFFF;">Controles Nómina</span>
+    <span style="width: 1px; height: 20px; background: rgba(255,255,255,0.22);"></span>
+    <span style="font-size: 13px; color: #C7D5E4;">Mapa de fases — qué destraba qué</span>
+    <span style="flex-grow: 1;"></span>
+    <span style="font-size: 11px; color: #C7D5E4;">Catálogo maestro v1.0 · 42 controles</span>
+  </div>
+
+  <div style="padding: 28px 32px 40px;">
+
+    <!-- ── Tablero de conteo ─────────────────────────────────── -->
+    <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 24px 28px; margin-bottom: 24px;">
+      <div style="display: flex; align-items: flex-start; gap: 40px;">
+
+        <div style="flex-shrink: 0;">
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 66px; line-height: 1; color: #00ACD4; font-variant-numeric: tabular-nums;">{{reach}}</span>
+            <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 30px; line-height: 1; color: #8FA3BA;">/ 42</span>
+          </div>
+          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #8FA3BA; margin-top: 8px;">Controles al alcance</div>
+          <div style="font-size: 12px; color: #4A6080; margin-top: 6px; max-width: 220px; line-height: 1.5;">{{reachNote}}</div>
+        </div>
+
+        <div style="flex-grow: 1;">
+          <div style="display: flex; height: 14px; border-radius: 9999px; overflow: hidden; background: #EFEEEC; gap: 2px;">
+            <sc-for list="{{segments}}" as="seg" hint-placeholder-count="4">
+              <div style="{{seg.css}}"></div>
+            </sc-for>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 18px;">
+            <sc-for list="{{legend}}" as="lg" hint-placeholder-count="4">
+              <div style="{{lg.boxCss}}">
+                <div style="display: flex; align-items: center; gap: 7px;">
+                  <span style="{{lg.dotCss}}"></span>
+                  <span style="font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: #15263D;">{{lg.count}}</span>
+                </div>
+                <div style="font-size: 12px; font-weight: 700; margin-top: 6px; color: #1E3A5F;">{{lg.label}}</div>
+                <div style="font-size: 11px; color: #4A6080; margin-top: 2px; line-height: 1.4;">{{lg.help}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Dos columnas: llaves | controles ───────────────────── -->
+    <div style="display: flex; gap: 24px; align-items: flex-start;">
+
+      <!-- Columna izquierda: las llaves -->
+      <div style="width: 396px; flex-shrink: 0; background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); overflow: hidden;">
+
+        <div style="padding: 18px 20px 14px; border-bottom: 1px solid #E7E6E6;">
+          <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 21px; color: #15263D; line-height: 1.2;">Las llaves</div>
+          <div style="font-size: 12px; color: #4A6080; margin-top: 4px; line-height: 1.5;">Tildá una para ver qué destraba. El número de la derecha es cuántos controles suma <em>ahora</em>, con lo que ya tildaste.</div>
+          <div style="display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap;">
+            <sc-for list="{{presets}}" as="p" hint-placeholder-count="4">
+              <div onClick="{{p.apply}}" style="{{p.css}}">{{p.label}}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column;">
+          <sc-for list="{{keys}}" as="k" hint-placeholder-count="11">
+            <div onClick="{{k.toggle}}" style="{{k.rowCss}}">
+              <div style="{{k.boxCss}}">
+                <sc-if value="{{k.on}}" hint-placeholder-val="{{true}}">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </sc-if>
+              </div>
+              <div style="flex-grow: 1; min-width: 0;">
+                <div style="display: flex; align-items: baseline; gap: 7px;">
+                  <span style="{{k.chipCss}}">{{k.id}}</span>
+                  <span style="font-size: 13px; font-weight: 700; color: #15263D; line-height: 1.3;">{{k.title}}</span>
+                </div>
+                <div style="font-size: 11.5px; color: #4A6080; margin-top: 3px; line-height: 1.45;">{{k.detail}}</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
+                  <span style="{{k.ownerCss}}">{{k.owner}}</span>
+                  <span style="font-size: 10.5px; color: #8FA3BA;">{{k.kind}}</span>
+                </div>
+              </div>
+              <div style="flex-shrink: 0; text-align: right; width: 56px;">
+                <div style="{{k.gainCss}}">{{k.gainText}}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Columna derecha: los 42 controles -->
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px;">
+        <sc-for list="{{families}}" as="fam" hint-placeholder-count="9">
+          <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 16px 18px 18px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+              <span style="width: 26px; height: 26px; border-radius: 8px; background: rgba(0,172,212,0.10); border: 1px solid rgba(0,172,212,0.30); color: #0090B4; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">{{fam.letter}}</span>
+              <span style="font-size: 14px; font-weight: 700; color: #15263D;">{{fam.name}}</span>
+              <span style="flex-grow: 1; height: 1px; background: #EFEEEC;"></span>
+              <span style="{{fam.tallyCss}}">{{fam.tally}}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+              <sc-for list="{{fam.items}}" as="c" hint-placeholder-count="4">
+                <div style="{{c.css}}">
+                  <div style="display: flex; align-items: baseline; gap: 6px;">
+                    <span style="{{c.idCss}}">{{c.id}}</span>
+                    <span style="font-size: 12px; font-weight: 600; color: #15263D; line-height: 1.3;">{{c.name}}</span>
+                  </div>
+                  <div style="{{c.noteCss}}">{{c.note}}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; font-size: 11px; color: #8FA3BA; line-height: 1.6;">
+      Universo: los 42 controles del catálogo maestro de payroll (familias A–I), los mismos que están cargados en el tablero <em>Catálogo de Controles de Payroll</em> de monday. Los 4 prerrequisitos del catálogo (A0, B0, E0 y la pieza T) no se cuentan como controles: están acá arriba, como llaves.
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+const KEYS = [
+  { id: 'T',       title: 'Cablear el lector de tabulado',          owner: 'Repo',              kind: 'construir · el detector ya está hecho', detail: 'Ubicar campos por nombre y conceptos por código en Meta4 y Axton, y avisar qué columnas entraron o salieron entre dos archivos.' },
+  { id: 'D7',      title: 'Tabla de parámetros con vigencia',        owner: 'Repo',              kind: 'construir · sin decisión pendiente',    detail: 'Alícuotas, topes, mínimo, detracción, escalas y valores variables, cada uno con fecha desde/hasta y resueltos por fecha de liquidación.' },
+  { id: 'A0',      title: 'Jerarquía de fuentes por dato',           owner: 'Guille',            kind: 'decisión',                              detail: 'Para cada dato, qué archivo manda: padrón, importador, tabulado o nómina declarada en el F.931.' },
+  { id: 'PADRON',  title: 'Padrón y manual de conceptos por cliente',owner: 'Guille + clientes', kind: 'juntar datos',                        detail: 'Un formato único que los controles lean: quién está activo, quién egresó, y qué conceptos existen en cada cliente.' },
+  { id: 'B0',      title: 'Template de novedades por sistema',       owner: 'Guille + comercial', kind: 'decisión',                             detail: '¿Un template único bajado a todos los clientes, o negociado cliente por cliente?' },
+  { id: 'SAC',     title: 'Las tres definiciones del SAC teórico',   owner: 'Guille',            kind: 'decisión · D-063',                      detail: '¿Entra 1101 en la doceava? ¿Se resta 1137? ¿Va 1103 en el juego base? Sin esto no se toca calcDoceava.' },
+  { id: 'BASES',   title: 'Qué concepto pega en qué base',           owner: 'Guille + proveedor', kind: 'decisión',                             detail: 'El mapa concepto → bases sobre las que impacta, con sus excepciones legítimas.' },
+  { id: 'TOPE',    title: 'Criterio de tope imponible',              owner: 'Guille',            kind: 'decisión',                              detail: 'El tope depende del tipo de liquidación y hoy no está definido cuál se aplica en cada caso.' },
+  { id: 'CONTA',   title: 'Cuál es el reporte contable vigente',     owner: 'Proveedor',         kind: 'decisión',                              detail: 'El proveedor da de baja el reporte actual; hasta saber cuál lo reemplaza no se puede fijar el asiento.' },
+  { id: 'OFICIOS', title: 'Registro de oficios judiciales',          owner: 'Guille + cliente',  kind: 'juntar datos',                          detail: 'Legajo, carátula, monto total, cuotas y saldo. Hoy el saldo vive sólo adentro del sistema.' },
+  { id: 'SIRADIG', title: 'El HTML del validador SIRADIG',           owner: 'Guille',            kind: 'juntar datos',                          detail: 'El archivo que falta para cruzar lo que declara el empleado contra lo que quedó cargado.' }
+];
+
+const PRESETS = [
+  { label: 'Hoy',                   set: [] },
+  { label: 'Tanda 1 — el lector',   set: ['T'] },
+  { label: '+ Tanda 2',             set: ['T', 'D7'] },
+  { label: 'Todo destrabado',       set: KEYS.map(function (k) { return k.id; }) }
+];
+
+// base: 'listo' (anda hoy) · 'parcial' (hay base en el repo) · 'nuevo'
+const CONTROLS = [
+  { id: 'A1',  fam: 'A', name: 'Cobertura de legajos',        base: 'parcial', repo: 'cat_x_empleados', needs: ['T', 'A0'] },
+  { id: 'A2',  fam: 'A', name: 'Altas del mes',               base: 'nuevo',   repo: '',                needs: ['A0', 'B0'] },
+  { id: 'A3',  fam: 'A', name: 'Bajas del mes',               base: 'nuevo',   repo: '',                needs: ['A0', 'B0'] },
+  { id: 'A4',  fam: 'A', name: 'Alta y baja registral',       base: 'nuevo',   repo: '',                needs: ['A0'] },
+  { id: 'A5',  fam: 'A', name: 'Legajo fantasma',             base: 'nuevo',   repo: '',                needs: ['A0', 'PADRON'] },
+  { id: 'A6',  fam: 'A', name: 'Cierre de tres puntas',       base: 'nuevo',   repo: '',                needs: ['A0'] },
+
+  { id: 'B1',  fam: 'B', name: 'Validador de novedades antes de importar', base: 'nuevo', repo: '',     needs: ['PADRON'] },
+  { id: 'B2a', fam: 'B', name: 'Planilla del cliente vs importador',        base: 'nuevo', repo: '',     needs: ['B0', 'PADRON'] },
+  { id: 'B2b', fam: 'B', name: 'Importador vs tabulado liquidado',          base: 'nuevo', repo: '',     needs: ['B0', 'T'] },
+  { id: 'B2c', fam: 'B', name: 'Registro de que se controló',               base: 'nuevo', repo: '',     needs: ['B0'] },
+
+  { id: 'C1',  fam: 'C', name: 'Cambio de básico',            base: 'parcial', repo: 'brutos',          needs: ['T', 'D7'] },
+  { id: 'C2',  fam: 'C', name: 'Cambio de categoría',         base: 'nuevo',   repo: '',                needs: ['T', 'PADRON'] },
+  { id: 'C3',  fam: 'C', name: 'Sueldo sin novedad',          base: 'nuevo',   repo: '',                needs: ['T', 'PADRON'] },
+  { id: 'C4',  fam: 'C', name: 'Valores parametrizados',      base: 'nuevo',   repo: '',                needs: ['T', 'D7'] },
+
+  { id: 'D1',  fam: 'D', name: 'Aportes personales',          base: 'listo',   repo: 'Control CCSS',    needs: [] },
+  { id: 'D2',  fam: 'D', name: 'Contribuciones patronales',   base: 'listo',   repo: 'Control CCSS',    needs: [] },
+  { id: 'D3',  fam: 'D', name: 'ART',                         base: 'listo',   repo: 'Control CCSS',    needs: [] },
+  { id: 'D4',  fam: 'D', name: 'Tope imponible',              base: 'parcial', repo: 'Control CCSS',    needs: ['D7', 'TOPE'] },
+  { id: 'D5',  fam: 'D', name: 'Base remunerativa vs no remunerativa', base: 'parcial', repo: 'nr',     needs: ['BASES'] },
+  { id: 'D6',  fam: 'D', name: 'Mínimo imponible',            base: 'nuevo',   repo: '',                needs: ['D7'] },
+  { id: 'D7',  fam: 'D', name: 'Tabla de parámetros',         base: 'nuevo',   repo: '',                needs: [] },
+
+  { id: 'E1',  fam: 'E', name: 'Continuidad de embargos',     base: 'nuevo',   repo: '',                needs: ['T'] },
+  { id: 'E2',  fam: 'E', name: 'Acumulado contra el oficio',  base: 'nuevo',   repo: '',                needs: ['OFICIOS'] },
+  { id: 'E3',  fam: 'E', name: 'Tope de embargabilidad',      base: 'nuevo',   repo: '',                needs: ['OFICIOS'] },
+  { id: 'E4',  fam: 'E', name: 'Sindicatos y terceros',       base: 'parcial', repo: 'archivo al gremio', needs: ['D7'] },
+
+  { id: 'F1',  fam: 'F', name: 'Retenido entre períodos',     base: 'nuevo',   repo: '',                needs: ['T'] },
+  { id: 'F2',  fam: 'F', name: 'Validador SIRADIG',           base: 'nuevo',   repo: '',                needs: ['SIRADIG'] },
+  { id: 'F3',  fam: 'F', name: 'Deducciones, acumuladores y SAC teórico', base: 'parcial', repo: 'acumuladores_ganancias', needs: ['SAC'] },
+
+  { id: 'G1',  fam: 'G', name: 'Variación entre quincenas',   base: 'listo',   repo: 'pop_variaciones', needs: [] },
+  { id: 'G2',  fam: 'G', name: 'Variación entre meses',       base: 'parcial', repo: 'variaciones',     needs: ['T'] },
+  { id: 'G3',  fam: 'G', name: 'Diferencia entre períodos',   base: 'nuevo',   repo: '',                needs: ['T'] },
+  { id: 'G4',  fam: 'G', name: 'Diferencia entre versiones',  base: 'nuevo',   repo: '',                needs: ['T'] },
+  { id: 'G5',  fam: 'G', name: 'Netos imposibles',            base: 'nuevo',   repo: '',                needs: ['T'] },
+  { id: 'G6',  fam: 'G', name: 'Reconstrucción de variaciones', base: 'nuevo', repo: '',                needs: ['T'] },
+
+  { id: 'H1',  fam: 'H', name: 'Cuadre de acreditaciones del mes', base: 'listo', repo: 'acreditaciones_reporte', needs: [] },
+  { id: 'H2',  fam: 'H', name: 'Cotejo por legajo',           base: 'nuevo',   repo: '',                needs: ['T'] },
+
+  { id: 'I1',  fam: 'I', name: 'Libro de sueldos digital',    base: 'nuevo',   repo: '',                needs: ['T', 'A0'] },
+  { id: 'I2',  fam: 'I', name: 'Declaración jurada',          base: 'nuevo',   repo: '',                needs: ['T', 'A0'] },
+  { id: 'I3',  fam: 'I', name: 'Asiento contable',            base: 'parcial', repo: 'finadiet_asiento', needs: ['CONTA'] },
+  { id: 'I4',  fam: 'I', name: 'Contabilidad desglosada',     base: 'parcial', repo: 'rend_vs_asiento', needs: ['CONTA'] },
+  { id: 'I5',  fam: 'I', name: 'Recibos emitidos',            base: 'nuevo',   repo: '',                needs: ['A0'] },
+  { id: 'I6',  fam: 'I', name: 'Acumuladores antes del lote', base: 'nuevo',   repo: '',                needs: [] }
+];
+
+const FAMILIES = [
+  { letter: 'A', name: 'Cobertura de nómina, altas y bajas' },
+  { letter: 'B', name: 'Novedades y trazabilidad' },
+  { letter: 'C', name: 'Remuneración, categoría y valores parametrizados' },
+  { letter: 'D', name: 'Bases imponibles, topes y parámetros' },
+  { letter: 'E', name: 'Embargos, cuota alimentaria y terceros' },
+  { letter: 'F', name: 'Ganancias' },
+  { letter: 'G', name: 'Diferencias entre períodos y versiones' },
+  { letter: 'H', name: 'Pago y acreditaciones' },
+  { letter: 'I', name: 'Cierre fiscal y contable' }
+];
+
+const TONE = {
+  listo:   { bg: 'rgba(34,197,94,0.10)',   bd: 'rgba(34,197,94,0.30)',   tx: '#177A50' },
+  parcial: { bg: 'rgba(245,158,11,0.12)',  bd: 'rgba(245,158,11,0.32)',  tx: '#9A5A0B' },
+  nuevo:   { bg: 'rgba(0,172,212,0.10)',   bd: 'rgba(0,172,212,0.30)',   tx: '#0090B4' },
+  trabado: { bg: '#FCFCFB',                bd: '#E7E6E6',                tx: '#8FA3BA' }
+};
+
+function statusOf(control, on) {
+  if (control.base === 'listo') return 'listo';
+  var missing = control.needs.filter(function (n) { return !on[n]; });
+  if (missing.length) return 'trabado';
+  return control.base === 'parcial' ? 'parcial' : 'nuevo';
+}
+
+function reachCount(on) {
+  return CONTROLS.filter(function (c) { return statusOf(c, on) !== 'trabado'; }).length;
+}
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { on: {} };
+  }
+
+  renderVals() {
+    var self = this;
+    var on = (this.state && this.state.on) || {};
+
+    var counts = { listo: 0, parcial: 0, nuevo: 0, trabado: 0 };
+    CONTROLS.forEach(function (c) { counts[statusOf(c, on)] += 1; });
+    var reach = counts.listo + counts.parcial + counts.nuevo;
+
+    var reachNote;
+    if (reach === 7)       reachNote = 'Lo que se puede construir sin pedirle una definición a nadie.';
+    else if (reach === 42) reachNote = 'Con todas las llaves dadas vuelta, el catálogo entero queda construible.';
+    else                   reachNote = 'Con las llaves que tildaste, estos controles ya no dependen de una definición pendiente.';
+
+    var legendSpec = [
+      { k: 'listo',   label: 'Andando',            help: 'Funciona hoy con datos reales',      color: '#22C55E' },
+      { k: 'parcial', label: 'A medio camino',     help: 'Hay base en el repo, falta cerrarlo', color: '#F59E0B' },
+      { k: 'nuevo',   label: 'Listo para arrancar', help: 'Sin llave pendiente, falta hacerlo', color: '#00ACD4' },
+      { k: 'trabado', label: 'Trabado',            help: 'Espera al menos una llave',          color: '#8C837B' }
+    ];
+
+    var legend = legendSpec.map(function (l) {
+      return {
+        count: counts[l.k],
+        label: l.label,
+        help: l.help,
+        dotCss: 'width:10px; height:10px; border-radius:9999px; flex-shrink:0; background:' + l.color + ';',
+        boxCss: 'background:#FCFCFB; border:1px solid #EFEEEC; border-radius:8px; padding:12px 14px;'
+      };
+    });
+
+    var segments = legendSpec.map(function (l) {
+      return { css: 'flex-grow:' + counts[l.k] + '; flex-basis:0; min-width:0; background:' + l.color + ';' };
+    });
+
+    var keys = KEYS.map(function (k) {
+      var isOn = !!on[k.id];
+      var gain = 0;
+      if (!isOn) {
+        var probe = Object.assign({}, on);
+        probe[k.id] = true;
+        gain = reachCount(probe) - reach;
+      }
+      return {
+        id: k.id,
+        title: k.title,
+        detail: k.detail,
+        owner: k.owner,
+        kind: k.kind,
+        on: isOn,
+        gainText: isOn ? 'dada' : (gain > 0 ? '+' + gain : '—'),
+        gainCss: isOn
+          ? 'font-size:11px; font-weight:700; color:#177A50;'
+          : (gain > 0
+              ? 'font-size:19px; font-weight:800; color:#00ACD4; font-variant-numeric:tabular-nums; line-height:1;'
+              : 'font-size:15px; font-weight:700; color:#C9D3DD;'),
+        rowCss: 'display:flex; gap:12px; align-items:flex-start; padding:13px 20px; cursor:pointer; border-bottom:1px solid #EFEEEC; background:' + (isOn ? 'rgba(34,197,94,0.06)' : '#FFFFFF') + ';',
+        boxCss: 'width:20px; height:20px; border-radius:6px; flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; border:2px solid ' + (isOn ? '#22C55E' : '#C9D3DD') + '; background:' + (isOn ? '#22C55E' : '#FFFFFF') + ';',
+        chipCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; padding:2px 6px; border-radius:4px; flex-shrink:0; background:' + (isOn ? 'rgba(34,197,94,0.14)' : 'rgba(21,38,61,0.07)') + '; color:' + (isOn ? '#177A50' : '#4A6080') + ';',
+        ownerCss: 'font-size:10px; font-weight:700; padding:2px 7px; border-radius:9999px; background:rgba(0,172,212,0.10); color:#0090B4;',
+        toggle: function () {
+          var next = Object.assign({}, on);
+          next[k.id] = !isOn;
+          self.setState({ on: next });
+        }
+      };
+    });
+
+    var presets = PRESETS.map(function (p) {
+      var active = KEYS.every(function (k) {
+        return !!on[k.id] === (p.set.indexOf(k.id) !== -1);
+      });
+      return {
+        label: p.label,
+        css: 'font-size:11px; font-weight:700; padding:5px 11px; border-radius:9999px; cursor:pointer; border:1.5px solid ' +
+             (active ? '#00ACD4' : '#E7E6E6') + '; background:' + (active ? '#00ACD4' : '#FFFFFF') +
+             '; color:' + (active ? '#FFFFFF' : '#4A6080') + ';',
+        apply: function () {
+          var next = {};
+          p.set.forEach(function (id) { next[id] = true; });
+          self.setState({ on: next });
+        }
+      };
+    });
+
+    var families = FAMILIES.map(function (f) {
+      var items = CONTROLS.filter(function (c) { return c.fam === f.letter; });
+      var open = items.filter(function (c) { return statusOf(c, on) !== 'trabado'; }).length;
+      return {
+        letter: f.letter,
+        name: f.name,
+        tally: open + ' de ' + items.length,
+        tallyCss: 'font-size:11px; font-weight:700; padding:2px 9px; border-radius:9999px; background:' +
+                  (open === items.length ? 'rgba(34,197,94,0.10)' : (open === 0 ? 'rgba(140,131,123,0.12)' : 'rgba(0,172,212,0.10)')) +
+                  '; color:' + (open === items.length ? '#177A50' : (open === 0 ? '#6B635C' : '#0090B4')) + ';',
+        items: items.map(function (c) {
+          var st = statusOf(c, on);
+          var tone = TONE[st];
+          var missing = c.needs.filter(function (n) { return !on[n]; });
+          var note;
+          if (st === 'trabado') {
+            note = 'Falta ' + missing.join(' + ') + (c.repo ? ' · base: ' + c.repo : '');
+          } else if (st === 'listo') {
+            note = c.repo;
+          } else if (st === 'parcial') {
+            note = 'Terminar sobre ' + c.repo;
+          } else {
+            note = 'Se puede construir';
+          }
+          return {
+            id: c.id,
+            name: c.name,
+            note: note,
+            css: 'border:1px solid ' + tone.bd + '; background:' + tone.bg + '; border-radius:8px; padding:9px 11px 10px; min-height:64px;',
+            idCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; flex-shrink:0; color:' + tone.tx + ';',
+            noteCss: 'font-size:10.5px; margin-top:5px; line-height:1.35; color:' + (st === 'trabado' ? '#8FA3BA' : tone.tx) + ';'
+          };
+        })
+      };
+    });
+
+    return {
+      reach: reach,
+      reachNote: reachNote,
+      legend: legend,
+      segments: segments,
+      keys: keys,
+      presets: presets,
+      families: families
+    };
+  }
+}
+</script>
+</body>
+</html>
