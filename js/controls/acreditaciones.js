@@ -33,6 +33,13 @@ import { periodToLabel, periodSuffix } from '../utils/dates.js';
  */
 const DETALLE_COLUMNS = EXPORT_CONTRACTS.acreditaciones_reporte.columns;
 
+// El reporte tiene que cerrar EXACTO contra el archivo de origen: lo que se
+// acredita es lo que el banco va a pagar, y un peso que sobra o falta es el
+// reporte mal armado, no una diferencia que el analista pueda tolerar. Por eso
+// este cuadre no usa el monto de diferencia del cliente (D-069) y mide siempre
+// al centavo.
+const CIERRE_EPS = 0.01;
+
 export const DEFAULT_ACREDITACIONES_CONFIG = {
   // Cuando el archivo trae más de una Empresa, ¿las listas se parten por empresa?
   // Con una sola empresa (el caso de POP) el flag no tiene efecto.
@@ -432,7 +439,7 @@ export function summarizeAcreditacionesReporte(results) {
   }
 
   const s = results.summary;
-  const cierraOk = Math.abs(s.diferencia) <= 0.01;
+  const cierraOk = Math.abs(s.diferencia) <= CIERRE_EPS;
 
   // "Unidad" del semáforo = la lista de acreditación. Un grupo pendiente (sin
   // fecha resoluble) cuenta como una unidad más — todavía no es una lista, pero
@@ -504,7 +511,7 @@ export function renderAcreditacionesReporteResults(results, container) {
       return;
     }
 
-    const cierraOk = Math.abs(s.diferencia) <= 0.01;
+    const cierraOk = Math.abs(s.diferencia) <= CIERRE_EPS;
     const listasOk = listas.length - s.listasConAlerta;
 
     container.innerHTML = '';
@@ -1087,7 +1094,7 @@ export function buildAcreditacionesWorkbook(results) {
   addCierreRow(
     'Diferencia',
     { formula: `${parts.join('+')}-${totalColLetter}${origenRow.number}` },
-    { danger: Math.abs(s.diferencia) > 0.01 }
+    { danger: Math.abs(s.diferencia) > CIERRE_EPS }
   );
 
   ctrl.views = [{ state: 'frozen', ySplit: hdrRow.number }];

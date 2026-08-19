@@ -27,6 +27,7 @@
 // Ver specs/reporte-variaciones-opmobility.md y D-022 / D-023 / D-026 en DECISIONS.md.
 
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { wireTableTools } from '../ui/tableTools.js';
 import {
@@ -313,7 +314,12 @@ function chequearTotalDelArchivo(meta, columna, calculado) {
   return Math.abs(archivo - calculado) > TOL_TOTAL ? { archivo, calculado } : null;
 }
 
-const isDif = v => v !== null && Math.abs(v) > TOL;
+// Qué movimiento entre los dos períodos cuenta como variación: el monto que el
+// cliente puso en "Umbrales" (D-069). Es la columna "Modificación S/N" y lo que
+// decide qué legajos entran a la lista. El resto de los TOL de este módulo son
+// estructurales (detectar una escala, validar contra TOTAL GENERAL, saber si un
+// concepto se liquidó) y siguen midiendo al centavo.
+const isDif = v => isDiff(v);
 
 /** Variación %: sin base en el período anterior no existe, se informa null → "s/base". */
 function calcularPct(anterior, actual) {
@@ -658,8 +664,10 @@ function casosDeEscalon(relevantes, grupos) {
   return casos;
 }
 
-const claseVar = diff => (diff > TOL ? 'var(--color-success)' : (diff < -TOL ? 'var(--color-danger)' : 'var(--color-text-muted)'));
-const flechaVar = diff => (diff > TOL ? '▲' : (diff < -TOL ? '▼' : '–'));
+// El bruto total del período: sube, baja o no se movió, con el mismo monto que
+// decide el resto de las variaciones.
+const claseVar = diff => (isDif(diff) ? (diff > 0 ? 'var(--color-success)' : 'var(--color-danger)') : 'var(--color-text-muted)');
+const flechaVar = diff => (isDif(diff) ? (diff > 0 ? '▲' : '▼') : '–');
 
 function summarizeVariaciones(results) {
   if (results?.error) {

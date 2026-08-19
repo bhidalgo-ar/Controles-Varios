@@ -52,6 +52,15 @@ export const ACUMULADORES = {
 // bloques del editor. Antes de hacerlo, resolver el tope propio del SAC.
 const EXTRAS_GANANCIAS_HABILITADOS = false;
 
+// Este control no cruza dos archivos: lee los acumuladores y muestra chequeos de
+// coherencia sobre un solo lado. Por eso NO usa el monto de diferencia del
+// cliente (D-069) — no hay una "diferencia" que el analista pueda tolerar, hay
+// un dato que existe o no existe, y una suma que cierra o no cierra.
+/** "Este acumulador tiene valor / a este legajo se le retuvo algo." */
+const VALOR_REAL_EPS = 0.01;
+/** El TOTAL guardado contra la suma de sus componentes: cierra al centavo. */
+const RECONCILIACION_EPS = 0.01;
+
 export const DEFAULT_ACUMULADORES_CONFIG = {
   regimen: 'RG4030',            // 'RG4003' (año calendario) | 'RG4030' (semestral)
   codigos: { ...ACUMULADORES },  // override por cliente, si otra cuenta Axton numera distinto
@@ -300,7 +309,7 @@ function computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, 
       const expected = round2(sumOrNull([row.brutoGanancias, row.noRemGravado, row.retribNoHabit, row.sacPrimera, row.sacSegunda]));
       const stored   = row.total;
       const bothNull = expected === null && stored === null;
-      if (bothNull || (expected !== null && stored !== null && Math.abs(expected - stored) <= 0.01)) {
+      if (bothNull || (expected !== null && stored !== null && Math.abs(expected - stored) <= RECONCILIACION_EPS)) {
         reconciliation.ok++;
       } else {
         issues.push({
@@ -387,7 +396,7 @@ function computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, 
       if (sac.porPeriodo.size >= 2) {
         const vals    = [...sac.porPeriodo.values()].sort((a, b) => a - b);
         const mediana = vals[Math.floor(vals.length / 2)];
-        if (mediana > 0.01) {  // con mediana ~0 o negativa la razón no dice nada
+        if (mediana > VALOR_REAL_EPS) {  // con mediana ~0 o negativa la razón no dice nada
           for (const [period, v] of sac.porPeriodo) {
             const ratio = v / mediana;
             if (ratio > mult || ratio < 1 / mult) {
@@ -409,12 +418,12 @@ function computeChecks({ mesRows, datosRows, sacPorLegajo, periods, mesProceso, 
   // total más bajo al que SÍ se le retuvo. Es lo único afirmable sin la escala
   // legal — y se dice en neutral: puede haber deducciones que lo expliquen.
   if (EXTRAS_GANANCIAS_HABILITADOS && enabled.fueraDePatron) {
-    const conImpuesto = datosRows.filter(r => isVal(r.total) && r.impuesto !== null && r.impuesto > 0.01);
+    const conImpuesto = datosRows.filter(r => isVal(r.total) && r.impuesto !== null && r.impuesto > VALOR_REAL_EPS);
     if (conImpuesto.length > 0) {
       const minTrib = Math.min(...conImpuesto.map(r => r.total));
       for (const row of datosRows) {
         if (!isVal(row.total) || row.total < minTrib) continue;
-        if (row.impuesto !== null && row.impuesto > 0.01) continue;
+        if (row.impuesto !== null && row.impuesto > VALOR_REAL_EPS) continue;
         issues.push({
           type: 'fueraDePatron', sev: 'hi', legajo: row.legajo, nombre: row.nombre,
           what: 'Total anual sobre el piso de tributación, pero sin impuesto retenido.',
@@ -537,11 +546,11 @@ function validateWindow(periods, mesProceso, regimen) {
 }
 
 function hasMovement(row) {
-  return MOVEMENT_KEYS.some(k => row[k] !== null && Math.abs(row[k]) > 0.01);
+  return MOVEMENT_KEYS.some(k => row[k] !== null && Math.abs(row[k]) > VALOR_REAL_EPS);
 }
 
 function isVal(v) {
-  return v !== null && Math.abs(v) > 0.01;
+  return v !== null && Math.abs(v) > VALOR_REAL_EPS;
 }
 
 function sumOrNull(values) {
@@ -740,12 +749,12 @@ function renderScatter(panel, datosRows, pisoGananciasAnualAprox = null) {
 
   if (points.length < 3) return; // muy pocos puntos para que un gráfico aporte algo
 
-  const tributan = points.filter(p => p.y > 0.01);
+  const tributan = points.filter(p => p.y > VALOR_REAL_EPS);
   if (tributan.length === 0) return;
   const minTrib = Math.min(...tributan.map(p => p.x)); // piso real observado
 
   // 't' tributa · 'f' fuera de patrón (no tributa pero está sobre el piso) · 'n' no tributa
-  const clase = p => p.y > 0.01 ? 't' : (p.x >= minTrib ? 'f' : 'n');
+  const clase = p => p.y > VALOR_REAL_EPS ? 't' : (p.x >= minTrib ? 'f' : 'n');
   const grupos = { t: 0, n: 0, f: 0 };
   for (const p of points) grupos[clase(p)]++;
 

@@ -1,5 +1,6 @@
 // nr.js — Control No Remunerativos (Control NR)
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -136,7 +137,7 @@ export function runNr(nrRows, tabRows, mapping) {
   });
 
   const conDif     = rows.filter(r =>
-    Object.values(r.valores).some(v => v.ctrl !== null && Math.abs(v.ctrl) > 0.01)
+    Object.values(r.valores).some(v => isDiff(v.ctrl))
   ).length;
   const sinTabData = rows.filter(r => r.sinTabData).length;
 
@@ -147,9 +148,16 @@ export function runNr(nrRows, tabRows, mapping) {
   };
 }
 
+// "Tiene valor real" es otra pregunta que "difiere", así que el monto de
+// diferencia del cliente no entra acá (D-069): con el monto en $ 100 una
+// indemnización de $ 50 dejaría de existir para el control en vez de salir
+// como diferencia.
+const VALOR_REAL_EPS = 0.01;
+const tieneValor = v => v !== null && Math.abs(v) > VALOR_REAL_EPS;
+
 /** ¿Este concepto tiene algún valor real en alguna de las dos fuentes? */
 function hasValor(v) {
-  return (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01);
+  return tieneValor(v.nrVal) || tieneValor(v.tabVal);
 }
 
 // Un empleado es "relevante" si tiene algún valor NR (Tab o reporte) distinto de cero.
@@ -158,7 +166,8 @@ function hasAnyNrValue(r) {
   return Object.values(r.valores).some(hasValor);
 }
 
-const isDif = v => v !== null && Math.abs(v) > 0.01;
+// Qué cuenta como diferencia: el monto que el cliente puso en "Umbrales" (D-069).
+const isDif = v => isDiff(v);
 
 // Colores por grupo (compartidos entre tabla y export)
 const INDEM_BG  = 'rgba(56,142,60,0.08)';
@@ -294,7 +303,7 @@ function renderNrDetalle(container, { relevantRows, diffRows, results }) {
     ? NR_CONCEPTS.filter(c => diffRows.some(r => isDif(r.valores[c.key].ctrl)))
     : NR_CONCEPTS.filter(c => relevantRows.some(r => {
         const v = r.valores[c.key];
-        return (v.nrVal !== null && Math.abs(v.nrVal) > 0.01) || (v.tabVal !== null && Math.abs(v.tabVal) > 0.01);
+        return tieneValor(v.nrVal) || tieneValor(v.tabVal);
       }));
 
   function renderConceptOptions() {
@@ -466,7 +475,7 @@ export function summarizeNrReporte(results) {
 
 // En "Generar Reporte" cada fila trae los conceptos como r[c.key] (número o null).
 function reporteRowHasValue(r) {
-  return NR_CONCEPTS.some(c => r[c.key] !== null && Math.abs(r[c.key]) > 0.01);
+  return NR_CONCEPTS.some(c => tieneValor(r[c.key]));
 }
 
 export function renderNrReporteResults(results, container) {
@@ -481,7 +490,7 @@ export function renderNrReporteResults(results, container) {
   const relevantRows = rows.filter(reporteRowHasValue);
   const noNrCount    = rows.length - relevantRows.length;
   const conceptsWithValue = NR_CONCEPTS.filter(c =>
-    relevantRows.some(r => r[c.key] !== null && Math.abs(r[c.key]) > 0.01)
+    relevantRows.some(r => tieneValor(r[c.key]))
   );
 
   container.innerHTML = '';
@@ -556,7 +565,7 @@ function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, re
   function renderTable(selectedKey) {
     const shownRows = selectedKey === 'all'
       ? relevantRows
-      : relevantRows.filter(r => r[selectedKey] !== null && Math.abs(r[selectedKey]) > 0.01);
+      : relevantRows.filter(r => tieneValor(r[selectedKey]));
 
     const shownConcepts = selectedKey === 'all'
       ? conceptsWithValue

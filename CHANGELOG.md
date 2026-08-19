@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: el monto de diferencia del panel "Umbrales" ahora filtra de verdad, en todos los controles — 2026-08-19
+
+- **Lo que pasaba:** el panel "Umbrales" del wizard mostraba "$ 1,00" y "0,1 %", pero eran **números escritos a mano que ningún control leía**. No se podían editar y no filtraban nada: adentro, cada control tenía cableado su propio margen de un centavo. Un analista que quería ignorar las diferencias de menos de $ 100 no tenía cómo, y lo que veía en pantalla no era con lo que la app estaba midiendo.
+- **Lo que hace ahora:** el campo **"Diferencia a partir de"** se escribe en ese mismo panel, se guarda para el cliente y vale para **todos** los controles de la corrida. Una diferencia menor a ese monto no se marca, no se cuenta y no pinta el semáforo. Se edita también desde `#/admin` y viaja en el seed, como el resto de la configuración del cliente.
+- **Las corridas viejas no cambian solas.** Cada corrida se guarda con el monto que usó: si mañana lo subís a $ 500, la corrida que revisaste y cerraste la semana pasada se sigue viendo con los mismos números. Las corridas anteriores a este cambio se leen al centavo, que es exactamente con lo que se midieron.
+- **Un monto en cero o mal escrito no apaga los avisos:** vuelve al piso de $ 0,01 y el campo lo muestra corregido. Por debajo del centavo el filtro no significa nada — los decimales de una planilla nunca dan igualdad exacta.
+- **Dos controles miden con el suyo y el panel lo dice, con el número:** el Control de Netos (su tolerancia por legajo) y Cruce por Agrupadores (su monto, su porcentaje y el marcado de legajos que están de un lado y no del otro, los tres juntos en su propio panel).
+- **El porcentaje y el "marcar legajos presentes en un archivo y ausentes en el otro" salieron del panel general.** Sólo funcionan de verdad en Cruce por Agrupadores —el único control con los dos lados del cruce fila a fila, y por lo tanto con un "sobre cuánto" claro para sacar el porcentaje— y ahí se siguen editando. Prometerlos para los 19 controles era repetir el problema que este cambio vino a cerrar.
+- **Seis controles avisan en pantalla que este monto no los toca**, porque no comparan importes contra un umbral: Cat. x Empleados compara campos de texto; Acreditaciones, Contabilidad Desglosada y el Asiento de FINADIET cuadran al centavo (es plata que el banco acredita o un asiento que cierra o no cierra); POP Variaciones verifica su propia reconstrucción contra cómo redondea el archivo de Axton; Acumuladores Ganancias son chequeos sobre un solo lado.
+- **También se corrigió en la base para que no vuelva a pasar:** el monto vive en un módulo compartido (`js/controls/tolerance.js`) y los helpers que todos los controles ya usan salen midiendo bien solos, así que **un control nuevo lo hereda sin escribir una línea**. Un test barre `js/controls/` y falla si alguien vuelve a cablear un margen suelto. Ver **D-069**; cierra el ítem 3.10 del ROADMAP.
+- 67 asserts nuevos en `tests/tolerance.test.js` y 2 pruebas de navegador en `tests/e2e/umbralDiferencia.spec.js` (el campo se guarda en el cliente y sigue ahí en la próxima corrida).
+
 ### fix: Control de Netos — cuatro puntos que reportó Willy probándolo en vivo (PR #165), tres resueltos — 2026-08-20
 
 - **Willy probó el control recién mergeado contra el archivo real de mayo de IFSA y encontró cuatro problemas.** Tres quedan resueltos acá; el cuarto sigue sin tocar.
