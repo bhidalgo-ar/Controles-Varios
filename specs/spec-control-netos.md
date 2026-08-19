@@ -1,4 +1,4 @@
-**Estado:** implementado y verificado contra la liquidación real de IFSA 05/2026 (los 22 legajos cierran) · falta probarlo en el navegador · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
+**Estado:** implementado y probado en el navegador (Playwright) contra la liquidación real de IFSA 05/2026 (los 22 legajos cierran) · mergeado en PR #165 y probado en vivo por Willy, que reportó 4 ajustes — 3 resueltos (columna Nombre, rótulo de Empresa configurable, filtro de 4 categorías con la tolerancia real, ver D-068 para el fix de `.ctrl-detail-grid`), el cuarto (acuerdo no remunerativo variable por categoría) sigue **pendiente de que aclare el mecanismo** · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
 
 > **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-067).** Este brief planteaba comparar
 > contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"

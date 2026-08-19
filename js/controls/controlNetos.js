@@ -94,6 +94,12 @@ export const DEFAULT_NETOS_CONFIG = () => ({
   noRemuAcuerdo: null,
   // Tolerancia en pesos por legajo.
   tolerancia: 1,
+  // Nombre de cada razón social, uno por casillero de Tabulado. Ninguno de los
+  // tres Tabulados trae una columna "EMPRESA" que lo diga, así que sin esto la
+  // pantalla mostraba "Tabulado 1/2/3" — un rótulo que no identifica a nadie
+  // (Willy, 2026-08-20). `''` = todavía no lo cargó; el control cae al mismo
+  // "Empresa N" mientras tanto.
+  empresaLabels: { tab: '', tab2: '', tab3: '' },
   codigos: { ...DEFAULT_CONCEPT_CODES },
 });
 
@@ -252,12 +258,20 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
   // empresa y no entre empresas: las tres numeran los legajos por su cuenta, así
   // que el mismo número puede ser dos empleados distintos.
   //
-  // Van rotuladas por casillero y no por nombre de archivo: el wizard le pasa a
-  // `run()` el mapeo de cada archivo adicional, no cómo se llamaba.
+  // El nombre de cada empresa lo pone el analista en la configuración —el
+  // Tabulado de cada razón social no trae una columna "EMPRESA" que lo diga— y
+  // se usa tal cual, o "Empresa N" si todavía no lo cargó. `nameCol` es la
+  // columna de apellido y nombre QUE ESE ARCHIVO mapeó al subirse: cada
+  // Tabulado tiene su propio mapeo, así que no se puede asumir el de la
+  // primera empresa para las otras dos.
+  const empresaLabels = cfg.empresaLabels || {};
   const empresas = [
-    { label: 'Tabulado 1', rows: tabRows || [] },
-    { label: 'Tabulado 2', rows: mapping?.tab2Rows || [] },
-    { label: 'Tabulado 3', rows: mapping?.tab3Rows || [] },
+    { label: empresaLabels.tab || 'Empresa 1', rows: tabRows || [],
+      nameCol: mapping?.tab?.apellidoNombreColumn },
+    { label: empresaLabels.tab2 || 'Empresa 2', rows: mapping?.tab2Rows || [],
+      nameCol: mapping?.tab2?.apellidoNombreColumn },
+    { label: empresaLabels.tab3 || 'Empresa 3', rows: mapping?.tab3Rows || [],
+      nameCol: mapping?.tab3?.apellidoNombreColumn },
   ].filter(e => e.rows.length > 0);
 
   if (empresas.length === 0) {
@@ -348,7 +362,8 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     const osCol  = headers.find(h => norm(h).toUpperCase() === 'OBRA_SOCIAL');
 
     for (const [legajo, group] of groupRowsByLegajo(empresa.rows, legajoCol, { keyFn })) {
-      const ficha = lastRow(group);
+      const ficha  = lastRow(group);
+      const nombre = empresa.nameCol ? norm(ficha?.[empresa.nameCol]) : '';
 
       const base   = sum0(group, c.sueldo, colByCode) + sum0(group, c.aCuentaFutAumen, colByCode);
       const anios  = sumCodes(group, c.aniosAntiguedad, colByCode);
@@ -440,7 +455,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       const variacionMes    = netoTeoricoPrev === null ? null : netoTeorico - netoTeoricoPrev;
 
       rows.push({
-        legajo, empresa: empresa.label, categoria, obraSocial, afiliado,
+        legajo, nombre, empresa: empresa.label, categoria, obraSocial, afiliado,
         netoTeoricoPrev, variacionMes,
         aniosAntiguedad: aniosAnt,
         base, sueldoLiq,
@@ -709,6 +724,7 @@ function renderResumen(results, host) {
 
 const COLUMNS = [
   { key: 'legajo',          label: 'Legajo',            num: false },
+  { key: 'nombre',          label: 'Nombre',            num: false },
   { key: 'empresa',         label: 'Empresa',           num: false },
   { key: 'base',            label: 'Sueldo + AFA',      num: true  },
   { key: 'remuTeo',         label: 'Remunerativo teórico',   num: true },
@@ -719,36 +735,61 @@ const COLUMNS = [
   { key: 'variacionMes',    label: 'Movió vs. mes anterior',  num: true },
 ];
 
+// Las tres categorías que separan un legajo "cerrado" de uno para mirar.
+// $0,01 es el piso de todo el repo (redondeo de Meta4, CLAUDE.md); por encima
+// de eso y hasta la tolerancia del control es la zona gris que el analista
+// decidió tolerar a propósito; por encima de la tolerancia es lo que hay que
+// revisar. Un legajo sin neto liquidado (`residuo === null`) no entra en
+// ninguna de las tres: no se pudo comparar, no es que cerró.
+function categoriaDe(residuo, tol) {
+  if (residuo === null) return null;
+  const abs = Math.abs(residuo);
+  if (abs <= 0.01) return 'exacto';
+  if (abs <= tol) return 'margen';
+  return 'diferencia';
+}
+
 function renderDetalle(results, host) {
   const tol = results.tolerancia;
+  const porCategoria = results.rows.reduce((acc, r) => {
+    const cat = categoriaDe(r.residuo, tol);
+    if (cat) acc[cat].push(r);
+    return acc;
+  }, { exacto: [], margen: [], diferencia: [] });
 
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select';
   filterSel.innerHTML = `
-    <option value="dif">Sólo con diferencia</option>
     <option value="todos">Todos los legajos</option>
+    <option value="exacto">Coinciden al centavo</option>
+    <option value="margen">Dentro del margen (hasta ${fmt(tol)})</option>
+    <option value="diferencia">Diferencia mayor al margen</option>
   `;
 
   const { searchEl, exportEl } = createResultsToolbar(host, { left: filterSel });
   const tableHost = document.createElement('div');
   host.appendChild(tableHost);
 
-  const conDif = results.rows.filter(r => r.residuo !== null && Math.abs(r.residuo) > tol);
-  filterSel.value = conDif.length > 0 ? 'dif' : 'todos';
+  // Arranca mostrando lo que hay que mirar; si no hay nada fuera de margen,
+  // no tiene sentido abrir en una lista vacía.
+  filterSel.value = porCategoria.diferencia.length > 0 ? 'diferencia' : 'todos';
 
   const maxDiff = results.rows.reduce((m, r) => Math.max(m, Math.abs(r.residuo ?? 0)), 0);
 
   const draw = () => {
-    const shown = filterSel.value === 'dif' ? conDif : results.rows;
+    const shown = filterSel.value === 'todos' ? results.rows : porCategoria[filterSel.value];
     tableHost.innerHTML = shown.length === 0
-      ? '<p class="text-muted">Sin legajos con diferencia.</p>'
-      : tableHtml(shown, maxDiff);
+      ? '<p class="text-muted">Ningún legajo en esta categoría.</p>'
+      : tableHtml(shown, maxDiff, tol);
     const table = tableHost.querySelector('table');
     if (!table) return;
     wireTableTools(table, {
       rows: shown,
-      getLabel: r => `${r.legajo} — ${r.empresa}`,
+      getLabel: r => `${r.legajo} ${r.nombre} — ${r.empresa}`,
       searchEl,
+      // enhanceGrid sólo sabe fijar 0, 1 o 2 columnas (css/components.css no
+      // define un tercer nivel): legajo + nombre quedan fijas, empresa
+      // scrollea con el resto — no es un límite de esta tabla en particular.
       stickyCols: 2,
     });
   };
@@ -763,7 +804,7 @@ function renderDetalle(results, host) {
   });
 }
 
-function tableHtml(rows, maxDiff) {
+function tableHtml(rows, maxDiff, tol) {
   const head = COLUMNS.map(c => `<th${c.num ? ' class="num"' : ''}>${esc(c.label)}</th>`).join('')
     + '<th class="num">Sin explicar</th><th>Conceptos del mes</th>';
 
@@ -778,12 +819,16 @@ function tableHtml(rows, maxDiff) {
       ? '<span class="text-muted">—</span>'
       : r.detalle.map(d => `${esc(d.label)} <span class="text-muted">(${esc(d.code)})</span> ${fmt(d.importe)}`)
           .join(' <span class="text-muted">·</span> ');
-    return `<tr>${cells}${diffCellHtml(r.residuo, { max: maxDiff, absentLabel: 'sin comparar' })}`
+    // `eps: tol` es lo que hace que esta celda —y el "N con diferencias" de la
+    // barra, que cuenta las celdas que salen en rojo acá— respete la
+    // tolerancia que el analista configuró y no el margen de $0,01 por
+    // defecto: sin esto, un legajo dentro del margen igual salía marcado.
+    return `<tr>${cells}${diffCellHtml(r.residuo, { max: maxDiff, eps: tol, absentLabel: 'sin comparar' })}`
       + `<td>${conceptos}</td></tr>`;
   }).join('');
 
   const totales = COLUMNS.map((c, i) => {
-    if (i < 2) return '';
+    if (i < 3) return '';
     const sum = rows.reduce((a, r) => a + (r[c.key] ?? 0), 0);
     return `<td class="num">${fmt(sum)}</td>`;
   }).join('');
@@ -792,7 +837,7 @@ function tableHtml(rows, maxDiff) {
     <table class="data-table data-table--compact">
       <thead><tr>${head}</tr></thead>
       <tbody>${body}</tbody>
-      <tfoot><tr><td colspan="2">TOTAL — ${rows.length} legajos</td>${totales}<td></td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="3">TOTAL — ${rows.length} legajos</td>${totales}<td></td><td></td></tr></tfoot>
     </table>
   `;
 }
@@ -804,7 +849,7 @@ function tableHtml(rows, maxDiff) {
 // Finanzas: por eso lleva la reconstrucción completa (D-020 no aplica).
 
 const EXPORT_HEADERS = [
-  'Legajo', 'Empresa', 'Categoría', 'Años antigüedad', 'Sueldo + AFA',
+  'Legajo', 'Nombre', 'Empresa', 'Categoría', 'Años antigüedad', 'Sueldo + AFA',
   'Remunerativo teórico', 'No remun. teórico', 'Retenciones teóricas', 'Neto teórico',
   'Neto liquidado', 'Devuelto al neto', 'Neto liquidado ajustado',
   'Explicado por el mes', 'Sin explicar', 'Excedente del tope', 'Básico en escala',
@@ -812,7 +857,7 @@ const EXPORT_HEADERS = [
 ];
 
 const exportRows = (results) => results.rows.map(r => ([
-  r.legajo, r.empresa, r.categoria, r.aniosAntiguedad, r.base,
+  r.legajo, r.nombre, r.empresa, r.categoria, r.aniosAntiguedad, r.base,
   r.remuTeo, r.noRemuTeo, r.retencionesTeo, r.netoTeorico,
   r.netoLiquidado, r.devuelto, r.netoAjustado,
   r.explicado, r.residuo, r.excedenteTope,

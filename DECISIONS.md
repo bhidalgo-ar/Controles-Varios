@@ -2088,3 +2088,35 @@ sea el mismo de los dos lados no es un detalle de implementación: con dos fórm
 meses mediría la diferencia entre ellas y no entre las liquidaciones. Por eso el recibo teórico vive en
 una función aparte (`reciboTeorico`) y no dentro del recorrido.
 
+---
+
+## D-068 — `.ctrl-detail-grid` sin `grid-template-columns`: la ficha de detalle se rompía con tablas anchas, y no era un bug del Control de Netos
+
+**Fecha:** 2026-08-20. **Instrucción de:** Willy, probando en vivo el Control de Netos recién mergeado
+(PR #165) contra el archivo real de mayo de IFSA con "Todos los legajos" seleccionado — no se veía la
+pantalla completa ni el botón de exportar.
+
+**Contexto.** `.ctrl-detail-grid` es el acordeón que abre y cierra la ficha de detalle de **cualquier**
+control en la pantalla de resultados (`css/components.css`), no algo propio del Control de Netos.
+Declaraba `display: grid; grid-template-rows: 0fr` para animar la apertura, pero nunca fijaba
+`grid-template-columns`: la única columna implícita se medía por el contenido en vez de quedar acotada al
+ancho de la ficha. Con una tabla de muchas columnas y `white-space: nowrap` en las celdas (la regla que
+sostiene D-060, para que un importe nunca se corte a la mitad), el "grid" crecía más allá de la pantalla y
+se llevaba puesta la barra de herramientas de abajo —el botón Exportar incluido— fuera del área visible,
+sin scroll posible salvo el de toda la página. Se veía más seguido con "Todos los legajos" porque ahí es
+más probable que aparezca la fila con el listado de conceptos más largo.
+
+**Decisión.** Una línea, `grid-template-columns: minmax(0, 1fr)`, que fuerza el mínimo a 0 para que la
+tabla scrollee dentro de su propio `.rb-grid-wrap` en vez de estirar la ficha. Se corrige en el componente
+compartido y no con un ajuste puntual del Control de Netos —achicar o truncar la columna de conceptos, por
+ejemplo— porque el mismo problema iba a reaparecer en el próximo control con una tabla ancha: ya le había
+pasado antes a Acumuladores Ganancias por otra causa (D-060).
+
+**Verificado en vivo con Playwright** contra el archivo real de IFSA 05/2026 con "Todos los legajos": el
+exportador y el resto de la barra de herramientas quedan visibles en las cuatro vistas del filtro del
+Control de Netos.
+
+**Detalle.** `css/components.css`, entrada de `.ctrl-detail-grid`. Sin test automatizado nuevo: es el
+mismo tipo de bug de layout que D-060 —se mide en un navegador real, no con un assert de DOM— y no se
+sumó un e2e dedicado en este cambio.
+

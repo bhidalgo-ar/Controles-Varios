@@ -7,6 +7,17 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix: Control de Netos — cuatro puntos que reportó Willy probándolo en vivo (PR #165), tres resueltos — 2026-08-20
+
+- **Willy probó el control recién mergeado contra el archivo real de mayo de IFSA y encontró cuatro problemas.** Tres quedan resueltos acá; el cuarto sigue sin tocar.
+- **La tolerancia no decía en qué unidad estaba.** El campo del Paso 2 pasó de "Tolerancia por legajo" a "Tolerancia por legajo, en pesos ($)".
+- **El detalle del run no mostraba con quién se estaba tratando.** Nueva columna "Nombre", que sale de la columna que el analista mapeó como Apellido y Nombre en el Paso 1, para cada Tabulado que subió. Si no la mapeó, la celda queda vacía — no es un error.
+- **La columna "Empresa" decía "Tabulado 1/2/3"**, un rótulo que no identifica a nadie. Ahora tiene un nombre configurable: en el panel del Paso 2 hay un campo de texto por cada Tabulado cargado (ej. "IFSA"); si no se carga, cae a "Empresa 1/2/3".
+- **El filtro del detalle pasa de 2 a 4 opciones:** "Todos los legajos" / "Coinciden al centavo" (diferencia de $0,01 o menos) / "Dentro del margen" (entre $0,01 y la tolerancia que configuró el analista) / "Diferencia mayor al margen". De rebote corrigió un bug que no se había diagnosticado antes: la celda de diferencia y el contador "N con diferencias" de la barra de KPIs usaban siempre el margen visual de $0,01 en vez de la tolerancia configurada — con tolerancia $100 igual aparecía "3 con diferencias" en pantalla.
+- **El cuarto punto queda sin tocar.** "El acuerdo no remunerativo del mes" hoy es un número fijo que carga el analista, pero Willy avisó que varía por categoría —a veces se paga un fijo para todos y un porcentaje por categoría—. `PENDIENTE: falta que Willy aclare el mecanismo exacto` (qué códigos de concepto varían por categoría, de dónde sale el porcentaje, cómo se combina con lo fijo) antes de tocar `noRemuAcuerdo`.
+- **Fix aparte, de un componente compartido por todos los controles:** el acordeón de detalle (`.ctrl-detail-grid`, `css/components.css`) no acotaba el ancho de su columna al de la ficha; con una tabla de muchas columnas (Netos con 12, sumando Nombre) el "grid" crecía más allá de la pantalla y se llevaba puesta la barra de herramientas de abajo, exportador incluido, sin scroll posible. Una línea de CSS lo corrige para cualquier control con tabla ancha, no sólo éste. Ver **D-068**.
+- **Verificado en vivo con Playwright** contra el archivo real de mayo de IFSA (22 legajos) y el de la escala, con la tolerancia real de Willy ($100): la corrida da 0 con diferencias, el filtro separa 19 exacto / 3 margen / 0 diferencia = 22 todos, y Nombre, Empresa "IFSA" y el exportador se ven en las cuatro vistas. 8 asserts nuevos en `tests/controlNetosControl.test.js`.
+
 ### feat: control de Contabilidad Desglosada + Asiento (COTY · Axton) — 2026-08-19
 
 - **Qué hace el analista ahora:** sube el reporte "Totales de Concepto" que baja de Axton (el `.xls` de 23 MB) y, si lo tiene, el "Reporte de Cuentas de Redefinición" del cliente. La app le devuelve tres archivos —**Contabilidad Desglosada** (10 columnas, una línea por cada lado del movimiento), **Asiento Contable** (agrupado por cuenta y centro de costo, con el neteo de cada línea) y **Desglosada con Código** (la desglosada completa con el código de cada cuenta, para auditar el asiento línea por línea)— y le dice en pantalla si el asiento **cierra**.
