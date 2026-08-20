@@ -35,6 +35,19 @@ esfuerzo alto no es un parámetro de `create_session`, así que viaja como `appe
 - tanda1 — session_01DeaMD6Trremoe2iUhszYiy — LANZADA 2026-08-20 20:58Z
 - tanda2..8 — pendientes
 
+## Cómo se despierta el orquestador
+
+Dos mecanismos, a propósito:
+
+- **`send_later`, de un disparo**, que cada chequeo vuelve a agendar a ~40 min. Es el que da la
+  cadencia fina.
+- **Rutina recurrente `trig_01GN8sMAAQtvPrx5exAQ9tWn`**, cada hora al minuto 23, como red de
+  seguridad: si un chequeo falla y no re-agenda el `send_later`, la cadena sigue igual. El mínimo
+  que admite una rutina es horario, por eso no reemplaza al `send_later`.
+
+Cuando las 8 tandas tengan su PR abierto, hay que **borrar la rutina recurrente** (se auto-expira
+a los 7 días de todos modos).
+
 ## Qué hace el chequeo (cada ~40 min)
 
 1. `git ls-remote --heads origin` y `list_pull_requests` para ver qué ramas/PRs existen.
