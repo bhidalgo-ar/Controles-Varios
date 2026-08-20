@@ -13,6 +13,14 @@
 //               un par de columnas Cant/Imp por concepto, `TOTAL GENERAL`
 //               literal al cierre, conceptos `1000 - Sueldo Basico` (espacio,
 //               guion, espacio), no liquidado = celda vacía.
+//   axton_tot — El reporte "Totales de Concepto" de Axton, que arranca igual que
+//               un Tabulado (preámbulo `EA: …`, columna Legajo) pero es OTRO
+//               archivo: formato largo, una fila por legajo × concepto × liquidación
+//               y sin subencabezados Cant/Imp. Se distingue por el campo
+//               `Reporte:` del preámbulo y por la hoja `totalesconcepto.*`. Lo lee
+//               `totalesConceptoParser.js`, no el parser del Tabulado — sin esta
+//               firma, subido en el casillero del Tabulado, se clasificaba como
+//               `axton_imp` y moría más adelante con un error que no explica nada.
 //   axton_imp — Axton reducido a sólo importes (SIASA; posiblemente retocado a
 //               mano antes de enviarse — se acepta igual, por las dudas).
 //               Preámbulo `EA: … | Reporte: … | Periodo: …` en la fila 1,
@@ -35,10 +43,16 @@
 // así que se matchea por patrón — nunca por igualdad.
 const HOJA_META4_H = 'tabulado_h';
 const HOJA_AXTON = /^Liquidaciones\.\d{8}\.\d{6}\.\d+$/;
+const HOJA_AXTON_TOTALES = /^totalesconcepto/i;
 
 // Marcadores internos, para archivos re-guardados donde el nombre de hoja no
 // alcanza o no está (el Tabulado HTML no tiene hojas).
 const PREAMBULO_EA = /^EA:\s/;
+// El campo `Reporte:` del preámbulo: es lo que dice CUÁL de los exports de Axton
+// es el archivo. `Resumen de Liquidacion` y `Consulta de Liquidacion` son el
+// Tabulado; `Totales de Concepto` es el totalizador.
+const CAMPO_REPORTE = /reporte:\s*([^|]+?)\s*(?:\||$)/i;
+const REPORTE_TOTALES = /totales?\s+de\s+concepto/i;
 const CONCEPTO_META4 = /^\d+-\S/; // "1003-SUELDO": código pegado al nombre
 const PRIMERA_COLUMNA_META4 = /^(id_)?empleado$|^legajo$/i;
 
@@ -64,22 +78,46 @@ export function sniffContainer(arrayBuffer) {
  *
  * @param {{ sheetName?: string, rows: any[][] }} input - `rows` son las primeras
  *   filas de la hoja (alcanza con ~8) como array de arrays.
- * @returns {{ format: string, sistema: string, evidencia: string[] } |
- *           { format: null, evidencia: string[] }}
+ * @returns {{ format: string, sistema: string, reporte: string|null, evidencia: string[] } |
+ *           { format: null, reporte: string|null, evidencia: string[] }}
+ *   `reporte` es el texto del campo `Reporte:` del preámbulo cuando el archivo lo
+ *   trae (`Resumen de Liquidacion`, `Consulta de Liquidacion`, `Totales de
+ *   Concepto`), y `null` cuando no hay preámbulo — POP, Epiroc y Geopagos exportan
+ *   con los encabezados en la fila 1.
  */
 export function classifyTabulado({ sheetName, rows }) {
   const hoja = norm(sheetName);
   const primeras = (rows || []).slice(0, 8);
 
+  // El campo `Reporte:` del preámbulo, cuando el archivo lo trae: dice cuál de los
+  // exports de Axton es, y viaja en el resultado para que el lector no tenga que
+  // volver a buscarlo.
+  const reporte = leerCampoReporte(primeras);
+
   // Sub-variante de Axton: con pares Cant/Imp (completo) o sólo Imp (reducido).
   const hayCant = primeras.some(f => (f || []).some(c => norm(c) === 'Cant'));
   const variantAxton = evidencia => hayCant
-    ? { format: 'axton', sistema: 'Axton', evidencia: [...evidencia, 'subencabezado con pares Cant/Imp'] }
-    : { format: 'axton_imp', sistema: 'Axton', evidencia: [...evidencia, 'subencabezado sólo Imp, sin ningún Cant'] };
+    ? { format: 'axton', sistema: 'Axton', reporte, evidencia: [...evidencia, 'subencabezado con pares Cant/Imp'] }
+    : { format: 'axton_imp', sistema: 'Axton', reporte, evidencia: [...evidencia, 'subencabezado sólo Imp, sin ningún Cant'] };
 
   if (hoja === HOJA_META4_H) {
-    return { format: 'meta4_h', sistema: 'Meta4', evidencia: [`hoja "${HOJA_META4_H}"`] };
+    return { format: 'meta4_h', sistema: 'Meta4', reporte, evidencia: [`hoja "${HOJA_META4_H}"`] };
   }
+
+  // El totalizador se decide ANTES de las dos variantes del Tabulado: arranca con
+  // el mismo preámbulo y también tiene columna Legajo, así que si no se lo separa
+  // acá sale clasificado como Tabulado y el error aparece recién al leerlo.
+  const esTotalizador = HOJA_AXTON_TOTALES.test(hoja) || (reporte && REPORTE_TOTALES.test(reporte));
+  if (esTotalizador) {
+    return {
+      format: 'axton_tot', sistema: 'Axton', reporte,
+      evidencia: [
+        HOJA_AXTON_TOTALES.test(hoja) ? `hoja "${hoja}" (totalizador)` : `preámbulo con "Reporte: ${reporte}"`,
+        'es el reporte "Totales de Concepto", no el Tabulado de la liquidación',
+      ],
+    };
+  }
+
   if (HOJA_AXTON.test(hoja)) {
     return variantAxton([`hoja con firma de Axton ("${hoja}")`]);
   }
@@ -102,11 +140,23 @@ export function classifyTabulado({ sheetName, rows }) {
 
   return {
     format: null,
+    reporte,
     evidencia: [
       `hoja "${hoja || '(sin nombre)'}" — no es "${HOJA_META4_H}" (Meta4) ni "Liquidaciones.AAAAMMDD.HHMMSS.n" (Axton)`,
       'tampoco se encontró preámbulo "EA:", ni encabezados de Tabulado en la fila 1',
     ],
   };
+}
+
+/** El texto del campo `Reporte:` del preámbulo, o `null` si el archivo no lo trae. */
+function leerCampoReporte(primeras) {
+  for (const fila of primeras) {
+    for (const celda of fila || []) {
+      const m = norm(celda).match(CAMPO_REPORTE);
+      if (m) return m[1].trim();
+    }
+  }
+  return null;
 }
 
 /**
@@ -131,8 +181,17 @@ export function detectTabFormat(arrayBuffer) {
   if (container === 'html') {
     const inicio = new TextDecoder('latin1').decode(new Uint8Array(arrayBuffer).subarray(0, 4096));
     if (/EA:\s/.test(inicio)) {
+      const mReporte = inicio.replace(/<[^>]*>/g, ' ').match(CAMPO_REPORTE);
+      const reporte = mReporte ? mReporte[1].trim() : null;
+      if (reporte && REPORTE_TOTALES.test(reporte)) {
+        return {
+          format: 'axton_tot', sistema: 'Axton', container, sheetName: null, reporte,
+          evidencia: [`HTML disfrazado de Excel con "Reporte: ${reporte}"`,
+            'es el reporte "Totales de Concepto" (lo lee totalesConceptoParser.js), no el Tabulado'],
+        };
+      }
       return {
-        format: 'axton_imp', sistema: 'Axton', container, sheetName: null,
+        format: 'axton_imp', sistema: 'Axton', container, sheetName: null, reporte,
         evidencia: ['HTML disfrazado de Excel con preámbulo "EA: …" (familia que ya lee tabuladoHtml.js)'],
       };
     }

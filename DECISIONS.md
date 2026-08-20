@@ -2299,3 +2299,71 @@ de diferencia detrás de un umbral de $ 100.
   pudo** asignar es parte del resultado; sin esto el control no tiene con qué informarlo y volvería a
   quedar ignorado en silencio.
 
+---
+
+## D-072 — El lector robusto del Tabulado de Axton vive aparte del parser estricto, y el totalizador se distingue por el campo `Reporte:`
+
+**Fecha:** 2026-08-20. **Contexto:** construcción del cimiento N0b de la familia de Novedades
+(`specs/familia-novedades-axton.md`), sobre el relevamiento de los 7 clientes Axton y las firmas de
+Tabulado que dejó (D-070, § "El lado liquidación").
+
+**El problema.** Ya existía `js/parsers/tabAxtonParser.js`, que lee el Tabulado de Axton en su forma
+**estricta**: encabezados en la fila 1, subencabezados Cant/Imp en la fila 2 —obligatorios— y datos desde
+la fila 3. Sirve para lo que se construyó (el control de Variación entre quincenas de POP, que recibe
+exactamente ese layout) y no sirve para los otros seis clientes: cinco exportan **sin ninguna columna
+Cant**, cuatro traen preámbulo de 1 o 2 filas antes de los encabezados, dos traen `TOTAL GENERAL`
+duplicado, y uno trae filas con fórmulas agregadas a mano debajo del cierre.
+
+**Qué se decidió — 1. Módulo nuevo, no ampliar el estricto en el mismo PR.** El lector robusto es
+`js/parsers/tabAxtonReader.js` (`readTabAxton` + `layoutTabAxton`), y `tabAxtonParser.js` queda intacto.
+Ampliar el estricto habría cambiado, de paso, el resultado de un control que ya corre en producción:
+emite claves distintas (`cant_<codigo>` no existe en la variante sólo-Imp), no mete la fila `TOTAL GENERAL`
+entre los empleados, y acepta filas que el otro descarta (un legajo `'12-B'`, que el estricto filtra con
+`/^\d+$/`). **Deuda declarada:** que `tabAxtonParser.js` pase a delegar en el lector es un PR aparte, con
+la verificación de que Variaciones sigue dando lo mismo. Lo que **no** se acepta es que las dos lógicas
+sigan divergiendo: cualquier firma nueva se agrega al lector, no al parser estricto.
+
+**2. La fila `TOTAL GENERAL` no viaja entre los empleados.** El parser estricto la emite en `parsedRows`
+con `legajo: null`; el lector la deja en `parseMetadata.totalGeneral`. Es la misma razón por la que
+`countUniqueLegajos` existe (D-042): una fila de totales metida entre los datos infla cualquier conteo que
+no se acuerde de filtrarla, y acordarse es opcional. Con la fila afuera, `parsedRows.length` es la cantidad
+de liquidaciones y nada más.
+
+**3. El corte de las filas agregadas a mano es el ÚLTIMO `TOTAL GENERAL`, no el primero.** En la variante
+duplicada la copia de arriba puede caer dentro del preámbulo (SIASA) o pegada debajo de los
+subencabezados. Cortar en la primera copia descartaría la nómina entera como "fila agregada a mano" y el
+archivo se leería sin un solo empleado — con un error que hablaría de otra cosa. Escrito como assert en
+`tests/tabAxtonReader.test.js`.
+
+**4. El campo `Reporte:` del preámbulo entra al detector de formato, con un cuarto formato: `axton_tot`.**
+Los tres exports de Axton arrancan igual —preámbulo `EA: …`, columna `Legajo`— y lo único que los
+distingue es ese campo: `Resumen de Liquidacion` y `Consulta de Liquidacion` son el Tabulado, `Totales de
+Concepto` es el totalizador, que es otro archivo y tiene otro lector. Sin esa firma, el totalizador subido
+en el casillero del Tabulado se clasificaba como `axton_imp` y moría más adelante con un error sobre
+subencabezados que el archivo nunca tuvo. Ahora el lector corta diciendo qué archivo es y dónde va.
+`classifyTabulado` devuelve además `reporte` en todos los casos; ningún control lo consume todavía.
+
+**5. La validación de sumas contra `TOTAL GENERAL` es aviso, no corte.** El export puede venir retocado a
+mano antes de enviarse y se acepta igual (D-065); si un concepto no cierra, el resto del archivo sigue
+sirviendo. Lo que no puede pasar es que no se note: los conceptos que no cierran salen en
+`totalesQueNoCierran` con los dos números y en un aviso. La tolerancia es de un centavo fijo y **no** es
+la del cliente (`clients.diffTolerance`, D-069): esa mide una diferencia de negocio, ésta mide si leímos
+bien el archivo.
+
+**6. El totalizador se lee con un segundo export del mismo módulo, no con uno nuevo.**
+`readTotalesConcepto` convive con `parseTotalesConcepto` en `js/parsers/totalesConceptoParser.js` y
+comparte con él la lectura de la tabla (las dos ramas, HTML y .xlsx real). Se diferencian sólo en qué
+columnas exigen y qué devuelven: la Contabilidad Desglosada exige las dos cuentas contables —ahí el
+movimiento contable *es* el entregable— y el cruce no, porque el export que se baja para comparar
+novedades puede venir sin ellas y sirve igual. Exigirlas rechazaría un archivo válido; duplicar el módulo
+volvería a partir en dos la lectura de un mismo formato, que es el error que este repo ya pagó cuatro
+veces.
+
+**Alternativas descartadas:** hacer que `tabAxtonParser.js` delegue en el lector en este mismo PR — cambia
+un control en producción sin verificarlo contra un archivo real; inferir la cantidad desde el importe en la
+variante sólo-Imp — D-065; completar con `null` las claves `cant_<codigo>` que el archivo no trae — un
+`null` se lee igual que "vino vacía" y una de las dos lecturas miente; cortar la corrida cuando una suma no
+cierra contra el `TOTAL GENERAL` — esconde el resto del archivo, que sí sirve.
+
+**Pendiente de verificación:** el lector todavía no se corrió contra un Tabulado real — los del
+relevamiento no entraron al repo. Ahí puede aparecer alguna variante de firma no vista.

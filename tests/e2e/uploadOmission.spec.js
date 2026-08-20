@@ -16,6 +16,26 @@ import { test, expect } from '@playwright/test';
 const errores = [];
 test.beforeEach(async ({ page }) => { page.on('pageerror', e => errores.push(String(e))); });
 
+/**
+ * Espera a que el formulario haya TERMINADO de confirmar el mapeo, y devuelve el
+ * último `onComplete`.
+ *
+ * No alcanza con esperar a que el nombre del archivo aparezca en `#host`: al
+ * confirmar, `fileUpload.js` pinta primero la pantalla de "parseando" —que ya
+ * lleva el nombre del archivo— y sólo después de un `await saveFileProfile()`
+ * (una escritura en IndexedDB) llama a `onComplete`. O sea que el texto está en
+ * pantalla mientras la escritura está en vuelo: el test seguía de largo y leía
+ * `__completes` vacío. Pasaba igual porque el archivo son 3 filas y la escritura
+ * termina en el mismo tick, y falló cuando el runner de CI se puso lento.
+ *
+ * Esperar la cantidad de `onComplete` es esperar lo que el assert de abajo
+ * realmente necesita.
+ */
+async function esperarComplete(page, esperados) {
+  await page.waitForFunction(n => window.__completes.length >= n, esperados, { timeout: 15000 });
+  return page.evaluate(() => window.__completes.at(-1));
+}
+
 async function abrirFormulario(page, { detecta = false } = {}) {
   await page.goto('/tests/e2e/fixtures/uploadOmission.html');
   await expect(page.locator('#out')).toHaveText('listo', { timeout: 15000 });
@@ -47,8 +67,8 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(page.locator('[data-fu-omit-group="gratVacColumn"] [data-fu-omit-badge]')).toBeVisible();
 
   await page.click('#js-mapping-form button[type=submit]');
+  const { mapping } = await esperarComplete(page, 1);
   await expect(page.locator('#host')).toContainText('nr.xlsx');
-  const mapping = await page.evaluate(() => window.__completes.at(-1)?.mapping);
   expect(mapping.legajoColumn).toBe('LEGAJO');
   expect(mapping.gratVacColumn).toBe('__omitido__');
   expect(Object.values(mapping).filter(v => v === '__omitido__').length).toBe(18);
@@ -62,6 +82,7 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(page.locator('.toast').last()).toContainText('o declarala ausente con ⊘');
   await page.click('[data-fu-omit-group="gratVacColumn"] [data-fu-omit]');
   await page.click('#js-remap-apply');
+  await esperarComplete(page, 2);
   await expect(page.locator('#host')).toContainText('nr.xlsx');
 
   // La vuelta entera: el perfil guardado precompleta el ⊘ en la próxima
@@ -84,8 +105,8 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(page.locator('select[name="reinHomeOficeColumn"]')).toBeEnabled();
   await page.selectOption('select[name="reinHomeOficeColumn"]', 'REIN_HOME_OFICE');
   await page.click('#js-mapping-form button[type=submit]');
+  const { mapping: mappingResuelto } = await esperarComplete(page, 1);
   await expect(page.locator('#host')).toContainText('nr.xlsx');
-  const mappingResuelto = await page.evaluate(() => window.__completes.at(-1)?.mapping);
   expect(mappingResuelto.reinHomeOficeColumn).toBe('REIN_HOME_OFICE');
   expect(Object.values(mappingResuelto).filter(v => v === '__omitido__').length).toBe(17);
 

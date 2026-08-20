@@ -8,13 +8,14 @@
 >
 > | Orden | Chat | Modelo | Esfuerzo / thinking | Por qué |
 > |---|---|---|---|---|
-> | 1 | Lector ExpNov (N0a) | **Opus 5** | **alto** | Muchos casos borde relevados; un parser permisivo de más produce el "número mal pero coherente" |
-> | 2 | Parser Axton de Tabulado (N0b) | **Opus 5** | **alto** | Toca la pieza T que consumen varios controles; consolidación por legajo = el bug más caro del repo |
+> | 1 | ~~Lector ExpNov (N0a)~~ **hecho (2026-08-20)** | **Opus 5** | **alto** | Muchos casos borde relevados; un parser permisivo de más produce el "número mal pero coherente" |
+> | 2 | ~~Parser Axton de Tabulado (N0b)~~ **hecho (2026-08-20)** | **Opus 5** | **alto** | Toca la pieza T que consumen varios controles; consolidación por legajo = el bug más caro del repo |
 > | 3 | Generador de importador (N1) | **Opus 5** | **alto** | Diseño fino de mapeo + UI de validación; usar la skill `nuevo-control` |
 > | 4 | Novedades vs Liquidación (N2) | **Opus 5** | **alto** | El cruce con las 4 bandas; depende de 1 y 2 |
 >
 > El 2 puede correr en paralelo con el 3 (no se pisan). El 4 recién cuando 1, 2
-> y 3 estén mergeados (1 y 3 ya están). Sonnet 5 alcanza para retoques posteriores de UI o de
+> y 3 estén mergeados. **Al 2026-08-20 están hechos el 1 (N0a), el 2 (N0b) y el 3 (N1);
+> queda el 4.** Sonnet 5 alcanza para retoques posteriores de UI o de
 > textos sobre estos módulos, no para construirlos.
 
 ---
@@ -53,7 +54,11 @@ No toques ningún control existente. Terminá en PR con la doc al día
 (documentalista antes de mergear).
 ```
 
-## Chat 2 — N0b: Parser Axton del Tabulado + Totales de Concepto
+## Chat 2 — N0b: Parser Axton del Tabulado + Totales de Concepto — **hecho (2026-08-20)**
+
+> Resultado: `js/parsers/tabAxtonReader.js` + `readTotalesConcepto` en
+> `js/parsers/totalesConceptoParser.js` + el campo `Reporte:` en el detector. Ver **D-072**
+> y `specs/lector-tabulado-formatos.md`. El prompt queda como registro de lo que se pidió.
 
 ```
 Leé specs/familia-novedades-axton.md (sección "El lado liquidación"),
