@@ -1045,9 +1045,9 @@ const VACACIONES_CODES = ['3553', '4743', '3556', '4556', '4557', '4558', '4559'
  * que en esta corrida no hubo ninguno. Arranca en "Con diferencia" si hay alguno
  * —errores primero— y en "Todos" si el control cerró limpio.
  *
- * `data-chips` es la marca explícita de que ESTE select se dibuja como chips:
- * sin ella, `chipifySelect()` decide por la cantidad de opciones, o sea por
- * accidente (D-074, §3).
+ * `data-chips` es la marca explícita de que ESTE select se dibuja como chips.
+ * Sin ella se queda desplegable, tenga las opciones que tenga: qué se chipifica
+ * se declara y no se adivina (D-074, §3).
  */
 function selectDeEstado(rows, tol) {
   const sel = document.createElement('select');
@@ -1071,8 +1071,8 @@ function selectDeMarcas(rows) {
   const sel = document.createElement('select');
   sel.className = 'form-select';
   // Desplegable por diseño: las marcas son el otro eje y no van a la fila de
-  // chips, que tiene que decir lo mismo en las 21 pantallas (D-074, §3).
-  sel.dataset.chips = '0';
+  // chips, que tiene que decir lo mismo en las 21 pantallas (D-074, §3). No
+  // lleva `data-chips`, y con eso alcanza.
   sel.setAttribute('aria-label', 'Filtrar por marca del legajo');
   sel.innerHTML = `<option value="">Marcas: todas</option>`
     + disponibles.map(m => `<option value="${esc(m.id)}">${esc(m.label)} (${m.n})</option>`).join('');

@@ -254,6 +254,9 @@ function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
 
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select form-select--sm';
+  // El filtro de estado es lo que se dibuja como chips (§3 de
+  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
+  filterSel.dataset.chips = '1';
   filterSel.innerHTML = `
     <option value="dif">Sólo con diferencia (${diffRows.length})</option>
     <option value="all">Todos los evaluados (${relevantRows.length})</option>

@@ -14,10 +14,13 @@
 // Reglas de cálculo completas en specs/control-acumuladores-ganancias.md.
 
 import { initTabs } from '../ui/tabs.js';
-import { renderVerdict, renderTiles, renderIssues, renderMinorObservations, renderChecks } from '../ui/resultBlocks.js';
+import {
+  renderVerdict, renderTiles, renderIssues, renderMinorObservations, renderChecks,
+  renderResumenDetalle, renderRubroGrid,
+} from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { wireTableTools } from '../ui/tableTools.js';
-import { getViewPreference, setViewPreference } from '../ui/viewPreference.js';
+import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel } from '../utils/dates.js';
@@ -107,33 +110,40 @@ const ACCUM_FIELDS = [
   { key: 'retenciones',        label: 'Retenciones efectuadas (1150)' },
 ];
 
-// Columnas de la hoja/solapa MM-AAAA (mes de proceso + SAC teórico acumulado)
+// Columnas de la hoja/solapa MM-AAAA (mes de proceso + SAC teórico acumulado).
+//
+// `key` y `label` son también los del .xlsx y el CSV — no se tocan. `band` y
+// `sub` son de la planilla en pantalla (§5 de la vista estándar): la banda
+// agrupa y el sub dice la BASE DE CÁLCULO abajo del título, que acá es el número
+// de acumulador de Axton. Es lo que hace que la planilla se explique sola: el
+// analista ve "1100" y sabe exactamente de qué columna del crudo salió.
+// El ORDEN es el del archivo exportado y no cambia; las bandas se arman sobre él.
 const MES_CONCEPTS = [
-  { key: 'brutoGanancias', label: 'Bruto para ganancias' },
-  { key: 'retribNoHabit',  label: 'Retribuciones no habituales' },
-  { key: 'noRemGravado',   label: 'No Rem. gravado IIGG' },
-  { key: 'sacSegunda',     label: 'SAC segunda cuota' },
-  { key: 'excluyeSac',     label: 'Excluye del SAC teórico' },
-  { key: 'retJubilacion',  label: 'Ret. jubilación' },
-  { key: 'retObraSocial',  label: 'Ret. obra social' },
-  { key: 'retSindicato',   label: 'Ret. sindicato' },
-  { key: 'retenciones',    label: 'Retenciones efectuadas' },
-  { key: 'sacTeorico',     label: 'SAC TEÓRICO' },
+  { key: 'brutoGanancias', label: 'Bruto para ganancias',        band: 'Gravado del mes',     sub: '1100' },
+  { key: 'retribNoHabit',  label: 'Retribuciones no habituales', band: 'Gravado del mes',     sub: '1107' },
+  { key: 'noRemGravado',   label: 'No Rem. gravado IIGG',        band: 'Gravado del mes',     sub: '1101' },
+  { key: 'sacSegunda',     label: 'SAC segunda cuota',           band: 'Gravado del mes',     sub: '1109' },
+  { key: 'excluyeSac',     label: 'Excluye del SAC teórico',     band: 'Deducciones del mes', sub: '1137' },
+  { key: 'retJubilacion',  label: 'Ret. jubilación',             band: 'Deducciones del mes', sub: '1120' },
+  { key: 'retObraSocial',  label: 'Ret. obra social',            band: 'Deducciones del mes', sub: '1122' },
+  { key: 'retSindicato',   label: 'Ret. sindicato',              band: 'Deducciones del mes', sub: '1121' },
+  { key: 'retenciones',    label: 'Retenciones efectuadas',      band: 'Impuesto',            sub: '1150' },
+  { key: 'sacTeorico',     label: 'SAC TEÓRICO',                 band: 'SAC teórico',         sub: '(gravado − deducciones) ÷ 12, sumado por mes', close: true },
 ];
 
 // Columnas de la hoja/solapa DATOS (acumulado del año, del crudo más nuevo)
 const DATOS_CONCEPTS = [
-  { key: 'brutoGanancias', label: 'Bruto para ganancias' },
-  { key: 'excluyeSac',     label: 'Excluye del SAC teórico' },
-  { key: 'noRemGravado',   label: 'No Rem. gravado IIGG' },
-  { key: 'retribNoHabit',  label: 'Retribuciones no habituales' },
-  { key: 'sacPrimera',     label: 'SAC primera cuota' },
-  { key: 'sacSegunda',     label: 'SAC segunda cuota' },
-  { key: 'total',          label: 'TOTAL' },
-  { key: 'retJubilacion',  label: 'Jubilación' },
-  { key: 'retObraSocial',  label: 'Obra social' },
-  { key: 'retSindicato',   label: 'Sindicato' },
-  { key: 'impuesto',       label: 'IMPUESTO' },
+  { key: 'brutoGanancias', label: 'Bruto para ganancias',        band: 'Acumulado del año', sub: '1100' },
+  { key: 'excluyeSac',     label: 'Excluye del SAC teórico',     band: 'Acumulado del año', sub: '1137 · no entra al TOTAL' },
+  { key: 'noRemGravado',   label: 'No Rem. gravado IIGG',        band: 'Acumulado del año', sub: '1101' },
+  { key: 'retribNoHabit',  label: 'Retribuciones no habituales', band: 'Acumulado del año', sub: '1107' },
+  { key: 'sacPrimera',     label: 'SAC primera cuota',           band: 'Acumulado del año', sub: '1108' },
+  { key: 'sacSegunda',     label: 'SAC segunda cuota',           band: 'Acumulado del año', sub: '1109' },
+  { key: 'total',          label: 'TOTAL',                       band: 'Acumulado del año', sub: '1100 + 1101 + 1107 + 1108 + 1109', close: true },
+  { key: 'retJubilacion',  label: 'Jubilación',                  band: 'Retenciones',       sub: '1120' },
+  { key: 'retObraSocial',  label: 'Obra social',                 band: 'Retenciones',       sub: '1122' },
+  { key: 'retSindicato',   label: 'Sindicato',                   band: 'Retenciones',       sub: '1121' },
+  { key: 'impuesto',       label: 'IMPUESTO',                    band: 'Impuesto',          sub: '1150 · retenciones efectuadas', close: true },
 ];
 
 // Conceptos que definen si un legajo "tuvo movimiento" en el mes de proceso
@@ -226,7 +236,14 @@ export function runAcumuladoresGanancias(primaryRows, _tabRows, mapping) {
       sac.porPeriodo.set(period, doceava);
     }
   }
-  for (const row of mesRows) row.sacTeorico = sacPorLegajo.get(row.legajo)?.total ?? null;
+  for (const row of mesRows) {
+    const sac = sacPorLegajo.get(row.legajo);
+    row.sacTeorico = sac?.total ?? null;
+    // El desglose por mes viaja con la fila (objeto plano, no Map): es lo que la
+    // ficha muestra para explicar de dónde sale el SAC teórico de ese legajo.
+    // No entra al .xlsx ni al CSV, que se arman con las columnas declaradas.
+    row.sacPorPeriodo = sac ? Object.fromEntries(sac.porPeriodo) : {};
+  }
 
   // ── Tabla DATOS: acumulado del año, SOLO del crudo más nuevo (SUMA + sus
   // propias filas de mes) — no se suman los crudos entre sí. ─────────────────
@@ -591,11 +608,16 @@ export function summarizeAcumuladoresGanancias(results) {
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────
-
-// NOTA de diseño (D-027): esta pantalla usa 3 solapas (Resumen · Fichas ·
-// Planilla) en vez de las 2 (Resumen/Detalle) de `renderResumenDetalle()` que
-// usan los otros 9 controles — Guillermo pidió explícitamente las tres
-// direcciones como vistas separadas. Se arma con `initTabs` directamente.
+//
+// Las tres solapas del estándar (Resumen · Fichas · Planilla, §2 de
+// specs/vista-estandar-resultados.md) con las piezas compartidas: la barra con
+// los cinco chips de estado, el buscador, Marcas ▾, Orden ▾, el KPI de la
+// selección y el ⬇ Exportar ▾ último; las fichas del molde de `fichaList.js`; y
+// la planilla armada con el descriptor de columnas de `renderRubroGrid()`.
+//
+// Este control fue el piloto del estándar: tenía fichas de primera generación
+// (con los estilos escritos adentro del módulo) y una barra propia con selects
+// crudos y sin exportar en la solapa de fichas. Las dos cosas se jubilaron acá.
 // El veredicto queda SIEMPRE visible arriba, afuera de las solapas.
 export function renderAcumuladoresResults(results, container) {
   if (results.error) {
@@ -644,34 +666,34 @@ export function renderAcumuladoresResults(results, container) {
   }
 
   // ── Solapas Resumen · Fichas · Planilla ────────────────────────────────────
+  const fichas = buildFichas({ mes, datos, issues, periods, mesProceso });
+  // "Con diferencia" acá es lo que no cierra: la reconciliación que no da o el
+  // SAC teórico negativo (ver estadoDeFicha). Es lo que decide qué solapa abre.
+  const conDiferencias = fichas.some(f => f.estado === 'conDif');
+
   const tabsHost = document.createElement('div');
   container.appendChild(tabsHost);
 
-  initTabs(tabsHost, {
-    tabs: [
-      { id: 'resumen',  label: 'Resumen',  render: (panel) => renderResumenTab(panel, {
-          datos, mesRows: mes.rows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks,
-          sinCalcular, pisoGananciasAnualAprox: results.pisoGananciasAnualAprox,
-        }) },
-      { id: 'fichas',   label: 'Fichas',   render: (panel) => renderFichasTab(panel, { mes, datos, issues }) },
-      { id: 'planilla', label: 'Planilla', render: (panel) => renderPlanillaTab(panel, {
-          mesConMov, datos, sinMovCount, mesProceso,
-        }) },
-    ],
-    activeId: getViewPreference('acumuladores_ganancias').tab,
-    onChange(id) { setViewPreference('acumuladores_ganancias', { tab: id }); },
+  renderResumenDetalle(tabsHost, {
+    controlId: 'acumuladores_ganancias',
+    conDiferencias,
+    resumen: (panel) => renderResumenTab(panel, {
+      datos, mesRows: mes.rows, sinMovCount, sacTeoricoTotal, periods, regimenLabel, issues, coherenceChecks,
+      sinCalcular, pisoGananciasAnualAprox: results.pisoGananciasAnualAprox,
+    }),
+    fichas: (panel) => renderFichasTab(panel, { fichas, results }),
+    planilla: (panel) => renderPlanillaTab(panel, { mesConMov, datos, sinMovCount, mesProceso, results }),
   });
+}
 
-  // ── Export único (arma el .xlsx con ambas hojas) ──────────────────────────
-  const exportBar = document.createElement('div');
-  exportBar.className = 'results-toolbar';
-  exportBar.style.justifyContent = 'flex-end';
-  container.appendChild(exportBar);
-
+/** Los tres ítems del ⬇ Exportar ▾ — los mismos en las dos solapas que lo llevan. */
+function mountExportMenu(exportEl, results) {
+  const { mes, mesProceso } = results;
+  const mesConMov = mes.rows.filter(hasMovement);
   const csvHeaders = ['Legajo', 'Apellido y Nombre', ...MES_CONCEPTS.map(c => c.label)];
   const csvRows = () => mesConMov.map(r => [r.legajo, r.nombre, ...MES_CONCEPTS.map(c => fmtNum(r[c.key]))]);
 
-  renderExportMenu(exportBar, {
+  renderExportMenu(exportEl, {
     onExcel: () => exportAcumuladoresToXlsx(results),
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acumuladores_Ganancias_${mesProceso}.csv`),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
@@ -719,6 +741,7 @@ function renderResumenTab(panel, { datos, mesRows, sinMovCount, sacTeoricoTotal,
 
   if (EXTRAS_GANANCIAS_HABILITADOS) renderScatter(panel, datos.rows, pisoGananciasAnualAprox);
 }
+
 
 /**
  * Dispersión total anual gravado (DATOS.total) vs. impuesto retenido
@@ -834,8 +857,75 @@ function renderScatter(panel, datosRows, pisoGananciasAnualAprox = null) {
 }
 
 // ── Dirección B — Fichas por legajo ──────────────────────────────────────────
+//
+// **En qué estado cerró cada legajo, para este control.** Los cinco chips son
+// los mismos en los 21 controles, pero qué significa cada uno lo define el
+// control: acá no hay dos archivos que se crucen, así que "cómo cerró" es la
+// pregunta que este reporte sí se hace — ¿el TOTAL del crudo coincide con la
+// suma de sus componentes, y salió el SAC teórico?
+//
+//   Con diferencia   → la reconciliación no cierra, o el SAC teórico dio negativo
+//   Dentro del margen→ NO APLICA: este control no usa el monto de diferencia del
+//                      cliente (D-069). La reconciliación cierra al centavo o no
+//                      cierra; no hay una zona gris que tolerar.
+//   Al centavo       → la reconciliación cierra y el SAC teórico salió completo
+//   Sin comparar     → falta un lado: no hay doceava en ningún mes de la ventana,
+//                      o el SAC teórico quedó armado con menos meses de los que
+//                      la ventana pide
+//
+// Lo demás que le puede pasar a un legajo —sin movimiento en el mes, una doceava
+// que se sale de la línea, que no traiga CUIL— no es un grado de cierre: es el
+// segundo eje, y va en Marcas ▾ (§3).
+const ESTADO_POR_ISSUE = {
+  reconciliacion:  'conDif',
+  sacNegativo:     'conDif',
+  sacNoCalculado:  'sinComparar',
+  sacParcial:      'sinComparar',
+  // Estos no dicen cómo cerró — son marcas (ver MARCAS_ACUM).
+  sinMovimiento:   null,
+  doceavaAtipica:  null,
+  cuil:            null,
+  // Los dos de EXTRAS_GANANCIAS_HABILITADOS (D-033), por si se reactivan.
+  fueraDePatron:   null,
+  tope:            null,
+};
 
-function renderFichasTab(panel, { mes, datos, issues }) {
+const NO_APLICA_ACUM = {
+  margen: 'no cruza dos archivos, así que no usa el monto de diferencia del '
+    + 'cliente — la reconciliación cierra al centavo o no cierra',
+};
+
+/** Peor primero: si un legajo tiene varios, gana el que más importa. */
+const ORDEN_ESTADO = ['conDif', 'sinComparar', 'centavo'];
+
+function estadoDeFicha(ficha) {
+  let peor = 'centavo';
+  for (const i of ficha.issues) {
+    // Un tipo de issue que nadie mapeó no puede quedar escondido en verde: se
+    // lee como que no cierra hasta que alguien lo clasifique acá arriba.
+    const estado = (i.type in ESTADO_POR_ISSUE) ? ESTADO_POR_ISSUE[i.type] : 'conDif';
+    if (!estado) continue;
+    if (ORDEN_ESTADO.indexOf(estado) < ORDEN_ESTADO.indexOf(peor)) peor = estado;
+  }
+  return peor;
+}
+
+const SEVERIDAD_POR_ESTADO = { conDif: 'error', sinComparar: 'warn', centavo: 'ok' };
+
+/**
+ * El segundo eje: qué MÁS le pasa al legajo. Acá van los avisos que NO son un
+ * grado de cierre — los que sí lo son (SAC parcial, SAC negativo) ya están en el
+ * chip de estado y en el badge de la ficha, y repetirlos como marca haría que la
+ * misma cosa se diga dos veces en la misma tarjeta.
+ */
+const MARCAS_ACUM = [
+  { value: 'sinMov',  label: 'Sin movimiento en el mes', match: f => !f.tieneMovimiento },
+  { value: 'doceava', label: 'Doceava atípica',          match: f => f.issues.some(i => i.type === 'doceavaAtipica') },
+  { value: 'sinCuil', label: 'No trae CUIL',             match: f => f.issues.some(i => i.type === 'cuil') },
+];
+
+/** Los descriptores de ficha del control (§4). Uno por legajo de DATOS. */
+function buildFichas({ mes, datos, issues, periods, mesProceso }) {
   const issuesByLegajo = new Map();
   for (const i of issues) {
     if (!issuesByLegajo.has(i.legajo)) issuesByLegajo.set(i.legajo, []);
@@ -843,146 +933,222 @@ function renderFichasTab(panel, { mes, datos, issues }) {
   }
   const mesByLegajo = new Map(mes.rows.map(r => [r.legajo, r]));
 
-  const fichas = datos.rows.map(d => {
+  return datos.rows.map(d => {
     const legajoIssues = issuesByLegajo.get(d.legajo) || [];
-    return {
-      legajo: d.legajo, nombre: d.nombre, cuil: d.cuil,
-      datos: d, mes: mesByLegajo.get(d.legajo) || null,
-      tieneMovimiento: mesByLegajo.has(d.legajo) ? hasMovement(mesByLegajo.get(d.legajo)) : false,
+    const mesRow = mesByLegajo.get(d.legajo) || null;
+    const base = {
+      id: d.legajo,
+      name: d.nombre,
+      datos: d,
+      mes: mesRow,
+      tieneMovimiento: mesRow ? hasMovement(mesRow) : false,
       issues: legajoIssues,
-      revisar: legajoIssues.filter(i => i.sev !== 'minor'),
-      minorWhats: [...new Set(legajoIssues.filter(i => i.sev === 'minor').map(i => i.what))],
     };
+    base.estado = estadoDeFicha(base);
+    return { ...base, ...presentacionDeFicha(base, { periods, mesProceso }) };
   });
-
-  // Opciones del filtro de severidad — derivadas de los issues presentes en
-  // este run, no hardcodeadas: "Con algo para revisar" agrupa todo lo no-minor,
-  // y cada texto `minor` distinto (ej. "no trae CUIL") es su propia opción,
-  // separada de "revisar" (D-027 / spec §3).
-  const minorTexts = [...new Set(fichas.flatMap(f => f.minorWhats))];
-  const filterOptions = [
-    { value: 'todos', label: `Todos (${fichas.length})` },
-    { value: 'revisar', label: `Con algo para revisar (${fichas.filter(f => f.revisar.length > 0).length})` },
-    ...minorTexts.map((what, idx) => ({
-      value: `minor:${idx}`, what,
-      label: `${what} (${fichas.filter(f => f.minorWhats.includes(what)).length})`,
-    })),
-    { value: 'sinMov', label: `Sin movimiento (${fichas.filter(f => !f.tieneMovimiento).length})` },
-  ];
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  toolbar.innerHTML = `
-    <input type="text" class="form-input" data-fichas-search placeholder="Buscar legajo o nombre…" style="max-width:220px;padding:6px 10px;">
-    <select class="form-input" data-fichas-filter style="max-width:260px;">
-      ${filterOptions.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
-    </select>
-    <select class="form-input" data-fichas-sort style="max-width:200px;">
-      <option value="bruto">Mayor bruto (DATOS)</option>
-      <option value="sacTeorico">Mayor SAC teórico</option>
-      <option value="legajo">Legajo</option>
-      <option value="nombre">Nombre</option>
-    </select>
-  `;
-  panel.appendChild(toolbar);
-
-  const listHost = document.createElement('div');
-  listHost.className = 'fichas-list';
-  panel.appendChild(listHost);
-
-  const searchEl = toolbar.querySelector('[data-fichas-search]');
-  const filterEl = toolbar.querySelector('[data-fichas-filter]');
-  const sortEl   = toolbar.querySelector('[data-fichas-sort]');
-
-  function apply() {
-    const q = searchEl.value.trim().toLowerCase();
-    const filter = filterEl.value;
-    const sort = sortEl.value;
-
-    let shown = fichas.filter(f => {
-      if (q && !`${f.legajo} ${f.nombre}`.toLowerCase().includes(q)) return false;
-      if (filter === 'revisar' && f.revisar.length === 0) return false;
-      if (filter === 'sinMov' && f.tieneMovimiento) return false;
-      if (filter.startsWith('minor:')) {
-        const what = minorTexts[Number(filter.split(':')[1])];
-        if (!f.minorWhats.includes(what)) return false;
-      }
-      return true;
-    });
-
-    shown = shown.slice().sort((a, b) => {
-      if (sort === 'bruto') return (b.datos.total ?? 0) - (a.datos.total ?? 0);
-      if (sort === 'sacTeorico') return (b.mes?.sacTeorico ?? 0) - (a.mes?.sacTeorico ?? 0);
-      if (sort === 'nombre') return a.nombre.localeCompare(b.nombre);
-      return String(a.legajo).localeCompare(String(b.legajo), undefined, { numeric: true });
-    });
-
-    renderFichasList(listHost, shown);
-  }
-
-  searchEl.addEventListener('input', apply);
-  filterEl.addEventListener('change', apply);
-  sortEl.addEventListener('change', apply);
-  apply();
 }
 
-function renderFichasList(host, fichas) {
-  if (fichas.length === 0) {
-    host.innerHTML = `<p class="text-muted" style="padding:var(--sp-3);">Ningún legajo coincide con el filtro.</p>`;
-    return;
-  }
+/** Lo que se ve de la ficha: cerrada arriba, y el cuerpo que se dibuja al abrir. */
+function presentacionDeFicha(f, { periods, mesProceso }) {
+  const d = f.datos;
+  const sev = SEVERIDAD_POR_ESTADO[f.estado] || 'info';
+  // El badge dice POR QUÉ el legajo quedó en ese estado, así que sale del issue
+  // que definió el estado — no de cualquiera. Lo que no mueve el estado es una
+  // marca y va en su propia línea.
+  const deEstado = f.issues.filter(i => ESTADO_POR_ISSUE[i.type]);
+  const principal = deEstado.find(i => i.sev === 'hi') || deEstado[0];
 
-  host.innerHTML = fichas.map(f => `
-    <details class="ficha-card" style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:var(--sp-2);background:var(--color-surface);">
-      <summary style="cursor:pointer;padding:var(--sp-2) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;list-style:none;">
-        <strong>${esc(f.legajo)}</strong>
-        <span>${esc(f.nombre)}</span>
-        ${f.revisar.length > 0 ? `<span class="text-muted" style="font-size:var(--text-sm);">⚠ ${f.revisar.length} para revisar</span>` : ''}
-        ${f.minorWhats.map(w => `<span class="rb-chip-minor" title="${esc(w)}">${esc(w.length > 28 ? w.slice(0, 27) + '…' : w)}</span>`).join('')}
-        ${!f.tieneMovimiento ? `<span class="text-muted" style="font-size:var(--text-sm);">sin movimiento en el mes</span>` : ''}
-        <span style="margin-left:auto;font-size:var(--text-sm);" class="text-muted">TOTAL: ${fmtNum(f.datos.total)}</span>
-      </summary>
-      <div style="padding:0 var(--sp-3) var(--sp-3);display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);">
-        <div>
-          <div class="rb-section-h">Mes de proceso</div>
-          ${f.mes ? MES_CONCEPTS.filter(c => isVal(f.mes[c.key])).map(c => `
-            <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);padding:2px 0;">
-              <span class="text-muted">${esc(c.label)}</span><span>${fmtNum(f.mes[c.key])}</span>
-            </div>`).join('') || '<p class="text-muted" style="font-size:var(--text-sm);">Sin movimiento.</p>'
-            : '<p class="text-muted" style="font-size:var(--text-sm);">Sin movimiento.</p>'}
-        </div>
-        <div>
-          <div class="rb-section-h">Acumulado del año (DATOS)</div>
-          ${DATOS_CONCEPTS.filter(c => isVal(f.datos[c.key])).map(c => `
-            <div style="display:flex;justify-content:space-between;font-size:var(--text-sm);padding:2px 0;">
-              <span class="text-muted">${esc(c.label)}</span><span>${fmtNum(f.datos[c.key])}</span>
-            </div>`).join('')}
-        </div>
-      </div>
-      ${f.issues.length > 0 ? `
-        <div style="padding:0 var(--sp-3) var(--sp-3);">
-          ${f.issues.map(i => `<div style="font-size:var(--text-sm);color:var(--color-text-muted);">${i.sev === 'minor' ? 'i' : '⚠'} ${esc(i.what)}</div>`).join('')}
-        </div>` : ''}
-    </details>
-  `).join('');
+  // Reconciliación: la misma cuenta que hace computeChecks — la suma de los
+  // componentes contra el TOTAL que trae el crudo. Acá no se recalcula nada
+  // distinto: se muestra de dónde sale el resultado que el chequeo ya dio.
+  const calculado = round2(sumOrNull([d.brutoGanancias, d.noRemGravado, d.retribNoHabit, d.sacPrimera, d.sacSegunda]));
+  const residuo = (calculado === null || d.total === null) ? null : round2(calculado - d.total);
+  const hayResiduo = residuo !== null && Math.abs(residuo) > RECONCILIACION_EPS;
+
+  const doceavas = Object.entries(f.mes?.sacPorPeriodo || {}).sort(([a], [b]) => a.localeCompare(b));
+  const sacTeorico = f.mes?.sacTeorico ?? null;
+
+  // La cascada que produce el número grande de la ficha, con la MISMA cuenta que
+  // hace calcDoceava: gravado − deducciones, dividido 12, sumado mes a mes. Acá
+  // no se recalcula nada: se muestra de dónde sale.
+  const m = f.mes;
+  const gravadoMes     = m ? sumOrNull([m.brutoGanancias, m.retribNoHabit, m.noRemGravado, m.sacSegunda]) : null;
+  const deduccionesMes = m ? sumOrNull([m.excluyeSac, m.retJubilacion, m.retObraSocial, m.retSindicato]) : null;
+  const baseMes = (gravadoMes === null && deduccionesMes === null)
+    ? null : round2((gravadoMes ?? 0) - (deduccionesMes ?? 0));
+  const doceavaMes = f.mes?.sacPorPeriodo?.[mesProceso] ?? null;
+  const sacNegativo = sacTeorico !== null && sacTeorico < -VALOR_REAL_EPS;
+
+  const marks = MARCAS_ACUM
+    .filter(m => m.match(f))
+    .map(m => ({ text: m.label, tone: m.value === 'sinCuil' ? 'neutral' : 'info' }));
+
+  return {
+    unit: d.legajo,
+    severity: sev,
+    tag: { text: periodToLabel(mesProceso) },
+    badge: principal
+      ? { text: tituloCorto(principal.what), title: principal.what, tone: principal.sev === 'hi' ? 'error' : 'warn' }
+      : undefined,
+    context: [
+      f.tieneMovimiento ? 'Con movimiento en el mes' : 'Sin movimiento en el mes',
+      `${doceavas.length} de ${periods.length} mes${periods.length === 1 ? '' : 'es'} con doceava`,
+    ],
+    marks,
+    amountLabel: 'SAC teórico',
+    amount: sacTeorico,
+    amountTone: sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : undefined,
+    body: {
+      // 1. La tira: la cascada del SAC teórico, que es lo que este reporte
+      //    calcula y el número grande de la ficha. Del gravado del mes a lo que
+      //    termina en el archivo. En rojo si dio negativo — ahí hay algo mal.
+      strip: [
+        { label: 'Gravado del mes', value: gravadoMes },
+        { label: '− Deducciones', value: deduccionesMes },
+        { label: 'Base del mes', value: baseMes, invert: true },
+        { label: '÷ 12 = doceava del mes', value: doceavaMes },
+        { label: 'SAC teórico', value: sacTeorico, residuo: sacNegativo },
+      ],
+      // 2. Las dos tablas: a la izquierda cómo debería ser, a la derecha cómo salió.
+      tables: [
+        {
+          title: 'Cómo debería ser — los componentes del TOTAL',
+          rows: [
+            { label: 'Bruto para ganancias',        code: '1100', value: d.brutoGanancias },
+            { label: 'No Rem. gravado IIGG',        code: '1101', value: d.noRemGravado },
+            { label: 'Retribuciones no habituales', code: '1107', value: d.retribNoHabit },
+            { label: 'SAC primera cuota',           code: '1108', value: d.sacPrimera },
+            { label: 'SAC segunda cuota',           code: '1109', value: d.sacSegunda },
+          ],
+          foot: { label: 'TOTAL calculado', value: calculado, tone: 'ink' },
+        },
+        {
+          title: 'Cómo salió — lo que trae el crudo de Axton',
+          rows: [
+            { label: 'TOTAL acumulado del año', code: '1100…1109', value: d.total },
+            { label: 'Excluye del SAC teórico', code: '1137', value: d.excluyeSac },
+            { label: 'Jubilación',              code: '1120', value: d.retJubilacion },
+            { label: 'Obra social',             code: '1122', value: d.retObraSocial },
+            { label: 'Sindicato',               code: '1121', value: d.retSindicato },
+            { label: 'Impuesto retenido',       code: '1150', value: d.impuesto },
+          ],
+          foot: { label: 'Residuo', value: residuo, tone: hayResiduo ? 'error' : 'ink' },
+        },
+      ],
+      // 3. El detalle: de dónde sale el SAC teórico, mes por mes.
+      detail: doceavas.length > 0 ? {
+        title: 'De dónde sale el SAC teórico — una doceava por mes',
+        columns: [
+          { key: 'mes', label: 'Mes de la ventana' },
+          { key: 'doceava', label: 'Doceava', num: true },
+        ],
+        rows: doceavas.map(([period, doceava]) => ({
+          mes: periodToLabel(period),
+          doceava,
+          tone: doceava >= 0 ? 'pos' : 'neg',
+        })),
+        foot: { label: 'SAC teórico acumulado', value: sacTeorico },
+      } : undefined,
+      // 4. La conclusión: qué mirar, no un resumen.
+      conclusion: conclusionDeFicha(f, { residuo, hayResiduo, periods, doceavas, sacTeorico }),
+    },
+  };
 }
 
-// ── Dirección C — Planilla (la tabla completa, con sticky) ───────────────────
+/** No un resumen: una instrucción. Descarta lo que ya quedó explicado. */
+function conclusionDeFicha(f, { residuo, hayResiduo, periods, doceavas, sacTeorico }) {
+  if (hayResiduo) {
+    return {
+      tone: 'error',
+      title: `El TOTAL del crudo no cierra por ${fmtNum(residuo)}`,
+      text: 'La suma de los acumuladores 1100, 1101, 1107, 1108 y 1109 no da el TOTAL que trae el archivo. '
+        + 'Mirá esos cinco acumuladores de este legajo en el crudo más nuevo antes de mandar el reporte: '
+        + 'el SAC teórico se calcula sobre los mismos valores.',
+    };
+  }
+  if (f.issues.some(i => i.type === 'sacNegativo')) {
+    return {
+      tone: 'error',
+      title: `El SAC teórico dio negativo: ${fmtNum(sacTeorico)}`,
+      text: 'En alguno de los meses las deducciones (excluidos, jubilación, obra social, sindicato) superaron al '
+        + 'gravado. La tabla de abajo dice en cuál: revisá ese mes antes de mandar el archivo.',
+    };
+  }
+  if (f.issues.some(i => i.type === 'sacNoCalculado')) {
+    return {
+      tone: 'warn',
+      title: 'No hay con qué calcular el SAC teórico',
+      text: 'Este legajo no tiene valores propios del mes en ninguno de los crudos subidos, así que no hay doceava '
+        + 'que acumular y sale en cero en el .xlsx. Confirmá si tenía que liquidar en alguno de esos meses.',
+    };
+  }
+  if (f.issues.some(i => i.type === 'sacParcial')) {
+    return {
+      tone: 'warn',
+      title: `SAC teórico armado con ${doceavas.length} de ${periods.length} meses`,
+      text: 'Queda proporcional a lo que sí liquidó. Si es un alta posterior o una licencia, está bien así; '
+        + 'si no, falta subir el crudo de alguno de esos meses.',
+    };
+  }
+  if (f.issues.some(i => i.type === 'doceavaAtipica')) {
+    return {
+      tone: 'warn',
+      title: 'Una doceava se sale de la línea de las otras',
+      text: 'Puede ser un retroactivo o una liquidación extra. Mirá en la tabla de abajo cuál es el mes y '
+        + 'confirmá que el SAC teórico no quede inflado.',
+    };
+  }
+  return {
+    tone: 'ok',
+    title: 'Cierra al centavo',
+    text: 'El TOTAL del crudo coincide con la suma de sus componentes y el SAC teórico salió con todos los meses '
+      + 'de la ventana. No hay nada para revisar en este legajo.',
+  };
+}
 
-function renderPlanillaTab(panel, { mesConMov, datos, sinMovCount, mesProceso }) {
+/** El badge de la causa principal entra en una línea: la primera oración, sin el punto. */
+function tituloCorto(what) {
+  const primera = String(what || '').split(/(?<=\.)\s/)[0].replace(/\.$/, '');
+  return primera.length > 42 ? `${primera.slice(0, 41)}…` : primera;
+}
+
+function renderFichasTab(panel, { fichas, results }) {
+  renderFichasPanel(panel, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_ACUM,
+    marcas: MARCAS_ACUM,
+    ordenes: [
+      { value: 'sacTeorico', label: 'Mayor SAC teórico', compare: (a, b) => (b.mes?.sacTeorico ?? 0) - (a.mes?.sacTeorico ?? 0) },
+      { value: 'bruto',      label: 'Mayor bruto (DATOS)', compare: (a, b) => (b.datos.total ?? 0) - (a.datos.total ?? 0) },
+      { value: 'legajo',     label: 'Legajo', compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+      { value: 'nombre',     label: 'Nombre', compare: (a, b) => String(a.name).localeCompare(String(b.name)) },
+    ],
+    getLabel: f => `${f.id} — ${f.name}`,
+    getAmount: f => f.mes?.sacTeorico ?? null,
+    amountLabel: 'Σ SAC teórico',
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+  });
+}
+
+// ── Dirección C — Planilla (la tabla ancha, con bandas y TOTAL) ──────────────
+
+function renderPlanillaTab(panel, { mesConMov, datos, sinMovCount, mesProceso, results }) {
   const tabsHost = document.createElement('div');
   panel.appendChild(tabsHost);
 
   initTabs(tabsHost, {
     tabs: [
       { id: 'mes',   label: periodToLabel(mesProceso), render: (p) => renderConceptTable(p, {
-          rows: mesConMov, concepts: MES_CONCEPTS,
+          rows: mesConMov, concepts: MES_CONCEPTS, results,
           emptyMessage: 'Ningún legajo tiene movimiento en este período.',
           footnote: `Mostrando ${mesConMov.length} legajo${mesConMov.length === 1 ? '' : 's'} con movimiento en el mes.`
             + (sinMovCount > 0 ? ` El .xlsx incluye además los ${sinMovCount} legajo${sinMovCount === 1 ? '' : 's'} sin movimiento, en cero.` : ''),
         }) },
       { id: 'datos', label: 'DATOS (acumulado)', render: (p) => renderConceptTable(p, {
-          rows: datos.rows, concepts: DATOS_CONCEPTS,
+          rows: datos.rows, concepts: DATOS_CONCEPTS, results,
           emptyMessage: 'Sin datos acumulados.',
           footnote: `Mostrando ${datos.rows.length} legajo${datos.rows.length === 1 ? '' : 's'}. Acumulado del año, del crudo más nuevo.`,
         }) },
@@ -990,71 +1156,60 @@ function renderPlanillaTab(panel, { mesConMov, datos, sinMovCount, mesProceso })
   });
 }
 
-/** Tabla genérica (compartida por Planilla): oculta columnas sin valor real, pagina, busca, totaliza, sticky. */
-function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote }) {
+/** Las dos columnas de identificación, iguales en las dos hojas de la planilla. */
+const COLS_IDENTIFICACION = [
+  { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+  { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
+];
+
+/**
+ * Una hoja de la planilla: oculta las columnas sin valor real, y el resto lo
+ * pone la pieza compartida (bandas, base de cálculo, columnas congeladas, TOTAL
+ * por columna, buscador, paginación y total de la selección).
+ */
+function renderConceptTable(panel, { rows, concepts, emptyMessage, footnote, results }) {
   if (rows.length === 0) {
     panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(emptyMessage)}</p>`;
     return;
   }
 
+  // Un concepto que no se liquidó en el período no se muestra como una columna
+  // de ceros: se oculta y se dice cuántos abajo (que un dato no exista ES un
+  // resultado válido, y se informa — D-036).
   const shownConcepts = concepts.filter(c => rows.some(r => isVal(r[c.key])));
   const hiddenCols = concepts.length - shownConcepts.length;
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  const searchEl = document.createElement('div');
-  toolbar.appendChild(searchEl);
-  panel.appendChild(toolbar);
+  const { searchEl, exportEl } = createResultsToolbar(panel);
+  mountExportMenu(exportEl, results);
 
   // Sin scroller propio: el de la planilla lo arma `enhanceGrid()` alrededor de
   // la tabla, y uno intermedio además se tragaría la nota al pie (D-060).
   const tableHost = document.createElement('div');
   panel.appendChild(tableHost);
 
-  const totals = {};
-  for (const c of shownConcepts) totals[c.key] = rows.reduce((acc, r) => acc + (r[c.key] ?? 0), 0);
+  const { tableEl } = renderRubroGrid(tableHost, {
+    columns: [...COLS_IDENTIFICACION, ...shownConcepts.map(c => ({ ...c, num: true }))],
+    rows,
+    unitLabel: 'legajos',
+    stickyCols: 2,
+  });
 
-  tableHost.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Legajo</th>
-          <th>Apellido y Nombre</th>
-          ${shownConcepts.map(c => `<th style="text-align:right;white-space:nowrap;">${esc(c.label)}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td>${esc(r.legajo)}</td>
-            <td>${esc(r.nombre)}</td>
-            ${shownConcepts.map(c => `<td style="text-align:right;">${fmtNum(r[c.key])}</td>`).join('')}
-          </tr>
-        `).join('')}
-      </tbody>
-      <tfoot>
-        <tr style="font-weight:700;border-top:2px solid var(--color-border);">
-          <!-- Con la unidad: es de donde sale "TOTAL de la selección — 1 legajo"
-               al filtrar (ver selectionLabelHtml en tableTools.js). Sin ella la
-               fila decía "1 fila", que no dice de qué. -->
-          <td colspan="2">TOTAL — ${rows.length} legajo${rows.length === 1 ? '' : 's'}</td>
-          ${shownConcepts.map(c => `<td style="text-align:right;">${fmtNum(totals[c.key])}</td>`).join('')}
-        </tr>
-      </tfoot>
-    </table>
-    <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-      ${esc(footnote)}
-      ${hiddenCols > 0 ? ` Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} sin valores.` : ''}
-    </p>
-  `;
+  const pie = document.createElement('p');
+  pie.className = 'text-muted';
+  pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
+  pie.textContent = footnote
+    + (hiddenCols > 0 ? ` Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} sin valores.` : '');
+  panel.appendChild(pie);
 
   // Sólo el <tbody> (filas de datos) — el <tfoot> es la fila de TOTAL, que
   // queda fuera de paginación y búsqueda (mismo patrón que rendXEe.js) y
   // permite que enhanceGrid() la fije abajo con sticky.
-  wireTableTools(tableHost.querySelector('table'), {
+  // `sticky: false` porque los superpoderes de la planilla (sticky, columnas
+  // fijas, rótulo de banda anclado) ya se los puso `renderRubroGrid()`.
+  wireTableTools(tableEl, {
     rows, getLabel: r => `${r.legajo} — ${r.nombre}`,
     searchEl,
-    stickyCols: 2,
+    sticky: false,
   });
 }
 

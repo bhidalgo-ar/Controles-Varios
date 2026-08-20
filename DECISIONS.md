@@ -2691,3 +2691,71 @@ la tabla seguía a la derecha); los chips de filtro suben de 4 a 7 opciones (`MA
 `js/ui/tableTools.js`); y se agregan los tokens de tema `--invert-bg/--invert-fg/--invert-accent` y
 `--solid-error-bg/--solid-error-fg` porque en los temas oscuros `--ink` es un color claro (se usa como
 texto fuerte) y "fondo ink + texto blanco" dejaba renglones blanco sobre blanco.
+
+---
+
+## D-077 — Tanda 1 de la vista estándar: qué significa cada chip en un control que no cruza dos archivos
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 1 de `specs/vista-estandar-resultados.md` (D-074) — las piezas
+compartidas del §7 más Acumuladores Ganancias como piloto (§9, punto 1). Willy no estaba disponible para las
+dos decisiones de abajo: quedan tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. Qué significa cada chip en un control que no cruza dos archivos.** Acumuladores Ganancias es de
+generación (D-026), no de cruce: no hay un archivo de origen contra el que medir una diferencia. Los cinco
+chips del estándar (D-074) se redefinen sobre lo único que el control sí verifica — la reconciliación del
+TOTAL del crudo contra sus componentes, y el SAC teórico:
+
+- **Con diferencia** = la reconciliación no cierra, o el SAC teórico dio negativo.
+- **Al centavo** = cierra, y el SAC teórico salió con todos los meses de la ventana.
+- **Sin comparar** = no hay ninguna doceava en la ventana, o el SAC teórico quedó armado con menos meses de
+  los que la ventana pide.
+- **Dentro del margen no aplica**: el control no usa el monto de diferencia del cliente (D-069) — la
+  reconciliación cierra al centavo o no cierra, no hay una zona intermedia que tolerar. Sale en gris, con su
+  0 y el `title` que lo explica, igual que un chip sin casos (D-074 §3).
+
+Lo que no es un grado de cierre —sin movimiento en el mes, doceava atípica, no trae CUIL— pasa a
+`Marcas ▾`, no al chip de estado.
+
+**2. Un tipo de issue que nadie mapeó a un estado se lee como "Con diferencia".** Es el default de
+`estadoDeFicha()`: un tipo de issue nuevo que todavía no se clasificó cuenta como que no cierra, no como que
+está bien. Con el default al revés, un caso que nadie previó se leería en verde sin que nadie lo note — el
+problema que la vista estándar vino a evitar.
+
+**3. Lo que la pieza compartida se lleva del Detalle de Netos, que llegó primero.** D-076 implementó esta
+misma vista a mano, antes de que existieran las piezas, "para que la tanda 1 los pueda levantar tal cual".
+Esta tanda los levanta: la fila de bandas sobre `--invert-bg` con el rótulo en `--invert-accent` y el
+separador en `--band-divider`, el chip sin casos como `.results-chip--vacio`, la marca `data-chips` para
+declarar qué select se dibuja como chips, y los tokens `--scroll-track`, `--sh-ficha`/`--sh-ficha-hover` e
+`--invert-*`. **No se inventó un segundo nombre para nada de eso**, que es lo que haría que las dos pantallas
+se vean distintas. Lo que sí cambia respecto de D-076: el límite por cantidad de opciones desaparece —
+`data-chips="1"` es la única forma de pedir chips, como el propio D-076 anticipó ("cuando las 21 pantallas
+declaren su select de estado, el límite se va")—, y el rótulo de banda se ancla en el ancho real de las
+columnas congeladas (`--rb-band-inset`, medido) en vez de a una distancia fija del borde.
+
+**De paso.** `renderResumenDetalle()` deja de asumir exactamente 2 solapas — la razón por la que D-027 armaba
+Acumuladores con `initTabs()` aparte, al margen de la pieza compartida. Ahora soporta las tres nativamente
+(`resumen`/`fichas`/`planilla`) y decide cuál abre según `conDiferencias`, así que Acumuladores pasa a usarla
+como el resto de los controles.
+
+**Tres superposiciones que se arreglaron en la pieza, para las 19 planillas.** Las tres se ven sólo al
+scrollear a la derecha, que es cuando el analista ya no tiene el encabezado de la izquierda para orientarse:
+el rótulo de la banda se metía abajo de las columnas congeladas; el rótulo de la fila de TOTAL quedaba tapado
+por el primer importe (se leía "TOTAL315.000,00jos"); y con una banda sobre las columnas congeladas, la
+banda de al lado la tapaba. Además, las columnas congeladas del encabezado sólo se fijaban si el control las
+declaraba con `rowspan="2"` — con la fila de bandas arriba viven en la segunda fila, y ahí se quedaban
+sueltas.
+
+**El scroll de 14 px estaba apagado desde siempre.** Chromium ignora los `::-webkit-scrollbar` cuando el
+mismo elemento declara `scrollbar-width` o `scrollbar-color`, que es lo que pasaba: ni los 10 px de antes ni
+los 14 px que declaró D-076 llegaban a dibujarse — quedaba la barra overlay de 2 px del sistema (medido en
+navegador: una página mínima con la regla de 14 px mide lo mismo que una sin ninguna regla). Las propiedades
+estándar pasan a vivir dentro de `@supports not selector(::-webkit-scrollbar)`, o sea sólo para el navegador
+que las necesita. **Sin verificar en pantalla:** el navegador headless de este entorno fuerza su propia barra
+de 2 px, así que el ancho real hay que mirarlo en una máquina de verdad.
+
+**Pendiente.** Los puntos 1 y 2 esperan que Willy los vea en pantalla; si el chip "Dentro del margen" no le
+sirve así en un control de generación, se ajusta sin tocar el resto del estándar.
+
+**Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
+`js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
+D-069, D-074, D-076.
