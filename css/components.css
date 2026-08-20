@@ -1206,16 +1206,23 @@
     linear-gradient(to right,  var(--scroll-shadow), transparent) 0 0 / 18px 100% no-repeat scroll,
     linear-gradient(to left,   var(--scroll-shadow), transparent) 100% 0 / 18px 100% no-repeat scroll,
     var(--color-surface);
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  /* La barra tiene que AVISAR que la planilla sigue para el costado. A 10px,
+     con la pista transparente y el thumb del mismo gris que el borde, no se
+     veía que faltaban 300px de tabla a la derecha (reporte de Willy con el
+     Detalle de Netos). Ahora: 14px, pista visible, thumb con contraste y un
+     mínimo de 80px para que se vea aunque la tabla sea muy ancha. */
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--t3) var(--scroll-track);
 }
-.rb-grid-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
-.rb-grid-wrap::-webkit-scrollbar-track { background: transparent; }
+.rb-grid-wrap::-webkit-scrollbar { width: 14px; height: 14px; }
+.rb-grid-wrap::-webkit-scrollbar-track { background: var(--scroll-track); border-radius: 7px; }
 .rb-grid-wrap::-webkit-scrollbar-thumb {
-  background: var(--color-border); border-radius: 5px;
-  border: 2px solid transparent; background-clip: padding-box;
+  background: var(--t3); border-radius: 7px;
+  border: 3px solid var(--scroll-track); background-clip: padding-box;
+  min-width: 80px; min-height: 80px;
 }
-.rb-grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--t3); background-clip: padding-box; }
+.rb-grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--t2); background-clip: padding-box; }
+.rb-grid-wrap::-webkit-scrollbar-corner { background: var(--scroll-track); }
 /* Barra del botón "Ampliar" — sólo se muestra si a la planilla le falta ancho
    de verdad (ver enhanceWidthEscape en resultBlocks.js). */
 .rb-grid-bar { display: flex; justify-content: flex-end; margin-bottom: var(--sp-2); }

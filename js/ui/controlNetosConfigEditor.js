@@ -16,12 +16,27 @@
 //      retuvieron sobre una base menor que sus haberes— pero no lo aplica solo:
 //      el número oficial lo pone el analista.
 //
-//   3. **Las alícuotas de retención.** Vienen con la semilla del convenio de
-//      Comercio, confirmada contra la liquidación real. Se muestran porque son
-//      exactamente lo que el control existe para detectar: una alícuota mal
-//      puesta llega a un bruto y a un neto equivocados sin que nadie lo vea.
+//   3. **Las alícuotas de retención.** Son el RESPALDO: el control usa las que
+//      el Tabulado declara para cada empleado (Willy, 2026-08-20), y estas
+//      valen sólo para el archivo que no traiga esas columnas. Se muestran
+//      igual porque son exactamente lo que el control existe para detectar: una
+//      alícuota mal puesta llega a un bruto y a un neto equivocados sin que
+//      nadie lo vea.
+//
+//   4. **El convenio del acuerdo.** Los adicionales y el descuento sindical son
+//      del convenio que firmó la paritaria: al de fuera de convenio se lo sigue
+//      controlando, pero con su sueldo y sus propios aportes.
+//
+//   5. **Los jubilados que siguen trabajando.** El Tabulado no trae ninguna
+//      columna que lo diga, así que el panel muestra la SOSPECHA —los legajos a
+//      los que les retuvieron sólo jubilación teniendo las cuatro alícuotas
+//      declaradas— y el analista la confirma con un tilde. Hasta que la tilde,
+//      el control les calcula los cuatro aportes y salen con diferencia: la
+//      alternativa era que el control se corrigiera solo mirando lo que la
+//      liquidación hizo, y ahí deja de ser un control (Willy, 2026-08-20).
 
-import { DEFAULT_NETOS_CONFIG } from '../controls/controlNetos.js';
+import { DEFAULT_NETOS_CONFIG, detectarPerfilJubilado } from '../controls/controlNetos.js';
+import { makeLegajoKey } from '../utils/legajo.js';
 import { toNum } from '../utils/currency.js';
 
 const TASA_LABELS = {
@@ -32,7 +47,9 @@ const TASA_LABELS = {
   sindicato:        'Sindicato',
   faecys:           'FAECYS',
   obraSocialNoRemu: 'Obra social sobre lo no remunerativo',
-  afiliadoExtra:    'Retención del afiliado (2° 2%)',
+  // La retención del afiliado no se edita acá: su alícuota la declara el
+  // Tabulado por empleado (678-AFILIADO_PORC), que es además el único lugar
+  // donde dice quién está afiliado.
 };
 
 /**
@@ -44,6 +61,8 @@ const TASA_LABELS = {
  * @param {object[]} [opts.tabRows]        filas del Tabulado, para sugerir el tope
  * @param {object[]} [opts.tab2Rows]       filas del Tabulado de la segunda empresa, si se cargó
  * @param {object[]} [opts.tab3Rows]       filas del Tabulado de la tercera empresa, si se cargó
+ * @param {string}   [opts.legajoColumn]   columna de legajo del Tabulado, para detectar jubilados
+ * @param {string}   [opts.legajoKeyMode]  cómo se comparan dos legajos en este cliente (D-038)
  */
 export function renderControlNetosConfigEditor(container, opts = {}) {
   const {
@@ -53,6 +72,8 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     tabRows = [],
     tab2Rows = [],
     tab3Rows = [],
+    legajoColumn = '',
+    legajoKeyMode,
   } = opts;
 
   const base = DEFAULT_NETOS_CONFIG();
@@ -62,6 +83,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     tasas:         { ...base.tasas,         ...(config.tasas         || {}) },
     codigos:       { ...base.codigos,       ...(config.codigos       || {}) },
     empresaLabels: { ...base.empresaLabels, ...(config.empresaLabels || {}) },
+    jubilados:     { ...base.jubilados,     ...(config.jubilados     || {}) },
   };
 
   const empresaSlots = [
@@ -71,6 +93,16 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   ].filter(s => s.rows.length > 0);
 
   const sugerido = sugerirTope(tabRows, current);
+
+  // Los legajos con perfil de jubilado, por casillero. Se detectan con la misma
+  // función que usa el control, así el analista tilda exactamente la lista que
+  // el control después va a mirar.
+  const keyFn = makeLegajoKey(legajoKeyMode);
+  const sospechas = empresaSlots.map(s => ({
+    ...s,
+    legajos: detectarPerfilJubilado(s.rows, { legajoColumn, keyFn, config: current }),
+  })).filter(s => s.legajos.length > 0);
+  const totalSospechas = sospechas.reduce((a, s) => a + s.legajos.length, 0);
 
   const editor = document.createElement('details');
   if (openByDefault || current.noRemuAcuerdo === null) editor.open = true;
@@ -98,6 +130,36 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
 
     <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
       <label style="display:block;">
+        <span class="form-label" style="font-size:var(--text-sm);">Convenio del acuerdo</span>
+        <input type="text" class="form-input form-input--sm" style="max-width:160px;"
+               data-netos-convenio autocomplete="off"
+               value="${esc(current.convenio ?? '')}" placeholder="ej. Comercio">
+      </label>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:52ch;margin:var(--sp-4) 0 0;">
+        Se compara contra la columna CONVENIO del Tabulado. Al empleado que no es de este convenio
+        el control le arma el recibo con su sueldo y sus propios aportes: <strong>sin el acuerdo, sin
+        antigüedad ni presentismo y sin descuento sindical</strong>. Igual se lo controla y aparece en
+        la lista.
+      </p>
+    </div>
+
+    <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
+      <label style="display:block;">
+        <span class="form-label" style="font-size:var(--text-sm);">Puestos sin aportes</span>
+        <input type="text" class="form-input form-input--sm" style="max-width:200px;"
+               data-netos-puestos autocomplete="off"
+               value="${esc((current.puestosSinAportes || []).join(', '))}" placeholder="ej. Director">
+      </label>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:52ch;margin:var(--sp-4) 0 0;">
+        Separados por coma, se comparan contra la columna PUESTO. A estos empleados no se les
+        descuenta jubilación, ley 19.032, obra social ni ANSSAL: el director no está en relación de
+        dependencia y la liquidación no le retiene nada, pero el Tabulado igual le declara las
+        alícuotas. Lo gremial, si el archivo declara alguna cuota, se le sigue calculando.
+      </p>
+    </div>
+
+    <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
+      <label style="display:block;">
         <span class="form-label" style="font-size:var(--text-sm);">Tope de la base de aportes</span>
         <input type="text" class="form-input form-input--sm" style="max-width:160px;"
                data-netos-tope inputmode="decimal" autocomplete="off"
@@ -119,6 +181,33 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
         un error.
       </p>
     </div>
+
+
+    ${totalSospechas > 0 ? `
+    <div style="margin-top:var(--sp-3);">
+      <span class="form-label" style="font-size:var(--text-sm);">Jubilados que siguen trabajando</span>
+      <p class="text-muted" style="font-size:var(--text-sm);margin:2px 0 var(--sp-2);max-width:72ch;">
+        A ${totalSospechas === 1 ? 'este legajo' : `estos ${totalSospechas} legajos`} la liquidación
+        les retuvo <strong>sólo jubilación</strong>, teniendo las cuatro alícuotas declaradas en el
+        Tabulado. Es el perfil de un jubilado que sigue trabajando: no paga la ley 19.032 porque ya
+        es beneficiario, y su obra social es la del PAMI. El archivo no dice que lo sean, así que
+        <strong>confirmalo con el tilde</strong> y el control les va a calcular jubilación y nada
+        más. Sin tildar, salen con diferencia.
+      </p>
+      ${sospechas.map(s => `
+        <div style="margin-bottom:var(--sp-2);">
+          ${sospechas.length > 1 ? `<div class="text-muted" style="font-size:var(--text-sm);">${esc(s.label)}</div>` : ''}
+          ${s.legajos.map(l => `
+            <label style="display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--text-sm);">
+              <input type="checkbox" data-netos-jubilado="${esc(s.key)}" value="${esc(l.legajo)}"
+                     ${(current.jubilados[s.key] || []).map(String).includes(String(l.legajo)) ? 'checked' : ''}>
+              <span>Legajo <strong>${esc(l.legajo)}</strong>${l.nombre ? ` — ${esc(l.nombre)}` : ''}${l.puesto ? ` <span class="text-muted">(${esc(l.puesto)})</span>` : ''}</span>
+            </label>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
 
     ${empresaSlots.length ? `
     <div style="margin-top:var(--sp-3);">
@@ -146,9 +235,15 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
       </summary>
       <div data-netos-tasas style="margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-3);"></div>
       <p class="text-muted" style="font-size:var(--text-sm);max-width:60ch;margin-top:var(--sp-2);">
-        Vienen con los valores del convenio de Comercio. La obra social que además cobra sobre lo
-        no remunerativo es la <strong>${esc(current.obraSocialConAporteNoRemu)}</strong>; al resto no
-        se le aplica ese porcentaje.
+        <strong>Son el respaldo</strong>: cuando el Tabulado trae la columna de porcentaje de un
+        aporte —y los de Sportline la traen— el control usa la del propio empleado, que es la que
+        sabe quién aporta el 1% de AMECYS, quién el del CEC y quién no tiene obra social. Estos
+        valores se usan sólo para el archivo que no traiga esas columnas.
+      </p>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:60ch;margin-top:var(--sp-2);">
+        La obra social que además cobra sobre lo no remunerativo es la
+        <strong>${esc(current.obraSocialConAporteNoRemu)}</strong>; al resto no se le aplica ese
+        porcentaje.
       </p>
     </details>
   `;
@@ -156,9 +251,12 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   const nrEl      = editor.querySelector('[data-netos-nr]');
   const topeEl    = editor.querySelector('[data-netos-tope]');
   const tolEl     = editor.querySelector('[data-netos-tol]');
+  const convEl    = editor.querySelector('[data-netos-convenio]');
+  const puestosEl = editor.querySelector('[data-netos-puestos]');
   const hintEl    = editor.querySelector('[data-netos-tope-hint]');
   const tasasEl   = editor.querySelector('[data-netos-tasas]');
   const empresaEls = editor.querySelectorAll('[data-netos-empresa]');
+  const jubiladoEls = editor.querySelectorAll('[data-netos-jubilado]');
 
   tasasEl.innerHTML = Object.keys(TASA_LABELS).map(k => `
     <label style="display:block;">
@@ -189,11 +287,20 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     current.noRemuAcuerdo     = num(nrEl.value);
     current.topeBaseImponible = num(topeEl.value);
     current.tolerancia        = num(tolEl.value) ?? 1;
+    current.convenio          = convEl.value.trim();
+    current.puestosSinAportes = puestosEl.value.split(',').map(v => v.trim()).filter(Boolean);
     for (const el of tasasEl.querySelectorAll('[data-netos-tasa]')) {
       current.tasas[el.dataset.netosTasa] = num(el.value) ?? 0;
     }
     for (const el of empresaEls) {
       current.empresaLabels[el.dataset.netosEmpresa] = el.value.trim();
+    }
+    // Se rearma la lista completa de cada casillero: destildar tiene que borrar
+    // el legajo, no dejarlo guardado de una corrida anterior.
+    for (const slot of ['tab', 'tab2', 'tab3']) {
+      const enPantalla = [...jubiladoEls].filter(el => el.dataset.netosJubilado === slot);
+      if (enPantalla.length === 0) continue;
+      current.jubilados[slot] = enPantalla.filter(el => el.checked).map(el => el.value);
     }
     pintarHint();
     onChange({
@@ -203,9 +310,10 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     });
   };
 
-  for (const el of [nrEl, topeEl, tolEl]) el.addEventListener('input', emitir);
+  for (const el of [nrEl, topeEl, tolEl, convEl, puestosEl]) el.addEventListener('input', emitir);
   tasasEl.addEventListener('input', emitir);
   for (const el of empresaEls) el.addEventListener('input', emitir);
+  for (const el of jubiladoEls) el.addEventListener('change', emitir);
 
   pintarHint();
   container.appendChild(editor);
