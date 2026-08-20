@@ -17,7 +17,7 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG } =
+const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG, detectarPerfilJubilado } =
   await import('./js/controls/controlNetos.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { categoriaKey } = await import('./js/parsers/escalaComercioParser.js');
@@ -349,6 +349,78 @@ const rSinLista = runControlNetos(escalaRows, [fila('1', filaDirector)],
   { ...mapping, netosConfig: { ...CFG, puestosSinAportes: [] } });
 assert('con la lista de puestos vacía, el director vuelve a aportar',
   rSinLista.rows[0].sinAportes === false);
+
+// ── Jubilados que siguen trabajando (sospecha + tilde) ──────────────────────
+//
+// El Tabulado no trae ninguna columna que diga que un empleado está jubilado, y
+// estimarlo por la edad que se deduce del CUIL sería numerología. Lo que el
+// archivo SÍ deja ver es el perfil: le retuvieron jubilación y nada más, con las
+// cuatro alícuotas declaradas. El control lo sospecha y lo informa; el efecto lo
+// habilita el tilde del analista en el Paso 2. Sin tilde no se toca el cálculo:
+// un control que se corrige solo con lo que la liquidación hizo deja de ser un
+// control (Willy, 2026-08-20).
+
+// Sólo jubilación retenida, las cuatro alícuotas declaradas.
+const filaJubilado = {
+  ...conTasas(),
+  '6005-TOT_JUB': REMU_TEO * p(11),
+  '6018-TOT_LEY19032': 0,
+  '6030-OBRA_SOCIAL': 0,
+  '6039-AP_ANSSAL': 0,
+  NETO: REMU_TEO + NR_TEO
+    - (REMU_TEO * p(11) + (REMU_TEO + NR_TEO) * TASA_GREM),
+};
+
+const rJubSinTilde = runControlNetos(escalaRows, [fila('1', filaJubilado)], mapping);
+assert('perfil de jubilado: el control lo detecta',
+  rJubSinTilde.rows[0].perfilJubilado === true);
+assert('perfil de jubilado sin tildar: NO se le cambia el cálculo y sale con diferencia',
+  rJubSinTilde.rows[0].jubilado === false
+  && rJubSinTilde.rows[0].tasas.obraSocial === 2.55
+  && Math.abs(rJubSinTilde.rows[0].residuo) > 1);
+
+const rJubTildado = runControlNetos(escalaRows, [fila('1', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab: ['1'] } } });
+assert('jubilado confirmado: aporta jubilación y nada más',
+  rJubTildado.rows[0].tasas.jubilacion === 11
+  && rJubTildado.rows[0].tasas.ley19032 === 0
+  && rJubTildado.rows[0].tasas.obraSocial === 0
+  && rJubTildado.rows[0].tasas.anssal === 0);
+assert('jubilado confirmado: el legajo cierra',
+  Math.abs(rJubTildado.rows[0].residuo) < 0.01);
+assert('jubilado confirmado: queda marcado como confirmado, no sólo como sospecha',
+  rJubTildado.rows[0].jubilado === true && rJubTildado.rows[0].perfilJubilado === true);
+
+// El tilde de un casillero no vale para otro: las tres empresas numeran sus
+// legajos por su cuenta, así que el mismo número puede ser otro empleado.
+const rTildeOtroSlot = runControlNetos(escalaRows, [fila('1', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab2: ['1'] } } });
+assert('el tilde de otra empresa no afecta a este legajo',
+  rTildeOtroSlot.rows[0].jubilado === false);
+
+// El tilde se compara con la clave de legajo del cliente: guardado como '007' y
+// liquidado como '7' tiene que seguir siendo el mismo empleado (D-038).
+const rTildeConCeros = runControlNetos(escalaRows, [fila('7', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab: ['007'] } } });
+assert('el tilde matchea con la clave de legajo del cliente, no con el texto crudo',
+  rTildeConCeros.rows[0].jubilado === true);
+
+// Un legajo al que le retuvieron todo no tiene el perfil: no se le ofrece tilde.
+assert('un legajo que aporta normal no tiene perfil de jubilado',
+  rOk.rows[0].perfilJubilado === false);
+
+// La lista que el Paso 2 ofrece para tildar sale de la MISMA función que usa el
+// control: con la detección duplicada, el analista tilda una lista y el control
+// mira otra.
+const detectados = detectarPerfilJubilado(
+  [fila('1', filaJubilado), fila('2', { NETO: NETO_TEO })],
+  { legajoColumn: 'ID_EMPLEADO' });
+assert('el Paso 2 recibe sólo los legajos con el perfil',
+  detectados.length === 1 && detectados[0].legajo === '1');
+assert('cada sospecha viaja con el nombre, para que el analista lo reconozca',
+  detectados[0].nombre === 'Sanguinetti Javier');
+assert('sin columna de legajo no se inventa una lista',
+  detectarPerfilJubilado([fila('1', filaJubilado)], {}).length === 0);
 
 // El del convenio sigue con su acuerdo, y el nombre del convenio se compara sin
 // distinguir mayúsculas.

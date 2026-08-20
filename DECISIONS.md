@@ -2508,13 +2508,32 @@ dato de ese empleado. Con esto las diferencias sin explicar bajaron de 17 a **3*
 Se descartó porque tiene un contraejemplo en el mismo archivo. Es el caso de manual del gotcha de
 CLAUDE.md: la regla se decidió mirando 17 filas y la fila 18 la refutaba.
 
-**Pendiente, sin resolver — no es un criterio confirmado, es una pregunta abierta.** Quedan 3 legajos
-con diferencia: uno de fuera de convenio y dos de Comercio, a los que la liquidación les retuvo
-**sólo jubilación** (11%) y ni ley 19.032, ni obra social, ni ANSSAL, aunque el Tabulado les declara
-las cuatro alícuotas. Los tres tienen la obra social en 0 y un puesto común —administrativo, vendedor,
-maestranza—, así que ninguna columna del archivo los distingue. El perfil coincide con el de un
-jubilado que sigue trabajando, pero eso es una lectura de quien mira el dato: **PENDIENTE: falta que
-Willy defina el criterio** antes de tocar el control para estos casos.
+**Quinto criterio: el jubilado que sigue trabajando se sospecha, y lo confirma el analista.** Los 3
+legajos que quedaban —uno de fuera de convenio y dos de Comercio— tenían la liquidación con **sólo
+jubilación** retenida (11%) y ni ley 19.032, ni obra social, ni ANSSAL, aunque el Tabulado les declara
+las cuatro alícuotas. Willy confirmó que son jubilados que siguen trabajando: no pagan la ley 19.032
+porque ya son beneficiarios y su obra social es la del PAMI. El problema es que **ninguna columna del
+archivo lo dice**: los tres tienen un puesto común (administrativo, vendedor, maestranza) y sindicato
+normal. Estimarlo por la edad que se deduce del CUIL —65 los hombres, 60 las mujeres— es numerología
+y Willy lo descartó explícitamente.
+
+La solución que pidió, y que quedó implementada: **el control sospecha y el analista confirma**.
+`perfilJubilado()` detecta el perfil sobre un hecho del archivo —le retuvieron jubilación y nada más,
+teniendo las otras tres alícuotas declaradas—, `detectarPerfilJubilado()` arma la lista que el panel
+del Paso 2 pinta con un tilde por legajo (con nombre y puesto, para reconocerlo), y `cfg.jubilados`
+—por casillero de Tabulado, porque las tres empresas numeran sus legajos por su cuenta— guarda lo
+tildado. Recién tildado se le dejan de calcular esos tres aportes. **Sin tildar, el legajo sale con
+diferencia y la pantalla dice el motivo y qué hacer.** La misma función detecta para la pantalla y
+para la corrida: con la detección duplicada, el analista tilda una lista y el control mira otra.
+
+**Alternativa descartada:** que el control mirara lo que la liquidación efectivamente retuvo y ajustara
+el teórico a eso. Es lo más cómodo y cierra todo solo, pero un control que se corrige con el dato que
+tiene que auditar deja de ser un control: una alícuota mal cargada en Meta4 pasaría inadvertida, que
+es exactamente lo que este control existe para detectar. La sospecha se muestra; el criterio lo pone
+una persona.
+
+Con los tres tildes puestos, la corrida de 05/2026 sobre las tres empresas cierra **completa: 0
+legajos con diferencia sobre 619**.
 
 **Fuera de esta decisión, identificado y sin arreglar:** el KPI "Legajos cruzados" del hero de
 resultados cuenta sólo los empleados del Tabulado principal (380 en esta corrida), mientras la

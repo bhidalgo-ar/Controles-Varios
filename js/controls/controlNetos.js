@@ -123,6 +123,15 @@ export const DEFAULT_NETOS_CONFIG = () => ({
   // cero: hay empleados con la obra social en cero que aportan normal y cierran
   // (Willy, 2026-08-20).
   puestosSinAportes: ['Director'],
+  // Jubilados que siguen trabajando, CONFIRMADOS por el analista en el Paso 2.
+  // Aportan jubilación y nada más: ni ley 19.032 (ya son beneficiarios), ni obra
+  // social, ni ANSSAL. El Tabulado igual les declara las cuatro alícuotas, y no
+  // trae ninguna columna que diga que están jubilados: el control **sospecha**
+  // el perfil —le retuvieron sólo jubilación teniendo las cuatro declaradas— lo
+  // muestra en el Paso 2, y recién cuando el analista lo tilda deja de
+  // calcularles esos tres aportes. Se guarda por casillero de Tabulado porque
+  // las tres empresas numeran sus legajos por su cuenta (Willy, 2026-08-20).
+  jubilados: { tab: [], tab2: [], tab3: [] },
   antiguedadPorAnio: 1,      // % por año
   presentismo:       8.33,   // %
   // Tope de la base imponible de los cuatro aportes. `null` = no se aplica tope
@@ -282,7 +291,56 @@ function tasaDelLegajo(group, codes, colByCode, fallback) {
  * que cuando el archivo no declara la alícuota el respaldo es 0 y no el 2% del
  * Paso 2. Si el archivo SÍ la declara, manda el archivo igual que para todos.
  */
-function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes }) {
+/**
+ * ¿Este legajo tiene el perfil de un jubilado que sigue trabajando?
+ *
+ * El Tabulado no trae ninguna columna que lo diga, pero la liquidación lo deja
+ * ver: le retuvieron jubilación y **nada más** —ni ley 19.032, ni obra social,
+ * ni ANSSAL— teniendo las cuatro alícuotas declaradas en sus columnas de
+ * porcentaje. Es una sospecha, no un hecho: la confirma el analista con un tilde
+ * en el Paso 2. Estimarlo por la edad que se deduce del CUIL sería numerología
+ * (Willy, 2026-08-20).
+ */
+export function perfilJubilado(group, colByCode, cfg) {
+  const c = cfg.codigos;
+  const declara = (codes) => (maxCodes(group, codes, colByCode) ?? 0) > 0;
+  const retuvo  = (codes) => Math.abs(sumCodes(group, codes, colByCode) ?? 0) > REDONDEO_EPS;
+
+  if (!declara(c.porcJubilacion) || !retuvo(c.apJubilacion)) return false;
+  const declaraOtros = declara(c.porcLey19032) || declara(c.porcObraSocial) || declara(c.porcAnssal);
+  const retuvoOtros  = retuvo(c.apLey19032)  || retuvo(c.apObraSocial)  || retuvo(c.apAnssal);
+  return declaraOtros && !retuvoOtros;
+}
+
+/**
+ * Los legajos con perfil de jubilado de un Tabulado, para ofrecerlos en el Paso 2.
+ *
+ * La usan la pantalla —para pintar la lista con el tilde— y el control, que
+ * vuelve a evaluar el perfil sobre lo que se cargó. Una sola función para las
+ * dos cosas: con la detección duplicada, el analista tilda una lista y el
+ * control mira otra.
+ */
+export function detectarPerfilJubilado(rows, { legajoColumn, keyFn, config } = {}) {
+  if (!rows?.length || !legajoColumn) return [];
+  const cfg = { ...DEFAULT_NETOS_CONFIG(), ...(config || {}) };
+  cfg.codigos = { ...DEFAULT_CONCEPT_CODES, ...(config?.codigos || {}) };
+  const colByCode = buildColByCode(rows[0]);
+  const nombreCol = Object.keys(rows[0] || {})
+    .find(h => /APE?LL?IDO/i.test(norm(h)));
+  const out = [];
+  for (const [legajo, group] of groupRowsByLegajo(rows, legajoColumn, { keyFn: keyFn || makeLegajoKey() })) {
+    if (!perfilJubilado(group, colByCode, cfg)) continue;
+    const ficha = lastRow(group);
+    out.push({
+      legajo,
+      nombre: nombreCol ? norm(ficha?.[nombreCol]) : '',
+      puesto: norm(ficha?.PUESTO),
+    });
+  }
+  return out;
+}
+
+function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes, jubilado }) {
   const c = cfg.codigos;
   const t = cfg.tasas;
   const gremial = (codes, fb) => tasaDelLegajo(group, codes, colByCode, aplicaAcuerdo ? fb : 0);
@@ -291,11 +349,15 @@ function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes }) {
   // y la liquidación no le retiene nada. Lo gremial sí sale del archivo — si
   // declara una cuota, es un dato de ese empleado.
   const aporte = (codes, fb) => sinAportes ? 0 : tasaDelLegajo(group, codes, colByCode, fb);
+  // Al jubilado confirmado le queda sólo la jubilación: ya es beneficiario de la
+  // ley 19.032 y su obra social es la del PAMI, así que esos tres no se le
+  // retienen aunque el Tabulado los declare.
+  const deJubilado = (codes, fb) => jubilado ? 0 : aporte(codes, fb);
   return {
     jubilacion: aporte(c.porcJubilacion, t.jubilacion),
-    ley19032:   aporte(c.porcLey19032,   t.ley19032),
-    obraSocial: aporte(c.porcObraSocial, t.obraSocial),
-    anssal:     aporte(c.porcAnssal,     t.anssal),
+    ley19032:   deJubilado(c.porcLey19032,   t.ley19032),
+    obraSocial: deJubilado(c.porcObraSocial, t.obraSocial),
+    anssal:     deJubilado(c.porcAnssal,     t.anssal),
     sindicato:  gremial(c.porcSindicato, t.sindicato),
     faecys:     gremial(c.porcFaecys,    t.faecys),
     cec:        gremial(c.porcCec,       0),
@@ -316,10 +378,10 @@ function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes }) {
  * cuenta tiene que ser **la misma** de los dos lados, o la comparación entre
  * meses mide la diferencia entre dos fórmulas y no entre dos liquidaciones.
  */
-function reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo, sinAportes }) {
+function reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo, sinAportes, jubilado }) {
   const c = cfg.codigos;
   const t = cfg.tasas;
-  const tasas = tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes });
+  const tasas = tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes, jubilado });
   const tasaAportes = pct(tasas.jubilacion) + pct(tasas.ley19032)
                     + pct(tasas.obraSocial) + pct(tasas.anssal);
   const tasaGremial = pct(tasas.sindicato) + pct(tasas.faecys)
@@ -400,11 +462,11 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
   // primera empresa para las otras dos.
   const empresaLabels = cfg.empresaLabels || {};
   const empresas = [
-    { label: empresaLabels.tab || 'Empresa 1', rows: tabRows || [],
+    { key: 'tab',  label: empresaLabels.tab || 'Empresa 1', rows: tabRows || [],
       nameCol: mapping?.tab?.apellidoNombreColumn },
-    { label: empresaLabels.tab2 || 'Empresa 2', rows: mapping?.tab2Rows || [],
+    { key: 'tab2', label: empresaLabels.tab2 || 'Empresa 2', rows: mapping?.tab2Rows || [],
       nameCol: mapping?.tab2?.apellidoNombreColumn },
-    { label: empresaLabels.tab3 || 'Empresa 3', rows: mapping?.tab3Rows || [],
+    { key: 'tab3', label: empresaLabels.tab3 || 'Empresa 3', rows: mapping?.tab3Rows || [],
       nameCol: mapping?.tab3?.apellidoNombreColumn },
   ].filter(e => e.rows.length > 0);
 
@@ -434,6 +496,12 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
   const CONVENIO_HEADERS = ['CONVENIO'];
   const mismoConvenio = (valor) =>
     norm(valor).toUpperCase() === norm(cfg.convenio).toUpperCase();
+
+  // Los jubilados que el analista confirmó, por casillero de Tabulado. Se
+  // normalizan con la MISMA clave de legajo que el resto del cruce: guardados a
+  // mano como '007' y comparados contra '7', el tilde no tendría efecto.
+  const jubiladosDe = (slot) => new Set(
+    ((cfg.jubilados || {})[slot] || []).map(v => keyFn(v)));
 
   // Los puestos a los que no se les retiene seguridad social (los directores).
   const PUESTO_HEADERS = ['PUESTO'];
@@ -469,6 +537,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
         obraSocial:    prevOsCol ? norm(fichaPrev?.[prevOsCol]) : '',
         aplicaAcuerdo: prevConvCol ? mismoConvenio(fichaPrev?.[prevConvCol]) : true,
         sinAportes:    prevPuestoCol ? esSinAportes(fichaPrev?.[prevPuestoCol]) : false,
+        jubilado:      jubiladosDe('tab').has(legajo),
       });
       netoPrevPorLegajo.set(legajo, t.neto);
     }
@@ -532,9 +601,15 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       const puesto     = puestoCol ? norm(ficha?.[puestoCol]) : '';
       const aplicaAcuerdo = convCol ? mismoConvenio(convenio) : true;
       const sinAportes    = puestoCol ? esSinAportes(puesto) : false;
+      // La sospecha la calcula el control; el efecto lo habilita el tilde del
+      // Paso 2. Sin confirmar, el legajo sale con diferencia y con el motivo a
+      // la vista: el control no se corrige solo con lo que la liquidación hizo.
+      const perfilJub  = perfilJubilado(group, colByCode, cfg);
+      const jubilado   = jubiladosDe(empresa.key).has(legajo);
 
       // ── El recibo teórico ──────────────────────────────────────────────────
-      const teo = reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo, sinAportes });
+      const teo = reciboTeorico(group, colByCode, cfg,
+        { obraSocial, aplicaAcuerdo, sinAportes, jubilado });
       const afiliado       = teo.tasas.afiliado > 0;
       const aniosAnt       = teo.anios;
       const antiguedadTeo  = teo.antiguedad;
@@ -619,6 +694,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       rows.push({
         legajo, nombre, empresa: empresa.label, categoria, obraSocial, afiliado,
         convenio, aplicaAcuerdo, puesto, sinAportes, tasas: teo.tasas, noRemuSinAporteLiq,
+        perfilJubilado: perfilJub, jubilado,
         netoTeoricoPrev, variacionMes,
         aniosAntiguedad: aniosAnt,
         base, sueldoLiq,
@@ -782,6 +858,8 @@ function renderResumen(results, host) {
   const fueraConvenio  = rows.filter(r => r.aplicaAcuerdo === false);
   const sinTasasPropias = rows.filter(r => r.tasas?.delArchivo === false);
   const sinAportes      = rows.filter(r => r.sinAportes === true);
+  const jubConfirmados  = rows.filter(r => r.jubilado === true);
+  const jubSinConfirmar = rows.filter(r => r.perfilJubilado === true && r.jubilado !== true);
 
   renderVerdict(host, {
     tone: conDif.length === 0 && fueraEscala.length === 0 ? 'ok' : 'warn',
@@ -828,7 +906,11 @@ function renderResumen(results, host) {
           who: `Legajo ${r.legajo}`,
           what: `Quedan ${fmt(r.residuo)} sin explicar`,
           why: `Neto liquidado ajustado ${fmt(r.netoAjustado)} contra teórico ${fmt(r.netoTeorico)}. `
-            + `Los conceptos del mes explican ${fmt(r.explicado)}.`,
+            + `Los conceptos del mes explican ${fmt(r.explicado)}.`
+            + (r.perfilJubilado && !r.jubilado
+                ? ' Tiene perfil de jubilado que sigue trabajando: le retuvieron sólo jubilación '
+                  + 'teniendo las cuatro alícuotas declaradas. Si lo es, tildalo en el Paso 2.'
+                : ''),
           sev: 'hi',
         })),
     });
@@ -885,6 +967,16 @@ function renderResumen(results, host) {
         : `A ${sinAportes.length} ${sinAportes.length === 1 ? 'empleado' : 'empleados'} no se les `
           + 'calculó jubilación, ley 19.032, obra social ni ANSSAL, por su puesto ('
           + `${results.config.puestosSinAportes.join(', ')}).` },
+    { label: 'Jubilados que siguen trabajando',
+      ok: jubSinConfirmar.length === 0,
+      detail: jubSinConfirmar.length === 0
+        ? (jubConfirmados.length === 0
+            ? 'Ningún legajo tiene el perfil: a todos les retuvieron los aportes que declaran.'
+            : `${jubConfirmados.length} confirmados en el Paso 2: se les calcula jubilación y nada más.`)
+        : `${jubSinConfirmar.length} ${jubSinConfirmar.length === 1 ? 'legajo tiene' : 'legajos tienen'} `
+          + 'el perfil (les retuvieron sólo jubilación teniendo las cuatro alícuotas declaradas) y '
+          + 'todavía no están confirmados. Tildalos en el Paso 2 y volvé a ejecutar: hasta entonces '
+          + 'salen con diferencia, porque el control les calcula los cuatro aportes.' },
     { label: 'Alícuotas de retención',
       ok: sinTasasPropias.length === 0,
       detail: sinTasasPropias.length === 0
@@ -1051,6 +1143,8 @@ const exportRows = (results) => results.rows.map(r => ([
   r.legajo, r.nombre, r.empresa, r.convenio, r.aplicaAcuerdo ? 'sí' : 'no',
   r.categoria, r.puesto, r.aniosAntiguedad,
   r.sinAportes ? 'sin aportes por su puesto'
+               : r.jubilado ? 'jubilado confirmado: sólo jubilación'
+               : r.perfilJubilado ? 'perfil de jubilado sin confirmar'
                : r.tasas.delArchivo ? 'del Tabulado' : 'del Paso 2', r.base,
   r.remuTeo, r.noRemuTeo, r.retencionesTeo, r.netoTeorico,
   r.netoLiquidado, r.devuelto, r.netoAjustado,

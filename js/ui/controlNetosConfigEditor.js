@@ -26,8 +26,17 @@
 //   4. **El convenio del acuerdo.** Los adicionales y el descuento sindical son
 //      del convenio que firmó la paritaria: al de fuera de convenio se lo sigue
 //      controlando, pero con su sueldo y sus propios aportes.
+//
+//   5. **Los jubilados que siguen trabajando.** El Tabulado no trae ninguna
+//      columna que lo diga, así que el panel muestra la SOSPECHA —los legajos a
+//      los que les retuvieron sólo jubilación teniendo las cuatro alícuotas
+//      declaradas— y el analista la confirma con un tilde. Hasta que la tilde,
+//      el control les calcula los cuatro aportes y salen con diferencia: la
+//      alternativa era que el control se corrigiera solo mirando lo que la
+//      liquidación hizo, y ahí deja de ser un control (Willy, 2026-08-20).
 
-import { DEFAULT_NETOS_CONFIG } from '../controls/controlNetos.js';
+import { DEFAULT_NETOS_CONFIG, detectarPerfilJubilado } from '../controls/controlNetos.js';
+import { makeLegajoKey } from '../utils/legajo.js';
 import { toNum } from '../utils/currency.js';
 
 const TASA_LABELS = {
@@ -52,6 +61,8 @@ const TASA_LABELS = {
  * @param {object[]} [opts.tabRows]        filas del Tabulado, para sugerir el tope
  * @param {object[]} [opts.tab2Rows]       filas del Tabulado de la segunda empresa, si se cargó
  * @param {object[]} [opts.tab3Rows]       filas del Tabulado de la tercera empresa, si se cargó
+ * @param {string}   [opts.legajoColumn]   columna de legajo del Tabulado, para detectar jubilados
+ * @param {string}   [opts.legajoKeyMode]  cómo se comparan dos legajos en este cliente (D-038)
  */
 export function renderControlNetosConfigEditor(container, opts = {}) {
   const {
@@ -61,6 +72,8 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     tabRows = [],
     tab2Rows = [],
     tab3Rows = [],
+    legajoColumn = '',
+    legajoKeyMode,
   } = opts;
 
   const base = DEFAULT_NETOS_CONFIG();
@@ -70,6 +83,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     tasas:         { ...base.tasas,         ...(config.tasas         || {}) },
     codigos:       { ...base.codigos,       ...(config.codigos       || {}) },
     empresaLabels: { ...base.empresaLabels, ...(config.empresaLabels || {}) },
+    jubilados:     { ...base.jubilados,     ...(config.jubilados     || {}) },
   };
 
   const empresaSlots = [
@@ -79,6 +93,16 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   ].filter(s => s.rows.length > 0);
 
   const sugerido = sugerirTope(tabRows, current);
+
+  // Los legajos con perfil de jubilado, por casillero. Se detectan con la misma
+  // función que usa el control, así el analista tilda exactamente la lista que
+  // el control después va a mirar.
+  const keyFn = makeLegajoKey(legajoKeyMode);
+  const sospechas = empresaSlots.map(s => ({
+    ...s,
+    legajos: detectarPerfilJubilado(s.rows, { legajoColumn, keyFn, config: current }),
+  })).filter(s => s.legajos.length > 0);
+  const totalSospechas = sospechas.reduce((a, s) => a + s.legajos.length, 0);
 
   const editor = document.createElement('details');
   if (openByDefault || current.noRemuAcuerdo === null) editor.open = true;
@@ -158,6 +182,33 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
       </p>
     </div>
 
+
+    ${totalSospechas > 0 ? `
+    <div style="margin-top:var(--sp-3);">
+      <span class="form-label" style="font-size:var(--text-sm);">Jubilados que siguen trabajando</span>
+      <p class="text-muted" style="font-size:var(--text-sm);margin:2px 0 var(--sp-2);max-width:72ch;">
+        A ${totalSospechas === 1 ? 'este legajo' : `estos ${totalSospechas} legajos`} la liquidación
+        les retuvo <strong>sólo jubilación</strong>, teniendo las cuatro alícuotas declaradas en el
+        Tabulado. Es el perfil de un jubilado que sigue trabajando: no paga la ley 19.032 porque ya
+        es beneficiario, y su obra social es la del PAMI. El archivo no dice que lo sean, así que
+        <strong>confirmalo con el tilde</strong> y el control les va a calcular jubilación y nada
+        más. Sin tildar, salen con diferencia.
+      </p>
+      ${sospechas.map(s => `
+        <div style="margin-bottom:var(--sp-2);">
+          ${sospechas.length > 1 ? `<div class="text-muted" style="font-size:var(--text-sm);">${esc(s.label)}</div>` : ''}
+          ${s.legajos.map(l => `
+            <label style="display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--text-sm);">
+              <input type="checkbox" data-netos-jubilado="${esc(s.key)}" value="${esc(l.legajo)}"
+                     ${(current.jubilados[s.key] || []).map(String).includes(String(l.legajo)) ? 'checked' : ''}>
+              <span>Legajo <strong>${esc(l.legajo)}</strong>${l.nombre ? ` — ${esc(l.nombre)}` : ''}${l.puesto ? ` <span class="text-muted">(${esc(l.puesto)})</span>` : ''}</span>
+            </label>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
+
     ${empresaSlots.length ? `
     <div style="margin-top:var(--sp-3);">
       <span class="form-label" style="font-size:var(--text-sm);">Nombre de cada empresa</span>
@@ -205,6 +256,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   const hintEl    = editor.querySelector('[data-netos-tope-hint]');
   const tasasEl   = editor.querySelector('[data-netos-tasas]');
   const empresaEls = editor.querySelectorAll('[data-netos-empresa]');
+  const jubiladoEls = editor.querySelectorAll('[data-netos-jubilado]');
 
   tasasEl.innerHTML = Object.keys(TASA_LABELS).map(k => `
     <label style="display:block;">
@@ -243,6 +295,13 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     for (const el of empresaEls) {
       current.empresaLabels[el.dataset.netosEmpresa] = el.value.trim();
     }
+    // Se rearma la lista completa de cada casillero: destildar tiene que borrar
+    // el legajo, no dejarlo guardado de una corrida anterior.
+    for (const slot of ['tab', 'tab2', 'tab3']) {
+      const enPantalla = [...jubiladoEls].filter(el => el.dataset.netosJubilado === slot);
+      if (enPantalla.length === 0) continue;
+      current.jubilados[slot] = enPantalla.filter(el => el.checked).map(el => el.value);
+    }
     pintarHint();
     onChange({
       ...current,
@@ -254,6 +313,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   for (const el of [nrEl, topeEl, tolEl, convEl, puestosEl]) el.addEventListener('input', emitir);
   tasasEl.addEventListener('input', emitir);
   for (const el of empresaEls) el.addEventListener('input', emitir);
+  for (const el of jubiladoEls) el.addEventListener('change', emitir);
 
   pintarHint();
   container.appendChild(editor);
