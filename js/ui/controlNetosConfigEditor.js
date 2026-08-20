@@ -16,10 +16,16 @@
 //      retuvieron sobre una base menor que sus haberes— pero no lo aplica solo:
 //      el número oficial lo pone el analista.
 //
-//   3. **Las alícuotas de retención.** Vienen con la semilla del convenio de
-//      Comercio, confirmada contra la liquidación real. Se muestran porque son
-//      exactamente lo que el control existe para detectar: una alícuota mal
-//      puesta llega a un bruto y a un neto equivocados sin que nadie lo vea.
+//   3. **Las alícuotas de retención.** Son el RESPALDO: el control usa las que
+//      el Tabulado declara para cada empleado (Willy, 2026-08-20), y estas
+//      valen sólo para el archivo que no traiga esas columnas. Se muestran
+//      igual porque son exactamente lo que el control existe para detectar: una
+//      alícuota mal puesta llega a un bruto y a un neto equivocados sin que
+//      nadie lo vea.
+//
+//   4. **El convenio del acuerdo.** Los adicionales y el descuento sindical son
+//      del convenio que firmó la paritaria: al de fuera de convenio se lo sigue
+//      controlando, pero con su sueldo y sus propios aportes.
 
 import { DEFAULT_NETOS_CONFIG } from '../controls/controlNetos.js';
 import { toNum } from '../utils/currency.js';
@@ -32,7 +38,9 @@ const TASA_LABELS = {
   sindicato:        'Sindicato',
   faecys:           'FAECYS',
   obraSocialNoRemu: 'Obra social sobre lo no remunerativo',
-  afiliadoExtra:    'Retención del afiliado (2° 2%)',
+  // La retención del afiliado no se edita acá: su alícuota la declara el
+  // Tabulado por empleado (678-AFILIADO_PORC), que es además el único lugar
+  // donde dice quién está afiliado.
 };
 
 /**
@@ -98,6 +106,21 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
 
     <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
       <label style="display:block;">
+        <span class="form-label" style="font-size:var(--text-sm);">Convenio del acuerdo</span>
+        <input type="text" class="form-input form-input--sm" style="max-width:160px;"
+               data-netos-convenio autocomplete="off"
+               value="${esc(current.convenio ?? '')}" placeholder="ej. Comercio">
+      </label>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:52ch;margin:var(--sp-4) 0 0;">
+        Se compara contra la columna CONVENIO del Tabulado. Al empleado que no es de este convenio
+        el control le arma el recibo con su sueldo y sus propios aportes: <strong>sin el acuerdo, sin
+        antigüedad ni presentismo y sin descuento sindical</strong>. Igual se lo controla y aparece en
+        la lista.
+      </p>
+    </div>
+
+    <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
+      <label style="display:block;">
         <span class="form-label" style="font-size:var(--text-sm);">Tope de la base de aportes</span>
         <input type="text" class="form-input form-input--sm" style="max-width:160px;"
                data-netos-tope inputmode="decimal" autocomplete="off"
@@ -146,9 +169,15 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
       </summary>
       <div data-netos-tasas style="margin-top:var(--sp-2);display:flex;flex-wrap:wrap;gap:var(--sp-3);"></div>
       <p class="text-muted" style="font-size:var(--text-sm);max-width:60ch;margin-top:var(--sp-2);">
-        Vienen con los valores del convenio de Comercio. La obra social que además cobra sobre lo
-        no remunerativo es la <strong>${esc(current.obraSocialConAporteNoRemu)}</strong>; al resto no
-        se le aplica ese porcentaje.
+        <strong>Son el respaldo</strong>: cuando el Tabulado trae la columna de porcentaje de un
+        aporte —y los de Sportline la traen— el control usa la del propio empleado, que es la que
+        sabe quién aporta el 1% de AMECYS, quién el del CEC y quién no tiene obra social. Estos
+        valores se usan sólo para el archivo que no traiga esas columnas.
+      </p>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:60ch;margin-top:var(--sp-2);">
+        La obra social que además cobra sobre lo no remunerativo es la
+        <strong>${esc(current.obraSocialConAporteNoRemu)}</strong>; al resto no se le aplica ese
+        porcentaje.
       </p>
     </details>
   `;
@@ -156,6 +185,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   const nrEl      = editor.querySelector('[data-netos-nr]');
   const topeEl    = editor.querySelector('[data-netos-tope]');
   const tolEl     = editor.querySelector('[data-netos-tol]');
+  const convEl    = editor.querySelector('[data-netos-convenio]');
   const hintEl    = editor.querySelector('[data-netos-tope-hint]');
   const tasasEl   = editor.querySelector('[data-netos-tasas]');
   const empresaEls = editor.querySelectorAll('[data-netos-empresa]');
@@ -189,6 +219,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     current.noRemuAcuerdo     = num(nrEl.value);
     current.topeBaseImponible = num(topeEl.value);
     current.tolerancia        = num(tolEl.value) ?? 1;
+    current.convenio          = convEl.value.trim();
     for (const el of tasasEl.querySelectorAll('[data-netos-tasa]')) {
       current.tasas[el.dataset.netosTasa] = num(el.value) ?? 0;
     }
@@ -203,7 +234,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     });
   };
 
-  for (const el of [nrEl, topeEl, tolEl]) el.addEventListener('input', emitir);
+  for (const el of [nrEl, topeEl, tolEl, convEl]) el.addEventListener('input', emitir);
   tasasEl.addEventListener('input', emitir);
   for (const el of empresaEls) el.addEventListener('input', emitir);
 
