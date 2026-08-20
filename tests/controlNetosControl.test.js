@@ -17,8 +17,8 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG } =
-  await import('./js/controls/controlNetos.js');
+const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG, detectarPerfilJubilado,
+        BANDAS, RUBROS } = await import('./js/controls/controlNetos.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { categoriaKey } = await import('./js/parsers/escalaComercioParser.js');
 
@@ -148,7 +148,11 @@ assert('diferencia de 5.000: unitsWithDiff > 0', summarizeControlNetos(rDif).uni
 // no). Sin reconocerla, el neto liquidado da más bajo que el teórico por
 // exactamente ese importe — que es lo que le pasaba a 4 de los 22 legajos reales.
 
-const extra2Pct  = (REMU_TEO + NR_TEO) * p(T.afiliadoExtra);
+// La alícuota es la de la columna del empleado (678-AFILIADO_PORC = 2), no un
+// porcentaje del Paso 2: esa columna es el único lugar que dice quién está
+// afiliado, así que también es la que pone el número.
+const AFILIADO_PORC = 2;
+const extra2Pct  = (REMU_TEO + NR_TEO) * p(AFILIADO_PORC);
 const netoAfil   = NETO_TEO - extra2Pct;
 const rAfiliado  = runControlNetos(escalaRows, [fila('1', {
   '678-AFILIADO_PORC': 2,
@@ -159,6 +163,279 @@ assert('afiliado: el 2% extra entra en el recibo teórico y el legajo cierra',
   Math.abs(rAfiliado.rows[0].residuo) < 0.01);
 assert('afiliado: el neto teórico baja en ese 2%',
   Math.abs(rAfiliado.rows[0].netoTeorico - netoAfil) < 0.01);
+
+// ── Las alícuotas salen del Tabulado, empleado por empleado ──────────────────
+//
+// El Tabulado declara el porcentaje de cada aporte para cada empleado, y ahí
+// están los casos que las alícuotas del Paso 2 no pueden representar: el que
+// paga el 1% de AMECYS, el del CEC, y el que no tiene obra social y aporta sólo
+// jubilación. Manda el archivo; el Paso 2 es el respaldo. Y si la columna está y
+// dice 0, manda el 0 — "no aporta" es un dato, no un dato faltante.
+
+// Con las alícuotas de siempre declaradas en el archivo, el resultado no cambia.
+const conTasas = (extra = {}) => ({
+  '610-PORC_JUBILACION': 11, '612-PORC_LEY_19032': 3, '616-PORC_OBR_SOCIAL': 2.55,
+  '632-ANSSAL_PORC': 0.45, '676-SINDICAT_PORC': 2, '623-PORC_FAECYS': 0.5,
+  ...extra,
+});
+
+const rTasasArchivo = runControlNetos(escalaRows,
+  [fila('1', { ...conTasas(), NETO: NETO_TEO })], mapping);
+assert('alícuotas del archivo iguales a las del Paso 2: el legajo cierra igual',
+  Math.abs(rTasasArchivo.rows[0].residuo) < 0.01);
+assert('se informa que las alícuotas salieron del Tabulado',
+  rTasasArchivo.rows[0].tasas.delArchivo === true);
+assert('sin las columnas de porcentaje, se usan las del Paso 2 y se informa',
+  rOk.rows[0].tasas.delArchivo === false);
+
+// El 1% de AMECYS: se liquida en 8559 sobre la misma base que sindicato y FAECYS.
+const amecys = (REMU_TEO + NR_TEO) * p(1);
+const rAmecys = runControlNetos(escalaRows, [fila('1', {
+  ...conTasas({ '677-APO_CUOT_AMECYS': 1 }),
+  '8559-CTA_SOC_AMECYS': amecys,
+  NETO: NETO_TEO - amecys,
+})], mapping);
+assert('el 1% de AMECYS entra en el recibo teórico y el legajo cierra',
+  Math.abs(rAmecys.rows[0].residuo) < 0.01);
+
+// El 1% del CEC: misma base, y en este Tabulado se liquida bajo el código 8538.
+const cec = (REMU_TEO + NR_TEO) * p(1);
+const rCec = runControlNetos(escalaRows, [fila('1', {
+  ...conTasas({ '669-APORTE_CEC_PORC': 1 }),
+  '8538-FAECYS_VAC': cec,
+  NETO: NETO_TEO - cec,
+})], mapping);
+assert('el 1% del CEC entra en el recibo teórico y el legajo cierra',
+  Math.abs(rCec.rows[0].residuo) < 0.01);
+
+// Sin obra social: la columna dice 0 y el 0 manda. No se le cobra ese aporte.
+const netoSinOs = REMU_TEO + NR_TEO
+  - (REMU_TEO * (p(11) + p(3) + p(0.45)) + (REMU_TEO + NR_TEO) * TASA_GREM);
+const rSinOs = runControlNetos(escalaRows, [fila('1', {
+  ...conTasas({ '616-PORC_OBR_SOCIAL': 0 }),
+  NETO: netoSinOs,
+})], mapping);
+assert('una alícuota en 0 en el archivo se respeta: no se cae al valor del Paso 2',
+  Math.abs(rSinOs.rows[0].residuo) < 0.01);
+
+// La alícuota NO se suma entre liquidaciones: el legajo con la mensual y la baja
+// declara su 11% en las dos filas, y sumarlas daría 22%.
+const rTasasDoble = runControlNetos(escalaRows, [
+  { ...fila('1', conTasas()), '1003-SUELDO': 600000, '1017-A_CTA_FUT_AUMEN': 120000,
+    '3513-COMP_ANTIGUEDAD': 72000, '1011-PRESENTISMO': 109956 * 0.6, NETO: NETO_TEO * 0.6 },
+  { ...fila('1', conTasas()), '1003-SUELDO': 400000, '1017-A_CTA_FUT_AUMEN': 80000,
+    '3513-COMP_ANTIGUEDAD': 48000, '1011-PRESENTISMO': 109956 * 0.4,
+    '4567-INCRE_ADO_ABR26_NO': 0, '4569-RECOM_ADO_ABR26_NO': 0,
+    '4615-ANT_ADO_NOS_ADIC': 0, '4613-PRES_ADO_NOS_ADIC': 0,
+    NETO: NETO_TEO * 0.4 },
+], mapping);
+assert('dos liquidaciones: la alícuota no se duplica',
+  rTasasDoble.rows[0].tasas.jubilacion === 11);
+assert('dos liquidaciones: los años de antigüedad tampoco se duplican',
+  rTasasDoble.rows[0].aniosAntiguedad === 10);
+assert('dos liquidaciones con alícuotas del archivo: el legajo cierra',
+  Math.abs(rTasasDoble.rows[0].residuo) < 0.01);
+
+// ── No remunerativos que no aportan nada ─────────────────────────────────────
+//
+// El anticipo de incentivo suma al neto entero: la liquidación no le cobra ni
+// gremial ni obra social. Contándolo como un no remunerativo común, el control
+// le cobraba el 2,5% y ese 2,5% quedaba como diferencia sin explicar — 109
+// legajos de 05/2026 (Willy confirmó el criterio, 2026-08-20).
+
+const anticipo = 44704.94;
+const rSinAporte = runControlNetos(escalaRows, [fila('1', {
+  '1684-ANTIC_INCENTIVO': anticipo,
+  NETO: NETO_TEO + anticipo,
+})], mapping);
+assert('un no remunerativo sin aportes suma entero al neto y el legajo cierra',
+  Math.abs(rSinAporte.rows[0].residuo) < 0.01);
+assert('ese concepto aparece en el detalle con su código',
+  rSinAporte.rows[0].detalle.some(d => d.code === '1684'));
+
+// ── Fuera del convenio del acuerdo ───────────────────────────────────────────
+//
+// El acuerdo, sus adicionales y el descuento sindical son del convenio que
+// firmó la paritaria. Al de fuera de convenio se lo sigue controlando, pero su
+// recibo es sueldo + AFA menos sus propios aportes: sin no remunerativo, sin
+// antigüedad ni presentismo y sin sindicato (Willy, 2026-08-20).
+
+const netoFuera = 1200000 - 1200000 * TASA_AP;
+const rFuera = runControlNetos(escalaRows, [fila('1', {
+  CONVENIO: 'FUERA DE CONVENIO',
+  ...conTasas({ '676-SINDICAT_PORC': 0, '623-PORC_FAECYS': 0 }),
+  '3513-COMP_ANTIGUEDAD': 0,
+  '1011-PRESENTISMO': 0,
+  '4567-INCRE_ADO_ABR26_NO': 0, '4569-RECOM_ADO_ABR26_NO': 0,
+  '4615-ANT_ADO_NOS_ADIC': 0, '4613-PRES_ADO_NOS_ADIC': 0,
+  NETO: netoFuera,
+})], mapping);
+assert('fuera de convenio: se lo controla igual', rFuera.rows.length === 1);
+assert('fuera de convenio: no se le calcula el acuerdo no remunerativo',
+  rFuera.rows[0].noRemuTeo === 0);
+assert('fuera de convenio: no se le calculan antigüedad ni presentismo',
+  rFuera.rows[0].antiguedadTeo === 0 && rFuera.rows[0].presentismoTeo === 0);
+assert('fuera de convenio: el recibo teórico es el sueldo menos sus aportes',
+  Math.abs(rFuera.rows[0].netoTeorico - netoFuera) < 0.01);
+assert('fuera de convenio: el legajo cierra', Math.abs(rFuera.rows[0].residuo) < 0.01);
+assert('fuera de convenio: queda marcado como tal',
+  rFuera.rows[0].aplicaAcuerdo === false && rFuera.rows[0].convenio === 'FUERA DE CONVENIO');
+
+// Sin la columna del archivo, el descuento sindical del Paso 2 no se le aplica
+// a nadie de fuera de convenio: el respaldo es 0, no el 2%.
+const rFueraSinCols = runControlNetos(escalaRows, [fila('1', {
+  CONVENIO: 'FUERA DE CONVENIO',
+  '3513-COMP_ANTIGUEDAD': 0, '1011-PRESENTISMO': 0,
+  '4567-INCRE_ADO_ABR26_NO': 0, '4569-RECOM_ADO_ABR26_NO': 0,
+  '4615-ANT_ADO_NOS_ADIC': 0, '4613-PRES_ADO_NOS_ADIC': 0,
+  NETO: netoFuera,
+})], mapping);
+assert('fuera de convenio sin columnas de porcentaje: tampoco paga sindicato',
+  Math.abs(rFueraSinCols.rows[0].residuo) < 0.01);
+
+// ── Puestos sin aportes (los directores) ─────────────────────────────────────
+//
+// El director no está en relación de dependencia: la liquidación no le retiene
+// seguridad social, pero el Tabulado igual le declara las alícuotas 11 / 3 /
+// 2,55 / 0,45 en las columnas de porcentaje. Sin la lista de puestos, el control
+// le descontaba un 17% que nadie le descontó. El criterio es el PUESTO y no la
+// obra social en cero: en 05/2026 hay empleados con la obra social en cero que
+// aportan normal y cierran (Willy, 2026-08-20).
+
+const netoDirector = 1200000;   // sueldo + AFA, sin una sola retención
+const filaDirector = {
+  CONVENIO: 'FUERA DE CONVENIO',
+  PUESTO: 'Director',
+  OBRA_SOCIAL: '0',
+  // El archivo le declara el 11 / 3 / 2,55 / 0,45 igual que a todos, y es
+  // justamente eso lo que la lista de puestos tiene que ignorar. Lo gremial va
+  // en 0, como en el Tabulado real: el director no está en ningún sindicato.
+  ...conTasas({ '676-SINDICAT_PORC': 0, '623-PORC_FAECYS': 0 }),
+  '3513-COMP_ANTIGUEDAD': 0, '1011-PRESENTISMO': 0,
+  '4567-INCRE_ADO_ABR26_NO': 0, '4569-RECOM_ADO_ABR26_NO': 0,
+  '4615-ANT_ADO_NOS_ADIC': 0, '4613-PRES_ADO_NOS_ADIC': 0,
+  '6005-TOT_JUB': 0,
+  NETO: netoDirector,
+};
+const rDirector = runControlNetos(escalaRows, [fila('1', filaDirector)], mapping);
+assert('director: no se le calcula seguridad social y el legajo cierra',
+  Math.abs(rDirector.rows[0].residuo) < 0.01);
+assert('director: queda marcado como sin aportes',
+  rDirector.rows[0].sinAportes === true && rDirector.rows[0].puesto === 'Director');
+assert('director: las cuatro alícuotas de seguridad social quedan en cero',
+  rDirector.rows[0].tasas.jubilacion === 0 && rDirector.rows[0].tasas.ley19032 === 0
+  && rDirector.rows[0].tasas.obraSocial === 0 && rDirector.rows[0].tasas.anssal === 0);
+
+// El mismo empleado con el puesto fuera de la lista vuelve a aportar.
+const rNoDirector = runControlNetos(escalaRows,
+  [fila('1', { ...filaDirector, PUESTO: 'Encargado' })], mapping);
+assert('un puesto que no está en la lista sí aporta',
+  rNoDirector.rows[0].sinAportes === false
+  && Math.abs(rNoDirector.rows[0].residuo) > 1);
+
+// La obra social en cero NO alcanza para eximir de aportes: el empleado del
+// convenio con la obra social en cero que aporta normal tiene que seguir
+// cerrando. Es el legajo que la regla "obra social en cero = sin aportes"
+// habría roto.
+const rOs0Aporta = runControlNetos(escalaRows, [fila('1', {
+  ...conTasas(), OBRA_SOCIAL: '0', NETO: NETO_TEO,
+})], mapping);
+assert('obra social en cero pero aporta normal: sigue cerrando',
+  rOs0Aporta.rows[0].sinAportes === false
+  && Math.abs(rOs0Aporta.rows[0].residuo) < 0.01);
+
+// Sin puestos declarados, a nadie se le exime.
+const rSinLista = runControlNetos(escalaRows, [fila('1', filaDirector)],
+  { ...mapping, netosConfig: { ...CFG, puestosSinAportes: [] } });
+assert('con la lista de puestos vacía, el director vuelve a aportar',
+  rSinLista.rows[0].sinAportes === false);
+
+// ── Jubilados que siguen trabajando (sospecha + tilde) ──────────────────────
+//
+// El Tabulado no trae ninguna columna que diga que un empleado está jubilado, y
+// estimarlo por la edad que se deduce del CUIL sería numerología. Lo que el
+// archivo SÍ deja ver es el perfil: le retuvieron jubilación y nada más, con las
+// cuatro alícuotas declaradas. El control lo sospecha y lo informa; el efecto lo
+// habilita el tilde del analista en el Paso 2. Sin tilde no se toca el cálculo:
+// un control que se corrige solo con lo que la liquidación hizo deja de ser un
+// control (Willy, 2026-08-20).
+
+// Sólo jubilación retenida, las cuatro alícuotas declaradas.
+const filaJubilado = {
+  ...conTasas(),
+  '6005-TOT_JUB': REMU_TEO * p(11),
+  '6018-TOT_LEY19032': 0,
+  '6030-OBRA_SOCIAL': 0,
+  '6039-AP_ANSSAL': 0,
+  NETO: REMU_TEO + NR_TEO
+    - (REMU_TEO * p(11) + (REMU_TEO + NR_TEO) * TASA_GREM),
+};
+
+const rJubSinTilde = runControlNetos(escalaRows, [fila('1', filaJubilado)], mapping);
+assert('perfil de jubilado: el control lo detecta',
+  rJubSinTilde.rows[0].perfilJubilado === true);
+assert('perfil de jubilado sin tildar: NO se le cambia el cálculo y sale con diferencia',
+  rJubSinTilde.rows[0].jubilado === false
+  && rJubSinTilde.rows[0].tasas.obraSocial === 2.55
+  && Math.abs(rJubSinTilde.rows[0].residuo) > 1);
+
+const rJubTildado = runControlNetos(escalaRows, [fila('1', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab: ['1'] } } });
+assert('jubilado confirmado: aporta jubilación y nada más',
+  rJubTildado.rows[0].tasas.jubilacion === 11
+  && rJubTildado.rows[0].tasas.ley19032 === 0
+  && rJubTildado.rows[0].tasas.obraSocial === 0
+  && rJubTildado.rows[0].tasas.anssal === 0);
+assert('jubilado confirmado: el legajo cierra',
+  Math.abs(rJubTildado.rows[0].residuo) < 0.01);
+assert('jubilado confirmado: queda marcado como confirmado, no sólo como sospecha',
+  rJubTildado.rows[0].jubilado === true && rJubTildado.rows[0].perfilJubilado === true);
+
+// El tilde de un casillero no vale para otro: las tres empresas numeran sus
+// legajos por su cuenta, así que el mismo número puede ser otro empleado.
+const rTildeOtroSlot = runControlNetos(escalaRows, [fila('1', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab2: ['1'] } } });
+assert('el tilde de otra empresa no afecta a este legajo',
+  rTildeOtroSlot.rows[0].jubilado === false);
+
+// El tilde se compara con la clave de legajo del cliente: guardado como '007' y
+// liquidado como '7' tiene que seguir siendo el mismo empleado (D-038).
+const rTildeConCeros = runControlNetos(escalaRows, [fila('7', filaJubilado)],
+  { ...mapping, netosConfig: { ...CFG, jubilados: { tab: ['007'] } } });
+assert('el tilde matchea con la clave de legajo del cliente, no con el texto crudo',
+  rTildeConCeros.rows[0].jubilado === true);
+
+// Un legajo al que le retuvieron todo no tiene el perfil: no se le ofrece tilde.
+assert('un legajo que aporta normal no tiene perfil de jubilado',
+  rOk.rows[0].perfilJubilado === false);
+
+// La lista que el Paso 2 ofrece para tildar sale de la MISMA función que usa el
+// control: con la detección duplicada, el analista tilda una lista y el control
+// mira otra.
+const detectados = detectarPerfilJubilado(
+  [fila('1', filaJubilado), fila('2', { NETO: NETO_TEO })],
+  { legajoColumn: 'ID_EMPLEADO' });
+assert('el Paso 2 recibe sólo los legajos con el perfil',
+  detectados.length === 1 && detectados[0].legajo === '1');
+assert('cada sospecha viaja con el nombre, para que el analista lo reconozca',
+  detectados[0].nombre === 'Sanguinetti Javier');
+assert('sin columna de legajo no se inventa una lista',
+  detectarPerfilJubilado([fila('1', filaJubilado)], {}).length === 0);
+
+// El del convenio sigue con su acuerdo, y el nombre del convenio se compara sin
+// distinguir mayúsculas.
+const rConvenioMayus = runControlNetos(escalaRows,
+  [fila('1', { CONVENIO: 'COMERCIO', NETO: NETO_TEO })], mapping);
+assert('el nombre del convenio se compara sin distinguir mayúsculas',
+  rConvenioMayus.rows[0].aplicaAcuerdo === true
+  && Math.abs(rConvenioMayus.rows[0].residuo) < 0.01);
+
+// Sin la columna CONVENIO no se adivina: se avisa y se los trata a todos como
+// del convenio, que es lo que el control hacía antes de conocer el dato.
+assert('sin la columna CONVENIO se avisa',
+  rOk.avisos.some(a => a.includes('CONVENIO')));
+assert('sin la columna CONVENIO se aplica el acuerdo, como antes',
+  rOk.rows[0].aplicaAcuerdo === true);
 
 // ── El tope de la base de aportes ────────────────────────────────────────────
 //
@@ -249,6 +526,100 @@ assert('un básico que no está en ninguna columna de la escala se marca',
   rEscala.rows[0].escalaOk === false);
 assert('el básico fuera de escala baja el status a warning',
   summarizeControlNetos(rEscala).status === 'warning');
+
+
+// ── La cascada del residuo (lo que muestran las dos vistas del Detalle) ──────
+//
+// El control no sólo dice CUÁNTO explican los conceptos del mes: dice de dónde
+// sale cada peso. La invariante que hace legible la pantalla es que la suma de
+// los efectos sea, al centavo, `explicado` — si el desglose no suma lo mismo
+// que el número que usa el cruce, el analista descarta la pantalla entera.
+
+const feriado2 = 30000;
+const presDelFeriado2 = feriado2 * PRES;
+const anticipoIncentivo = 44704.94;
+const rCascada = runControlNetos(escalaRows, [fila('1', {
+  '4096-DTO_FERIADO': feriado2,
+  '1011-PRESENTISMO': 109956 + presDelFeriado2,
+  '1684-ANTIC_INCENTIVO': anticipoIncentivo,
+  '3553-VACACIONES': 500000,
+  '4743-DESC_VACACIONES': -420000,
+  NETO: NETO_TEO,
+})], mapping);
+const casc = rCascada.rows[0];
+
+assert('la suma de los efectos de la cascada es, al centavo, "explicado"',
+  Math.abs(casc.cascada.reduce((a, x) => a + x.efecto, 0) - casc.explicado) < 0.01);
+assert('el neto esperado es el teórico más lo que explicó el mes',
+  Math.abs(casc.netoEsperado - (casc.netoTeorico + casc.explicado)) < 0.01);
+assert('cada renglón de la cascada trae importe, alícuota y efecto',
+  casc.cascada.length > 0 && casc.cascada.every(x =>
+    typeof x.label === 'string' && Number.isFinite(x.importe)
+    && Number.isFinite(x.tasa) && Number.isFinite(x.efecto)));
+assert('un concepto remunerativo del mes entra neto de aportes',
+  casc.cascada.some(x => x.code === '4096'
+    && Math.abs(x.efecto - feriado2 * (1 - TASA_AP - TASA_GREM)) < 0.01));
+assert('el no remunerativo sin aportes entra entero, con alícuota cero',
+  casc.cascada.some(x => x.code === '1684' && x.tasa === 0
+    && Math.abs(x.efecto - anticipoIncentivo) < 0.01));
+assert('el presentismo que el mes movió sale como su propio renglón',
+  casc.cascada.some(x => /Presentismo/i.test(x.label)));
+
+// Las marcas: lo que hay que saber del legajo antes de mirar los números.
+assert('las marcas dicen cuántos conceptos del mes tiene',
+  casc.marcas.some(m => /conceptos del mes/.test(m.label)));
+assert('un legajo sin conceptos del mes lo dice, en vez de no decir nada',
+  rOk.rows[0].marcas.some(m => m.label === 'Sin conceptos del mes'));
+assert('cada marca trae su tono, que es el que la pinta',
+  casc.marcas.every(m => typeof m.label === 'string' && typeof m.tone === 'string'));
+assert('el legajo sin mes anterior cargado lo dice como marca',
+  rOk.rows[0].marcas.some(m => m.label === 'Sin mes anterior cargado'));
+
+// Los descuentos que se devuelven al neto, uno por uno: el analista tiene que
+// poder ver que el anticipo que le falta al neto es el que él cargó.
+assert('los descuentos devueltos al neto se informan con su código',
+  rDevuelve.rows[0].devueltoDetalle.some(d => d.code === '8500'
+    && Math.abs(d.importe - 300000) < 0.01));
+
+// ── Columnas de unidades que no son importes ─────────────────────────────────
+//
+// El Tabulado trae, para varios conceptos, una columna con la CANTIDAD
+// (`1064-UN_ADIC_MES`) y otra con el importe (`1062-ADIC_ART30`). La cantidad
+// estaba en la lista de importes y se sumaba como pesos: "2,00" de haberes en
+// 263 legajos de 05/2026. Es la clase de número mal pero coherente que no
+// detecta nadie, así que además de no sumarse, se avisa.
+
+const rUnidades = runControlNetos(escalaRows, [fila('1', {
+  '1064-UN_ADIC_MES': 3,
+  NETO: NETO_TEO,
+})], mapping);
+assert('una columna de unidades no se suma como si fueran pesos',
+  Math.abs(rUnidades.rows[0].residuo) < 0.01);
+assert('y no aparece como concepto del mes en la cascada',
+  !rUnidades.rows[0].cascada.some(x => x.code === '1064'));
+
+const rUnidadesDeclarada = runControlNetos(escalaRows, [fila('1', {
+  '1064-UN_ADIC_MES': 3, NETO: NETO_TEO,
+})], { ...mapping, netosConfig: { ...CFG, codigos: { ...DEFAULT_NETOS_CONFIG().codigos,
+  remuOtros: ['1064'] } } });
+assert('si alguien declara un código de unidades como importe, el control avisa',
+  rUnidadesDeclarada.avisos.some(a => a.includes('unidades')));
+
+// ── El contrato de la planilla "Totales por rubro" ───────────────────────────
+//
+// Las bandas del encabezado se declaran con `colspan`, así que si alguien
+// agrega una columna y se olvida de la banda, el encabezado sale corrido sobre
+// los datos y no hay forma de notarlo mirando el código.
+
+assert('las bandas cubren exactamente las columnas de la planilla',
+  BANDAS.reduce((a, b) => a + b.cols, 0) === RUBROS.length);
+assert('toda columna de la planilla existe de verdad en la fila del control',
+  RUBROS.every(c => Object.prototype.hasOwnProperty.call(rOk.rows[0], c.key)));
+assert('las dos primeras columnas son las que se congelan: legajo y empleado',
+  RUBROS[0].key === 'legajo' && RUBROS[1].key === 'nombre'
+  && !RUBROS[0].num && !RUBROS[1].num);
+assert('todo rubro de importe dice su base de cálculo abajo del título',
+  RUBROS.filter(c => c.num && !c.dif).every(c => typeof c.sub === 'string' && c.sub.length > 0));
 
 // ── Ramas de error ───────────────────────────────────────────────────────────
 

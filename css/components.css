@@ -1195,8 +1195,8 @@
    - la sombra de los bordes, que se apaga sola al llegar a la punta (truco de
      4 fondos: los dos "tapa" viajan con el contenido —`local`— y las dos
      sombras quedan fijas al recuadro —`scroll`—, y las tapas se pintan encima);
-   - la barra de scroll, declarada a 10px: la overlay del sistema mide 2px y es
-     transparente hasta que le pasás el mouse, o sea que no avisa nada. */
+   - la barra de scroll, declarada a 14px con pista visible: la overlay del sistema
+     mide 2px y es transparente hasta que le pasás el mouse, o sea que no avisa nada. */
 .rb-grid-wrap {
   max-height: 62vh; overflow: auto;
   border: 1px solid var(--line); border-radius: var(--radius-md);
@@ -1206,16 +1206,33 @@
     linear-gradient(to right,  var(--scroll-shadow), transparent) 0 0 / 18px 100% no-repeat scroll,
     linear-gradient(to left,   var(--scroll-shadow), transparent) 100% 0 / 18px 100% no-repeat scroll,
     var(--color-surface);
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  /* La barra tiene que AVISAR que la planilla sigue para el costado. A 10px,
+     con la pista transparente y el thumb del mismo gris que el borde, no se
+     veía que faltaban 300px de tabla a la derecha (reporte de Willy con el
+     Detalle de Netos). Ahora: 14px, pista visible, thumb con contraste y un
+     mínimo de 80px para que se vea aunque la tabla sea muy ancha. */
+  scrollbar-gutter: stable;
 }
-.rb-grid-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
-.rb-grid-wrap::-webkit-scrollbar-track { background: transparent; }
+/* Ojo con las DOS formas de pedir una barra de scroll: si el elemento declara
+   `scrollbar-width` o `scrollbar-color`, **Chromium ignora los
+   `::-webkit-scrollbar`** y dibuja igual su overlay de 2px. Por eso no se veía
+   ni el 10px de antes ni el 14px que declaró el Detalle de Netos: los apagaba
+   el `scrollbar-color` que estaba acá arriba (medido en navegador: la barra
+   medía 2px con la regla puesta y 2px sin ella). Las propiedades estándar
+   quedan sólo para el navegador que NO entiende los pseudo-elementos (Firefox),
+   que es el único que las necesita. */
+@supports not selector(::-webkit-scrollbar) {
+  .rb-grid-wrap { scrollbar-color: var(--t3) var(--scroll-track); }
+}
+.rb-grid-wrap::-webkit-scrollbar { width: 14px; height: 14px; }
+.rb-grid-wrap::-webkit-scrollbar-track { background: var(--scroll-track); border-radius: 7px; }
 .rb-grid-wrap::-webkit-scrollbar-thumb {
-  background: var(--color-border); border-radius: 5px;
-  border: 2px solid transparent; background-clip: padding-box;
+  background: var(--t3); border-radius: 7px;
+  border: 3px solid var(--scroll-track); background-clip: padding-box;
+  min-width: 80px; min-height: 80px;
 }
-.rb-grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--t3); background-clip: padding-box; }
+.rb-grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--t2); background-clip: padding-box; }
+.rb-grid-wrap::-webkit-scrollbar-corner { background: var(--scroll-track); }
 /* Barra del botón "Ampliar" — sólo se muestra si a la planilla le falta ancho
    de verdad (ver enhanceWidthEscape en resultBlocks.js). */
 .rb-grid-bar { display: flex; justify-content: flex-end; margin-bottom: var(--sp-2); }
@@ -1310,9 +1327,30 @@ table.rb-grid tfoot > tr > :nth-child(2) {
      sticky vertical del pie, que sí lo queremos. */
 table.rb-grid tfoot > tr > [colspan]:not([colspan="1"]):first-child {
   width: auto; min-width: 0; max-width: none;
+  /* Y por encima de los importes que le pasan por debajo al scrollear: con el
+     z-index de las columnas fijas (1) el primer importe —que tiene 2— se
+     dibujaba ENCIMA del rótulo y se leía "TOTAL315.000,00jos". */
+  z-index: 3;
 }
 table.rb-grid.rb-grid--stick2 tfoot > tr > [colspan]:not([colspan="1"]):first-child + * {
   left: auto; z-index: 2; box-shadow: 0 -1px 0 var(--line);
+}
+/* Y lo mismo arriba: en la planilla del estándar la fila de BANDAS arranca con
+   "Identificación", que ocupa las dos columnas congeladas (`colspan="2"`). Ahí
+   `:nth-child(2)` de esa fila tampoco es la 2ª columna: es la SEGUNDA BANDA, que
+   quedaba clavada a 74px del borde y tapaba a las bandas que pasaban por debajo
+   al scrollear. Mismo arreglo por atributo que el del pie. */
+table.rb-grid thead tr:first-child > [colspan]:not([colspan="1"]):first-child {
+  width: auto; min-width: 0; max-width: none;
+  /* Y arriba de todo en el encabezado: es la banda que queda fija, y las otras
+     le pasan por debajo al scrollear (si no, "Identificación" desaparecía
+     tapada por la banda de al lado). */
+  z-index: 5;
+}
+table.rb-grid.rb-grid--stick2 thead tr:first-child > [colspan]:not([colspan="1"]):first-child + * {
+  /* Deja de fijarse en horizontal, pero se queda arriba de las filas que le
+     pasan por debajo al scrollear en vertical (el encabezado es sticky). */
+  left: auto; z-index: 4;
 }
 
 .rb-magcell { position: relative; }

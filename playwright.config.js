@@ -14,8 +14,17 @@ export default defineConfig({
     // Permite apuntar a un Chromium ya instalado (p.ej. en un sandbox de
     // desarrollo). En CI esta variable no está seteada y Playwright usa el
     // browser que instaló `playwright install`.
+    // Ese Chromium de sandbox puede ser más nuevo que el que espera esta
+    // versión de Playwright, que lo arranca con `--headless=old`: el binario ya
+    // no tiene ese modo y ni abre. `headless: false` + `--headless=new` lo
+    // levanta igual de headless, por la puerta que sí existe. En CI la variable
+    // no está seteada y no cambia nada.
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+      ? {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH,
+          headless: false,
+          args: ['--headless=new', '--no-sandbox'],
+        }
       : {},
   },
   webServer: {

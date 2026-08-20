@@ -2505,3 +2505,257 @@ sobre lo que puede llevar el archivo que va a Finanzas).
 `unitsTotal`/`unitsWithDiff` se siguen contando en la unidad que declara `unit` y el color sigue saliendo de
 `computeSemaforoStatus()`. Cada tanda de migración anota los números que el control muestra antes y los
 comprueba después; si uno se movió, es un bug de esa tanda, no un efecto de la vista nueva.
+## D-075 — Control de Netos: las alícuotas y el acuerdo son del Tabulado y del convenio, no de una config única
+
+**Fecha:** 2026-08-20. **Instrucción de:** Willy, después de correr el control contra los cuatro
+Tabulados reales de 05/2026 (IFSA, RELEF, FGSA e Intelicar) y su planilla de armado manual "Formula
+sueldos 05.2026 afa actualizado" (hoja "personal en convenio" para el AFA, hoja "ESCALA COM" para la
+escala). Intelicar es Camioneros y queda fuera de este control (su recibo trae adicional de rama,
+MOPRE y viáticos, que el modelo no contempla). Con los tres Tabulados de Comercio: 619 legajos
+evaluados, 206 con diferencia sin explicar antes de estos cambios.
+
+**1. Las alícuotas de retención se leen del Tabulado, empleado por empleado — la config queda como
+respaldo, no como fuente.** El archivo trae una columna de porcentaje por cada aporte (610
+jubilación, 612 ley 19.032, 616 obra social, 632 ANSSAL, 676 sindicato, 623 FAECYS, 669 CEC, 677
+AMECYS, 678 retención del afiliado) y ahí está declarado quién aporta qué. Las alícuotas del Paso 2
+sólo se usan cuando el archivo no trae esas columnas. Si la columna está y dice 0, manda el 0: "no
+aporta" es un dato, no un hueco a completar con la config (Willy: *"si dice 0, va 0"*). Con esto
+entran tres retenciones que el control no conocía: el 1% de AMECYS (código 8559, 7 legajos), el 1%
+del CEC —que en este Tabulado se liquida bajo el código `8538-FAECYS_VAC`, cuyo nombre engaña— (52
+legajos) y los empleados sin obra social. La retención del afiliado (el segundo 2% al sindicato) sale
+del Tabulado por el mismo motivo y ya no tiene alícuota en la config (`cfg.tasas.afiliadoExtra` se
+elimina): el archivo es el único lugar que dice **quién** está afiliado, así que un porcentaje suelto
+en la config se lo cobraría a toda la nómina.
+   - Alternativa descartada: seguir derivando el factor remunerativo sumando los `%` de la config
+     (el diseño original de la spec, §6.1). Se descarta porque esa suma es igual para toda la nómina y
+     no puede distinguir al afiliado del que no, ni al que no tiene obra social.
+   - Nota técnica de soporte: las alícuotas y los años de antigüedad se leen con el **máximo** del
+     grupo de liquidaciones del legajo, no con la suma (función `maxCodes`). El Tabulado trae una fila
+     por liquidación (ver el gotcha de consolidación en `CLAUDE.md`) y el legajo con la mensual y la
+     baja del mismo mes declara su 11% de jubilación en las dos filas: sumadas daban 22%. Afecta a 4
+     legajos de Comercio en los archivos de 05/2026.
+
+**2. `1684-ANTIC_INCENTIVO` no aporta nada — familia nueva, `noRemuSinAporte`.** Estaba en
+`noRemuOtros` (no remunerativo común), y el control le cobraba el 2,5% gremial que la liquidación no
+le cobra: ese 2,5% quedaba como diferencia sin explicar en 109 legajos. Willy confirmó el criterio el
+2026-08-20: *"no aporta nada"*. `noRemuSinAporte` suma entero al neto, sin ningún descuento.
+   - Caso verificado (spec, D-064): el legajo cajero con 18 años de antigüedad. Base sueldo + AFA
+     1.119.857,62, anticipo de incentivo 44.704,94, residuo antes del cambio +1.117,63 — exactamente
+     el 2,5% de ese concepto. En el empleado que además tiene la obra social que cobra sobre lo no
+     remunerativo o el 2% del afiliado, la diferencia era ese mismo concepto por 5,5% o 4,5%.
+
+**3. El acuerdo es del convenio — no de todos los que liquida el cliente.** Config nueva, `convenio`
+(semilla `'Comercio'`), comparada contra la columna CONVENIO del Tabulado. Al empleado que no
+pertenece a ese convenio el control lo sigue controlando —Willy pidió expresamente que se los siga
+controlando a todos, no que se los excluya— pero le arma el recibo con su sueldo + AFA menos sus
+propios aportes: sin acuerdo no remunerativo, sin antigüedad, sin presentismo y sin descuento
+sindical (cuando la columna del porcentaje gremial no está para ese legajo, el respaldo es 0 y no el
+2% de la config, porque ese 2% es del convenio que no le corresponde).
+   - Alternativa descartada: la que había hasta este commit, calcularle a todos el acuerdo y los
+     adicionales del convenio de Comercio. Le inflaba el recibo teórico a cualquier fuera de convenio
+     —el ejemplo verificado es un legajo con 39 años de antigüedad, que la antigüedad sola ya lo sacaba
+     con diferencia— y eran 50 de los 206 legajos sin explicar.
+   - Si el Tabulado no trae la columna CONVENIO, no se adivina quién está fuera: se avisa en pantalla
+     y se los trata a todos como del convenio, que es lo que hacía el control antes de este cambio.
+
+**Resultado de la verificación.** Con los tres cambios, las diferencias sin explicar de los tres
+Tabulados de Comercio bajaron de 206 a **17** legajos. Los 37 legajos de la planilla manual de Willy
+cierran todos dentro de la tolerancia de $100, y en 32 de los 37 el neto teórico del control es
+idéntico al centavo al de la planilla; los 5 que difieren son los 4 afiliados al sindicato y el que
+paga AMECYS, donde el control contempla retenciones que la planilla de Willy no tiene — confirmado
+que el control es el que está bien, porque esos 5 legajos cierran contra la liquidación real.
+
+**Cuarto criterio: los puestos sin aportes son los del puesto, no los de la obra social en cero.**
+De los 17 legajos que quedaban con diferencia, los 17 tenían la columna OBRA_SOCIAL en 0, y Willy
+eligió el criterio "obra social en cero = sin aportes". Al ir a implementarlo apareció el dato que lo
+desarma: en esos mismos archivos hay **18** empleados con la obra social en 0, y uno de ellos aporta
+normal y cierra al centavo — la regla lo habría convertido en una diferencia del 17% de su base. El
+archivo, en cambio, dice lo que hay que saber en otra columna: los 14 a los que la liquidación no les
+retuvo nada tienen **PUESTO = "Director"**, todos, sin excepción. Así que el criterio implementado es
+el puesto: `puestosSinAportes` (semilla `['Director']`, editable en el Paso 2, se compara contra la
+columna PUESTO sin distinguir mayúsculas) exime de jubilación, ley 19.032, obra social y ANSSAL
+**diga lo que diga la columna del porcentaje** — al director el Tabulado le declara el 11 / 3 / 2,55
+/ 0,45 igual que a todos. Lo gremial se le sigue leyendo del archivo: si declara una cuota, es un
+dato de ese empleado. Con esto las diferencias sin explicar bajaron de 17 a **3** sobre 619 legajos.
+
+**Alternativa descartada:** eximir por obra social en cero, que es lo que se había ofrecido y elegido.
+Se descartó porque tiene un contraejemplo en el mismo archivo. Es el caso de manual del gotcha de
+CLAUDE.md: la regla se decidió mirando 17 filas y la fila 18 la refutaba.
+
+**Quinto criterio: el jubilado que sigue trabajando se sospecha, y lo confirma el analista.** Los 3
+legajos que quedaban —uno de fuera de convenio y dos de Comercio— tenían la liquidación con **sólo
+jubilación** retenida (11%) y ni ley 19.032, ni obra social, ni ANSSAL, aunque el Tabulado les declara
+las cuatro alícuotas. Willy confirmó que son jubilados que siguen trabajando: no pagan la ley 19.032
+porque ya son beneficiarios y su obra social es la del PAMI. El problema es que **ninguna columna del
+archivo lo dice**: los tres tienen un puesto común (administrativo, vendedor, maestranza) y sindicato
+normal. Estimarlo por la edad que se deduce del CUIL —65 los hombres, 60 las mujeres— es numerología
+y Willy lo descartó explícitamente.
+
+La solución que pidió, y que quedó implementada: **el control sospecha y el analista confirma**.
+`perfilJubilado()` detecta el perfil sobre un hecho del archivo —le retuvieron jubilación y nada más,
+teniendo las otras tres alícuotas declaradas—, `detectarPerfilJubilado()` arma la lista que el panel
+del Paso 2 pinta con un tilde por legajo (con nombre y puesto, para reconocerlo), y `cfg.jubilados`
+—por casillero de Tabulado, porque las tres empresas numeran sus legajos por su cuenta— guarda lo
+tildado. Recién tildado se le dejan de calcular esos tres aportes. **Sin tildar, el legajo sale con
+diferencia y la pantalla dice el motivo y qué hacer.** La misma función detecta para la pantalla y
+para la corrida: con la detección duplicada, el analista tilda una lista y el control mira otra.
+
+**Alternativa descartada:** que el control mirara lo que la liquidación efectivamente retuvo y ajustara
+el teórico a eso. Es lo más cómodo y cierra todo solo, pero un control que se corrige con el dato que
+tiene que auditar deja de ser un control: una alícuota mal cargada en Meta4 pasaría inadvertida, que
+es exactamente lo que este control existe para detectar. La sospecha se muestra; el criterio lo pone
+una persona.
+
+Con los tres tildes puestos, la corrida de 05/2026 sobre las tres empresas cierra **completa: 0
+legajos con diferencia sobre 619**.
+
+**Fuera de esta decisión, identificado y sin arreglar:** el KPI "Legajos cruzados" del hero de
+resultados cuenta sólo los empleados del Tabulado principal (380 en esta corrida), mientras la
+tarjeta del control informa 619 porque las otras dos empresas entran por los casilleros adicionales
+del control. Es el mismo dato con dos poblaciones distintas en la misma pantalla; no se tocó en este
+commit.
+
+**Alcance.** Sigue siendo `scope: 'cliente'` de SPORTLINE (D-067). Verificado contra los tres
+Tabulados de Comercio del grupo (IFSA, RELEF, FGSA); Intelicar no participa de este control.
+
+## D-076 — Detalle de Netos: abre en Fichas (ficha por legajo) en vez de la planilla plana, y el bug de las columnas de unidades se corrige generalizando la detección
+
+**Fecha:** 2026-08-20. **Origen:** handoff de diseño sobre la solapa Detalle del Control de Netos.
+Con 116 de 380 legajos con diferencia en la corrida de referencia, la planilla de 12 columnas dejaba
+todo el "por qué" de cada legajo en una sola línea de texto ("Conceptos del mes") y eso no se leía ni
+se comparaba con cientos de legajos.
+
+**0. Esta pantalla es la primera implementación de la vista estándar (D-074), y se hizo antes de que
+existan sus piezas.** El handoff de diseño de Netos y la spec `specs/vista-estandar-resultados.md`
+salieron el mismo día: la spec generaliza este mismo diseño a los 21 controles y asigna Netos a un
+chat aparte **después de la tanda 1**, que es la que construye `js/ui/fichaList.js`. Esta
+implementación se adelantó a esa tanda, así que la ficha NO sale de esa pieza —todavía no existe—:
+el markup vive en el módulo y los estilos en `css/results.css`, siguiendo la anatomía del §4 de la
+spec para que la tanda 1 los pueda levantar tal cual. Lo que sí quedó alineado con la spec, contra lo
+que decía el mockup: la tercera solapa se llama **Planilla** y no "Totales por rubro"; los chips de
+estado son **cinco** con las palabras exactas (Todos · Con diferencia · Dentro del margen · Al
+centavo · Sin comparar) y el que no tiene casos se muestra apagado en vez de desaparecer; las marcas
+del control van a un desplegable **`Marcas ▾`** y no a la fila de chips; y la solapa que abre
+depende del estado del control (Fichas si hay diferencias, Planilla si cerró) con la preferencia
+guardada por control **y por estado**. En `js/ui/tableTools.js`, los chips pasan a declararse con
+`data-chips` en vez de decidirse por la cantidad de opciones —que era por accidente, lo que la spec
+pide sacar—: se agregó la marca sin tocar a los 12 controles que hoy dependen del accidente, que es
+trabajo de las tandas.
+
+**1. El Detalle pasa de dos solapas (Resumen/Detalle) a tres (Resumen · Fichas · Planilla), y
+abre en Fichas, no en Resumen.** Fichas es nueva: una tarjeta por legajo, cerrada con la identidad y
+las marcas del caso, abierta con la tira de conciliación en cinco pasos y la cascada del residuo
+concepto por concepto. Planilla reemplaza a la tabla plana de antes, ordenada en cuatro
+bandas de encabezado (Identificación, Recibo teórico, Lo que se liquidó, Conciliación) con fila de
+TOTAL que cierra por columna. Una preferencia guardada de la solapa vieja ('detalle', de cuando eran
+dos) cae en Fichas y no en la primera de la lista nueva.
+   - Alternativa descartada: mantener la planilla plana como vista de entrada y agregar el detalle
+     por legajo como un modal o una columna adicional. Se descarta porque el "por qué" de un legajo son
+     tres tablas (recibo teórico, liquidado, cascada de conceptos) y no entran en una celda ni se leen
+     en una ventana aparte sin perder la lista completa al lado.
+
+**2. El cuerpo de cada ficha se arma al abrirla, no antes.** Con cientos de legajos, pintar de
+entrada las tres tablas de cada uno cuesta segundos de pantalla en blanco para algo que el analista
+abre de a uno.
+   - Alternativa descartada: pre-renderizar el cuerpo de todas las fichas al cargar la vista. Se
+     descarta por el costo de pintar (segundos) para un contenido que la mayoría de las fichas nunca
+     llega a abrir.
+
+**3. Bug de paso, corregido generalizando en vez de parchear los dos casos encontrados: dos códigos
+de UNIDADES estaban en la lista de importes del control** (`1064-UN_ADIC_MES`, `4450-U_DIAS_FERIADOS`).
+El Tabulado trae, para varios conceptos, una columna con la cantidad y otra con el importe; el control
+sumaba la cantidad como si fueran pesos — "2,00" de haberes en 263 legajos de 05/2026, exactamente el
+"número mal pero coherente que no lo detecta nadie" de `CLAUDE.md`.
+   - Alternativa descartada: sacar sólo esos dos códigos de la lista de importes (el fix puntual, que
+     resuelve el caso encontrado). Se prefirió, además, que el control **detecte cualquier columna de
+     unidades por su prefijo** (`UN_` o `U_` después del código) e ignore y avise si un código
+     declarado como importe cae ahí — así un código nuevo que tenga el mismo problema no vuelve a
+     colarse en silencio. Explicó los centavos de residuo que quedaban en 82 legajos.
+
+**Lo que el handoff pedía y no quedó hecho, sin decisión tomada todavía — PENDIENTE: falta que Willy
+defina si vale la pena.** Cada solapa debía exportar lo que se está viendo (Fichas → una hoja por
+bloque con la conciliación y los conceptos de cada legajo; Planilla → la matriz con la fila
+de TOTAL). Las dos solapas siguen compartiendo el export que ya existía, que baja la reconstrucción
+completa de todos los legajos: sirve, pero no es lo que pedía el handoff.
+
+**Verificación.** 113 asserts en `tests/controlNetosControl.test.js` (batería completa en verde) y
+5 pruebas de navegador nuevas en `tests/e2e/controlNetosDetalle.spec.js` con su fixture
+`tests/e2e/fixtures/netosDetalle.html`: el Detalle abre en Fichas, la ficha abre y muestra la cascada,
+la ficha sin neto liquidado dice "sin comparar" y no un cero, las bandas de la Planilla quedan
+alineadas con sus columnas, y los renglones invertidos (pie de tabla, fila de bandas) se leen en los
+dos temas. Las dos vistas se revisaron a ojo en Chromium real, claro y oscuro.
+
+**Fuera de esta decisión, de paso:** el scroll horizontal de todas las planillas de resultados pasa de
+10 a 14 px con pista visible (antes era gris igual que el borde y pista transparente, no avisaba que
+la tabla seguía a la derecha); los chips de filtro suben de 4 a 7 opciones (`MAX_CHIP_OPTIONS` en
+`js/ui/tableTools.js`); y se agregan los tokens de tema `--invert-bg/--invert-fg/--invert-accent` y
+`--solid-error-bg/--solid-error-fg` porque en los temas oscuros `--ink` es un color claro (se usa como
+texto fuerte) y "fondo ink + texto blanco" dejaba renglones blanco sobre blanco.
+
+---
+
+## D-077 — Tanda 1 de la vista estándar: qué significa cada chip en un control que no cruza dos archivos
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 1 de `specs/vista-estandar-resultados.md` (D-074) — las piezas
+compartidas del §7 más Acumuladores Ganancias como piloto (§9, punto 1). Willy no estaba disponible para las
+dos decisiones de abajo: quedan tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. Qué significa cada chip en un control que no cruza dos archivos.** Acumuladores Ganancias es de
+generación (D-026), no de cruce: no hay un archivo de origen contra el que medir una diferencia. Los cinco
+chips del estándar (D-074) se redefinen sobre lo único que el control sí verifica — la reconciliación del
+TOTAL del crudo contra sus componentes, y el SAC teórico:
+
+- **Con diferencia** = la reconciliación no cierra, o el SAC teórico dio negativo.
+- **Al centavo** = cierra, y el SAC teórico salió con todos los meses de la ventana.
+- **Sin comparar** = no hay ninguna doceava en la ventana, o el SAC teórico quedó armado con menos meses de
+  los que la ventana pide.
+- **Dentro del margen no aplica**: el control no usa el monto de diferencia del cliente (D-069) — la
+  reconciliación cierra al centavo o no cierra, no hay una zona intermedia que tolerar. Sale en gris, con su
+  0 y el `title` que lo explica, igual que un chip sin casos (D-074 §3).
+
+Lo que no es un grado de cierre —sin movimiento en el mes, doceava atípica, no trae CUIL— pasa a
+`Marcas ▾`, no al chip de estado.
+
+**2. Un tipo de issue que nadie mapeó a un estado se lee como "Con diferencia".** Es el default de
+`estadoDeFicha()`: un tipo de issue nuevo que todavía no se clasificó cuenta como que no cierra, no como que
+está bien. Con el default al revés, un caso que nadie previó se leería en verde sin que nadie lo note — el
+problema que la vista estándar vino a evitar.
+
+**3. Lo que la pieza compartida se lleva del Detalle de Netos, que llegó primero.** D-076 implementó esta
+misma vista a mano, antes de que existieran las piezas, "para que la tanda 1 los pueda levantar tal cual".
+Esta tanda los levanta: la fila de bandas sobre `--invert-bg` con el rótulo en `--invert-accent` y el
+separador en `--band-divider`, el chip sin casos como `.results-chip--vacio`, la marca `data-chips` para
+declarar qué select se dibuja como chips, y los tokens `--scroll-track`, `--sh-ficha`/`--sh-ficha-hover` e
+`--invert-*`. **No se inventó un segundo nombre para nada de eso**, que es lo que haría que las dos pantallas
+se vean distintas. Lo que sí cambia respecto de D-076: el límite por cantidad de opciones desaparece —
+`data-chips="1"` es la única forma de pedir chips, como el propio D-076 anticipó ("cuando las 21 pantallas
+declaren su select de estado, el límite se va")—, y el rótulo de banda se ancla en el ancho real de las
+columnas congeladas (`--rb-band-inset`, medido) en vez de a una distancia fija del borde.
+
+**De paso.** `renderResumenDetalle()` deja de asumir exactamente 2 solapas — la razón por la que D-027 armaba
+Acumuladores con `initTabs()` aparte, al margen de la pieza compartida. Ahora soporta las tres nativamente
+(`resumen`/`fichas`/`planilla`) y decide cuál abre según `conDiferencias`, así que Acumuladores pasa a usarla
+como el resto de los controles.
+
+**Tres superposiciones que se arreglaron en la pieza, para las 19 planillas.** Las tres se ven sólo al
+scrollear a la derecha, que es cuando el analista ya no tiene el encabezado de la izquierda para orientarse:
+el rótulo de la banda se metía abajo de las columnas congeladas; el rótulo de la fila de TOTAL quedaba tapado
+por el primer importe (se leía "TOTAL315.000,00jos"); y con una banda sobre las columnas congeladas, la
+banda de al lado la tapaba. Además, las columnas congeladas del encabezado sólo se fijaban si el control las
+declaraba con `rowspan="2"` — con la fila de bandas arriba viven en la segunda fila, y ahí se quedaban
+sueltas.
+
+**El scroll de 14 px estaba apagado desde siempre.** Chromium ignora los `::-webkit-scrollbar` cuando el
+mismo elemento declara `scrollbar-width` o `scrollbar-color`, que es lo que pasaba: ni los 10 px de antes ni
+los 14 px que declaró D-076 llegaban a dibujarse — quedaba la barra overlay de 2 px del sistema (medido en
+navegador: una página mínima con la regla de 14 px mide lo mismo que una sin ninguna regla). Las propiedades
+estándar pasan a vivir dentro de `@supports not selector(::-webkit-scrollbar)`, o sea sólo para el navegador
+que las necesita. **Sin verificar en pantalla:** el navegador headless de este entorno fuerza su propia barra
+de 2 px, así que el ancho real hay que mirarlo en una máquina de verdad.
+
+**Pendiente.** Los puntos 1 y 2 esperan que Willy los vea en pantalla; si el chip "Dentro del margen" no le
+sirve así en un control de generación, se ajusta sin tocar el resto del estándar.
+
+**Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
+`js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
+D-069, D-074, D-076.

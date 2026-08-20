@@ -1,0 +1,89 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandar.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados completa del control piloto de la vista
+     estándar (Acumuladores Ganancias) con datos inventados y sin IndexedDB ni
+     los CDN de index.html: es lo que permite mirar en un navegador real las tres
+     solapas, los cinco chips, la ficha y la planilla con bandas
+     (specs/vista-estandar-resultados.md). -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body><div id="host" class="page-content page-content--wide"></div>
+<script type="module">
+import { runAcumuladoresGanancias, renderAcumuladoresResults } from '../../../js/controls/acumuladoresGanancias.js';
+
+// `cuil`: el control sólo mira si viene o no (para la marca "No trae CUIL"), así
+// que acá va una marca de presencia y no un CUIL — ni siquiera inventado: el
+// chequeo de datos sensibles frena el patrón, y hace bien.
+function mkRow(period, legajo, nombre, nro, operacion, valor, cuil = 'cargado') {
+  return {
+    legajo, apellido_nombre: nombre, cuil, ingreso: null, egreso: null,
+    nro, acumulador: '', operacion, valor, empresa: '',
+    _period: period, _fileName: `repacumuladores.${period.replace('-', '')}01.000000.xlsx`,
+  };
+}
+
+// Ventana RG 4030 procesando agosto: julio + agosto. Cinco legajos, uno por
+// estado posible de la solapa Fichas — para poder mirar los cinco chips.
+//   10 — cierra al centavo, con los dos meses
+//   11 — cierra, pero sin movimiento en el mes de proceso (una marca, no un estado)
+//   12 — el SAC teórico da NEGATIVO (un mes con más deducciones que gravado) → Con diferencia
+//   13 — no liquidó en ningún mes: no hay doceava → Sin comparar
+//   14 — SAC teórico parcial (le falta julio) y una doceava atípica
+const rows = [
+  // ── 10 ───────────────────────────────────────────────────────────────────
+  mkRow('2026-07', '10', 'SANGUINETTI JAVIER', 1100, '', 900000),
+  mkRow('2026-07', '10', 'SANGUINETTI JAVIER', 1120, '', 99000),
+  mkRow('2026-07', '10', 'SANGUINETTI JAVIER', 1122, '', 27000),
+  mkRow('2026-07', '10', 'SANGUINETTI JAVIER', 1121, '', 18000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1100, '', 950000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1109, '', 475000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1120, '', 104500),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1122, '', 28500),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1121, '', 19000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1100, 'SUMA', 5400000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1107, 'SUMA', 120000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1108, 'SUMA', 450000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1150, 'SUMA', 380000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1120, 'SUMA', 594000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1122, 'SUMA', 162000),
+  mkRow('2026-08', '10', 'SANGUINETTI JAVIER', 1121, 'SUMA', 108000),
+
+  // ── 11 — activo, pero sin movimiento en agosto ───────────────────────────
+  mkRow('2026-07', '11', 'ALBELLA GUSTAVO', 1100, '', 640000),
+  mkRow('2026-07', '11', 'ALBELLA GUSTAVO', 1120, '', 70400),
+  mkRow('2026-08', '11', 'ALBELLA GUSTAVO', 1100, 'SUMA', 3840000),
+  mkRow('2026-08', '11', 'ALBELLA GUSTAVO', 1108, 'SUMA', 320000),
+  mkRow('2026-08', '11', 'ALBELLA GUSTAVO', 1120, 'SUMA', 422400),
+
+  // ── 12 — en agosto lo excluido del SAC teórico (1137) se come al gravado, y
+  //         la doceava de ese mes sale tan negativa que hunde al acumulado ────
+  mkRow('2026-07', '12', 'ERVITI WALTER', 1100, '', 780000),
+  mkRow('2026-07', '12', 'ERVITI WALTER', 1120, '', 85800),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1100, '', 780000),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1101, '', 45000),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1120, '', 85800),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1137, '', 2400000),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1100, 'SUMA', 4680000),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1101, 'SUMA', 270000),
+  mkRow('2026-08', '12', 'ERVITI WALTER', 1120, 'SUMA', 514800),
+
+  // ── 13 — sólo acumulado, ninguna liquidación propia: no hay doceava ──────
+  mkRow('2026-08', '13', 'CVITANICH DARIO', 1100, 'SUMA', 2100000, ''),
+  mkRow('2026-08', '13', 'CVITANICH DARIO', 1120, 'SUMA', 231000, ''),
+
+  // ── 14 — alta en agosto (no liquidó julio) y una doceava que se dispara ──
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1100, '', 520000),
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1107, '', 1800000),
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1120, '', 57200),
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1100, 'SUMA', 520000),
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1107, 'SUMA', 1800000),
+  mkRow('2026-08', '14', 'URZI AGUSTIN', 1120, 'SUMA', 57200),
+];
+
+const results = runAcumuladoresGanancias(rows, [], { period: '2026-08', acumuladoresConfig: {} });
+window.__results = results;
+renderAcumuladoresResults(results, document.getElementById('host'));
+</script></body></html>

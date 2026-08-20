@@ -213,28 +213,64 @@ export function renderChecks(container, { heading, items } = {}) {
   return el;
 }
 
-// ── Solapas Resumen / Detalle ────────────────────────────────────────────────
-// El veredicto va SIEMPRE afuera (arriba), visible sin clickear nada. Estas
-// dos solapas son para lo que sigue: el resumen (tiles/casos/chequeos) y el
-// detalle (la tabla completa con buscador, paginación y export).
+// ── Solapas Resumen · Fichas · Planilla ──────────────────────────────────────
+// El veredicto va SIEMPRE afuera (arriba), visible sin clickear nada. Las
+// solapas son para lo que sigue: el resumen (tiles/casos/chequeos), las fichas
+// (una tarjeta desplegable por unidad, donde se entiende POR QUÉ no cierra) y
+// la planilla (la tabla ancha, donde se compara entre casos y se totaliza).
+//
+// Son las mismas tres, con los mismos nombres y en el mismo orden, en todos los
+// controles (§2 de specs/vista-estandar-resultados.md). Un control sin fichas
+// muestra dos — nunca un tercer nombre para lo mismo.
+
+/** 'conDif' / 'sinDif' — con qué clave se guarda la preferencia de solapa. */
+function estadoKey(conDiferencias) {
+  if (conDiferencias === undefined || conDiferencias === null) return undefined;
+  return conDiferencias ? 'conDif' : 'sinDif';
+}
 
 /**
- * @param {string} [controlId] - id del registry (ver `js/controls/registry.js`).
+ * @param {HTMLElement} container
+ * @param {object} opts
+ * @param {(panel: HTMLElement) => void} opts.resumen
+ * @param {(panel: HTMLElement) => void} [opts.fichas] - la solapa Fichas (§4).
+ *   Sin esto la pantalla muestra dos solapas, no tres.
+ * @param {(panel: HTMLElement) => void} [opts.planilla] - la planilla con bandas (§5).
+ * @param {(panel: HTMLElement) => void} [opts.detalle] - el nombre viejo de la
+ *   última solapa, para los controles que todavía no migraron.
+ * @param {string} [opts.detalleLabel='Detalle'] - rótulo de `detalle` (con
+ *   `planilla` el rótulo es siempre "Planilla": es la palabra del estándar).
+ * @param {boolean} [opts.conDiferencias] - cómo terminó el control en esta
+ *   corrida. Decide qué solapa abre la primera vez (con diferencias, Fichas;
+ *   si cerró, Planilla) y con qué clave se guarda la preferencia del analista.
+ * @param {string} [opts.controlId] - id del registry (ver `js/controls/registry.js`).
  *   Con esto, la solapa que el analista dejó abierta la última vez para ESTE
- *   control se recuerda entre sesiones (`viewPreference.js`) y es la que abre
- *   por default en la próxima corrida — a menos que el propio control fuerce
- *   `activeId` (ej. acreditaciones.js, que necesita mantener la solapa activa
- *   entre sus propios re-renders dentro de la misma corrida).
+ *   control y ESTE estado se recuerda entre sesiones (`viewPreference.js`) y es
+ *   la que abre por default en la próxima corrida — a menos que el propio
+ *   control fuerce `activeId` (ej. acreditaciones.js, que necesita mantener la
+ *   solapa activa entre sus propios re-renders dentro de la misma corrida).
  */
-export function renderResumenDetalle(container, { resumen, detalle, detalleLabel = 'Detalle', activeId, onChange, controlId }) {
+export function renderResumenDetalle(container, {
+  resumen, fichas, planilla, detalle, detalleLabel = 'Detalle',
+  activeId, onChange, controlId, conDiferencias,
+}) {
+  const tabs = [{ id: 'resumen', label: 'Resumen', render: resumen }];
+  if (fichas) tabs.push({ id: 'fichas', label: 'Fichas', render: fichas });
+  if (planilla) tabs.push({ id: 'planilla', label: 'Planilla', render: planilla });
+  else if (detalle) tabs.push({ id: 'detalle', label: detalleLabel, render: detalle });
+
+  const estado = estadoKey(conDiferencias);
+  // Con diferencias lo primero que se ve es por qué falla; si cerró, la planilla
+  // que totaliza. La preferencia guardada pisa el default, pero sólo la de ESTE
+  // estado (ver viewPreference.js).
+  const porDefecto = estado === undefined ? undefined
+    : (conDiferencias ? 'fichas' : 'planilla');
+
   return initTabs(container, {
-    tabs: [
-      { id: 'resumen', label: 'Resumen', render: resumen },
-      { id: 'detalle', label: detalleLabel, render: detalle },
-    ],
-    activeId: activeId ?? getViewPreference(controlId).tab,
+    tabs,
+    activeId: activeId ?? getViewPreference(controlId, estado).tab ?? porDefecto,
     onChange(id) {
-      setViewPreference(controlId, { tab: id });
+      setViewPreference(controlId, { tab: id }, estado);
       onChange?.(id);
     },
   });
@@ -274,12 +310,15 @@ export function enhanceGrid(tableEl, { stickyCols = 1, col1Width = 74 } = {}) {
   tableEl.classList.add('rb-grid');
   tableEl.classList.toggle('rb-grid--stick2', stickyCols >= 2);
   tableEl.classList.toggle('rb-grid--stick1', stickyCols === 1);
+  // Cuántas columnas quedan fijas, para las piezas que lo necesitan después del
+  // primer layout (el rótulo de banda, que no puede meterse abajo de ellas).
+  tableEl.dataset.stickyCols = String(stickyCols);
 
   if (stickyCols >= 2) {
     tableEl.style.setProperty('--rb-stick1-width', `${col1Width}px`);
   }
 
-  enhanceGroupedHead(tableEl);
+  enhanceGroupedHead(tableEl, stickyCols);
   reserveTotalsWidth(tableEl);
   enhanceWidthEscape(wrap);
   return wrap;
@@ -444,7 +483,8 @@ function enhanceWidthEscape(wrap) {
   const refresh = () => {
     // Con la ficha colapsada el ancho es 0 y no hay nada que medir todavía: la
     // reserva de ancho de los totales se hace acá, cuando la tabla se muestra.
-    if (wrap.clientWidth > 0) reserveTotalsWidth(wrap.querySelector('table.rb-grid'));
+    const grid = wrap.querySelector('table.rb-grid');
+    if (wrap.clientWidth > 0 && grid) { reserveTotalsWidth(grid); syncBandInset(grid); }
     if (full) return;
     const falta = wrap.clientWidth > 0 && wrap.scrollWidth > wrap.clientWidth + 1;
     bar.hidden = !falta;
@@ -473,13 +513,55 @@ function enhanceWidthEscape(wrap) {
 
 const observedHeads = new WeakSet();
 
-function enhanceGroupedHead(tableEl) {
+function enhanceGroupedHead(tableEl, stickyCols = 1) {
   const headRows = [...(tableEl.tHead?.rows || [])];
   tableEl.classList.toggle('rb-grid--2lvl', headRows.length >= 2);
   if (headRows.length < 2) return;
 
   syncHeadRowHeight(tableEl, headRows[0]);
-  paintColumnGroups(tableEl, headRows);
+  paintColumnGroups(tableEl, headRows, stickyCols);
+  syncBandInset(tableEl);
+}
+
+// ── El rótulo de la banda tiene que quedar visible al scrollear ──────────────
+//
+// La banda ("Salario Base", "Retenciones del mes") ES la idea de esta vista: es
+// lo que hace que 13 columnas se lean como tres grupos. Pero el `<th>` de la
+// banda es ancho y su rótulo está centrado adentro, así que al scrollear a la
+// derecha el rótulo se va con la banda: se mete abajo de las columnas
+// congeladas —que están fijas y lo tapan— y desaparece justo cuando el analista
+// más lo necesita, porque ya no ve el encabezado de la izquierda.
+//
+// Se arregla acá, en la pieza, y lo heredan los controles que ya usan bandas:
+// el rótulo se envuelve en un `<span>` sticky, anclado a la derecha de las
+// columnas fijas (`--rb-band-inset`). El span está contenido por su propia
+// celda, así que nunca se escapa de su banda — se corre hasta el borde de la
+// banda y ahí sale de la vista, que es lo correcto: esa banda ya no se ve.
+//
+// El rótulo de la PRIMERA banda no se envuelve: viaja con las columnas
+// congeladas (§5), o sea que su celda ya está fija y su rótulo con ella.
+
+/** Ancho real de las columnas congeladas — el ancla del rótulo de banda. */
+function syncBandInset(tableEl) {
+  const stickyCols = Number(tableEl.dataset.stickyCols ?? 1);
+  if (!stickyCols) { tableEl.style.setProperty('--rb-band-inset', '0px'); return; }
+
+  const row = tableEl.tBodies[0]?.rows[0];
+  if (!row) return;
+  let w = 0;
+  for (let i = 0; i < stickyCols && i < row.cells.length; i++) w += row.cells[i].offsetWidth;
+  // Ancho 0 = la tabla todavía no se dibujó (ficha colapsada, solapa oculta):
+  // lo reintenta el observer de enhanceWidthEscape cuando se muestre.
+  if (w > 0) tableEl.style.setProperty('--rb-band-inset', `${Math.round(w)}px`);
+}
+
+/** Envuelve el rótulo de una banda para poder fijarlo. Idempotente. */
+function wrapBandLabel(th) {
+  if (!th || th.querySelector(':scope > .rb-grid__band')) return;
+  const span = document.createElement('span');
+  span.className = 'rb-grid__band';
+  while (th.firstChild) span.appendChild(th.firstChild);
+  th.appendChild(span);
 }
 
 /** El alto real de la 1ª fila del encabezado, para que la 2ª se pegue abajo. */
@@ -498,16 +580,22 @@ function syncHeadRowHeight(tableEl, headRow) {
 }
 
 /** Tinte alternado por grupo, del encabezado hasta la fila de totales. */
-function paintColumnGroups(tableEl, headRows) {
+function paintColumnGroups(tableEl, headRows, stickyCols = 1) {
   // Columna donde arranca cada celda de la 1ª fila; las que abarcan las dos
   // filas (rowspan) ocupan su columna también en la 2ª.
   const ranges = [];
   const spannedCols = new Set();
   let col = 0;
+  // La banda que ocupa las columnas congeladas ("Identificación") NO entra en la
+  // alternancia: su fondo lo decide la regla de sticky, así que gastarle un
+  // turno de tinte dejaba a la primera banda de verdad con el tono de fondo y a
+  // la segunda con el celeste — al revés de como se lee.
   for (const th of headRows[0].cells) {
     const span = th.colSpan || 1;
     if ((th.rowSpan || 1) > 1) for (let k = 0; k < span; k++) spannedCols.add(col + k);
-    if (span > 1) ranges.push({ from: col, to: col + span - 1, cls: `rb-grid__grp--${ranges.length % 2 === 0 ? 'a' : 'b'}`, th });
+    if (span > 1 && col >= stickyCols) {
+      ranges.push({ from: col, to: col + span - 1, cls: `rb-grid__grp--${ranges.length % 2 === 0 ? 'a' : 'b'}`, th });
+    }
     col += span;
   }
   if (ranges.length === 0) return;
@@ -526,6 +614,8 @@ function paintColumnGroups(tableEl, headRows) {
 
   for (const { from, to, cls, th } of ranges) {
     tint(th, cls);
+    // La 1ª banda ocupa las columnas fijas: su celda ya está anclada.
+    if (from >= stickyCols) wrapBandLabel(th);
     for (let i = from; i <= to; i++) tint(row2[i], cls);
     for (const tr of bodyRows) {
       const byCol = [];
@@ -590,4 +680,168 @@ export function diffCellHtml(value, { max = 0, decimals = 2, eps = currentTolera
   const bg = background ? `background:${background};` : '';
   const cls = (value === null || value === undefined) ? '' : ` ${mvClass(value, eps)}`;
   return `<td class="rb-magcell${cls}" style="text-align:right;${bg}">${diffBadgeHtml(value, { max, decimals, eps, absentLabel })}</td>`;
+}
+
+// ── La planilla del estándar: bandas, base de cálculo y TOTAL ────────────────
+//
+// El §5 de specs/vista-estandar-resultados.md, como una pieza: 19 de los 21
+// controles muestran la misma tabla ancha —rubros agrupados en bandas, la base
+// de cálculo abajo de cada título, las dos primeras columnas congeladas y una
+// fila de TOTAL— y hasta acá cada uno la escribía a mano, con su propio HTML y
+// sus propios tintes. Acá el control declara SUS COLUMNAS y nada más.
+//
+// Descriptor de columna:
+//   key    — propiedad de la fila
+//   label  — título de la columna (la 2ª fila del encabezado)
+//   sub    — la base de cálculo, abajo del título en chico y gris: '1100',
+//            '1003 + 1017', '8,33 %'. Es lo que hace que la planilla se explique
+//            sola, y por eso va en la pieza y no como un comentario del control.
+//   num    — es un importe: a la derecha, cifras de ancho fijo, y entra al TOTAL
+//   band   — a qué banda pertenece (la 1ª fila del encabezado). La primera es
+//            siempre 'Identificación' y viaja con las columnas congeladas.
+//   close  — cierra la banda: negrita sobre un gris más marcado
+//   cell   — (row) => HTML de la celda, para lo que no es un importe pelado (un
+//            badge de diferencia, un pill de estado). Con esto el control sigue
+//            decidiendo cómo se ve su número; la pieza decide dónde va.
+//   total  — `false` para no totalizar una columna numérica, o (rows) => número
+//            para un total que no es la suma (un promedio, un recuento).
+//
+// **Ausencia de dato es `—`, nunca `0,00`** (`null` no es `0`, CLAUDE.md).
+
+/** Las bandas, en orden, con el rango de columnas de cada una. */
+function bandsOf(columns) {
+  const bands = [];
+  columns.forEach((c, i) => {
+    const band = c.band ?? '';
+    const last = bands[bands.length - 1];
+    if (last && last.band === band) { last.to = i; last.cols.push(c); }
+    else bands.push({ band, from: i, to: i, cols: [c] });
+  });
+  return bands;
+}
+
+/** ` class="…"` de una celda, o nada si no le corresponde ninguna clase. */
+function colClass(col, extra = '') {
+  const cls = [
+    col.num ? 'rb-col--num' : '',
+    col.close ? 'rb-col--close' : '',
+    extra,
+  ].filter(Boolean).join(' ');
+  return cls ? ` class="${cls}"` : '';
+}
+
+/** El total de una columna: la suma de lo que hay, `null` si no hay nada que sumar. */
+function columnTotal(col, rows) {
+  if (typeof col.total === 'function') return col.total(rows);
+  if (col.total === false || !col.num) return null;
+  let acc = null;
+  for (const r of rows) {
+    const v = r[col.key];
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    acc = (acc ?? 0) + v;
+  }
+  return acc;
+}
+
+/**
+ * El HTML de la planilla. Función pura (se testea sin navegador); quien la monta
+ * en el DOM y le pone los superpoderes es `renderRubroGrid()`.
+ *
+ * @param {object} opts
+ * @param {object[]} opts.columns - los descriptores de arriba
+ * @param {object[]} opts.rows
+ * @param {string} [opts.unitLabel='legajos'] - la unidad que cuenta la fila de
+ *   TOTAL. Es la que declara el control en `unit` (legajo, centro de costo,
+ *   cuenta, lista) — de acá sale "TOTAL de la selección — 1 legajo" al filtrar.
+ * @param {boolean} [opts.totals=true]
+ */
+export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = true, stickyCols = 2 }) {
+  const bands = bandsOf(columns);
+  const bandRow = bands.map((b, i) => `
+    <th colspan="${b.cols.length}"${b.cols.length > 1 ? ' style="text-align:center;"' : ''}${i > 0 ? ' class="rb-band--next"' : ''}>${esc(b.band)}</th>
+  `).join('');
+
+  const headRow = columns.map((c, i) => {
+    const startsBand = bands.some(b => b.from === i && b.from > 0);
+    // Las columnas congeladas viven en la 2ª fila (la 1ª es la de bandas), así
+    // que se marcan para que el CSS las pueda fijar: la regla por posición sólo
+    // alcanza a la primera fila del encabezado (ver css/components.css).
+    const congelada = i < stickyCols ? ` rb-grid__stick-${i + 1}` : '';
+    return `
+      <th${colClass(c, (startsBand ? 'rb-band--next' : '') + congelada)}>
+        <span class="rb-col__label">${esc(c.label)}</span>
+        ${c.sub ? `<span class="rb-col__sub">${esc(c.sub)}</span>` : ''}
+      </th>
+    `;
+  }).join('');
+
+  const bodyRows = rows.map(r => `
+    <tr>
+      ${columns.map((c, i) => {
+        const startsBand = bands.some(b => b.from === i && b.from > 0);
+        const cls = colClass(c, startsBand ? 'rb-band--next' : '');
+        if (typeof c.cell === 'function') return `<td${cls}>${c.cell(r)}</td>`;
+        return `<td${cls}>${c.num ? esc(fmtAmountOrDash(r[c.key])) : esc(r[c.key] ?? '—')}</td>`;
+      }).join('')}
+    </tr>
+  `).join('');
+
+  // El rótulo del TOTAL ocupa la banda de identificación entera (las columnas
+  // congeladas): es donde el analista lo busca, y es de donde sale la unidad
+  // cuando pasa a ser el total de la selección (ver selectionLabelHtml).
+  const labelSpan = bands[0]?.cols.length || 1;
+  const totalCells = columns.slice(labelSpan).map((c, k) => {
+    const i = labelSpan + k;
+    const startsBand = bands.some(b => b.from === i && b.from > 0);
+    const cls = colClass(c, startsBand ? 'rb-band--next' : '');
+    const v = columnTotal(c, rows);
+    return `<td${cls}>${v === null ? '' : esc(fmtAmountOrDash(v))}</td>`;
+  }).join('');
+
+  const unidad = rows.length === 1 ? singularUnit(unitLabel) : unitLabel;
+
+  return `
+    <table class="data-table data-table--compact rb-rubro">
+      <thead>
+        <tr class="rb-rubro__bands">${bandRow}</tr>
+        <tr>${headRow}</tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+      ${totals ? `<tfoot>
+        <tr>
+          <td colspan="${labelSpan}"><strong>TOTAL</strong> — ${rows.length} ${esc(unidad)}</td>
+          ${totalCells}
+        </tr>
+      </tfoot>` : ''}
+    </table>
+  `;
+}
+
+/** Importe con cifras de ancho fijo; ausencia de dato es `—`, nunca `0,00`. */
+function fmtAmountOrDash(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  return v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** 'legajos' → 'legajo' · 'centros de costo' → 'centro de costo'. */
+function singularUnit(unitLabel) {
+  const [primera, ...resto] = String(unitLabel).split(' ');
+  return primera.endsWith('s') ? [primera.slice(0, -1), ...resto].join(' ') : unitLabel;
+}
+
+/**
+ * Monta la planilla en el DOM y le pone los superpoderes de `enhanceGrid()`
+ * (sticky, columnas fijas, rótulo de banda anclado, ancho de la fila de TOTAL).
+ * El buscador, la paginación y el TOTAL de la selección los engancha el control
+ * con `wireTableTools()` sobre la tabla que devuelve.
+ *
+ * @returns {{ tableEl: HTMLTableElement, wrap: HTMLElement }}
+ */
+export function renderRubroGrid(host, { columns, rows, unitLabel, totals = true, stickyCols = 2, col1Width } = {}) {
+  const holder = document.createElement('div');
+  holder.innerHTML = rubroGridHtml({ columns, rows, unitLabel, totals, stickyCols });
+  const tableEl = holder.querySelector('table');
+  host.appendChild(tableEl);
+  const wrap = enhanceGrid(tableEl, { stickyCols, ...(col1Width !== undefined ? { col1Width } : {}) });
+  return { tableEl, wrap };
 }

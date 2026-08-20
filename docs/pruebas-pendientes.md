@@ -17,8 +17,10 @@
 
 Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
 
-1. **Control de Netos (Sportline)** — hay tres arreglos tuyos ya mergeados que nunca viste, y un
-   cuarto punto que nadie tocó porque falta que expliques el mecanismo. §1
+1. **Control de Netos (Sportline)** — el cálculo cierra completo (0 con diferencia sobre 619 legajos),
+   pero hay **tres cosas mergeadas que nunca viste**: tus tres arreglos, el Detalle rediseñado en fichas
+   y un bug de unidades que afectaba a 263 legajos. Más el tilde de jubilado, que nadie vio funcionando
+   en pantalla. §1
 2. **Contabilidad Desglosada + Asiento (COTY)** — el cálculo cierra al centavo contra el prototipo,
    pero **nadie abrió nunca los tres Excel que descarga la app**. Es el riesgo más silencioso de la
    lista: un archivo que sale mal formateado no lo detecta ningún test. §2
@@ -30,45 +32,60 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
 
 ## 1 · Control de Netos (Sportline / IFSA)
 
-**Qué es.** Rearma el recibo teórico de cada legajo desde el Tabulado y verifica que el neto
-liquidado coincida.
+**Qué es.** Rearma el recibo teórico de cada legajo desde el Tabulado y verifica que el neto liquidado
+coincida.
 
-**Cómo llegó hasta acá.** Se construyó y verificó contra el archivo real de IFSA de 05/2026: los
-legajos cierran, salvo uno que queda a −1,62 por redondeo acumulado de Meta4. Vos lo probaste y
-reportaste cuatro problemas; **tres se arreglaron y ya están mergeados, y no los viste**.
+**Cómo llegó hasta acá.** El cálculo **cierra completo**: contra los tres Tabulados reales de Comercio,
+**0 legajos con diferencia sobre 619**. Ese resultado salió de los cinco criterios que confirmaste el
+2026-08-20 (las alícuotas se leen del Tabulado empleado por empleado, el anticipo de incentivo no
+aporta, el acuerdo es del convenio, los puestos sin aportes son los del puesto y no los de obra social
+en cero, y el jubilado que sigue trabajando se sospecha y lo confirma el analista): las diferencias sin
+explicar bajaron de 206 a 17 y de ahí a 0.
 
-### Lo que hay que probar
+**Lo que está mergeado y no viste, que ahora son tres cosas y no una:**
 
-| Qué mirar | Cómo se ve si está bien | Si está mal |
+- **Los tres arreglos que pediste en vivo** — rótulo de la tolerancia en pesos, columna Nombre, rótulo
+  de Empresa configurable, y el filtro de 4 categorías (que de paso corregía que "con diferencias"
+  ignorara tu tolerancia y midiera siempre con $0,01).
+- **El Detalle rediseñado.** Pasó de planilla plana a las tres solapas del estándar, abre en Fichas si
+  hay diferencias y en Planilla si cerró, con una tarjeta por legajo y la cascada del residuo concepto
+  por concepto.
+- **Un bug de fondo corregido de paso:** dos códigos que son de UNIDADES se estaban sumando como pesos.
+  Afectaba a **263 legajos** de 05/2026.
+
+### Qué mirar
+
+| Qué | Cómo se ve si está bien | Si está mal |
 |---|---|---|
-| El rótulo de la tolerancia | Dice el monto **en pesos** ($100), no "0,01" ni un porcentaje | Volvés a no saber contra qué se está midiendo |
-| La columna **Nombre** | Está, al lado del legajo, en la ficha y en la planilla | Tenés que ir a buscar quién es cada uno a otro archivo |
-| El rótulo de **Empresa** | Dice "IFSA" (lo que configuraste), no un nombre cableado | Sale el nombre de otra empresa del grupo |
-| El **filtro de 4 categorías** | Los cuatro números **suman el total de legajos**. Con tolerancia $100 sobre IFSA 05/2026 tiene que dar: 19 al centavo + 3 dentro del margen + 0 con diferencia = 22 | Si "con diferencia" te muestra el legajo de −1,62 estando la tolerancia en $100, el filtro se quedó midiendo con $0,01 (ése era el bug de fondo del arreglo) |
+| El rótulo de la tolerancia | Dice el monto **en pesos**, no "0,01" ni un porcentaje | Volvés a no saber contra qué se está midiendo |
+| La columna **Nombre** y el rótulo de **Empresa** | El nombre al lado del legajo, y la empresa que configuraste | Vas a otro archivo a ver quién es cada uno, o sale otra empresa del grupo |
+| El **filtro de 4 categorías** | Los cuatro números **suman el total de legajos** | Si "con diferencia" te muestra un caso que está dentro de tu tolerancia, el filtro quedó midiendo con $0,01 — ése era el bug de fondo |
+| La corrida de los tres Tabulados de Comercio | **0 con diferencia sobre 619** | Cualquier número distinto de 0 es algo que cambió después de la verificación |
+| **El tilde de jubilado** | El analista lo marca y el legajo deja de exigir la ley 19.032 | Es lo único de los cinco criterios que **nadie vio funcionando en pantalla** |
+| El KPI "Legajos cruzados" del hero | Debería decir lo mismo que la tarjeta | **Hoy no coinciden y se sabe:** el hero cuenta 380 y la tarjeta informa 619. Está identificado y sin arreglar — no te asustes, pero confirmá que es sólo el número del hero |
 
-**Cómo probarlo.** Cliente Sportline → Control de Netos → subís el Tabulado real de IFSA + el archivo
-de la escala → tolerancia $100 → correr. Después pasá por las cuatro vistas (Resumen, ficha,
-planilla, exportado) y confirmá que el nombre, la empresa y los cuatro números aparecen igual en
-todas. **Miralo también en tema oscuro**: el arreglo del ancho de la ficha (D-068) tocó un componente
-compartido y conviene ver que ninguna tabla ancha se desarme.
+**Cómo probarlo.** Cliente Sportline → Control de Netos → los Tabulados reales + el archivo de la
+escala → correr. Pasá por las cuatro vistas (Resumen, Fichas, Planilla, exportado) y confirmá que el
+nombre, la empresa y los números aparecen igual en todas. **Miralo también en tema oscuro.**
 
-### Lo que está trabado esperándote a vos
+### Lo que espera una decisión tuya
 
-- **El acuerdo no remunerativo varía por categoría, y a veces es fijo + porcentaje.** Éste era tu
-  cuarto punto y **sigue sin tocarse a propósito**: hasta que no digas cuál es el mecanismo exacto
-  (¿qué categorías?, ¿el porcentaje sobre qué base?, ¿el fijo se suma antes o después?), cambiar el
-  cálculo sería inventar. Es lo único de este control que puede dar un número mal y coherente, o sea
-  del tipo que no detecta nadie.
-- **La tolerancia de la comparación con el mes anterior** — hoy el casillero del mes anterior existe
-  pero no está definido con qué margen se compara.
-- **El legajo a −1,62** — redondeo acumulado de Meta4 en el adicional del mes. Hay que decidir si eso
-  se informa como diferencia, se absorbe, o se marca aparte.
-- **El calculador de AFA** está pendiente: comparte la fórmula del neto pero corre *antes* de
-  liquidar, sobre un Tabulado de prueba. Es otro control, no un ajuste de éste.
+- **El acuerdo no remunerativo que varía por categoría** (a veces fijo + porcentaje) sigue pedido desde
+  el 2026-08-19 y **sin tocar a propósito**. Ojo: el criterio de que el acuerdo es *del convenio* ya
+  quedó resuelto y aplicado; lo que falta es el mecanismo del monto cuando cambia por categoría. Es lo
+  único de este control que puede dar un número mal y coherente.
+- **¿Cada solapa tiene que exportar lo que se está viendo?** El handoff lo pedía —Fichas una hoja por
+  legajo con su conciliación, Planilla la matriz con el TOTAL— y hoy las dos comparten el export que ya
+  existía, que baja la reconstrucción completa. Sirve, pero no es lo que pedía el handoff. **Falta que
+  digas si vale la pena.**
+- La tolerancia de la comparación con el mes anterior, y el **calculador de AFA** (comparte la fórmula
+  pero corre antes de liquidar — es otro control, no un ajuste de éste).
 
-**Detalle:** `specs/spec-control-netos.md`, D-067, D-068.
+**Deuda técnica que no te traba:** esta pantalla fue la primera implementación de la vista estándar y se
+hizo *antes* de que existiera la pieza compartida, así que su ficha y su planilla son propias y hay que
+migrarlas. Cuando pase, la pantalla tiene que seguir viéndose igual.
 
----
+**Detalle:** `specs/spec-control-netos.md`, D-067, D-068, D-075, D-076.
 
 ## 2 · Contabilidad Desglosada + Asiento (COTY, Axton)
 
@@ -250,6 +267,40 @@ mismo. Mientras conviven, cualquier formato nuevo se agrega al nuevo, no al estr
 
 ---
 
+## 6 bis · Vista estándar — tanda 1 y Acumuladores Ganancias
+
+**Qué es.** Las piezas compartidas de la pantalla de resultados (las tres solapas, los cinco chips, el
+buscador, `Marcas ▾`, `Orden ▾`, el exportar siempre último) más **Acumuladores Ganancias migrado de
+punta a punta** como piloto. Ningún cálculo cambió: la ficha vieja se reemplazó por una que explica la
+cascada del SAC teórico paso a paso.
+
+### Qué mirar
+
+- **El scroll horizontal de las planillas anchas.** Estaba declarado a 10 px desde hacía tiempo y el
+  navegador lo dibujaba a 2 px igual, porque dos propiedades de CSS lo apagaban sin que nadie lo
+  notara. Ahora son 14 px con pista visible. **El navegador de este entorno no lo deja verificar: hay
+  que mirarlo en pantalla.** Se ve en las 19 planillas, así que si algo quedó raro, quedó raro en todas.
+- **El rótulo de una banda ya no se esconde al scrollear a la derecha** — se queda pegado al borde de
+  las columnas congeladas. De paso se arreglaron dos superposiciones de la misma familia: el rótulo de
+  la fila de TOTAL tapado por el primer importe, y la banda "Identificación" tapada por la de al lado.
+- **Cinco desplegables de otros controles** (Brutos, GS Pers, Control de Netos, NR y Novedades vs
+  Liquidación) siguen mostrándose como chips a propósito; los de otros tres (Importador de Novedades,
+  Asiento de FINADIET, Contabilidad Desglosada) **vuelven a ser desplegables** porque se mostraban como
+  chips por accidente. Ninguno cambia lo que esos controles calculan, pero se ven distinto.
+
+### Dos decisiones que se tomaron sin vos
+
+Están escritas en D-077 y la pantalla ya funciona con ellas, pero es tu criterio el que vale:
+
+1. **Qué significa cada chip en un control que no cruza dos archivos.** Acumuladores genera, no cruza,
+   así que los chips se redefinieron sobre lo único que el control sí verifica —que la reconciliación
+   del TOTAL cierre y que el SAC teórico salga completo—. **"Dentro del margen" no aplica** y sale en
+   gris con su 0: no hay una zona intermedia que tolerar.
+2. **Un tipo de aviso que nadie clasificó se lee como "Con diferencia"**, no como que está bien. Con el
+   default al revés, un caso que nadie previó saldría en verde sin que nadie lo note.
+
+**Detalle:** `specs/vista-estandar-resultados.md`, D-074, D-076, D-077.
+
 ## 7 · Detector de formato del Tabulado (pieza T)
 
 **Qué es.** Reconocer, por la firma del archivo, si un Tabulado es Meta4 horizontal, Axton completo,
@@ -336,9 +387,8 @@ app**, así que no hay nada que abrir:
 - **Los datos de prueba pasaron a ser jugadores de Banfield** — cambia sólo lo que dicen los tests y
   los dos ejemplos de nombre de la app. Si ves "SANGUINETTI JAVIER" en un placeholder, es esto.
 - **El gate de mockup antes de construir un control** — regla de proceso para las próximas veces.
-- **La vista estándar de resultados** — decidida y planificada, con el mapa control por control
-  aprobado, **sin una línea de código escrita**. Cuando salga la primera tanda (Acumuladores
-  Ganancias como piloto) ahí sí hay pantalla para mirar.
+- **La vista estándar de resultados** — la **tanda 1 ya salió** y sí deja pantalla para mirar: pasó a
+  la §6 bis. Lo que queda sin código son las tandas 2 a 8, o sea los otros 19 controles.
 - **El runbook del orquestador y los prompts por tanda** — cómo se van a repartir los ocho chats.
 - **Los agentes nuevos** (documentalista, inspector-archivo) y el chequeo de datos sensibles antes de
   commitear — herramientas de trabajo, no app.

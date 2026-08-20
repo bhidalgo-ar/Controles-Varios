@@ -1246,6 +1246,12 @@ export const CONTROL_REGISTRY = {
                editor: renderControlNetosConfigEditor,
                editorProps: (state) => ({
                  tabRows:  state.tab?.parsedRows || [],
+                 // Para detectar los legajos con perfil de jubilado hace falta
+                 // la columna de legajo y la clave con la que este cliente
+                 // compara dos legajos (D-038): el tilde se guarda con esa
+                 // clave y el control lo busca con la misma.
+                 legajoColumn:  state.tab?.mapping?.empleadoColumn,
+                 legajoKeyMode: state.client?.legajoKeyMode,
                  tab2Rows: state.controlFiles?.control_netos?.tab2?.parsedRows || [],
                  tab3Rows: state.controlFiles?.control_netos?.tab3?.parsedRows || [],
                }),

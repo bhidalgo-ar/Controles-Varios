@@ -437,12 +437,26 @@
   color: var(--color-white);
 }
 .results-chip--active .results-chip__count { color: var(--color-white); opacity: 0.85; }
-/* El filtro de diferencias activo se pinta con el color de lo que hay que ir a
-   mirar, no con el celeste de "esto es lo normal". */
-.results-chip--dif.results-chip--active {
-  background: var(--error);
-  border-color: var(--error);
-}
+/* Los cinco estados se leen de peor a cerrado y cada uno se pinta con su color
+   (§3 de specs/vista-estandar-resultados.md): el activo con diferencia va en el
+   color de lo que hay que ir a mirar, no en el celeste de "esto es lo normal", y
+   "Sin comparar" en ámbar para que no se confunda con el verde de lo que cerró.
+   El punto de color se ve TAMBIÉN cuando el chip está inactivo: si no, la fila
+   entera es gris y el orden no dice nada. */
+.results-chip--dif    .results-chip__count { color: var(--error-tx); }
+.results-chip--warn   .results-chip__count { color: var(--warn-tx); }
+.results-chip--ok     .results-chip__count { color: var(--ok-tx); }
+.results-chip--dif.results-chip--active   { background: var(--error); border-color: var(--error); }
+/* El ámbar y el verde sólidos no llevan texto blanco (2,2:1): llevan el suyo,
+   igual que el celeste lleva --on-celeste. */
+.results-chip--warn.results-chip--active  { background: var(--warn); border-color: var(--warn); color: var(--on-warn); }
+.results-chip--ok.results-chip--active    { background: var(--ok);   border-color: var(--ok);   color: var(--on-ok); }
+.results-chip--dif.results-chip--active .results-chip__count   { color: var(--color-white); }
+.results-chip--warn.results-chip--active .results-chip__count  { color: var(--on-warn); opacity: 0.8; }
+.results-chip--ok.results-chip--active .results-chip__count     { color: var(--on-ok); opacity: 0.8; }
+/* El chip de un estado sin casos se pinta más abajo (`.results-chip--vacio`):
+   se muestra igual, apagado y sin poder tocarse, y su `title` dice si no hubo
+   ninguno en esta corrida o si el estado no aplica a este control. */
 /* El foco vive en el select oculto: se muestra sobre el chip que representa. */
 .results-filter-sr:focus + .results-chips .results-chip--active {
   outline: 2px solid var(--celeste);
@@ -489,6 +503,31 @@ table.rb-grid--2lvl thead tr:nth-child(2) > th {
   top: var(--rb-thead-h1, var(--detalle-head-h));
   z-index: 3;
 }
+/* Las reglas de arriba fijan la 1ª y 2ª celda de la PRIMERA fila del encabezado,
+   que es donde están las columnas de identificación cuando el control las
+   declara con `rowspan="2"` (brutos, gsPers). En la planilla del estándar la
+   primera fila es la de BANDAS y las columnas viven en la segunda, así que la
+   pieza las marca con estas clases (ver rubroGridHtml) y acá se las fija igual:
+   sin esto, el encabezado se iba para la izquierda y las filas se quedaban, o
+   sea "Legajo" arriba de un importe. */
+table.rb-grid thead tr > th.rb-grid__stick-1 {
+  position: sticky; left: 0; z-index: 5;
+  background: var(--color-bg-subtle);
+  width: var(--rb-stick1-width, 74px);
+  min-width: var(--rb-stick1-width, 74px);
+  box-sizing: border-box;
+}
+table.rb-grid.rb-grid--stick2 thead tr > th.rb-grid__stick-2 {
+  position: sticky; left: var(--rb-stick1-width, 74px); z-index: 5;
+  background: var(--color-bg-subtle);
+  /* La misma costura que llevan las celdas fijas del cuerpo, para que la
+     columna congelada se lea como un borde y no como un corte. */
+  box-shadow: 1px 0 0 var(--line);
+}
+table.rb-grid thead tr:first-child > [colspan]:not([colspan="1"]):first-child {
+  box-shadow: 1px 0 0 var(--line);
+}
+
 table.rb-grid thead th.rb-grid__grp--a { background: var(--detalle-grp-a-head); }
 table.rb-grid thead th.rb-grid__grp--b { background: var(--detalle-grp-b-head); }
 table.rb-grid tbody td.rb-grid__grp--a { background: var(--detalle-grp-a); }
@@ -560,3 +599,598 @@ table.rb-grid tfoot .rb-diffbadge {
   .results-toolbar__hint { display: none; }
   .results-toolbar--sticky .table-search { min-width: 160px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   LA VISTA ESTÁNDAR — §4 (la ficha) y §5 (la planilla) de
+   specs/vista-estandar-resultados.md. Todo lo de acá lo heredan los 21
+   controles: nada de esto se vuelve a escribir adentro de un módulo.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── La planilla: base de cálculo, cierre de banda y divisor ────── */
+/* El título de la columna con SU BASE DE CÁLCULO abajo, en chico y gris
+   ('1100', '1003 + 1017', '8,33 %'). Es lo que hace que la planilla se explique
+   sola sin que el analista tenga que preguntar de dónde sale un número. */
+.rb-col__label { display: block; }
+.rb-col__sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: var(--fw-regular);
+  color: var(--t3);
+  letter-spacing: 0.01em;
+}
+table.rb-grid .rb-col--num { text-align: right; font-variant-numeric: tabular-nums; }
+/* La columna que cierra la banda (el CTRL, el TOTAL del grupo): negrita sobre un
+   gris más marcado — es el número que el analista mira primero de cada banda. */
+table.rb-grid .rb-col--close { font-weight: var(--fw-bold); }
+table.rb-grid thead th.rb-col--close,
+table.rb-grid tfoot td.rb-col--close { background: var(--band-close-bg); }
+table.rb-grid tbody td.rb-col--close { background: var(--band-close-cell-bg); }
+/* Separador entre bandas: la línea que hace que 13 columnas se lean como tres
+   grupos y no como 13 columnas. En la fila de bandas va sobre el fondo oscuro
+   (por eso `--band-divider` es blanco translúcido); en el resto de la tabla, la
+   hairline de siempre. */
+table.rb-grid thead tr.rb-rubro__bands > .rb-band--next { border-left: 2px solid var(--band-divider); }
+table.rb-grid .rb-band--next { border-left: 1px solid var(--line); }
+/* El rótulo de la banda, anclado a la derecha de las columnas congeladas para
+   que no se meta abajo de ellas al scrollear (ver wrapBandLabel en
+   js/ui/resultBlocks.js). */
+.rb-grid__band {
+  display: inline-block;
+  position: sticky;
+  left: var(--rb-band-inset, 0px);
+}
+/* La fila de bandas es la única del encabezado que va sobre fondo oscuro (§5):
+   la segunda queda neutra, que es la que lleva los tintes por columna. Es el
+   mismo tratamiento que ya tiene el Detalle de Netos (D-076), acá en la pieza
+   compartida para que las dos pantallas se vean iguales. Los selectores son
+   deliberadamente específicos: pisan el tinte por grupo de `paintColumnGroups`
+   y el fondo neutro de las dos celdas congeladas, que ganan por especificidad. */
+table.rb-grid thead tr.rb-rubro__bands > th,
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th {
+  background: var(--invert-bg);
+  color: var(--invert-accent);
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 7px var(--sp-3);
+  text-align: left;
+}
+/* La banda que viaja con las columnas congeladas ("Identificación") es la que
+   nombra al caso, no un rubro: va en el color pleno y no en el de acento. */
+table.rb-grid thead tr.rb-rubro__bands > th:first-child,
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:first-child {
+  color: var(--invert-fg);
+}
+
+/* ── Los desplegables propios de la barra (Marcas ▾, Orden ▾) ───── */
+.results-toolbar__drop { margin-bottom: 0; }
+.results-toolbar__drop .form-select { font-size: 12.5px; max-width: 190px; }
+
+/* ── El pie de una lista de fichas: "Mostrar 50 más" y "N de M" ─── */
+.list-more {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  justify-content: center;
+  padding: var(--sp-3) 0 var(--sp-1);
+}
+.list-more__count { font-size: 11.5px; color: var(--t3); font-variant-numeric: tabular-nums; }
+/* `.btn` declara `display: inline-flex`, que le gana al `display: none` que el
+   navegador aplica por `[hidden]`: sin esto, "Mostrar 50 más" seguía visible
+   (diciendo "Mostrar 0 más") cuando ya no quedaba nada por mostrar. */
+.list-more [hidden] { display: none; }
+
+/* ── La ficha (§4) ──────────────────────────────────────────────── */
+.fichas-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+/* `flex: none` NO es decorativo: sin él, en una lista flex las tarjetas se
+   comprimen entre sí y el contenido de la ficha abierta se corta. Es un bug ya
+   pagado una vez (spec §4). */
+.ficha {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--sh-ficha);
+  font-family: var(--font-tool);
+}
+/* El hover NO usa `transform`: movería la lista entera abajo del mouse (el otro
+   bug ya pagado). Cambian el borde y la sombra, y nada más. */
+.ficha:hover { border-color: var(--celeste-border); box-shadow: var(--sh-ficha-hover); }
+.ficha[open] { border-color: var(--celeste-border); box-shadow: var(--sh-ficha-hover); }
+
+.ficha__head {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+.ficha__head::-webkit-details-marker { display: none; }
+.ficha__head::marker { content: none; }
+
+/* Avatar con el número de la unidad, en gradiente según severidad: rojo arriba
+   del monto, ámbar a revisar / sin comparar, celeste dentro del margen, verde lo
+   que cerró. El gradiente va de la terna de cada familia (bg → bd) con su propio
+   color de texto: así se lee en los tres temas sin preguntar cuál está activo. */
+.ficha__avatar {
+  flex: none;
+  min-width: 40px; height: 40px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.ficha__avatar--error { background: linear-gradient(135deg, var(--error-bg), var(--error-bd)); color: var(--error-tx); border: 1px solid var(--error-bd); }
+.ficha__avatar--warn  { background: linear-gradient(135deg, var(--warn-bg),  var(--warn-bd));  color: var(--warn-tx);  border: 1px solid var(--warn-bd); }
+.ficha__avatar--info  { background: linear-gradient(135deg, var(--celeste-dim), var(--celeste-border)); color: var(--celeste-deeper); border: 1px solid var(--celeste-border); }
+.ficha__avatar--ok    { background: linear-gradient(135deg, var(--ok-bg), var(--ok-bd)); color: var(--ok-tx); border: 1px solid var(--ok-bd); }
+
+.ficha__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ficha__identity { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.ficha__name { font-size: 13.5px; font-weight: var(--fw-semibold); color: var(--ink); }
+.ficha__tag {
+  font-size: 11px; font-weight: var(--fw-semibold);
+  padding: 1px 8px; border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle); color: var(--t2);
+}
+.ficha__badge {
+  font-size: 11px; font-weight: var(--fw-bold);
+  padding: 1px 9px; border-radius: var(--radius-full);
+}
+.ficha__badge--error { background: var(--error-bg); border: 1px solid var(--error-bd); color: var(--error-tx); }
+.ficha__badge--warn  { background: var(--warn-bg);  border: 1px solid var(--warn-bd);  color: var(--warn-tx); }
+.ficha__badge--info  { background: var(--celeste-dim); border: 1px solid var(--celeste-border); color: var(--celeste-deeper); }
+.ficha__badge--ok    { background: var(--ok-bg);    border: 1px solid var(--ok-bd);    color: var(--ok-tx); }
+
+.ficha__ctx { font-size: 11.5px; color: var(--t3); }
+.ficha__marks { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+.ficha__mark {
+  font-size: 10.5px; font-weight: var(--fw-semibold);
+  padding: 1px 8px; border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.ficha__mark--info    { background: var(--celeste-dim); border: 1px solid var(--celeste-border); color: var(--celeste-deeper); }
+.ficha__mark--neutral { background: var(--neutral-bg);  border: 1px solid var(--neutral-bd);  color: var(--neutral-tx); }
+
+.ficha__right { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+.ficha__amount-label {
+  font-size: 9.5px; font-weight: var(--fw-bold);
+  text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--t3);
+}
+.ficha__amount {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.ficha__amount--error { color: var(--error-tx); }
+.ficha__amount--warn  { color: var(--warn-tx); }
+.ficha__amount--ok    { color: var(--ok-tx); }
+
+.ficha__caret { flex: none; color: var(--t3); font-size: 15px; transition: transform var(--transition); }
+.ficha[open] .ficha__caret { transform: rotate(180deg); }
+
+.ficha__body { padding: 0 var(--sp-3) var(--sp-3); border-top: 1px solid var(--line-soft); }
+
+/* 1. La tira de conciliación: la cascada en pastillas, de lo teórico a lo que
+      sobra. La última pastilla antes del residuo va invertida y el residuo en
+      rojo — es lo que hace que se lea como una cuenta y no como una lista. */
+.ficha-strip {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  padding: var(--sp-3) 0;
+}
+.ficha-strip__op { color: var(--t3); font-size: 12px; }
+.ficha-strip__pill {
+  display: inline-flex; flex-direction: column;
+  padding: 5px 12px; border-radius: var(--radius-md);
+  background: var(--ficha-strip-bg); border: 1px solid var(--line);
+}
+.ficha-strip__label {
+  font-size: 9.5px; font-weight: var(--fw-bold);
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--t3);
+}
+.ficha-strip__value {
+  font-size: 13px; font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+/* La pastilla invertida usa el par de tokens de superficie invertida y no
+   `--ink` + blanco: en los temas oscuros `--ink` es un color CLARO (lo usan como
+   texto fuerte) y el renglón salía blanco sobre blanco. */
+.ficha-strip__pill--invert { background: var(--invert-bg); border-color: var(--invert-bg); }
+.ficha-strip__pill--invert .ficha-strip__label { color: var(--invert-accent); }
+.ficha-strip__pill--invert .ficha-strip__value { color: var(--invert-fg); }
+.ficha-strip__pill--residuo { background: var(--error-bg); border-color: var(--error-bd); }
+.ficha-strip__pill--residuo .ficha-strip__label { color: var(--error-tx); opacity: 0.8; }
+.ficha-strip__pill--residuo .ficha-strip__value { color: var(--error-tx); }
+
+/* 2. Las dos tablas al lado: a la izquierda cómo DEBERÍA ser, a la derecha cómo
+      SALIÓ. Cada una cierra en un pie de color. */
+.ficha-tables { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.ficha-table__title {
+  font-size: 10px; font-weight: var(--fw-bold);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--celeste-deeper); margin-bottom: var(--sp-1);
+}
+.ficha-table__grid, .ficha-detail__grid {
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+}
+.ficha-table__grid td, .ficha-detail__grid td, .ficha-detail__grid th {
+  padding: 4px 8px; border-bottom: 1px solid var(--line-soft); color: var(--t2);
+}
+.ficha-detail__grid th {
+  font-size: 10px; font-weight: var(--fw-bold); text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--t3); text-align: left;
+}
+.ficha-table__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ficha-table__code { color: var(--t3); font-size: 11px; }
+.ficha-table__foot > td { font-weight: var(--fw-bold); border-bottom: none; }
+.ficha-table__foot--ink > td   { background: var(--invert-bg); color: var(--invert-fg); }
+.ficha-table__foot--error > td { background: var(--error-bg); color: var(--error-tx); }
+
+/* 3. El detalle línea por línea, con el efecto de cada línea sobre el número que
+      se controla: lo que suma en verde suave, lo que resta en rojo suave. */
+.ficha-detail { margin-top: var(--sp-3); }
+.ficha-detail__row--pos > td { background: var(--ok-bg); }
+.ficha-detail__row--neg > td { background: var(--error-bg); }
+
+/* 4. La conclusión: NO un resumen — qué queda arriba de la tolerancia y qué
+      mirar, descartando lo que ya quedó explicado. */
+.ficha-conclusion {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--warn-bd);
+  background: var(--warn-bg);
+}
+.ficha-conclusion--error { border-color: var(--error-bd); background: var(--error-bg); }
+.ficha-conclusion--ok    { border-color: var(--ok-bd);    background: var(--ok-bg); }
+.ficha-conclusion--info  { border-color: var(--celeste-border); background: var(--celeste-dim); }
+.ficha-conclusion__title { font-size: 12.5px; font-weight: var(--fw-bold); color: var(--ink); }
+.ficha-conclusion__text { font-size: 12px; line-height: 1.5; color: var(--t2); margin-top: 3px; }
+
+@media (max-width: 720px) {
+  .ficha-tables { grid-template-columns: 1fr; }
+  .ficha__right { align-items: flex-start; }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   Control de Netos — vistas Fichas y Totales por rubro
+   ──────────────────────────────────────────────────────────────────────────
+   La planilla de 12 columnas dejaba el "por qué" de cada legajo en una línea
+   de texto que con cientos de legajos no se lee ni se compara. Fichas abre un
+   legajo a la vez con su cascada; Totales por rubro ordena la misma planilla
+   en bandas para comparar entre legajos. Todo con los tokens de tokens.css:
+   los dos temas oscuros repintan `--ink`, `--line` y la familia de estado, y
+   estas reglas los siguen sin preguntar cuál está activo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Fichas ─────────────────────────────────────────────────────────────── */
+.netos-fichas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-3);
+  background: var(--color-bg);
+}
+.netos-fichas__pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  font-size: var(--text-sm);
+  color: var(--neutral);
+}
+
+.netos-ficha {
+  /* Sin `flex: none` las tarjetas se comprimen en la lista flex y el contenido
+     se corta — el mismo bug que ya se arregló en Acumuladores. */
+  flex: none;
+  background: var(--color-surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--sh-ficha);
+  overflow: hidden;
+  transition: border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow  0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Sin `transform` en el hover: movería toda la lista. */
+.netos-ficha:hover,
+.netos-ficha[open] {
+  border-color: var(--celeste-border);
+  box-shadow: var(--sh-ficha-hover);
+}
+
+.netos-ficha__head {
+  cursor: pointer;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  list-style: none;
+}
+.netos-ficha__head::-webkit-details-marker { display: none; }
+
+.netos-ficha__avatar {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: var(--radius-full);
+  display: flex; align-items: center; justify-content: center;
+  font: var(--fw-bold) var(--text-sm)/1 var(--font-tool);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-white);
+  background: var(--celeste);
+}
+.netos-ficha__avatar--error { background: var(--error); }
+.netos-ficha__avatar--warn  { background: var(--warn); }
+.netos-ficha__avatar--ok    { background: var(--celeste); }
+
+.netos-ficha__id { flex: 1 1 auto; min-width: 0; }
+.netos-ficha__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.netos-ficha__nombre { font-size: 14px; color: var(--t1); }
+.netos-ficha__l2 {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--neutral);
+}
+.netos-ficha__l2 b { color: var(--t2); }
+.netos-ficha__l3 { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.netos-sep { color: var(--line); }
+
+.netos-ficha__empresa {
+  border-radius: var(--radius-sm);
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--celeste-dim);
+  color: var(--celeste-deeper);
+  white-space: nowrap;
+}
+/* Las marcas no se parten: sin `nowrap` una marca de tres palabras se corta y
+   ensucia toda la fila. */
+.netos-tag, .netos-pill {
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+  font-weight: var(--fw-semibold);
+}
+.netos-tag {
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.netos-tag--error { background: var(--error-bg); border-color: var(--error-bd); color: var(--error-tx); }
+.netos-tag--warn  { background: var(--warn-bg);  border-color: var(--warn-bd);  color: var(--warn-tx); }
+.netos-pill { padding: 2px 8px; font-size: 10px; }
+.netos-pill--info    { background: var(--celeste-dim); color: var(--celeste-deeper); }
+.netos-pill--neutral { background: var(--color-bg-subtle); color: var(--t2); }
+.netos-pill--muted   { background: var(--color-bg-subtle); color: var(--neutral); }
+
+.netos-ficha__right { flex: none; text-align: right; }
+.netos-ficha__label {
+  display: block;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+}
+.netos-ficha__monto {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+}
+.netos-ficha__monto--error { color: var(--error-tx); }
+.netos-ficha__monto--warn  { color: var(--warn-tx); }
+.netos-ficha__sin {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-bd);
+  color: var(--warn-tx);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+}
+.netos-caret {
+  flex: none;
+  font-size: 11px;
+  color: var(--t3);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.netos-ficha[open] .netos-caret { transform: rotate(90deg); }
+
+.netos-ficha__body { border-top: 1px solid var(--line); }
+
+/* La tira de conciliación: la cascada en cinco pastillas, en el orden en que
+   se lee (teórico → conceptos del mes → esperado → liquidado → sin explicar). */
+.netos-tira {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 18px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.netos-tira__p {
+  padding: 5px var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--color-surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.netos-tira__l { color: var(--t2); }
+.netos-tira__p b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.netos-tira__p--dark { background: var(--invert-bg); border-color: var(--invert-bg); }
+.netos-tira__p--dark .netos-tira__l,
+.netos-tira__p--dark b { color: var(--invert-fg); }
+.netos-tira__p--error {
+  background: var(--error-bg); border-color: var(--error-bd);
+}
+.netos-tira__p--error .netos-tira__l,
+.netos-tira__p--error b { color: var(--error-tx); }
+
+.netos-cols { display: grid; grid-template-columns: 1fr 1fr; }
+.netos-cols > .netos-col:first-child { border-right: 1px solid var(--line); }
+.netos-col > .rb-section-h { margin: var(--sp-3) 18px var(--sp-1); }
+
+table.netos-t { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+table.netos-t th,
+table.netos-t td {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: var(--fw-regular);
+  color: var(--t2);
+}
+table.netos-t td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--t1);
+}
+.netos-t__code { color: var(--neutral); }
+.netos-t__ausente { color: var(--warn-tx); }
+table.netos-t .netos-t__row--sub th,
+table.netos-t .netos-t__row--sub td {
+  background: var(--color-bg-subtle);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+/* El `color` va también en `td.num`: si no, el importe del pie hereda el
+   `--t1` de la celda numérica y queda navy sobre navy — el número más
+   importante de la tabla, ilegible. */
+table.netos-t tfoot th,
+table.netos-t tfoot td,
+table.netos-t tfoot td.num {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  font-weight: var(--fw-bold);
+  border-bottom: none;
+}
+table.netos-t tfoot.netos-t__foot--dif th,
+table.netos-t tfoot.netos-t__foot--dif td,
+table.netos-t tfoot.netos-t__foot--dif td.num {
+  background: var(--solid-error-bg);
+  color: var(--solid-error-fg);
+}
+
+/* La cascada: cada renglón dice qué efecto tuvo en el neto, que es lo único
+   comparable contra el importe liquidado. */
+table.netos-t--cascada thead th {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+table.netos-t--cascada thead th.num { text-align: right; }
+table.netos-t--cascada .netos-t__row--pos { background: var(--ok-bg); }
+table.netos-t--cascada .netos-t__row--pos td:last-child b { color: var(--ok-tx); }
+table.netos-t--cascada .netos-t__row--neg { background: var(--error-bg); }
+table.netos-t--cascada .netos-t__row--neg td:last-child b { color: var(--error-tx); }
+table.netos-t--cascada tfoot th,
+table.netos-t--cascada tfoot td,
+table.netos-t--cascada tfoot td.num {
+  background: var(--color-bg-subtle);
+  color: var(--ink);
+  border-top: 2px solid var(--line);
+}
+
+.netos-conclusion {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: 14px 18px 18px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: 10px;
+  border: 1px solid var(--error-bd);
+  background: var(--error-bg);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--t1);
+}
+.netos-conclusion > span[aria-hidden] { font-size: var(--text-lg); color: var(--error-tx); }
+.netos-conclusion--warn { border-color: var(--warn-bd); background: var(--warn-bg); }
+.netos-conclusion--warn > span[aria-hidden] { color: var(--warn-tx); }
+.netos-conclusion--ok { border-color: var(--ok-bd); background: var(--ok-bg); }
+.netos-conclusion--ok > span[aria-hidden] { color: var(--ok-tx); }
+
+.netos-orden { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.netos-orden select { font-size: 12px; padding: 3px var(--sp-2); }
+.netos-nota {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  margin: var(--sp-2) var(--sp-3) 0;
+}
+
+/* ── Totales por rubro ──────────────────────────────────────────────────── */
+/* La fila de bandas es la única del encabezado que va sobre ink: la segunda
+   queda neutra como en todas las planillas, porque es la que lleva los tintes
+   por columna (ver `table.rb-grid thead` en components.css). */
+/* Pisa el fondo neutro que `components.css` le pone a toda celda de encabezado
+   —y el de las dos celdas congeladas de la primera fila, que es más
+   específico—: la fila de bandas es la única del encabezado que va sobre ink. */
+table.rb-grid.netos-rubro thead tr:first-child > th.netos-banda,
+table.netos-rubro thead tr:first-child th.netos-banda {
+  background: var(--invert-bg);
+  color: var(--invert-accent);
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-left: 2px solid var(--band-divider);
+  padding: 7px var(--sp-3);
+  text-align: left;
+}
+table.netos-rubro thead tr:first-child th.netos-banda--id { color: var(--invert-fg); }
+/* El rótulo viaja con el scroll horizontal: sin esto se mete abajo de las dos
+   columnas congeladas y desaparece, y la banda ES la idea de esta vista. */
+.netos-banda__l { position: sticky; left: var(--sp-3); display: inline-block; }
+.netos-sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: var(--fw-regular);
+  color: var(--neutral);
+  text-transform: none;
+  letter-spacing: 0;
+}
+table.netos-rubro th.netos-cierre,
+table.netos-rubro td.netos-cierre {
+  background: var(--color-bg-subtle);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+table.netos-rubro th.netos-dif-h,
+table.netos-rubro td.netos-dif-h {
+  background: var(--error-bg);
+  color: var(--error-tx);
+  font-weight: var(--fw-bold);
+}
+table.netos-rubro th.netos-dif-h .netos-sub { color: var(--warn-tx); }
+
+/* Un estado sin casos en esta corrida: se muestra igual —sacarlo movería los
+   demás de lugar— apagado y sin poder tocarse (D-074, §3). */
+.results-chip--vacio {
+  opacity: 0.55;
+  cursor: default;
+  background: var(--color-bg-subtle);
+  color: var(--t3);
+}
+.results-chip--vacio:hover { border-color: var(--color-border); color: var(--t3); }
+.results-chip--vacio .results-chip__count { color: var(--t3); }

@@ -1,21 +1,131 @@
-// tableTools.js — Utilidades compartidas para tablas largas de resultados
-// (una fila por legajo/CC, a veces cientos): paginación "Mostrar todas" +
-// combobox accesible de búsqueda/filtro. Usado por la tabla principal de cada
-// control (catXEmpleados, brutos, gsPers, nr, rendVsTabu, rendVsAsiento,
-// rendXEe). Las tablas de resumen/distribución (pocas filas) no lo necesitan.
+// tableTools.js — La barra de herramientas de la vista estándar y las
+// utilidades para listas largas de resultados (una fila o una ficha por
+// legajo/CC, a veces cientos): los cinco chips de estado, el combobox accesible
+// de búsqueda, la paginación y el TOTAL/KPI de la selección.
 //
-// Los dos convergen en la MISMA visibilidad de cada <tr>: paginación decide
-// qué se ve "por longitud", el combobox decide qué se ve "por búsqueda", y
-// applyVisibility() combina ambos criterios.
+// Todo esto vale para las dos formas que puede tener el detalle de un control:
+// una TABLA (`initShowMorePagination` / `wireTableTools`, sobre un `<tbody>`) y
+// una LISTA de fichas (`initListPagination` / `wireListTools`, sobre elementos).
+//
+// Los dos convergen en la MISMA visibilidad de cada fila/ficha: paginación
+// decide qué se ve "por longitud", el combobox decide qué se ve "por búsqueda",
+// y el apply combina ambos criterios.
 
 import { enhanceGrid, diffBadgeHtml } from './resultBlocks.js';
+import { currentTolerance } from '../controls/tolerance.js';
 
 const PAGE_SIZE_DEFAULT = 50;
 
-/** Un `<select>` de filtro con hasta tantas opciones se dibuja como chips; con
- *  más (el filtro por concepto de NR, 18 opciones) sigue siendo un desplegable:
- *  18 chips no son un filtro, son una pared. */
-const MAX_CHIP_OPTIONS = 4;
+/** **Qué se chipifica se declara, no se adivina** (§3 de
+ *  specs/vista-estandar-resultados.md). Hasta acá se dibujaba como chips
+ *  cualquier `<select>` de la izquierda con 2 a 4 opciones — o sea, por
+ *  accidente: la "Vista" de un control y la "Solapa" de otro terminaron de
+ *  chips sin que nadie lo decidiera, y la fila de chips decía algo distinto en
+ *  cada pantalla. Se chipifica SÓLO el select de estado, y sólo si lo pide con
+ *  `data-chips="1"`; cualquier otro filtro queda desplegable por diseño (los 18
+ *  conceptos de NR no son un filtro, son una pared). El límite por cantidad de
+ *  opciones ya no existe: lo dejó escrito el Detalle de Netos cuando declaró el
+ *  suyo — "cuando las 21 pantallas declaren su select de estado, el límite se
+ *  va". Esta es esa tanda. */
+const CHIPS_DECLARADOS = '1';
+
+/** Qué opción de filtro es "lo que hay que ir a mirar": se pinta con el color
+ *  del error y, si arranca activa, la barra explica por qué. "Sin explicar" es
+ *  como lo dice el Control de Netos; el resto de los controles dice
+ *  "con diferencia". */
+const ES_DIFERENCIA = /diferencia|sin explicar/i;
+
+// ── Los cinco estados, iguales en los 21 controles ──────────────────────────
+//
+// Las mismas cinco palabras, en el mismo orden, en todos los controles: es lo
+// que hace que el analista reconozca la pantalla sin leerla. Se leen de peor a
+// cerrado, y "Sin comparar" va ÚLTIMO y en ámbar porque no es un grado de
+// cierre, es el resto: nunca se lee como aprobado (D-073), y en ámbar no se
+// confunde con el verde de lo que cerró.
+
+/** @type {{ value: string, label: string, tone: string, help: string }[]} */
+export const ESTADOS = [
+  { value: 'todos',       label: 'Todos',              tone: 'neutral', help: 'la vista completa' },
+  { value: 'conDif',      label: 'Con diferencia',     tone: 'dif',     help: 'arriba del monto de diferencia del cliente' },
+  { value: 'margen',      label: 'Dentro del margen',  tone: 'info',    help: 'arriba de $ 0,01 y hasta ese monto' },
+  { value: 'centavo',     label: 'Al centavo',         tone: 'ok',      help: 'hasta $ 0,01 — el redondeo de Meta4' },
+  { value: 'sinComparar', label: 'Sin comparar',       tone: 'warn',    help: 'falta un lado: no está en el otro archivo, la columna no está mapeada, o el período no trae el dato' },
+];
+
+/** Los cuatro estados que clasifican un caso ('todos' es la salida del filtro). */
+export const ESTADOS_DE_CASO = ESTADOS.filter(e => e.value !== 'todos').map(e => e.value);
+
+/** El redondeo de Meta4: el piso de todo el repo. */
+const CENTAVO = 0.01;
+
+/**
+ * En qué estado cae una diferencia. Es la definición del §3, en un solo lugar:
+ * `null` no es `0` (no se pudo comparar), el centavo es el redondeo de Meta4, y
+ * el margen es el monto de diferencia del cliente (D-069).
+ *
+ * @param {number|null} diff
+ * @param {number} [tol] - el monto de diferencia de la corrida
+ * @returns {'conDif'|'margen'|'centavo'|'sinComparar'}
+ */
+export function estadoDeDiferencia(diff, tol = currentTolerance()) {
+  if (diff === null || diff === undefined || !Number.isFinite(diff)) return 'sinComparar';
+  const abs = Math.abs(diff);
+  if (abs <= CENTAVO) return 'centavo';
+  if (abs <= tol) return 'margen';
+  return 'conDif';
+}
+
+/**
+ * El `<select>` de estado de un control, listo para chipificarse: los cinco
+ * estados con esas palabras y en ese orden, con su conteo.
+ *
+ * **Un estado sin casos se muestra igual**, en gris y sin poder tocarse, con su
+ * 0: sacarlo movería los demás de lugar, que es justo lo que este estándar viene
+ * a arreglar. El `title` dice cuál de las dos cosas es — que no hubo ninguno en
+ * esta corrida, o que el estado no aplica a este control (el que cuadra al
+ * centavo por definición no tiene "Dentro del margen").
+ *
+ * @param {object} opts
+ * @param {Record<string, number>} opts.counts - por estado; `todos` se suma solo si no viene
+ * @param {Record<string, string>} [opts.noAplica] - estado → por qué no aplica a este control
+ * @param {string} [opts.ariaLabel='Estado del caso']
+ * @returns {HTMLSelectElement} con el valor inicial ya puesto: "Con diferencia"
+ *   si hay alguno, "Todos" si no (§3).
+ */
+export function createEstadoFilter({ counts = {}, noAplica = {}, ariaLabel = 'Estado del caso' } = {}) {
+  const sel = document.createElement('select');
+  sel.className = 'form-select form-select--sm';
+  sel.dataset.chips = CHIPS_DECLARADOS;
+  sel.setAttribute('aria-label', ariaLabel);
+  sel.innerHTML = estadoOptionsHtml({ counts, noAplica });
+  sel.value = estadoInicial(counts);
+  return sel;
+}
+
+/** Las cinco `<option>` del filtro de estado. Función pura (se testea sin navegador). */
+export function estadoOptionsHtml({ counts = {}, noAplica = {} } = {}) {
+  const n = (v) => Number(counts[v] ?? 0);
+  const total = counts.todos !== undefined
+    ? Number(counts.todos)
+    : ESTADOS_DE_CASO.reduce((acc, v) => acc + n(v), 0);
+
+  return ESTADOS.map(e => {
+    const cant = e.value === 'todos' ? total : n(e.value);
+    const vacio = cant === 0 && e.value !== 'todos';
+    const title = !vacio ? e.help
+      : noAplica[e.value]
+        ? `No aplica a este control: ${noAplica[e.value]}.`
+        : `Ningún caso quedó en este estado en esta corrida (${e.help}).`;
+    return `<option value="${esc(e.value)}" data-tone="${esc(e.tone)}"`
+      + `${vacio ? ' disabled' : ''} title="${esc(title)}">`
+      + `${esc(e.label)} (${fmtInt(cant)})</option>`;
+  }).join('');
+}
+
+/** Arranca activo "Con diferencia" si hay alguno; si no, "Todos" (§3). */
+export function estadoInicial(counts = {}) {
+  return Number(counts.conDif ?? 0) > 0 ? 'conDif' : 'todos';
+}
 
 /**
  * Monta la barra de arriba de la tabla Detalle (pantalla 7 del rediseño):
@@ -59,11 +169,12 @@ export function createResultsToolbar(container, { left } = {}) {
   toolbar.append(leftGroup, rightGroup);
   container.appendChild(toolbar);
 
-  // Los filtros cortos pasan a chips. Si alguno arrancó en "con diferencia" —lo
-  // decide cada control, que ya lo hacía— se dice por qué: el analista tiene que
-  // saber que está mirando un recorte y no toda la tabla (regla "errores
-  // primero" + regla 5 de textos que orientan).
-  const chipped = [...leftGroup.querySelectorAll('select')].map(chipifySelect).filter(Boolean);
+  // El filtro de estado pasa a chips. Si arrancó en "con diferencia" —lo decide
+  // cada control, que ya lo hacía— se dice por qué: el analista tiene que saber
+  // que está mirando un recorte y no toda la tabla (regla "errores primero" +
+  // regla 5 de textos que orientan).
+  const chipped = [...leftGroup.querySelectorAll(`select[data-chips="${CHIPS_DECLARADOS}"]`)]
+    .map(chipifySelect).filter(Boolean);
   if (chipped.some(c => c.startedFiltered)) {
     const hint = document.createElement('span');
     hint.className = 'results-toolbar__hint';
@@ -81,8 +192,8 @@ export function createResultsToolbar(container, { left } = {}) {
 }
 
 /**
- * Dibuja un `<select>` de filtro como chips. Devuelve `null` si ese select no
- * es candidato (una sola opción, o demasiadas).
+ * Dibuja el `<select>` de estado como chips. Devuelve `null` si ese select no
+ * es candidato (una sola opción, o ya chipificado).
  *
  * **Los chips son la piel del select, no un control nuevo.** El `<select>` sigue
  * siendo el único control real —queda en el DOM, sólo visualmente oculto— y es
@@ -91,12 +202,19 @@ export function createResultsToolbar(container, { left } = {}) {
  * filtro como siempre, y no hay dos controles diciendo lo mismo en el árbol de
  * accesibilidad.
  *
+ * Lo que decide cada chip sale de su `<option>` y de ningún otro lado: el color
+ * de `data-tone`, el `title` del `title`, y el gris deshabilitado de que la
+ * opción esté `disabled` (que es también lo que ve el teclado — un estado sin
+ * casos no se puede elegir, ni con el mouse ni con las flechas).
+ *
  * @param {HTMLSelectElement} sel
  * @returns {{ startedFiltered: boolean, onUserChange: (fn: () => void) => void }|null}
  */
 function chipifySelect(sel) {
   const options = [...sel.options];
-  if (options.length < 2 || options.length > MAX_CHIP_OPTIONS) return null;
+  // La marca explícita y nada más: sin `data-chips="1"` este select se queda
+  // desplegable, tenga las opciones que tenga.
+  if (sel.dataset.chips !== CHIPS_DECLARADOS || options.length < 2) return null;
   if (sel.dataset.chipped === '1') return null;
   sel.dataset.chipped = '1';
   sel.classList.add('results-filter-sr');
@@ -105,11 +223,19 @@ function chipifySelect(sel) {
   group.className = 'results-chips';
   group.setAttribute('aria-hidden', 'true');
   group.innerHTML = options.map(o => {
-    // "Sólo con diferencia (23)" → el texto y el número, que se leen distinto.
+    // "Con diferencia (23)" → el texto y el número, que se leen distinto.
     const m = o.textContent.trim().match(/^(.*?)\s*\((\d[\d.,\s]*)\)$/);
+    // Un estado sin casos se muestra igual, apagado y con su 0: sacarlo movería
+    // los demás de lugar, que es justo lo que la fila de chips viene a evitar.
+    const tone = o.dataset.tone
+      // El control que todavía no declara el tono: el filtro de diferencias se
+      // pinta con el color de lo que hay que ir a mirar, como hasta ahora.
+      || (ES_DIFERENCIA.test(o.textContent) ? 'dif' : '');
     return `
       <button type="button" tabindex="-1" data-chip-value="${esc(o.value)}"
-              class="results-chip${/diferencia/i.test(o.textContent) ? ' results-chip--dif' : ''}">
+              ${o.disabled ? 'disabled' : ''}
+              ${o.title ? `title="${esc(o.title)}"` : ''}
+              class="results-chip${tone ? ` results-chip--${esc(tone)}` : ''}${o.disabled ? ' results-chip--vacio' : ''}">
         ${esc(m ? m[1] : o.textContent.trim())}
         ${m ? `<span class="results-chip__count">${esc(m[2])}</span>` : ''}
       </button>
@@ -124,7 +250,7 @@ function chipifySelect(sel) {
 
   const listeners = [];
   chips.forEach(chip => chip.addEventListener('click', () => {
-    if (chip.dataset.chipValue === sel.value) return;
+    if (chip.disabled || chip.dataset.chipValue === sel.value) return;
     sel.value = chip.dataset.chipValue;
     paint();
     listeners.forEach(fn => fn(sel.value));
@@ -140,7 +266,7 @@ function chipifySelect(sel) {
 
   const selected = options.find(o => o.value === sel.value);
   return {
-    startedFiltered: /diferencia/i.test(selected?.textContent || ''),
+    startedFiltered: ES_DIFERENCIA.test(selected?.textContent || ''),
     onUserChange: (fn) => listeners.push(fn),
   };
 }
@@ -257,6 +383,173 @@ export function wireTableTools(tableEl, {
     ...(placeholder !== undefined ? { placeholder } : {}),
   });
   if (sticky) enhanceGrid(tableEl, { stickyCols, ...(col1Width !== undefined ? { col1Width } : {}) });
+  return controller;
+}
+
+// ── Lo mismo, sobre una LISTA de elementos ──────────────────────────────────
+//
+// Paginar, buscar y totalizar la selección estaban escritos contra un `<tbody>`:
+// leían las `<tr>` pintadas y sumaban leyendo el texto de las celdas. La ficha
+// (§4) necesita exactamente lo mismo sobre tarjetas, así que acá va la versión
+// que trabaja sobre una lista de elementos y sobre los DATOS —no sobre el texto
+// dibujado—, que en una tarjeta no está en una celda de la que se pueda leer un
+// número.
+
+/**
+ * Pagina una lista ya renderizada con TODOS sus elementos: muestra los primeros
+ * `pageSize` y agrega al pie "Mostrar 50 más" y el contador "N de M fichas".
+ *
+ * A diferencia de la tabla —que ofrece "Mostrar todas" de una— acá cada click
+ * suma una página: una lista de fichas abiertas es mucho más alta que 500 filas
+ * de tabla, y saltar de 50 a 500 tarjetas deja al analista sin referencia de
+ * dónde estaba.
+ *
+ * @param {HTMLElement} listEl - el contenedor con los elementos ya insertados
+ * @param {object} [opts]
+ * @param {number} [opts.pageSize=50]
+ * @param {string} [opts.unitLabel='fichas'] - lo que cuenta el contador del pie
+ * @returns {{ items: HTMLElement[], setFilter: (s: Set|null) => void, visibleCount: () => number }}
+ */
+export function initListPagination(listEl, { pageSize = PAGE_SIZE_DEFAULT, unitLabel = 'fichas' } = {}) {
+  const items = [...listEl.children].filter(el => !el.classList.contains('list-more'));
+  let shown = Math.min(pageSize, items.length);
+  let filterSet = null; // null = sin búsqueda activa
+
+  const foot = document.createElement('div');
+  foot.className = 'list-more';
+  foot.innerHTML = `
+    <button type="button" class="btn btn--ghost btn--sm js-show-more">Mostrar ${pageSize} más</button>
+    <span class="list-more__count"></span>
+  `;
+  listEl.appendChild(foot);
+  const moreBtn  = foot.querySelector('.js-show-more');
+  const countEl  = foot.querySelector('.list-more__count');
+
+  moreBtn.addEventListener('click', () => {
+    shown = Math.min(shown + pageSize, items.length);
+    apply();
+  });
+
+  function matching() {
+    return filterSet === null ? items : items.filter(el => filterSet.has(el));
+  }
+
+  function apply() {
+    // En orden de DOM, no en el del array: la lista se puede reordenar (el
+    // "Orden ▾" de la barra mueve las tarjetas) y la primera página tiene que
+    // ser la de arriba de la pantalla, no la del orden con el que se pintó.
+    if (listEl.lastElementChild !== foot) listEl.appendChild(foot);
+    const match = matching();
+    let visibles = 0;
+    for (const el of [...listEl.children].filter(el => el !== foot)) {
+      const inFilter = filterSet === null || filterSet.has(el);
+      const withinPage = inFilter && visibles < shown;
+      if (withinPage) visibles++;
+      el.hidden = !withinPage;
+    }
+    const totalMatch = match.length;
+    moreBtn.hidden = visibles >= totalMatch;
+    moreBtn.textContent = `Mostrar ${Math.min(pageSize, totalMatch - visibles)} más`;
+    countEl.textContent = `${fmtInt(visibles)} de ${fmtInt(totalMatch)} ${unitLabel}`;
+    foot.hidden = totalMatch === 0;
+  }
+
+  apply();
+
+  return {
+    items,
+    setFilter(matchSet) { filterSet = matchSet; apply(); },
+    visibleCount: () => items.filter(el => !el.hidden).length,
+  };
+}
+
+/**
+ * El KPI de la selección para una lista: cuántas unidades se están mirando y la
+ * Σ del importe que el control mide. Sobre los DATOS, no sobre el texto: en una
+ * tarjeta el importe no está en una celda de la que se pueda parsear.
+ *
+ * @param {HTMLElement} kpisEl - el `kpisEl` de `createResultsToolbar`
+ * @param {object} opts
+ * @param {any[]} opts.rows - los datos, en el MISMO orden que los elementos
+ * @param {HTMLElement[]} opts.els
+ * @param {(row: any) => number|null} [opts.getAmount] - el importe que el control mide
+ * @param {string} [opts.amountLabel='Σ'] - cómo se llama esa suma
+ * @param {string} [opts.unitLabel='fichas']
+ */
+export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ', unitLabel = 'fichas' } = {}) {
+  if (!kpisEl) return { update() {} };
+
+  const pairs = rows.map((row, i) => ({ row, el: els[i] })).filter(p => p.el);
+
+  const sumOf = (selection) => {
+    let acc = null;
+    for (const { row } of selection) {
+      const v = getAmount?.(row);
+      if (v === null || v === undefined || !Number.isFinite(v)) continue;
+      acc = (acc ?? 0) + v;
+    }
+    return acc;
+  };
+
+  const paint = (selection, filtrado) => {
+    const suma = getAmount ? sumOf(selection) : null;
+    kpisEl.innerHTML = `
+      <span class="results-kpi">${filtrado
+        ? `<strong>${fmtInt(selection.length)}</strong> de ${fmtInt(pairs.length)} ${esc(unitLabel)}`
+        : `<strong>${fmtInt(pairs.length)}</strong> ${esc(unitLabel)}`}</span>
+      ${getAmount ? `<span class="results-kpi">${esc(amountLabel)} <strong>${
+        suma === null ? '—' : esc(fmtAmount(suma, 2))}</strong></span>` : ''}
+    `;
+  };
+
+  paint(pairs, false);
+  return {
+    update(filterSet) {
+      if (!filterSet) { paint(pairs, false); return; }
+      paint(pairs.filter(p => filterSet.has(p.el)), true);
+    },
+  };
+}
+
+/**
+ * El equivalente de `wireTableTools()` para una lista: paginación + buscador +
+ * KPI de la selección, todos mirando la MISMA selección.
+ *
+ * @param {HTMLElement} listEl - la lista con los elementos ya insertados
+ * @param {object} opts
+ * @param {any[]} opts.rows - los datos, en el MISMO orden que los elementos
+ * @param {(row: any) => string} opts.getLabel - texto buscable
+ * @param {HTMLElement} opts.searchEl
+ * @param {HTMLElement} [opts.kpisEl]
+ * @param {(row: any) => number|null} [opts.getAmount]
+ * @param {string} [opts.amountLabel]
+ * @param {string} [opts.unitLabel='fichas']
+ * @param {number} [opts.pageSize=50]
+ */
+export function wireListTools(listEl, {
+  rows, getLabel, searchEl, kpisEl, getAmount, amountLabel, unitLabel = 'fichas',
+  pageSize = PAGE_SIZE_DEFAULT, label, placeholder,
+} = {}) {
+  const pagination = initListPagination(listEl, { pageSize, unitLabel });
+  const kpis = initListKpis(kpisEl, {
+    rows, els: pagination.items, getAmount, amountLabel, unitLabel,
+  });
+
+  const controller = {
+    ...pagination,
+    setFilter(matchSet) {
+      pagination.setFilter(matchSet);
+      kpis.update(matchSet);
+    },
+  };
+
+  if (searchEl) {
+    initSearchCombobox(searchEl, {
+      rows, trEls: pagination.items, getLabel, pagination: controller,
+      ...(label !== undefined ? { label } : {}),
+      ...(placeholder !== undefined ? { placeholder } : {}),
+    });
+  }
   return controller;
 }
 
