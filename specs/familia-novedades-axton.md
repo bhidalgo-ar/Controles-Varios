@@ -1,6 +1,7 @@
 # Familia de Novedades (Axton) — spec
 
-**Estado:** relevada y con decisiones cerradas (2026-08-20) — en diseño, sin implementar.
+**Estado:** relevada, con decisiones cerradas y con el cimiento N0a implementado (2026-08-20).
+N0b, N1 y N2 siguen en diseño.
 **Origen:** relevamiento de Guillermo sobre SharePoint, 2026-08-20 — carpetas de
 Novedades y de Liquidaciones de **julio 2026** de los 7 clientes Axton: Plastic
 Pilar (POP), Merz, Epiroc, SIASA, Geopagos, Red Bull y Coelsa (más el histórico
@@ -108,14 +109,39 @@ Además, verificado:
 
 ## Los dos controles y sus cimientos
 
-### N0a — Lector de la familia ExpNov (cimiento)
+### N0a — Lector de la familia ExpNov (cimiento) — **hecho** (2026-08-20)
 
-Módulo `js/parsers/` que reconoce por firma (nombre de hoja + fila que contiene
-`Legajo`/`Apellido y Nombres`), nunca por posición, y devuelve:
-`{ legajo, código, cantidad, importe, unidadDeclarada }` por celda cargada +
-**lista de columnas sin código** + metadata (UO, empresa) + avisos (códigos
-duplicados, hojas no leídas, valores no parseables). Separa `cantidad$importe`.
-El período NO sale del archivo: lo declara el analista.
+`js/parsers/expNovParser.js`. Reconoce por firma (nombre de hoja + fila que
+contiene `Legajo`/`Apellido y Nombres`), nunca por posición, y devuelve
+`{ parsedRows, parseMetadata }`:
+
+- `parsedRows`: una fila **por celda cargada** —la unidad de este formato es la
+  novedad, no el empleado— con `{ legajo, codigo, cantidad, importe,
+  unidadDeclarada, fila, col, letraCol }`. El legajo viaja **crudo** (quién es el
+  mismo empleado lo decide el control con `makeLegajoKey`); `unidadDeclarada` es
+  `'cantidad_e_importe'` cuando la celda vino como `cantidad$importe` y
+  `'cantidad'` cuando vino un valor suelto. Celda vacía no emite nada; un `0`
+  escrito sí.
+- `parseMetadata`: `columnas` (código, rótulo en criollo, celdas cargadas,
+  duplicado, código no numérico), `columnasSinCodigo` (rótulo + celdas cargadas),
+  `empleados`, `bloqueIdentificacion`, `unidadOrganizativa` / `empresa` /
+  `fechaArchivo`, `noParseables`, `filasSinLegajo`, las filas de encabezado
+  detectadas y `avisos`. **`periodo` es siempre `null`: lo declara el analista.**
+
+Cómo se ubica, sin asumir posición: ancla = la fila con `Legajo` y `Apellido y
+Nombres`; fila de códigos = la pegada a ella (arriba o abajo, las dos variantes
+existen), elegida por cuántos códigos numéricos trae a la derecha del legajo, con
+prioridad para la fila del ancla; fila de criollo = la de arriba, sólo si trae
+rótulos de verdad (en Coelsa la fila 1 son totales); primer concepto = la primera
+columna con código numérico, estirada hacia la izquierda mientras haya rótulo en
+criollo (así `SAL BAS` y `Licencia por ART` no se pierden dentro de la ficha).
+Un código no numérico se acepta como código si tiene su rótulo en la fila de
+criollo, y sale como aviso; si no lo tiene, la columna se lista como sin código
+con esa etiqueta de rótulo (`Informar Cantidad`, `Suma total`).
+
+Contrato escrito como test ejecutable en `tests/expNovParser.test.js` (68
+asserts, datos inventados), en la cadena de `package.json`. Pendiente: correrlo
+contra un archivo real de cliente — los del relevamiento no entraron al repo.
 
 ### N0b — Parser Axton del Tabulado (cimiento, extiende la pieza T / D-065)
 
@@ -150,7 +176,7 @@ informa como no comparable.
 
 | Fase | Qué | Depende de |
 |---|---|---|
-| 0 | N0a Lector ExpNov + tests | — |
+| 0 | ~~N0a Lector ExpNov + tests~~ **hecho** (`js/parsers/expNovParser.js`) | — |
 | 0 | N0b Parser Axton de Tabulado + totalizador + tests | detector D-065 (hecho) |
 | 1 | N1 Generador de importador (piloto: SIASA y Merz) | N0a |
 | 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b |

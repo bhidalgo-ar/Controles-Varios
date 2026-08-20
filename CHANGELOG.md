@@ -7,6 +7,16 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat: la app ya sabe leer la planilla de novedades de Axton (N0a, cimiento de la familia de Novedades) — 2026-08-20
+
+- **Qué hace:** dado el archivo de novedades / importador de Axton (la hoja `…ExpNov…`), la app lo lee y devuelve, novedad por novedad, **qué legajo, qué código de concepto, qué cantidad y qué importe**. Es el cimiento del generador de importador (N1) y del cruce contra la liquidación (N2): todavía no hay pantalla, todavía no hay control — es la pieza que los dos van a usar para leer el archivo.
+- **No asume nada de dónde están las cosas.** El relevamiento mostró que entre los 7 clientes no hay dos archivos iguales: el bloque de datos del empleado mide de 3 a 31 columnas (o sea que el primer concepto puede caer en la columna D, E, F, G, I, J o AF), a veces está todo corrido una fila para abajo, y a veces arriba de la fila de códigos hay totales en vez de nombres. El lector se ubica por la fila que dice **"Legajo" y "Apellido y Nombres"**, y de ahí para la derecha busca los códigos. Si no encuentra esa fila, no adivina: corta y dice qué esperaba y qué encontró.
+- **Separa el valor pegado.** El importador escribe la novedad como `1$159811,7958` —cantidad y pesos en la misma celda— y eso sale partido en dos, con todos los decimales. Un valor suelto se lee como cantidad. Nada se convierte: días son días y horas son horas.
+- **Una celda vacía no es un cero.** Vacía significa "este empleado no tiene esa novedad" y no viaja; un cero escrito sí viaja, porque es un dato.
+- **Nada se pierde en silencio:** las columnas sin código se listan aparte con su nombre y cuántos empleados tienen algo cargado ahí (en Coelsa hay una con importes adentro); avisa cuando un código aparece en dos columnas distintas, cuando el código no es un número (`SAL BAS` en Geopagos), cuando una fila con datos no tiene legajo (los totales al pie), cuando un valor no se puede leer, y qué hojas del archivo no se leyeron (incluidas las ocultas).
+- **El período no sale del archivo.** La fecha de la fila 1 puede ser la de la plantilla original (hay archivos de 2026 que dicen 09/08/2024): se guarda como dato del archivo, con aviso, y el período lo declara el analista al cargarlo.
+- `js/parsers/expNovParser.js` + 68 asserts en `tests/expNovParser.test.js`, con un caso por cada rareza verificada en los archivos reales (datos inventados: un export de cliente no entra al repo). Ningún control existente cambia. Ver **D-070** y `specs/familia-novedades-axton.md`.
+
 ### docs: Familia de Novedades (Axton) — relevamiento de los 7 clientes, decisiones de diseño y roadmap de construcción — 2026-08-20
 
 - **Se relevó el formato real de novedades y de liquidación de julio 2026 en los 7 clientes Axton** (POP, Merz, Epiroc, SIASA, Geopagos, Red Bull, Coelsa) con 14 barridos de SharePoint. Ningún archivo de cliente entró al repo; lo que entró es la **firma** de cada formato: dónde están los códigos, cuántas columnas de identificación hay (3 a 31, según cliente), qué se corre de fila, qué viene sin código y qué trae el Tabulado de cada uno (preámbulo de 0/1/2 filas, con o sin cantidades, con o sin fila por liquidación, `TOTAL GENERAL` simple o duplicado).
