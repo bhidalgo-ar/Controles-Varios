@@ -1,0 +1,104 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/novedadesImportador.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del generador de importador de novedades
+     (N1, D-070) con el importador ya armado cargado, para verificar en un
+     navegador real lo que no se puede afirmar leyendo el código: que el Resumen
+     y el Detalle se dibujen, que la celda `cantidad$importe` se vea tal como va
+     a salir al archivo, que lo que quedó afuera se lea con su motivo, y que todo
+     se lea en los tres temas. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runNovedadesImportador, renderNovedadesImportadorResults, summarizeNovedadesImportador,
+         DEFAULT_NOVEDADES_CONFIG }
+  from '../../../js/controls/novedadesImportador.js';
+
+const celda = (legajo, codigo, cantidad, importe, fila, letraCol) => ({
+  legajo, codigo, cantidad, importe,
+  unidadDeclarada: importe === null ? 'cantidad' : 'cantidad_e_importe',
+  fila, col: 3, letraCol,
+});
+
+// 12 legajos inventados. El 5 viene en dos filas (doble novedad del mismo
+// concepto), el 9 tiene una celda que no se pudo leer, y ninguno lleva CUIL ni
+// CBU: el importador lo recibe el analista, no Finanzas (D-020).
+const nombres = ['Perez', 'Gomez', 'Lopez', 'Diaz', 'Ruiz', 'Sosa', 'Vera', 'Luna', 'Rios', 'Paz', 'Toro', 'Nieva'];
+const novedades = [];
+const empleados = [];
+nombres.forEach((nombre, i) => {
+  const legajo = String(i + 1);
+  empleados.push({ fila: i + 4, legajo, apellidoNombre: nombre });
+  novedades.push(celda(legajo, '1000', 1, 159811.7958 + i * 1000, i + 4, 'D'));
+  if (i % 2 === 0) novedades.push(celda(legajo, '1100', 8 + i, null, i + 4, 'E'));
+  if (i % 3 === 0) novedades.push(celda(legajo, '2500', 1, 25000 + i * 100, i + 4, 'F'));
+});
+// El legajo 5, dos veces el mismo concepto: tiene que SUMAR, no pisar.
+novedades.push(celda('5', '1000', 1, 40000, 20, 'D'));
+
+const parseMetadata = {
+  sheetName: 'd  axFiles HidalgoExpNov_1132_2',
+  totalRows: novedades.length,
+  uniqueLegajos: nombres.length,
+  conceptos: ['1000', '1100', '2500'],
+  periodo: null,
+  unidadOrganizativa: { numero: '4', nombre: 'AGUAS Y GASEOSAS' },
+  empresa: null,
+  fechaArchivo: '09/08/2024',
+  columnas: [
+    { col: 3, letra: 'D', codigo: '1000', rotulo: 'Sueldo Basico',    celdasCargadas: 13, duplicado: false, codigoNoNumerico: false },
+    { col: 4, letra: 'E', codigo: '1100', rotulo: 'Horas Extras 50%', celdasCargadas: 6,  duplicado: false, codigoNoNumerico: false },
+    { col: 5, letra: 'F', codigo: '2500', rotulo: 'Premio',           celdasCargadas: 4,  duplicado: false, codigoNoNumerico: false },
+  ],
+  // Una columna con datos cargados y sin código: es lo que NO puede pasar en
+  // silencio (D-070).
+  columnasSinCodigo: [
+    { col: 6, letra: 'G', rotulo: 'Licencia por ART', celdasCargadas: 2 },
+  ],
+  celdasSinCodigo: [
+    { legajo: '3', rotulo: 'Licencia por ART', cantidad: 3, importe: null, unidadDeclarada: 'cantidad', texto: '3', noParseable: null, fila: 6, col: 6, letraCol: 'G' },
+    { legajo: '7', rotulo: 'Licencia por ART', cantidad: 5, importe: null, unidadDeclarada: 'cantidad', texto: '5', noParseable: null, fila: 10, col: 6, letraCol: 'G' },
+  ],
+  empleados,
+  noParseables: [
+    { fila: 12, letraCol: 'F', codigo: '2500', texto: 'ver mail', motivo: 'no es un número: "ver mail"' },
+  ],
+  filasSinLegajo: [17],
+  bloqueIdentificacion: { hastaCol: 2, letraHasta: 'C', columnas: ['Legajo', 'Apellido y Nombres', 'Sector'] },
+  filaEncabezado: 3, filaCodigos: 3, filaCriollo: 2, primeraFilaDatos: 4,
+  avisos: [
+    'La fila 1 trae la fecha 09/08/2024: es la del archivo o la de la plantilla original, no el período. '
+    + 'El período lo declarás vos al cargar el archivo.',
+  ],
+};
+
+// El importador que se armó a mano: al legajo 12 no llegó (el caso que originó
+// el frente), y el 2 tiene otro importe.
+const f2ArmadoRows = novedades
+  .filter(n => n.legajo !== '12')
+  .map(n => (n.legajo === '2' && n.codigo === '1000' ? { ...n, importe: n.importe - 900 } : n));
+
+const results = runNovedadesImportador(novedades, [], {
+  period: '2026-07',
+  legajoKeyMode: 'sin_ceros',
+  novedadesMeta: parseMetadata,
+  novedadesConfig: DEFAULT_NOVEDADES_CONFIG(),
+  f2ArmadoRows,
+});
+renderNovedadesImportadorResults(results, document.getElementById('host'));
+
+window.__resumen = summarizeNovedadesImportador(results);
+window.__results = {
+  legajos: results.summary.legajos,
+  afuera:  results.afuera.length,
+  contra:  results.contra.difiere.length + results.contra.soloGenerado.length + results.contra.soloArmado.length,
+};
+window.__listo = true;
+</script>
+</body></html>

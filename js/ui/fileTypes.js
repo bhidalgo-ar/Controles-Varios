@@ -77,6 +77,10 @@ import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { parseTabAxton, detectHeaders as detectHeadersTabAxton } from '../parsers/tabAxtonParser.js';
 import { parseVariacAxton, detectHeaders as detectHeadersVariacAxton } from '../parsers/popVariacParser.js';
 import {
+  parseExpNov,
+  detectHeaders as detectHeadersExpNov,
+} from '../parsers/expNovParser.js';
+import {
   parseTotalesConcepto,
   detectHeaders as detectHeadersTotalesConcepto,
 } from '../parsers/totalesConceptoParser.js';
@@ -120,6 +124,16 @@ const metaTabAxton = (m) =>
 
 // La escala informa cuántas categorías leyó y de qué pestaña — con un libro de
 // varias hojas, saber cuál se usó es lo que confirma que no se leyó la equivocada.
+// La planilla de novedades informa legajos y conceptos, y además las columnas
+// que quedaron SIN código: es lo primero que el analista tiene que resolver en
+// el Paso 2, así que se ve desde que sube el archivo (D-070).
+const metaNovedades = (m) => {
+  const sinCodigo = (m?.columnasSinCodigo || []).filter(c => (c.celdasCargadas || 0) > 0).length;
+  return `${m?.uniqueLegajos ?? 0} legajos · ${m?.conceptos?.length ?? 0} conceptos`
+    + ` &nbsp;·&nbsp; ${m?.totalRows ?? 0} novedades`
+    + (sinCodigo > 0 ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${sinCodigo} columnas sin código</span>` : '');
+};
+
 const metaEscalaComercio = (m) =>
   `${m?.totalRows ?? 0} categorías`
   + (m?.sheetName ? ` &nbsp;·&nbsp; hoja «${esc(m.sheetName)}»` : '')
@@ -592,6 +606,23 @@ export const FILE_TYPES = {
   // varias pestañas (el cálculo de sueldos, los tabulados de prueba) y el parser
   // elige la de la escala; ver esa confirmación es lo que evita que se controle
   // contra una hoja equivocada. Mismo criterio que `acreditaciones_file`.
+  // Planilla de novedades / importador de Axton (la familia ExpNov): el archivo
+  // de entrada del generador de importador (N1, D-070). No tiene columnas que
+  // mapear —el lector reconoce la fila de encabezados por firma, nunca por
+  // posición— pero pasa igual por la vista previa: con hojas ocultas y un bloque
+  // de identificación que mide entre 3 y 31 columnas, ver qué leyó es lo único
+  // que le confirma al analista que subió la planilla correcta. Mismo criterio
+  // que `acreditaciones_file`.
+  novedades_axton_file: {
+    label: 'Planilla de novedades del cliente (Axton)',
+    siglas: ['EXPNOV', 'NOVEDADES', 'F2', 'IMPORTADOR'],
+    parse: parseExpNov,
+    detectHeaders: detectHeadersExpNov,
+    autoDetect: null,
+    meta: metaNovedades,
+    fields: [],
+  },
+
   escala_comercio_file: {
     label: 'Escala salarial del convenio de Comercio',
     // La zona de drop arma su título como "Arrastrá el <label>", así que un
@@ -647,6 +678,20 @@ FILE_TYPES.tab_empresa3_file = {
   ...FILE_TYPES.tab_control,
   label: 'Tabulado — tercera empresa',
   aliasOf: 'tab_control',
+};
+
+// Importador F2 ya armado (generador de importador de novedades, D-070): el
+// MISMO formato que la planilla de novedades —es un archivo de la familia
+// ExpNov— pero en el otro extremo del circuito. Es opcional: sin él el control
+// genera el importador y no compara nada; con él, el control dice qué difiere
+// entre lo que arma la app y lo que se subió a mano. Existe como tipo aparte
+// —y no como un segundo casillero del mismo tipo— porque la zona de drop se
+// rotula con la etiqueta del TIPO, y porque un run guarda un archivo por tipo:
+// con un solo tipo, el segundo pisaría al primero en la corrida guardada.
+FILE_TYPES.f2_armado_file = {
+  ...FILE_TYPES.novedades_axton_file,
+  label: 'Importador F2 ya armado (para controlar lo generado)',
+  aliasOf: 'novedades_axton_file',
 };
 
 // Tabulado del mes anterior del Control de Netos. **No es `tab_prev_file`**: ése

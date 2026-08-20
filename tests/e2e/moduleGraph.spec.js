@@ -30,7 +30,10 @@ test('el wizard y la ficha cargan juntos en un navegador real, sin ciclo de mód
   // Misma lista que fija `tests/fileTypes.test.js`: los 2 de pop_variaciones se
   // sumaron con el control de Variación entre quincenas (su panel del Paso 2
   // depende de qué Tabulados estén cargados).
+  // El de `novedades_importador` se sumó con el generador de importador de
+  // novedades: cargar la planilla cambia lo que ofrece su panel de conceptos.
   expect(r.specs).toEqual([
+    'novedades_importador.novedades',
     'pop_variaciones.tab_act', 'pop_variaciones.tab_prev',
     'rend_vs_asiento.conta', 'variaciones_conceptos.tab_prev', 'variaciones_sueldos.tab_prev',
   ]);

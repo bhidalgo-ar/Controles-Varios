@@ -40,13 +40,15 @@ assert('un cliente Meta4 nuevo no ve ningún control ("agrupadores" es el único
 // para Axton; acumuladores_ganancias es el segundo (ver
 // specs/control-acumuladores-ganancias.md). "agrupadores" queda afuera por
 // `hidden`, no por scope.
-assert('un cliente Axton ve Acreditaciones + Acumuladores Ganancias (no agrupadores, está `hidden`)',
+// D-070: el generador de importador de novedades es el tercero con scope
+// 'sistema' para Axton (ver specs/familia-novedades-axton.md).
+assert('un cliente Axton ve Acreditaciones + Acumuladores Ganancias + el generador de importador (no agrupadores, está `hidden`)',
   filterControlsForClient(allControls, nuevoAx).map(c => c.id).sort().join(',')
-    === 'acreditaciones_reporte,acumuladores_ganancias');
+    === 'acreditaciones_reporte,acumuladores_ganancias,novedades_importador');
 
 assert('los 10 controles de Marval son scope "cliente"',
   allControls
-    .filter(c => !['agrupadores', 'acreditaciones_reporte', 'acumuladores_ganancias'].includes(c.id))
+    .filter(c => !['agrupadores', 'acreditaciones_reporte', 'acumuladores_ganancias', 'novedades_importador'].includes(c.id))
     .every(c => c.scope === 'cliente'));
 
 assert('acreditaciones_reporte es scope "sistema" de Axton',
@@ -56,6 +58,10 @@ assert('acreditaciones_reporte es scope "sistema" de Axton',
 assert('acumuladores_ganancias es scope "sistema" de Axton',
   CONTROL_REGISTRY.acumuladores_ganancias.scope === 'sistema'
   && CONTROL_REGISTRY.acumuladores_ganancias.scopeMeta.sourceSystems.join(',') === 'axton');
+
+assert('novedades_importador es scope "sistema" de Axton',
+  CONTROL_REGISTRY.novedades_importador.scope === 'sistema'
+  && CONTROL_REGISTRY.novedades_importador.scopeMeta.sourceSystems.join(',') === 'axton');
 
 assert('agrupadores es scope "general"',
   CONTROL_REGISTRY.agrupadores.scope === 'general');
