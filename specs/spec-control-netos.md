@@ -1,4 +1,4 @@
-**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **17** (ver D-074), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. Sigue **pendiente**: el criterio para los 17 legajos que todavía difieren (todos con obra social en 0, ver D-074) y el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
+**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **3** (ver D-074), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. Sigue **pendiente**: el criterio para los 3 legajos que todavía difieren (la liquidación les retuvo sólo jubilación y ninguna columna del archivo los distingue, ver D-074) y el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
 
 > **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-067).** Este brief planteaba comparar
 > contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"
@@ -33,7 +33,11 @@
 > del convenio que lo firmó, así que al empleado que no pertenece se lo sigue controlando pero con su
 > sueldo + AFA menos sus propios aportes. Y `1684-ANTIC_INCENTIVO` deja de tratarse como no
 > remunerativo común: pasa a una familia nueva, `noRemuSinAporte`, porque la liquidación no le cobra
-> nada. Detalle completo, con los números de la verificación, en D-074.
+> nada. Y hay un cuarto campo de config, `puestosSinAportes` (semilla `['Director']`), que se compara
+> contra la columna PUESTO: a esos empleados no se les calcula jubilación, ley 19.032, obra social ni
+> ANSSAL, diga lo que diga su columna de porcentaje. El criterio es el puesto y no la obra social en
+> cero — hay empleados con la obra social en cero que aportan normal y cierran. Detalle completo, con
+> los números de la verificación, en D-074.
 
 # Control de Netos — brief para Claude Code
 

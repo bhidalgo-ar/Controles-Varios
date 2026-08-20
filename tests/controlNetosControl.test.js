@@ -293,6 +293,63 @@ const rFueraSinCols = runControlNetos(escalaRows, [fila('1', {
 assert('fuera de convenio sin columnas de porcentaje: tampoco paga sindicato',
   Math.abs(rFueraSinCols.rows[0].residuo) < 0.01);
 
+// ── Puestos sin aportes (los directores) ─────────────────────────────────────
+//
+// El director no está en relación de dependencia: la liquidación no le retiene
+// seguridad social, pero el Tabulado igual le declara las alícuotas 11 / 3 /
+// 2,55 / 0,45 en las columnas de porcentaje. Sin la lista de puestos, el control
+// le descontaba un 17% que nadie le descontó. El criterio es el PUESTO y no la
+// obra social en cero: en 05/2026 hay empleados con la obra social en cero que
+// aportan normal y cierran (Willy, 2026-08-20).
+
+const netoDirector = 1200000;   // sueldo + AFA, sin una sola retención
+const filaDirector = {
+  CONVENIO: 'FUERA DE CONVENIO',
+  PUESTO: 'Director',
+  OBRA_SOCIAL: '0',
+  // El archivo le declara el 11 / 3 / 2,55 / 0,45 igual que a todos, y es
+  // justamente eso lo que la lista de puestos tiene que ignorar. Lo gremial va
+  // en 0, como en el Tabulado real: el director no está en ningún sindicato.
+  ...conTasas({ '676-SINDICAT_PORC': 0, '623-PORC_FAECYS': 0 }),
+  '3513-COMP_ANTIGUEDAD': 0, '1011-PRESENTISMO': 0,
+  '4567-INCRE_ADO_ABR26_NO': 0, '4569-RECOM_ADO_ABR26_NO': 0,
+  '4615-ANT_ADO_NOS_ADIC': 0, '4613-PRES_ADO_NOS_ADIC': 0,
+  '6005-TOT_JUB': 0,
+  NETO: netoDirector,
+};
+const rDirector = runControlNetos(escalaRows, [fila('1', filaDirector)], mapping);
+assert('director: no se le calcula seguridad social y el legajo cierra',
+  Math.abs(rDirector.rows[0].residuo) < 0.01);
+assert('director: queda marcado como sin aportes',
+  rDirector.rows[0].sinAportes === true && rDirector.rows[0].puesto === 'Director');
+assert('director: las cuatro alícuotas de seguridad social quedan en cero',
+  rDirector.rows[0].tasas.jubilacion === 0 && rDirector.rows[0].tasas.ley19032 === 0
+  && rDirector.rows[0].tasas.obraSocial === 0 && rDirector.rows[0].tasas.anssal === 0);
+
+// El mismo empleado con el puesto fuera de la lista vuelve a aportar.
+const rNoDirector = runControlNetos(escalaRows,
+  [fila('1', { ...filaDirector, PUESTO: 'Encargado' })], mapping);
+assert('un puesto que no está en la lista sí aporta',
+  rNoDirector.rows[0].sinAportes === false
+  && Math.abs(rNoDirector.rows[0].residuo) > 1);
+
+// La obra social en cero NO alcanza para eximir de aportes: el empleado del
+// convenio con la obra social en cero que aporta normal tiene que seguir
+// cerrando. Es el legajo que la regla "obra social en cero = sin aportes"
+// habría roto.
+const rOs0Aporta = runControlNetos(escalaRows, [fila('1', {
+  ...conTasas(), OBRA_SOCIAL: '0', NETO: NETO_TEO,
+})], mapping);
+assert('obra social en cero pero aporta normal: sigue cerrando',
+  rOs0Aporta.rows[0].sinAportes === false
+  && Math.abs(rOs0Aporta.rows[0].residuo) < 0.01);
+
+// Sin puestos declarados, a nadie se le exime.
+const rSinLista = runControlNetos(escalaRows, [fila('1', filaDirector)],
+  { ...mapping, netosConfig: { ...CFG, puestosSinAportes: [] } });
+assert('con la lista de puestos vacía, el director vuelve a aportar',
+  rSinLista.rows[0].sinAportes === false);
+
 // El del convenio sigue con su acuerdo, y el nombre del convenio se compara sin
 // distinguir mayúsculas.
 const rConvenioMayus = runControlNetos(escalaRows,

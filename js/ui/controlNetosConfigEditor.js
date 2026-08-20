@@ -121,6 +121,21 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
 
     <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
       <label style="display:block;">
+        <span class="form-label" style="font-size:var(--text-sm);">Puestos sin aportes</span>
+        <input type="text" class="form-input form-input--sm" style="max-width:200px;"
+               data-netos-puestos autocomplete="off"
+               value="${esc((current.puestosSinAportes || []).join(', '))}" placeholder="ej. Director">
+      </label>
+      <p class="text-muted" style="font-size:var(--text-sm);max-width:52ch;margin:var(--sp-4) 0 0;">
+        Separados por coma, se comparan contra la columna PUESTO. A estos empleados no se les
+        descuenta jubilación, ley 19.032, obra social ni ANSSAL: el director no está en relación de
+        dependencia y la liquidación no le retiene nada, pero el Tabulado igual le declara las
+        alícuotas. Lo gremial, si el archivo declara alguna cuota, se le sigue calculando.
+      </p>
+    </div>
+
+    <div style="margin-top:var(--sp-3);display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:flex-start;">
+      <label style="display:block;">
         <span class="form-label" style="font-size:var(--text-sm);">Tope de la base de aportes</span>
         <input type="text" class="form-input form-input--sm" style="max-width:160px;"
                data-netos-tope inputmode="decimal" autocomplete="off"
@@ -186,6 +201,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
   const topeEl    = editor.querySelector('[data-netos-tope]');
   const tolEl     = editor.querySelector('[data-netos-tol]');
   const convEl    = editor.querySelector('[data-netos-convenio]');
+  const puestosEl = editor.querySelector('[data-netos-puestos]');
   const hintEl    = editor.querySelector('[data-netos-tope-hint]');
   const tasasEl   = editor.querySelector('[data-netos-tasas]');
   const empresaEls = editor.querySelectorAll('[data-netos-empresa]');
@@ -220,6 +236,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     current.topeBaseImponible = num(topeEl.value);
     current.tolerancia        = num(tolEl.value) ?? 1;
     current.convenio          = convEl.value.trim();
+    current.puestosSinAportes = puestosEl.value.split(',').map(v => v.trim()).filter(Boolean);
     for (const el of tasasEl.querySelectorAll('[data-netos-tasa]')) {
       current.tasas[el.dataset.netosTasa] = num(el.value) ?? 0;
     }
@@ -234,7 +251,7 @@ export function renderControlNetosConfigEditor(container, opts = {}) {
     });
   };
 
-  for (const el of [nrEl, topeEl, tolEl, convEl]) el.addEventListener('input', emitir);
+  for (const el of [nrEl, topeEl, tolEl, convEl, puestosEl]) el.addEventListener('input', emitir);
   tasasEl.addEventListener('input', emitir);
   for (const el of empresaEls) el.addEventListener('input', emitir);
 

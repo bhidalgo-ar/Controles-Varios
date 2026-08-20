@@ -114,6 +114,15 @@ export const DEFAULT_NETOS_CONFIG = () => ({
   // valen sólo para estos empleados. Se compara contra la columna CONVENIO del
   // Tabulado, sin distinguir mayúsculas. Semilla, no identidad (D-035).
   convenio: 'Comercio',
+  // Puestos a los que no se les retiene seguridad social. Los directores no
+  // están en relación de dependencia: la liquidación no les retiene nada, pero
+  // el Tabulado igual les declara las alícuotas 11 / 3 / 2,55 / 0,45 en las
+  // columnas de porcentaje, así que sin esta lista el control les descontaba un
+  // 17% que nadie les descontó. Se compara contra la columna PUESTO, sin
+  // distinguir mayúsculas. El criterio es el puesto y NO la obra social en
+  // cero: hay empleados con la obra social en cero que aportan normal y cierran
+  // (Willy, 2026-08-20).
+  puestosSinAportes: ['Director'],
   antiguedadPorAnio: 1,      // % por año
   presentismo:       8.33,   // %
   // Tope de la base imponible de los cuatro aportes. `null` = no se aplica tope
@@ -273,15 +282,20 @@ function tasaDelLegajo(group, codes, colByCode, fallback) {
  * que cuando el archivo no declara la alícuota el respaldo es 0 y no el 2% del
  * Paso 2. Si el archivo SÍ la declara, manda el archivo igual que para todos.
  */
-function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo }) {
+function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes }) {
   const c = cfg.codigos;
   const t = cfg.tasas;
   const gremial = (codes, fb) => tasaDelLegajo(group, codes, colByCode, aplicaAcuerdo ? fb : 0);
+  // Al puesto sin aportes no se le retiene seguridad social, diga lo que diga la
+  // columna del porcentaje: el director tiene declarado el 11 / 3 / 2,55 / 0,45
+  // y la liquidación no le retiene nada. Lo gremial sí sale del archivo — si
+  // declara una cuota, es un dato de ese empleado.
+  const aporte = (codes, fb) => sinAportes ? 0 : tasaDelLegajo(group, codes, colByCode, fb);
   return {
-    jubilacion: tasaDelLegajo(group, c.porcJubilacion, colByCode, t.jubilacion),
-    ley19032:   tasaDelLegajo(group, c.porcLey19032,   colByCode, t.ley19032),
-    obraSocial: tasaDelLegajo(group, c.porcObraSocial, colByCode, t.obraSocial),
-    anssal:     tasaDelLegajo(group, c.porcAnssal,     colByCode, t.anssal),
+    jubilacion: aporte(c.porcJubilacion, t.jubilacion),
+    ley19032:   aporte(c.porcLey19032,   t.ley19032),
+    obraSocial: aporte(c.porcObraSocial, t.obraSocial),
+    anssal:     aporte(c.porcAnssal,     t.anssal),
     sindicato:  gremial(c.porcSindicato, t.sindicato),
     faecys:     gremial(c.porcFaecys,    t.faecys),
     cec:        gremial(c.porcCec,       0),
@@ -302,10 +316,10 @@ function tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo }) {
  * cuenta tiene que ser **la misma** de los dos lados, o la comparación entre
  * meses mide la diferencia entre dos fórmulas y no entre dos liquidaciones.
  */
-function reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo }) {
+function reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo, sinAportes }) {
   const c = cfg.codigos;
   const t = cfg.tasas;
-  const tasas = tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo });
+  const tasas = tasasDelLegajo(group, colByCode, cfg, { aplicaAcuerdo, sinAportes });
   const tasaAportes = pct(tasas.jubilacion) + pct(tasas.ley19032)
                     + pct(tasas.obraSocial) + pct(tasas.anssal);
   const tasaGremial = pct(tasas.sindicato) + pct(tasas.faecys)
@@ -421,6 +435,11 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
   const mismoConvenio = (valor) =>
     norm(valor).toUpperCase() === norm(cfg.convenio).toUpperCase();
 
+  // Los puestos a los que no se les retiene seguridad social (los directores).
+  const PUESTO_HEADERS = ['PUESTO'];
+  const puestosSinAportes = (cfg.puestosSinAportes || []).map(p => norm(p).toUpperCase());
+  const esSinAportes = (valor) => puestosSinAportes.includes(norm(valor).toUpperCase());
+
   // Escala por categoría: clave normalizada → { categoria, basicos }
   const escalaByCat = new Map();
   for (const e of escalaRows || []) {
@@ -443,11 +462,13 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     const prevHeaders   = Object.keys(prevRows[0] || {});
     const prevOsCol     = prevHeaders.find(h => norm(h).toUpperCase() === 'OBRA_SOCIAL');
     const prevConvCol   = prevHeaders.find(h => CONVENIO_HEADERS.includes(norm(h).toUpperCase()));
+    const prevPuestoCol = prevHeaders.find(h => PUESTO_HEADERS.includes(norm(h).toUpperCase()));
     for (const [legajo, group] of groupRowsByLegajo(prevRows, legajoCol, { keyFn })) {
       const fichaPrev = lastRow(group);
       const t = reciboTeorico(group, prevColByCode, cfg, {
         obraSocial:    prevOsCol ? norm(fichaPrev?.[prevOsCol]) : '',
         aplicaAcuerdo: prevConvCol ? mismoConvenio(fichaPrev?.[prevConvCol]) : true,
+        sinAportes:    prevPuestoCol ? esSinAportes(fichaPrev?.[prevPuestoCol]) : false,
       });
       netoPrevPorLegajo.set(legajo, t.neto);
     }
@@ -487,6 +508,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     const catCol = headers.find(h => norm(h).toUpperCase() === 'CATEGORIA');
     const osCol  = headers.find(h => norm(h).toUpperCase() === 'OBRA_SOCIAL');
     const convCol = headers.find(h => CONVENIO_HEADERS.includes(norm(h).toUpperCase()));
+    const puestoCol = headers.find(h => PUESTO_HEADERS.includes(norm(h).toUpperCase()));
     if (!convCol) {
       avisos.push(`${empresa.label}: el Tabulado no trae la columna CONVENIO, así que no se pudo `
         + `distinguir quién está fuera del convenio de ${cfg.convenio}. Se les calculó el recibo `
@@ -507,10 +529,12 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       const obraSocial = osCol ? norm(ficha?.[osCol]) : '';
       const categoria  = catCol ? norm(ficha?.[catCol]) : '';
       const convenio   = convCol ? norm(ficha?.[convCol]) : '';
+      const puesto     = puestoCol ? norm(ficha?.[puestoCol]) : '';
       const aplicaAcuerdo = convCol ? mismoConvenio(convenio) : true;
+      const sinAportes    = puestoCol ? esSinAportes(puesto) : false;
 
       // ── El recibo teórico ──────────────────────────────────────────────────
-      const teo = reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo });
+      const teo = reciboTeorico(group, colByCode, cfg, { obraSocial, aplicaAcuerdo, sinAportes });
       const afiliado       = teo.tasas.afiliado > 0;
       const aniosAnt       = teo.anios;
       const antiguedadTeo  = teo.antiguedad;
@@ -594,7 +618,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
 
       rows.push({
         legajo, nombre, empresa: empresa.label, categoria, obraSocial, afiliado,
-        convenio, aplicaAcuerdo, tasas: teo.tasas, noRemuSinAporteLiq,
+        convenio, aplicaAcuerdo, puesto, sinAportes, tasas: teo.tasas, noRemuSinAporteLiq,
         netoTeoricoPrev, variacionMes,
         aniosAntiguedad: aniosAnt,
         base, sueldoLiq,
@@ -757,6 +781,7 @@ function renderResumen(results, host) {
   const movidos = rows.filter(r => r.variacionMes !== null && Math.abs(r.variacionMes) > tol);
   const fueraConvenio  = rows.filter(r => r.aplicaAcuerdo === false);
   const sinTasasPropias = rows.filter(r => r.tasas?.delArchivo === false);
+  const sinAportes      = rows.filter(r => r.sinAportes === true);
 
   renderVerdict(host, {
     tone: conDif.length === 0 && fueraEscala.length === 0 ? 'ok' : 'warn',
@@ -854,6 +879,12 @@ function renderResumen(results, host) {
             ? '.'
             : `; los otros ${fueraConvenio.length} quedaron con su sueldo y sus propios aportes, `
               + 'sin acuerdo, sin adicionales y sin descuento sindical.') },
+    { label: 'Puestos sin aportes', ok: true,
+      detail: (results.config.puestosSinAportes || []).length === 0
+        ? 'No hay ningún puesto declarado sin aportes: a todos se les calcula la seguridad social.'
+        : `A ${sinAportes.length} ${sinAportes.length === 1 ? 'empleado' : 'empleados'} no se les `
+          + 'calculó jubilación, ley 19.032, obra social ni ANSSAL, por su puesto ('
+          + `${results.config.puestosSinAportes.join(', ')}).` },
     { label: 'Alícuotas de retención',
       ok: sinTasasPropias.length === 0,
       detail: sinTasasPropias.length === 0
@@ -1008,7 +1039,7 @@ function tableHtml(rows, maxDiff, tol) {
 // Finanzas: por eso lleva la reconstrucción completa (D-020 no aplica).
 
 const EXPORT_HEADERS = [
-  'Legajo', 'Nombre', 'Empresa', 'Convenio', 'Aplica el acuerdo', 'Categoría',
+  'Legajo', 'Nombre', 'Empresa', 'Convenio', 'Aplica el acuerdo', 'Categoría', 'Puesto',
   'Años antigüedad', 'Alícuotas', 'Sueldo + AFA',
   'Remunerativo teórico', 'No remun. teórico', 'Retenciones teóricas', 'Neto teórico',
   'Neto liquidado', 'Devuelto al neto', 'Neto liquidado ajustado',
@@ -1018,7 +1049,9 @@ const EXPORT_HEADERS = [
 
 const exportRows = (results) => results.rows.map(r => ([
   r.legajo, r.nombre, r.empresa, r.convenio, r.aplicaAcuerdo ? 'sí' : 'no',
-  r.categoria, r.aniosAntiguedad, r.tasas.delArchivo ? 'del Tabulado' : 'del Paso 2', r.base,
+  r.categoria, r.puesto, r.aniosAntiguedad,
+  r.sinAportes ? 'sin aportes por su puesto'
+               : r.tasas.delArchivo ? 'del Tabulado' : 'del Paso 2', r.base,
   r.remuTeo, r.noRemuTeo, r.retencionesTeo, r.netoTeorico,
   r.netoLiquidado, r.devuelto, r.netoAjustado,
   r.explicado, r.residuo, r.excedenteTope,

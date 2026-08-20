@@ -2491,13 +2491,30 @@ idéntico al centavo al de la planilla; los 5 que difieren son los 4 afiliados a
 paga AMECYS, donde el control contempla retenciones que la planilla de Willy no tiene — confirmado
 que el control es el que está bien, porque esos 5 legajos cierran contra la liquidación real.
 
-**Pendiente, sin resolver — no es un criterio confirmado, es una pregunta abierta.** De los 17
-legajos que siguen con diferencia, 15 son de fuera de convenio y 2 de Comercio, y los 17 tienen la
-columna OBRA_SOCIAL en 0. A los 15 la liquidación no les retuvo absolutamente nada (el neto liquidado
-es igual al remunerativo); a los 2 sólo les retuvo jubilación, aunque el Tabulado declara para todos
-ellos las alícuotas 11 / 3 / 2,55 / 0,45. Parecen directores o socios sin aportes, pero eso es una
-lectura de quien mira el dato, no una regla que Willy haya confirmado: **PENDIENTE: falta que Willy
-defina el criterio** antes de tocar el control para estos casos.
+**Cuarto criterio: los puestos sin aportes son los del puesto, no los de la obra social en cero.**
+De los 17 legajos que quedaban con diferencia, los 17 tenían la columna OBRA_SOCIAL en 0, y Willy
+eligió el criterio "obra social en cero = sin aportes". Al ir a implementarlo apareció el dato que lo
+desarma: en esos mismos archivos hay **18** empleados con la obra social en 0, y uno de ellos aporta
+normal y cierra al centavo — la regla lo habría convertido en una diferencia del 17% de su base. El
+archivo, en cambio, dice lo que hay que saber en otra columna: los 14 a los que la liquidación no les
+retuvo nada tienen **PUESTO = "Director"**, todos, sin excepción. Así que el criterio implementado es
+el puesto: `puestosSinAportes` (semilla `['Director']`, editable en el Paso 2, se compara contra la
+columna PUESTO sin distinguir mayúsculas) exime de jubilación, ley 19.032, obra social y ANSSAL
+**diga lo que diga la columna del porcentaje** — al director el Tabulado le declara el 11 / 3 / 2,55
+/ 0,45 igual que a todos. Lo gremial se le sigue leyendo del archivo: si declara una cuota, es un
+dato de ese empleado. Con esto las diferencias sin explicar bajaron de 17 a **3** sobre 619 legajos.
+
+**Alternativa descartada:** eximir por obra social en cero, que es lo que se había ofrecido y elegido.
+Se descartó porque tiene un contraejemplo en el mismo archivo. Es el caso de manual del gotcha de
+CLAUDE.md: la regla se decidió mirando 17 filas y la fila 18 la refutaba.
+
+**Pendiente, sin resolver — no es un criterio confirmado, es una pregunta abierta.** Quedan 3 legajos
+con diferencia: uno de fuera de convenio y dos de Comercio, a los que la liquidación les retuvo
+**sólo jubilación** (11%) y ni ley 19.032, ni obra social, ni ANSSAL, aunque el Tabulado les declara
+las cuatro alícuotas. Los tres tienen la obra social en 0 y un puesto común —administrativo, vendedor,
+maestranza—, así que ninguna columna del archivo los distingue. El perfil coincide con el de un
+jubilado que sigue trabajando, pero eso es una lectura de quien mira el dato: **PENDIENTE: falta que
+Willy defina el criterio** antes de tocar el control para estos casos.
 
 **Fuera de esta decisión, identificado y sin arreglar:** el KPI "Legajos cruzados" del hero de
 resultados cuenta sólo los empleados del Tabulado principal (380 en esta corrida), mientras la
