@@ -1,10 +1,9 @@
 # Familia de Novedades (Axton) — spec
 
-**Estado:** relevada, con decisiones cerradas, y con los dos cimientos —N0a (lector ExpNov) y
-N0b (lector del Tabulado de Axton + totalizador)— más el generador N1 implementados el
-2026-08-20. **N2 sigue en diseño.** N1 está construido pero **sin verificar contra un archivo
-real**: ver "Lo que N1 espera de un archivo real". El lector de Tabulado tampoco se corrió
-todavía contra un Tabulado real.
+**Estado:** relevada, con decisiones cerradas, y con los cuatro módulos —N0a (lector ExpNov), N0b
+(lector del Tabulado de Axton + totalizador), N1 (generador de importador) y N2 (cruce contra la
+liquidación)— implementados el 2026-08-20. **Ninguno se corrió todavía contra un archivo real**:
+ver "Lo que N1 espera de un archivo real" y "Lo que N2 espera de un archivo real".
 **Origen:** relevamiento de Guillermo sobre SharePoint, 2026-08-20 — carpetas de
 Novedades y de Liquidaciones de **julio 2026** de los 7 clientes Axton: Plastic
 Pilar (POP), Merz, Epiroc, SIASA, Geopagos, Red Bull y Coelsa (más el histórico
@@ -320,16 +319,100 @@ y un contrato describe un juego fijo de columnas. Mismo caso que
    como archivo opcional, el empleado que no llegó tiene que salir en la banda
    "sólo en la planilla del cliente".
 
-### N2 — Novedades vs Liquidación (B2b del catálogo)
+### N2 — Novedades vs Liquidación (B2b del catálogo) — **hecho** (2026-08-20)
 
-Entrada: el importador (idealmente el generado y validado) + Tabulado del
-período + Totales de Concepto. Cruce por **legajo+código**, consolidando por
-legajo los dos lados (`makeLegajoKey`), comparando cantidad e importe cuando
-ambos existen. Resultados en cuatro bandas: coincide / difiere / **no
-comparable (informado, no bloquea)** / sin contraparte — y ahí distinguir "no
-se liquidó" de "el Tabulado no lo muestra" mirando el totalizador. Unidad del
-semáforo: `legajo`. Sin conversión de unidades (D-065): horas contra días se
-informa como no comparable.
+`js/controls/novedadesLiquidacion.js` + `js/ui/novedadesLiquidacionConfigEditor.js`. Control
+`novedades_liquidacion` (21º del registry), scope `sistema` / `axton`, grupo propio, modo
+"Controlar", `tabRequired: false`. Cierra el circuito que abre N1: no arma nada, cruza lo que ya
+existe.
+
+**Entrada: tres archivos, ninguno opcional, los tres como `additionalFiles`** — el importador de
+novedades del período (idealmente el que generó y validó N1), el Tabulado de Axton del mismo
+período y el reporte "Totales de Concepto" del mismo período. **El Tabulado no entra por el
+casillero estándar del Tabulado**: ese casillero cablea el lector de Meta4 y su `parseMetadata` no
+llega completo a `run()`, y este control necesita la metadata entera (qué conceptos tienen columna
+propia, si el export trae cantidades). Entran dos fichas de tipo de archivo hermanas de las que ya
+existían para otro uso: `tab_axton_cruce_file` (usa el lector **tolerante** `readTabAxton`, D-072,
+no el estricto de Variación entre quincenas de POP) y `totales_concepto_cruce_file` (usa
+`readTotalesConcepto`, que no exige las cuentas contables que sí pide la Contabilidad Desglosada).
+El importador entra por `f2_cruce_file`, alias del mismo formato que N1 lee y genera, con casillero
+propio para no pisar el archivo guardado de N1 en la misma corrida.
+
+**Unidad del cruce: legajo + código de concepto.** Compara cantidad **e** importe cuando los dos
+lados los traen, consolidando **los tres archivos** por legajo con la misma clave
+(`makeLegajoKey(mapping.legajoKeyMode)`, D-038/D-042) — el Tabulado trae una fila por liquidación y
+el totalizador una fila por legajo × concepto × liquidación, y sin consolidar salen diferencias
+falsas en todo empleado con más de una paga en el mes. Suma todas las columnas del mismo código
+base cuando el Tabulado lo repite en dos (`imp_1000` + `imp_1000__2`), y normaliza el código de
+concepto con la misma clave (`claveConcepto`, saca ceros a la izquierda sólo si es enteramente
+numérico) en los tres archivos — nunca matchea por el rótulo en criollo, que cambia entre archivos
+del mismo cliente y mes (D-039).
+
+**Cada par cae en una de cuatro bandas:**
+
+- **Coincide** — cantidad e importe (o la que se pudo comparar) están dentro de la tolerancia.
+- **Difiere** — el importe se mide con `isDiff()` (el monto de diferencia del cliente, D-069); la
+  cantidad, al centésimo, con su propia constante: medir horas con un umbral en pesos esconde tres
+  horas detrás de $ 100. Sin `ownTolerance` propio.
+- **No comparable** — informado, **no bloquea ni aprueba**. Motivos: la novedad y la liquidación
+  están en otra unidad (marcado por el analista en el Paso 2, D-065: nada se convierte); la novedad
+  vino en cantidad y el Tabulado no trae columnas de cantidad; la liquidación no informa cantidad (o
+  importe) para ese concepto; o no hay una misma medida en los dos lados.
+- **Sin contraparte** — motivos: marcado en el Paso 2 como concepto que no llega a la liquidación;
+  el legajo no aparece en el Tabulado ni en el totalizador del período; el concepto se liquidó en
+  otros legajos y en éste no (no se liquidó); el Tabulado no trae columna para el concepto y el
+  totalizador tampoco lo tiene (no se liquidó); el Tabulado no trae columna y **no se cargó** el
+  totalizador (no se puede determinar); o se liquidó y no hay novedad cargada. El reporte "Totales
+  de Concepto" es lo que permite distinguir "no se liquidó" de "el Tabulado no lo muestra en columna
+  propia" — hay conceptos liquidados así, relevados en Red Bull, Epiroc y SIASA.
+
+**`null` no es `0` en ninguna rama:** una dimensión sin dato de un lado no da una diferencia de
+cero, da una banda "no comparable" o "sin contraparte" con su motivo.
+
+**Config nueva por cliente**, `novedades_liquidacion_config` (14ª clave de `controlConfigs`), dos
+listas por código de concepto — `conceptosNoComparables` (otra unidad, no se convierte) y
+`conceptosSinLiquidacion` (informativos que no llegan a la liquidación) — editadas desde
+`js/ui/novedadesLiquidacionConfigEditor.js` en el Paso 2, mostrando el rótulo del importador cargado
+al lado del código.
+
+**Unidad del semáforo: `legajo`.** `unitsTotal` son los legajos del cruce; `unitsWithDiff` es la
+unión de los que tienen diferencia o sin contraparte **más los legajos de los que no se pudo
+comparar nada** — no tener con qué comparar no es aprobar (D-073). Excepción: el legajo cuyas
+novedades son todas conceptos declarados "no llega a la liquidación" no cuenta, porque ahí no hay
+nada que comparar por decisión del analista y no por un hueco del archivo. El color sale de
+`computeSemaforoStatus`, y la rama de error devuelve `status: 'error'`, que es lo único que hace que
+las cuatro pantallas pinten el control en rojo.
+
+**Ningún parser nuevo:** los tres lectores ya existían (N0a y N0b). Ningún control existente
+cambia de comportamiento.
+
+Contrato escrito como test ejecutable en `tests/novedadesLiquidacionControl.test.js` (91 asserts,
+datos inventados), en la cadena de `test:unit`, más `tests/e2e/novedadesLiquidacion.spec.js` (9
+pruebas de navegador, los tres temas).
+
+Tres decisiones de criterio que hicieron falta para entregar el control funcionando, abiertas a
+confirmación de Willy: el legajo sin nada comparado cuenta para el semáforo, el Tabulado entra como
+archivo adicional y no por su casillero estándar, y el totalizador es obligatorio. Detalle y
+alternativas descartadas en **D-073**.
+
+#### Lo que N2 espera de un archivo real (D-064 — no se generaliza sin confirmación)
+
+**El control no vio todavía ningún archivo real: no hay exports de cliente en el repo ni en el
+entorno de desarrollo.** Todo lo de arriba está verificado sólo con datos inventados.
+
+1. **Un importador + un Tabulado + un Totales de Concepto reales, del mismo período, de una UO de
+   SIASA 07/2026** (o de Merz): sin esto no se sabe si el lector tolerante de Tabulado (D-072)
+   reconoce el archivo real sin cortar, ni si las claves de concepto de los tres archivos matchean
+   como se espera.
+2. **Un caso completo**: un legajo, sus datos crudos en los tres archivos, dos o tres valores
+   reproducidos desde esos crudos que confirmen el criterio del cliente, el cálculo por las dos
+   vías y la descomposición de cualquier diferencia. Uno, revisado, y después el resto.
+3. **Ver las cuatro bandas con datos reales**, en particular un concepto liquidado que el Tabulado
+   no muestre en columna propia (relevado en Red Bull, Epiroc y SIASA, pero no visto todavía dentro
+   de una corrida real de la app).
+4. **Confirmar contra el caso real las tres decisiones de D-073**: si el legajo sin nada comparado
+   debe contar para el semáforo, si el totalizador debe seguir siendo obligatorio, y qué conceptos
+   van en cada lista de la config del cliente.
 
 ## Roadmap de implementación
 
@@ -338,7 +421,7 @@ informa como no comparable.
 | 0 | ~~N0a Lector ExpNov + tests~~ **hecho** (`js/parsers/expNovParser.js`) | — |
 | 0 | ~~N0b Lector Axton de Tabulado + totalizador + tests~~ **hecho** (`js/parsers/tabAxtonReader.js`, `readTotalesConcepto`) | detector D-065 (hecho) |
 | 1 | ~~N1 Generador de importador~~ **hecho**, sin verificar contra archivo real (`js/controls/novedadesImportador.js`) | N0a |
-| 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b + N1 (los tres hechos) |
+| 2 | ~~N2 Novedades vs Liquidación~~ **hecho**, sin verificar contra archivo real (`js/controls/novedadesLiquidacion.js`) | N0a + N0b + N1 (los tres hechos) |
 
 **Pilotos elegidos por evidencia:** SIASA guarda las tres capas del circuito en
 carpetas (`A - Novedades recibidas` / `B - Novedades modificadas` /
@@ -347,7 +430,7 @@ punta a punta contra un mes real ya cerrado, incluido el caso de Aguas y Gaseosa
 (un empleado en la planilla del cliente que no llegó al importador). Merz es chico (43 legajos) y guarda ORIGINAL/MODIFICADO. La
 verificación sigue D-064: de a un caso completo, nunca un conteo.
 
-## Falta información (no traba las fases 0–1)
+## Falta información (no trabó las fases 0–2, sí traba la verificación)
 
 1. **Planillas bloqueadas por Purview**: `Panilla de novedades` de Epiroc,
    `NN - Novedades <Mes>` de Red Bull, los dos `templates` de POP. Willy las

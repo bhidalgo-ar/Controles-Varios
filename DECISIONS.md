@@ -2367,3 +2367,64 @@ cierra contra el `TOTAL GENERAL` — esconde el resto del archivo, que sí sirve
 
 **Pendiente de verificación:** el lector todavía no se corrió contra un Tabulado real — los del
 relevamiento no entraron al repo. Ahí puede aparecer alguna variante de firma no vista.
+
+---
+
+## D-073 — Novedades vs Liquidación (N2): el legajo sin nada comparado cuenta para el semáforo, el Tabulado entra como archivo adicional, y el totalizador es obligatorio
+
+**Fecha:** 2026-08-20. **Contexto:** implementación de N2, el cruce contra la liquidación de la familia de
+Novedades de Axton (D-070, `specs/familia-novedades-axton.md`). Tres decisiones de criterio que hicieron
+falta para entregar el control funcionando y que el código no explica solo — las tres quedan **abiertas a
+confirmación de Willy** cuando aparezca el primer archivo real (D-064).
+
+**1. El legajo del que no se pudo comparar nada cuenta para el semáforo, igual que uno con diferencia.**
+`unitsWithDiff` es la unión de los legajos con alguna diferencia, los que tienen algo sin contraparte, y
+los que no tuvieron ni un solo par comparable (por ejemplo, todos sus conceptos cayeron en "no comparable"
+o el legajo no aparece en ningún lado con algo comparable). **Alternativa descartada:** dejarlo fuera del
+numerador porque "no hay diferencia detectada". Se descartó porque el semáforo saldría verde sobre un
+legajo que en realidad nunca se miró — la misma lógica que ya usa D-070 para la banda "no comparable" (no
+bloquea, pero tampoco aprueba), llevada al semáforo.
+
+**Con una excepción, encontrada en la revisión del propio PR:** el legajo cuyas novedades son **todas**
+conceptos que el analista declaró como "no llega a la liquidación" **no** entra al numerador. Ahí no hay
+nada que comparar por decisión suya y no por un hueco del archivo, y sin la excepción una sola columna
+informativa cargada para toda la nómina pintaba el control en rojo por lo que el propio analista había
+declarado como esperado — justo lo contrario de lo que promete el panel del Paso 2. Escrito como assert.
+
+**2. El Tabulado de Axton entra como archivo adicional (`tab_axton_cruce_file`), no por el casillero
+estándar del Tabulado.** Ese casillero cablea el lector de Meta4 (`parseTabuladoControl`), y además el
+`parseMetadata` del Tabulado principal no llega completo a `run()` — y este control necesita la metadata
+entera: qué conceptos tienen columna propia, si el export trae cantidades. Como archivo adicional, el
+wizard le pasa filas y metadata sin ningún caso especial. De la misma decisión salen dos fichas de tipo de
+archivo hermanas de las que ya existían para otros usos: `tab_axton_cruce_file` usa el lector **tolerante**
+(`readTabAxton`, D-072) en vez del estricto que usa Variación entre quincenas de POP, y
+`totales_concepto_cruce_file` usa `readTotalesConcepto` en vez de `parseTotalesConcepto`, porque no exige
+las cuentas contables que sí necesita la Contabilidad Desglosada. **Alternativa descartada:** ampliar el
+casillero del Tabulado estándar para que acepte también el formato Axton — cambiaría, de paso, el
+resultado de un control que ya corre en producción (mismo motivo de D-072).
+
+**3. El reporte "Totales de Concepto" es obligatorio, no opcional.** Sin él, la banda "sin contraparte" no
+tiene un motivo cierto: no se puede distinguir "el concepto no se liquidó" de "el Tabulado no lo muestra en
+columna propia", que es justo la pregunta que el analista se hace en la banda que más le importa (hay
+conceptos liquidados sin columna propia, verificado por suma en Red Bull, Epiroc y SIASA). El código ya
+soporta que el día de mañana se declare opcional: las filas salen igual, con el motivo
+`no_determinable_sin_totalizador`. **Alternativa descartada:** dejarlo opcional desde el vamos — la banda
+"sin contraparte" perdería el motivo por el que existe en más de la mitad de los clientes Axton, que son
+justamente los que no traen columna propia para todos los conceptos.
+
+**Pendiente de verificación:** el control no se corrió todavía contra ningún archivo real — no hay exports
+de cliente en el repo ni en el entorno de desarrollo. Hace falta un importador + un Tabulado + un Totales
+de Concepto reales del mismo período de una UO de SIASA 07/2026, y con eso un caso completo de un legajo
+(D-064) antes de generalizar cualquiera de las tres decisiones de arriba.
+
+**Deuda que dejó la revisión de este PR, en otros módulos y por eso no arreglada acá:**
+
+1. **`expNovParser.js` pierde una columna de concepto con código no numérico** cuando los códigos vienen en
+   la fila de **abajo** del ancla (la variante donde la fila de criollo ES la del ancla): el estirado del
+   bloque de identificación hacia la izquierda no corre, y la columna no aparece ni en `columnas` ni en
+   `columnasSinCodigo` ni en `avisos`. Las celdas desaparecen y el control informa que no falta ninguna
+   columna. Toca el contrato de N0a y cambia el resultado de N1, así que va en su propio PR con su test.
+2. **`novedadesImportador.js` (N1) y `acreditaciones.js` devuelven `status: 'warning'` en su rama de
+   error**, donde los otros nueve controles devuelven `'error'`. Con `'warning'` la tarjeta sale neutra y
+   la corrida se lee "N/N controles en verde" mientras el checklist pinta el mismo control en rojo. El test
+   de N1 fija hoy ese `'warning'` en tres asserts, así que corregirlo es un PR aparte.

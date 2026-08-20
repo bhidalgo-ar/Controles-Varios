@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/novedadesLiquidacion.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del cruce de Novedades vs Liquidación (N2,
+     D-070) con los tres archivos cargados, para verificar en un navegador real lo
+     que no se puede afirmar leyendo el código: que el Resumen y el Detalle se
+     dibujen, que las cuatro bandas del cruce se puedan recorrer, que lo no
+     comparable se lea con su motivo y no como un cero, y que todo se lea en los
+     tres temas. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runNovedadesLiquidacion, renderNovedadesLiquidacionResults, summarizeNovedadesLiquidacion,
+         DEFAULT_NOV_LIQ_CONFIG }
+  from '../../../js/controls/novedadesLiquidacion.js';
+
+// 12 legajos inventados, ningún CUIL ni CBU: el cruce lo lee el analista de
+// Payroll, no Finanzas (D-020).
+const nombres = ['Sanguinetti', 'Albella', 'Falcioni', 'Silva', 'Lucchetti', 'Erviti',
+  'Rodriguez', 'Palacio', 'Cvitanich', 'Datolo', 'Urzi', 'Carranza'];
+
+const celda = (legajo, codigo, cantidad, importe, fila, col, letraCol) => ({
+  legajo, codigo, cantidad, importe,
+  unidadDeclarada: importe === null ? 'cantidad' : 'cantidad_e_importe',
+  fila, col, letraCol,
+});
+
+// ── El importador de novedades ───────────────────────────────────────────────
+const novedades = [];
+const empleados = [];
+nombres.forEach((nombre, i) => {
+  const legajo = String(i + 1);
+  empleados.push({ fila: i + 4, legajo, apellidoNombre: nombre });
+  novedades.push(celda(legajo, '1000', 30, 150000 + i * 1000, i + 4, 3, 'D'));
+  if (i % 2 === 0) novedades.push(celda(legajo, '1100', 5 + i, 8000 + i * 100, i + 4, 4, 'E'));
+  // Horas extras al 100%: la novedad va en horas y la liquidación en días, así
+  // que está marcado en el Paso 2 como concepto que no se compara (D-065).
+  if (i % 4 === 0) novedades.push(celda(legajo, '1130', 6, null, i + 4, 5, 'F'));
+  // Premio: uno de los legajos lo pidió y no se liquidó.
+  if (i % 5 === 0) novedades.push(celda(legajo, '2500', 1, 25000, i + 4, 6, 'G'));
+  // Concepto exento que el Tabulado no muestra en columna propia: sólo aparece
+  // en el reporte de Totales de Concepto.
+  if (i % 6 === 0) novedades.push(celda(legajo, '520121', 1, 200000, i + 4, 7, 'H'));
+});
+// El legajo 5, dos celdas del mismo concepto: tiene que SUMAR, no pisar.
+novedades.push(celda('5', '1000', 15, 75000, 20, 3, 'D'));
+
+const importadorMeta = {
+  sheetName: 'd  axFiles HidalgoExpNov_1132_2',
+  totalRows: novedades.length,
+  uniqueLegajos: nombres.length,
+  conceptos: ['1000', '1100', '1130', '2500', '520121'],
+  periodo: null,
+  unidadOrganizativa: { numero: '4', nombre: 'AGUAS Y GASEOSAS' },
+  empresa: null,
+  fechaArchivo: '09/08/2024',
+  columnas: [
+    { col: 3, letra: 'D', codigo: '1000',   rotulo: 'Sueldo Basico',        celdasCargadas: 13, duplicado: false, codigoNoNumerico: false },
+    { col: 4, letra: 'E', codigo: '1100',   rotulo: 'Horas Extras 50%',     celdasCargadas: 6,  duplicado: false, codigoNoNumerico: false },
+    { col: 5, letra: 'F', codigo: '1130',   rotulo: 'Horas Extras 100%',    celdasCargadas: 3,  duplicado: false, codigoNoNumerico: false },
+    { col: 6, letra: 'G', codigo: '2500',   rotulo: 'Premio',               celdasCargadas: 3,  duplicado: false, codigoNoNumerico: false },
+    { col: 7, letra: 'H', codigo: '520121', rotulo: 'Reintegro exento',     celdasCargadas: 2,  duplicado: false, codigoNoNumerico: false },
+  ],
+  // Una columna con datos cargados y sin código: es lo que NO puede pasar en
+  // silencio (D-070).
+  columnasSinCodigo: [
+    { col: 8, letra: 'I', rotulo: 'Licencia por ART', celdasCargadas: 2 },
+  ],
+  celdasSinCodigo: [],
+  empleados,
+  noParseables: [],
+  filasSinLegajo: [26],
+  avisos: ['La fecha de la fila 1 (09/08/2024) es la de la plantilla original, no el período.'],
+};
+
+// ── El Tabulado de Axton ─────────────────────────────────────────────────────
+// Una fila por LIQUIDACIÓN: el legajo 5 aparece dos veces (mensual y baja).
+const conceptosTab = [
+  { codigo: '1000', codigoBase: '1000', nombre: 'Sueldo Basico',    label: '1000 - Sueldo Basico',    letra: 'D', keyCant: 'cant_1000', keyImp: 'imp_1000', duplicado: false },
+  { codigo: '1100', codigoBase: '1100', nombre: 'Horas Extras 50%', label: '1100 - Horas Extras 50%', letra: 'F', keyCant: 'cant_1100', keyImp: 'imp_1100', duplicado: false },
+  { codigo: '1130', codigoBase: '1130', nombre: 'Horas Extras',     label: '1130 - Horas Extras',     letra: 'H', keyCant: 'cant_1130', keyImp: 'imp_1130', duplicado: false },
+  { codigo: '2500', codigoBase: '2500', nombre: 'Premio',           label: '2500 - Premio',           letra: 'J', keyCant: 'cant_2500', keyImp: 'imp_2500', duplicado: false },
+  { codigo: '1203', codigoBase: '1203', nombre: 'Gratificacion',    label: '1203 - Gratificacion',    letra: 'L', keyCant: 'cant_1203', keyImp: 'imp_1203', duplicado: false },
+];
+
+const tabRows = [];
+nombres.forEach((nombre, i) => {
+  const legajo = String(i + 1);
+  const fila = {
+    fila: i + 3, esTotalGeneral: false, legajo, apellido_nombre: nombre, liquidacion: 'Mensual 07-2026',
+    cant_1000: legajo === '5' ? 30 : 30,
+    // El legajo 3 se liquidó con $ 2.000 menos que la novedad: la diferencia que
+    // el analista tiene que ver.
+    imp_1000: (150000 + i * 1000) - (legajo === '3' ? 2000 : 0),
+  };
+  if (i % 2 === 0) {
+    // El legajo 7 liquidó 3 horas más de las pedidas.
+    fila.cant_1100 = (5 + i) + (legajo === '7' ? 3 : 0);
+    fila.imp_1100 = 8000 + i * 100;
+  }
+  if (i % 4 === 0) {
+    // Liquidado en días contra una novedad en horas: no comparable (D-065).
+    fila.cant_1130 = 1;
+    fila.imp_1130 = 12000;
+  }
+  // El premio del legajo 1 NO se liquidó: queda "sin contraparte".
+  if (i % 5 === 0 && legajo !== '1') { fila.cant_2500 = 1; fila.imp_2500 = 25000; }
+  // Una gratificación liquidada que nadie pidió por novedad.
+  if (legajo === '2') { fila.cant_1203 = 1; fila.imp_1203 = 30000; }
+  tabRows.push(fila);
+});
+// El legajo 5, segunda liquidación del mes: se SUMA a la primera.
+tabRows.push({ fila: 20, esTotalGeneral: false, legajo: '5', apellido_nombre: 'Lucchetti',
+  liquidacion: 'Baja 07-2026', cant_1000: 15, imp_1000: 75000 });
+
+const tabAxtonMeta = {
+  sheetName: 'Liquidaciones.20260731.101122.3',
+  formato: 'axton', sistema: 'Axton', cantidadesDisponibles: true,
+  reporte: 'Resumen de Liquidacion', empresa: 'EMPRESA INVENTADA SA', periodo: '2026-07',
+  totalRows: tabRows.length, uniqueLegajos: nombres.length,
+  legajosConVariasLiquidaciones: 1, maxLiquidacionesPorLegajo: 2,
+  liquidaciones: ['Mensual 07-2026', 'Baja 07-2026'],
+  conceptos: conceptosTab,
+  totalizadores: [{ key: 'neto', label: 'Neto', keyCant: 'neto_cant', keyImp: 'neto_imp' }],
+  columnasSinClasificar: [], columnasIgnoradas: [], totalesQueNoCierran: [],
+  filasPostTotal: [], filasSinLegajo: [], avisos: [],
+};
+
+// ── El reporte de Totales de Concepto ────────────────────────────────────────
+// Trae el exento 520121, que el Tabulado no muestra en columna propia: es lo que
+// permite decir "se liquidó y el Tabulado no lo muestra" en vez de "no se liquidó".
+const totRows = [];
+nombres.forEach((nombre, i) => {
+  const legajo = String(i + 1);
+  if (i % 6 === 0) {
+    totRows.push({ legajo, codigo: '520121', concepto: 'Reintegro exento',
+      importe: 200000, cantidad: 1, liquidacion: 'Mensual 07-2026', centroCosto: 'ADM', fila: i + 4 });
+  }
+});
+
+const totalizadorMeta = {
+  formato: 'xlsx', sheetName: 'totalesconcepto.20260731.1011',
+  totalRows: totRows.length, uniqueLegajos: totRows.length,
+  cantidadDisponible: true, conceptos: ['520121'],
+  codigosConVariosRotulos: [], liquidaciones: ['Mensual 07-2026'],
+  periodo: '2026-07', empresa: 'EMPRESA INVENTADA SA',
+  filasIgnoradas: [], filasSinCodigo: [], headers: [], avisos: [],
+};
+
+const results = runNovedadesLiquidacion(novedades, [], {
+  period: '2026-07',
+  novLiqConfig: { ...DEFAULT_NOV_LIQ_CONFIG(), conceptosNoComparables: ['1130'] },
+  importadorRows: novedades, importadorMeta,
+  tabAxtonRows: tabRows, tabAxtonMeta,
+  totalizadorRows: totRows, totalizadorMeta,
+});
+
+window.__summary = summarizeNovedadesLiquidacion(results);
+window.__results = results;
+renderNovedadesLiquidacionResults(results, document.getElementById('host'));
+window.__listo = true;
+</script>
+</body></html>

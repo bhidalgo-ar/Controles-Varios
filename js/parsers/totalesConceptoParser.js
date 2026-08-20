@@ -277,6 +277,29 @@ export function detectHeaders(arrayBuffer) {
 }
 
 /**
+ * La misma vista previa, pero mirando la MISMA hoja que va a leer
+ * `readTotalesConcepto`: la que matchea `totalesconcepto.*`, no la primera del
+ * libro. Con un libro de varias hojas, el `detectHeaders` de arriba lee la
+ * primera y eso rompe de dos maneras — si esa hoja no tiene columna "Legajo" la
+ * carga corta con un error y el analista no puede subir un archivo que el lector
+ * lee perfecto; y si la tiene, la pantalla de confirmación le muestra los
+ * encabezados de otra hoja, que es justo lo único que esa pantalla existe para
+ * confirmar.
+ *
+ * `detectHeaders` queda como está: lo usa la ficha de la Contabilidad
+ * Desglosada, cuyo parser también lee la primera hoja.
+ *
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {{ headers: string[], preview: Array<Array<string>> }}
+ */
+export function detectHeadersCruce(arrayBuffer) {
+  const { headers, rows } = isHtmlTabulado(arrayBuffer)
+    ? leerTablaHtml(arrayBuffer)
+    : leerTablaXlsx(arrayBuffer, { preferSheet: HOJA_TOTALES_CONCEPTO_RE });
+  return { headers, preview: rows.slice(0, 3) };
+}
+
+/**
  * Parsea el reporte "Totales de Concepto".
  *
  * @param {ArrayBuffer} arrayBuffer
