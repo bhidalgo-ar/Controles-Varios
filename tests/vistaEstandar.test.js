@@ -20,7 +20,10 @@
 globalThis.document = { addEventListener() {} };
 
 const { rubroGridHtml } = await import('./js/ui/resultBlocks.js');
-const { ESTADOS, estadoOptionsHtml, estadoInicial, estadoDeDiferencia } = await import('./js/ui/tableTools.js');
+const {
+  ESTADOS, estadoOptionsHtml, estadoInicial, estadoDeDiferencia, estadoDeFila, contarEstados,
+} = await import('./js/ui/tableTools.js');
+const { reporteColumns } = await import('./js/ui/planillaPanel.js');
 const { fichaCardHtml, fichaBodyHtml } = await import('./js/ui/fichaList.js');
 
 let ok = 0, fail = 0;
@@ -256,7 +259,18 @@ assert('la unidad la declara el control: no siempre es el legajo',
     .includes('— 1 centro de costo<'));
 
 assert('el rótulo del TOTAL ocupa las columnas congeladas, así no pisa el primer importe',
-  grid.includes('<td colspan="2">'));
+  grid.includes('<td class="rb-total__label" colspan="2">'));
+
+assert('…y se marca como rótulo, así el total de la selección no lo pisa con una suma',
+  // Con una sola columna de identificación el rótulo no lleva `colspan`, y
+  // "TOTAL — 2 legajos" tiene un número adentro: sin la marca se lo tomaba por
+  // un importe (ver initSelectionTotals en js/ui/tableTools.js).
+  rubroGridHtml({
+    columns: [{ key: 'legajo', label: 'Legajo', band: 'Identificación' },
+              { key: 'monto', label: 'Monto', band: 'Sueldo', num: true }],
+    rows: [{ legajo: '10', monto: 100 }],
+    stickyCols: 1,
+  }).includes('<td class="rb-total__label" colspan="1">'));
 
 assert('una columna que no se puede totalizar sale vacía, no en cero',
   rubroGridHtml({
@@ -280,6 +294,132 @@ assert('los nombres del Excel del cliente se escapan también acá',
               { key: 'nombre', label: 'Nombre', band: 'Identificación' }],
     rows: [{ legajo: '10', nombre: '<b>LUCCHETTI CRISTIAN</b>' }],
   }).includes('&lt;b&gt;LUCCHETTI CRISTIAN&lt;/b&gt;'));
+
+
+// ══════════════════════════════════════════════════════════════════════
+// 4. El estado de una fila que compara VARIAS columnas (§3)
+// ══════════════════════════════════════════════════════════════════════
+//
+// Brutos compara dos columnas, NR dieciocho, Rendimiento seis. En qué chip cae
+// esa fila lo decide el peor de sus estados, y "Sin comparar" pesa más que
+// "Dentro del margen": una columna que no se pudo comparar preocupa más que una
+// que cerró adentro del margen, y nunca se lee como aprobada (D-073).
+
+assert('gana el peor: con una diferencia arriba del monto, la fila es "Con diferencia"',
+  estadoDeFila([0, 5000], 100) === 'conDif');
+
+assert('una columna que no se pudo comparar pesa más que una que cerró',
+  estadoDeFila([0, null], 100) === 'sinComparar');
+
+assert('…pero menos que una diferencia de verdad',
+  estadoDeFila([null, 5000], 100) === 'conDif');
+
+assert('todo adentro del margen del cliente es "Dentro del margen"',
+  estadoDeFila([40, 0], 100) === 'margen');
+
+assert('todo al centavo es "Al centavo"',
+  estadoDeFila([0, 0.004], 100) === 'centavo');
+
+assert('una fila que no compara nada es "Sin comparar", no "Al centavo"',
+  estadoDeFila([], 100) === 'sinComparar');
+
+assert('los cuatro estados PARTICIONAN las filas: la suma da el total',
+  (() => {
+    const filas = [{ d: 5000 }, { d: 40 }, { d: 0 }, { d: null }];
+    const counts = contarEstados(filas, r => estadoDeFila([r.d], 100));
+    return counts.todos === 4
+      && counts.conDif + counts.margen + counts.centavo + counts.sinComparar === 4;
+  })());
+
+assert('un control que no compara nada deja los cuatro chips en cero y "Todos" completo',
+  (() => {
+    const counts = contarEstados([{}, {}, {}], () => null);
+    return counts.todos === 3 && Object.keys(counts).length === 1;
+  })());
+
+// ══════════════════════════════════════════════════════════════════════
+// 5. La columna de diferencia de la planilla (§5)
+// ══════════════════════════════════════════════════════════════════════
+
+const gridDif = rubroGridHtml({
+  columns: [
+    { key: 'legajo', label: 'Legajo', band: 'Identificación' },
+    { key: 'nombre', label: 'Nombre', band: 'Identificación' },
+    { key: 'rep', label: 'Reporte', sub: 'lo que informa el reporte', band: 'Sueldo', num: true },
+    { key: 'tab', label: 'Tab', sub: 'la columna del Tabulado', band: 'Sueldo', num: true },
+    { key: 'd', label: 'CTRL', sub: 'Tab − Reporte', band: 'Sueldo', diff: true, close: true,
+      total: (rows) => rows.reduce((a, r) => a + (r.tab ?? 0), 0) - rows.reduce((a, r) => a + (r.rep ?? 0), 0) },
+  ],
+  rows: [
+    { legajo: '10', nombre: 'SANGUINETTI JAVIER', rep: 1000, tab: 1000, d: 0 },
+    { legajo: '11', nombre: 'ALBELLA GUSTAVO',    rep: 900,  tab: 1000, d: 100 },
+    { legajo: '13', nombre: 'SILVA SANTIAGO',     rep: 500,  tab: null, d: null },
+  ],
+});
+
+assert('una columna de diferencia se dibuja con el badge del estándar y no como un número pelado',
+  gridDif.includes('rb-diffbadge--error') && gridDif.includes('+100,00'), gridDif);
+
+assert('la diferencia que no se pudo calcular sale como "sin comparar" en ámbar, no como 0,00',
+  gridDif.includes('rb-diffbadge--warn'), gridDif);
+
+assert('la celda de diferencia lleva `rb-magcell`: de ahí salen la barra de magnitud y el KPI',
+  (gridDif.match(/rb-magcell/g) || []).length >= 4, gridDif);
+
+assert('el TOTAL de una diferencia puede no ser la suma de la columna (Σ Tab − Σ Reporte)',
+  // Σ Tab = 2000 · Σ Reporte = 2400 → −400, y NO +100 (la suma de la columna).
+  gridDif.slice(gridDif.indexOf('<tfoot>')).includes('-400,00'),
+  gridDif.slice(gridDif.indexOf('<tfoot>')));
+
+// ══════════════════════════════════════════════════════════════════════
+// 6. La planilla sin bandas (EE x CATEG)
+// ══════════════════════════════════════════════════════════════════════
+//
+// Un control que cruza campos de texto no tiene rubros que agrupar ni importes
+// que totalizar. Sin esto salía una franja oscura vacía arriba del encabezado.
+
+const sinBandas = rubroGridHtml({
+  bands: false, totals: false,
+  columns: [
+    { key: 'id', label: 'Legajo' },
+    { key: 'campo', label: 'Campo', sub: 'el que no coincide' },
+  ],
+  rows: [{ id: '10', campo: 'PUESTO' }],
+});
+
+assert('sin bandas no se dibuja la fila de bandas',
+  !sinBandas.includes('rb-rubro__bands'), sinBandas);
+
+assert('…y tampoco la fila de TOTAL, que no tendría qué totalizar',
+  !sinBandas.includes('<tfoot>'), sinBandas);
+
+assert('las columnas y su base de cálculo siguen saliendo igual',
+  sinBandas.includes('<span class="rb-col__sub">el que no coincide</span>'));
+
+// ══════════════════════════════════════════════════════════════════════
+// 7. Las columnas de un control que GENERA un archivo
+// ══════════════════════════════════════════════════════════════════════
+
+const colsReporte = reporteColumns(
+  [{ key: 'legajo', label: 'ID_EMPLEADO', type: 'txt' },
+   { key: 'salBase', label: 'SAL_BASE', type: 'num' },
+   { key: 'raro', label: 'SIN_BANDA', type: 'txt' }],
+  { legajo: { band: 'Identificación', sub: 'el legajo del Tabulado' },
+    salBase: { band: 'Importes del mes', sub: 'suma de todas las liquidaciones del mes' } },
+);
+
+assert('las columnas del archivo entregable conservan su clave, su rótulo y su orden',
+  colsReporte.map(c => c.key).join(',') === 'legajo,salBase,raro');
+
+assert('la banda y la base de cálculo se agregan por clave',
+  colsReporte[1].band === 'Importes del mes'
+  && colsReporte[1].sub === 'suma de todas las liquidaciones del mes');
+
+assert('una columna de tipo num se totaliza; una de texto, no',
+  colsReporte[1].num === true && !colsReporte[0].num);
+
+assert('una columna sin banda declarada no rompe: queda sin banda, no en `undefined`',
+  colsReporte[2].band === '');
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

@@ -21,7 +21,7 @@
 //   - el hover NO usa `transform`: movería la lista entera abajo del mouse.
 
 import {
-  createResultsToolbar, createEstadoFilter, wireListTools, initSearchCombobox,
+  createResultsToolbar, createEstadoFilter, createMarcasFilter, wireListTools, initSearchCombobox,
 } from './tableTools.js';
 
 function esc(str) {
@@ -39,10 +39,6 @@ function fmtAmount(v, decimals = 2) {
  *  se formatea, y lo que no existe sale como `—` (nunca vacío ni 0,00). */
 function fmtCell(v) {
   return typeof v === 'string' ? v : fmtAmount(v);
-}
-
-function fmtInt(n) {
-  return Math.round(n || 0).toLocaleString('es-AR');
 }
 
 // ── La tarjeta cerrada ──────────────────────────────────────────────────────
@@ -299,7 +295,7 @@ export function renderFichasPanel(panel, {
   const estadoSel = createEstadoFilter({ counts, noAplica });
 
   const left = [estadoSel];
-  if (marcas.length) left.push(marcasDropdown(marcas, fichas));
+  if (marcas.length) left.push(createMarcasFilter(marcas, fichas));
 
   const { toolbar, searchEl, exportEl, kpisEl } = createResultsToolbar(panel, { left });
 
@@ -333,7 +329,7 @@ export function renderFichasPanel(panel, {
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 
-  const marcaSel = toolbar.querySelector('[data-ficha-marca]');
+  const marcaSel = toolbar.querySelector('[data-marca-filter]');
 
   function filtrar() {
     const estado = estadoSel.value;
@@ -377,22 +373,6 @@ export function renderFichasPanel(panel, {
   if (ordenSel) ordenar();
 
   return { listEl, els, tools, estadoSel };
-}
-
-/** El segundo eje: qué MÁS le pasa al caso. Desplegable, propio de cada control. */
-function marcasDropdown(marcas, fichas) {
-  const wrap = document.createElement('div');
-  wrap.className = 'form-group results-toolbar__drop';
-  wrap.innerHTML = `
-    <select class="form-select form-select--sm" data-ficha-marca aria-label="Marcas">
-      <option value="todas">Marcas ▾</option>
-      ${marcas.map(m => {
-        const n = fichas.filter(m.match).length;
-        return `<option value="${esc(m.value)}"${n === 0 ? ' disabled' : ''}>${esc(m.label)} (${fmtInt(n)})</option>`;
-      }).join('')}
-    </select>
-  `;
-  return wrap;
 }
 
 /** Sólo en Fichas (§3). */

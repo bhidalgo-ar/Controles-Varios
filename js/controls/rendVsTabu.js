@@ -2,13 +2,14 @@
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { estadoDeFila } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { buildColByCode } from './tabCodes.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -57,19 +58,23 @@ export const DEFAULT_CONCEPT_CONFIG = {
 // este archivo, así que este archivo NO puede importar contracts.js con un
 // `import` estático — si alguna vez lo necesita, usar `import()` dinámico
 // adentro de la función, como hace nr.js (ver la nota de D-041 ahí).
+// Los colores `xl*` son los del .xlsx y los sigue leyendo `contracts.js`. Los de
+// PANTALLA no están más acá: el tinte de cada banda lo pone la pieza compartida
+// (`paintColumnGroups`), que es lo que hace que el mismo concepto salga del
+// mismo color en los tres controles de Rendimiento y no uno distinto por módulo.
 export const COLS = [
   { key: 'precio',   label: 'PRECIO',          rKey: 'rPrecio',   tKey: 'tPrecio',   dKey: 'dPrecio',
-    hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)',  xlHdr: 'FFCCE0F5', xlBg: 'FFF0F6FD' },
+    xlHdr: 'FFCCE0F5', xlBg: 'FFF0F6FD' },
   { key: 'estimulo', label: 'ASIG. ESTÍMULO',  rKey: 'rEstimulo', tKey: 'tEstimulo', dKey: 'dEstimulo',
-    hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)',   xlHdr: 'FFC9EDD8', xlBg: 'FFEDF9F2' },
+    xlHdr: 'FFC9EDD8', xlBg: 'FFEDF9F2' },
   { key: 'cargas',   label: 'CARGAS SS',       rKey: 'rCargas',   tKey: 'tCargas',   dKey: 'dCargas',
-    hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)',    xlHdr: 'FFF5CCCC', xlBg: 'FFFCEAEA' },
+    xlHdr: 'FFF5CCCC', xlBg: 'FFFCEAEA' },
   { key: 'provMes',  label: 'PROV. MES',       rKey: 'rProvMes',  tKey: 'tProvMes',  dKey: 'dProvMes',
-    hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)',  xlHdr: 'FFC7EDF9', xlBg: 'FFEAF7FD' },
+    xlHdr: 'FFC7EDF9', xlBg: 'FFEAF7FD' },
   { key: 'provCcss', label: 'PROV. CCSS MES',  rKey: 'rProvCcss', tKey: 'tProvCcss', dKey: 'dProvCcss',
-    hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)',   xlHdr: 'FFCCDDED', xlBg: 'FFEAF2F8' },
+    xlHdr: 'FFCCDDED', xlBg: 'FFEAF2F8' },
   { key: 'total',    label: 'COSTO TOTAL',     rKey: 'rTotal',    tKey: 'tTotal',    dKey: 'dTotal',
-    hdr: 'rgba(64,64,64,0.18)',   bg: 'rgba(64,64,64,0.07)',   xlHdr: 'FFDCDCDC', xlBg: 'FFF2F2F2' },
+    xlHdr: 'FFDCDCDC', xlBg: 'FFF2F2F2' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -290,7 +295,7 @@ export function renderRendVsTabuResults(results, container) {
           : `${ccsWithDiff.length} de ${rows.length} centros de costo tienen diferencia.`,
         body: ccsWithDiff.length === 0
           ? `${rows.length} centro${rows.length === 1 ? '' : 's'} de costo verificados, sin diferencias.`
-          : `Diferencia total de <strong>${fmt(totalsAll.dTotal)}</strong> en COSTO TOTAL (Tab − Rend). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmt(totalsAll.dTotal)}</strong> en COSTO TOTAL (Tab − Rend). El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -322,151 +327,120 @@ export function renderRendVsTabuResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderRendVsTabuDetalle(panel, { rows, results }); },
+    planilla(panel) { renderRendVsTabuPlanilla(panel, { rows, results }); },
   });
 }
 
-function renderRendVsTabuDetalle(container, { rows, results }) {
-  // Acumuladores para fila de totales
-  const totals = {};
-  for (const c of COLS) {
-    totals[c.rKey] = 0;
-    totals[c.tKey] = 0;
-  }
-  for (const r of rows) {
-    for (const c of COLS) {
-      totals[c.rKey] += r[c.rKey] ?? 0;
-      totals[c.tKey] += r[c.tKey] ?? 0;
-    }
-  }
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// Una banda por categoría de costo y, adentro, las tres columnas de siempre: lo
+// que informa el Reporte de Rendimiento, lo que sale del Tabulado y la resta.
+//
+// **Qué conceptos componen cada categoría** dejó de vivir adentro del `<th>` de
+// la banda y pasó a una leyenda arriba de la tabla. El rótulo de la banda ahora
+// es chico, en mayúsculas y sobre fondo oscuro (§5) y queda pegado al scrollear:
+// un `<details>` con quince conceptos adentro no entra ahí. La información es la
+// misma y ahora se puede leer sin abrir catorce desplegables.
 
-  // §11.1 — de las 5 columnas componentes, ocultar las que no tienen ninguna
-  // diferencia en ningún CC (COSTO TOTAL siempre se muestra: es el agregado).
-  // Si no hay ninguna diferencia en absoluto, se muestran todas — no tiene
-  // sentido "ocultar todo".
-  const componentCols = COLS.filter(c => c.key !== 'total');
-  const componentsWithDiff = componentCols.filter(c => rows.some(r => hasDiff(r[c.dKey])));
-  const visibleComponents = componentsWithDiff.length > 0 ? componentsWithDiff : componentCols;
-  const hiddenCount = componentCols.length - visibleComponents.length;
-  const cols = [...visibleComponents, COLS[COLS.length - 1]]; // + COSTO TOTAL al final, siempre
+/**
+ * La leyenda: qué columnas del Tabulado suman a cada categoría. La usan los dos
+ * controles que calculan las cinco categorías desde el Tabulado —éste y
+ * Rendimiento x EE—, igual que ya comparten `DEFAULT_CONCEPT_CONFIG`.
+ *
+ * @param {HTMLElement} host
+ * @param {{ cols: object[], meta: object }} opts - `cols` son las categorías a
+ *   listar (sin COSTO TOTAL, que es la suma de las otras) y `meta` es el
+ *   `results.meta` del control, con la agrupación aplicada en esa corrida.
+ */
+export function leyendaDeConceptos(host, { cols, meta }) {
+  const { conceptConfig: cc, colByCode: cbc } = meta || {};
+  if (!cc || !cbc) return;
 
-  // ── Encabezados ───────────────────────────────────────────────────────────
-  const { conceptConfig: cc, colByCode: cbc } = results.meta || {};
-  const hdr1 = cols.map(c => {
-    if (c.key === 'total' || !cc || !cbc) {
-      return `<th colspan="3" style="text-align:center;background:${c.hdr};">${esc(c.label)}</th>`;
-    }
+  const bloques = cols.filter(c => c.key !== 'total').map(c => {
     const entries = cc[c.key] || [];
-    const conceptList = entries
-      .filter(e => cbc[e.code])
-      .map(e => {
-        const sign = e.sign === -1 ? '−' : '+';
-        return `<span style="display:inline-block;margin:1px 3px;white-space:nowrap;">${sign} ${esc(cbc[e.code])}</span>`;
-      })
-      .join('');
-    const missing = entries.filter(e => !cbc[e.code]);
-    const missingNote = missing.length
-      ? `<span style="display:block;margin-top:2px;color:var(--color-warning);font-size:10px;">⚠ ${missing.length} código${missing.length > 1 ? 's' : ''} no hallado${missing.length > 1 ? 's' : ''} en Tabulado</span>`
-      : '';
-    const conceptDetail = entries.length
-      ? `<details style="font-size:10px;font-weight:400;text-align:left;margin-top:2px;">
-           <summary style="cursor:pointer;list-style:none;text-align:center;color:inherit;opacity:0.75;">▾ ${entries.length} concepto${entries.length !== 1 ? 's' : ''}</summary>
-           <div style="padding:3px 0;line-height:1.6;">${conceptList}${missingNote}</div>
-         </details>`
-      : `<div style="font-size:10px;font-weight:400;opacity:0.6;">(sin conceptos)</div>`;
-    return `<th colspan="3" style="text-align:center;background:${c.hdr};">${esc(c.label)}${conceptDetail}</th>`;
-  }).join('');
-
-  const hdr2 = cols.map(c => `
-    <th style="text-align:right;background:${c.hdr};">Rend</th>
-    <th style="text-align:right;background:${c.hdr};">Tab</th>
-    <th style="text-align:right;background:${c.hdr};"><strong>CTRL</strong><br>
-      <small style="font-weight:400;white-space:nowrap;">Tab−Rend</small></th>
-  `).join('');
-
-  const maxAbsDiff = Math.max(1, ...rows.flatMap(r => cols.map(c => Math.abs(r[c.dKey] ?? 0))));
-
-  // ── Filas de datos ─────────────────────────────────────────────────────────
-  const dataRows = rows.map(r => {
-    const cells = cols.map(c => `
-      <td style="text-align:right;background:${c.bg};">${fmt(r[c.rKey])}</td>
-      <td style="text-align:right;background:${c.bg};">${fmt(r[c.tKey])}</td>
-      ${diffCellHtml(r[c.dKey], { max: maxAbsDiff, background: c.bg })}
-    `).join('');
-    const rowStyle = r.sinTabData ? ' style="opacity:0.55;"' : '';
+    const hallados = entries.filter(e => cbc[e.code]);
+    const faltan = entries.length - hallados.length;
     return `
-      <tr${rowStyle}>
-        <td style="white-space:nowrap;font-family:monospace;">${esc(r.ccCode)}</td>
-        <td style="white-space:nowrap;">${esc(r.ccName)}</td>
-        ${cells}
-      </tr>
+      <div class="rvt-leyenda__cat">
+        <span class="rvt-leyenda__titulo">${esc(c.label)}</span>
+        ${hallados.length
+          ? hallados.map(e => `<span class="rvt-leyenda__concepto">${e.sign === -1 ? '−' : '+'} ${esc(cbc[e.code])}</span>`).join('')
+          : '<span class="rvt-leyenda__vacio">sin conceptos configurados</span>'}
+        ${faltan ? `<span class="rvt-leyenda__falta">⚠ ${faltan} código${faltan > 1 ? 's' : ''} no hallado${faltan > 1 ? 's' : ''} en el Tabulado</span>` : ''}
+      </div>
     `;
   }).join('');
 
-  // ── Fila de totales ────────────────────────────────────────────────────────
-  const totRow = cols.map(c => {
-    const d = totals[c.tKey] - totals[c.rKey];
-    return `
-      <td style="text-align:right;background:${c.hdr};font-weight:600;">${fmt(totals[c.rKey])}</td>
-      <td style="text-align:right;background:${c.hdr};font-weight:600;">${fmt(totals[c.tKey])}</td>
-      ${diffCellHtml(d, { background: c.hdr })}
-    `;
-  }).join('');
-
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const { searchEl, exportEl } = createResultsToolbar(container);
-
-  if (hiddenCount > 0) {
-    const note = document.createElement('p');
-    note.className = 'text-muted';
-    note.style.cssText = 'font-size:var(--text-sm);padding:0 var(--sp-3);';
-    note.textContent = `Se ocultan ${hiddenCount} columna${hiddenCount === 1 ? '' : 's'} sin ninguna diferencia. El .xlsx exportado incluye las 6.`;
-    container.appendChild(note);
-  }
-
-  const tableWrap = document.createElement('div');
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th rowspan="2" style="white-space:nowrap;">CC</th>
-          <th rowspan="2">Centro de Costo</th>
-          ${hdr1}
-        </tr>
-        <tr>
-          ${hdr2}
-        </tr>
-      </thead>
-      <tbody>
-        ${dataRows}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="2" style="font-weight:600;white-space:nowrap;">TOTAL GENERAL</td>
-          ${totRow}
-        </tr>
-      </tfoot>
-    </table>
+  const det = document.createElement('details');
+  det.className = 'rvt-leyenda';
+  det.innerHTML = `
+    <summary>Qué conceptos del Tabulado suman a cada columna</summary>
+    <div class="rvt-leyenda__cuerpo">${bloques}</div>
   `;
-  container.appendChild(tableWrap);
+  host.appendChild(det);
+}
 
-  // Paginación (clientes con muchos CC) + buscador por código/nombre de CC
-  wireTableTools(tableWrap.querySelector('table'), {
-    rows,
-    getLabel: r => `${r.ccCode} — ${r.ccName}`,
-    searchEl,
-    label: 'Buscar centro de costo',
-    placeholder: 'Código o nombre de CC…',
-    stickyCols: 2, col1Width: 100,
-  });
+function renderRendVsTabuPlanilla(container, { rows, results }) {
+  // §11.1 — de las 5 columnas componentes se ocultan las que no tienen ninguna
+  // diferencia en ningún CC (COSTO TOTAL siempre se muestra: es el agregado). Sin
+  // ninguna diferencia en absoluto se muestran todas — no tiene sentido ocultar
+  // todo.
+  const componentCols = COLS.filter(c => c.key !== 'total');
+  const conDif = componentCols.filter(c => rows.some(r => hasDiff(r[c.dKey])));
+  const visibles = conDif.length > 0 ? conDif : componentCols;
+  const ocultas = componentCols.length - visibles.length;
+  const cols = [...visibles, COLS[COLS.length - 1]];   // + COSTO TOTAL, siempre al final
+
+  const suma = (key) => rows.reduce((acc, r) => acc + (r[key] ?? 0), 0);
+
+  const columns = [
+    { key: 'ccCode', label: 'CC',              band: 'Identificación' },
+    { key: 'ccName', label: 'Centro de Costo', band: 'Identificación' },
+    ...cols.flatMap(c => [
+      { key: c.rKey, label: 'Rend', sub: 'del Reporte de Rendimiento', band: c.label, num: true },
+      { key: c.tKey, label: 'Tab',
+        sub: c.key === 'total' ? 'la suma de las cinco categorías' : 'la suma de sus conceptos en el Tabulado',
+        band: c.label, num: true },
+      { key: c.dKey, label: 'CTRL', sub: 'Tab − Rend', band: c.label, diff: true, close: true,
+        absentLabel: 'sin comparar',
+        // La resta de los totales, no la suma de la columna: un CC que no está
+        // en el Tabulado suma de un lado y de ninguno del otro, y el número que
+        // muestra la tile "Dif. COSTO TOTAL" del Resumen es éste.
+        total: () => suma(c.tKey) - suma(c.rKey) },
+    ]),
+  ];
 
   const csvHeaders = ['CC', 'Centro de Costo', ...COLS.flatMap(c => [`${c.label} (Rend)`, `${c.label} (Tab)`, `${c.label} (CTRL)`])];
   const csvRows = () => rows.map(r => [r.ccCode, r.ccName, ...COLS.flatMap(c => [fmt(r[c.rKey]), fmt(r[c.tKey]), fmt(r[c.dKey])])]);
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportRendVsTabuToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `RendVsTabulado_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns,
+    rows,
+    unitLabel: 'centros de costo',
+    // La unidad de este control es el CENTRO DE COSTO, no el legajo, y el estado
+    // sale de las cinco categorías componentes — no de COSTO TOTAL, que es la
+    // suma de esas cinco y contaría dos veces la misma diferencia (igual que
+    // `summarizeRendVsTabu`).
+    estadoDe: r => estadoDeFila(componentCols.map(c => r[c.dKey])),
+    getLabel: r => `${r.ccCode} — ${r.ccName}`,
+    searchLabel: 'Buscar centro de costo',
+    searchPlaceholder: 'Código o nombre de CC…',
+    stickyCols: 2, col1Width: 100,
+    empty: 'Sin datos.',
+    beforeTable: (host) => {
+      leyendaDeConceptos(host, { cols, meta: results.meta });
+      if (ocultas === 0) return;
+      const nota = document.createElement('p');
+      nota.className = 'text-muted';
+      nota.style.cssText = 'font-size:var(--text-sm);padding:0 var(--sp-3);';
+      nota.textContent = `Se ocultan ${ocultas} columna${ocultas === 1 ? '' : 's'} sin ninguna diferencia. El .xlsx exportado incluye las 6.`;
+      host.appendChild(nota);
+    },
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportRendVsTabuToXlsx(results),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `RendVsTabulado_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
 }
 

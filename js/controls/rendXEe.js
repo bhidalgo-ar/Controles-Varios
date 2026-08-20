@@ -7,48 +7,41 @@
 //
 // Dif = Costo Total (Reporte) − Costo Total (Calculado del Tabulado).
 
-import { DEFAULT_CONCEPT_CONFIG } from './rendVsTabu.js';
+import { DEFAULT_CONCEPT_CONFIG, leyendaDeConceptos } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { estadoDeFila } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { buildColByCode } from './tabCodes.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 
 // ── Definición de columnas calculadas desde el Tabulado ──────────────────────
 // Mismos colores que las categorías de Rend vs Tabulado.
 
-// Los colores `xl*` de estas categorías (y del verde de Dif) ahora viven en
-// `js/exports/contracts.js` (`rend_x_ee`), que es quien alimenta al writer —
-// acá sólo quedan los `rgba(...)` que usa la tabla HTML en pantalla.
+// Los colores del .xlsx viven en `js/exports/contracts.js` (`rend_x_ee`), que es
+// quien alimenta al writer. Los de PANTALLA no están más acá: el tinte de cada
+// banda lo pone la pieza compartida, que es lo que hace que la misma categoría
+// salga del mismo color en los tres controles de Rendimiento.
 const CATS = [
-  { key: 'precio',   label: 'PRECIO',          hdr: 'rgba(0,112,192,0.22)',  bg: 'rgba(0,112,192,0.08)' },
-  { key: 'estimulo', label: 'ASIG. ESTÍMULO',  hdr: 'rgba(0,156,64,0.22)',   bg: 'rgba(0,156,64,0.08)' },
-  { key: 'cargas',   label: 'CARGAS SS',       hdr: 'rgba(192,0,0,0.22)',    bg: 'rgba(192,0,0,0.08)' },
-  { key: 'provMes',  label: 'PROV. MES',       hdr: 'rgba(0,176,240,0.22)',  bg: 'rgba(0,176,240,0.08)' },
-  { key: 'provCcss', label: 'PROV. CCSS MES',  hdr: 'rgba(0,70,127,0.22)',   bg: 'rgba(0,70,127,0.08)' },
+  { key: 'precio',   label: 'PRECIO' },
+  { key: 'estimulo', label: 'ASIG. ESTÍMULO' },
+  { key: 'cargas',   label: 'CARGAS SS' },
+  { key: 'provMes',  label: 'PROV. MES' },
+  { key: 'provCcss', label: 'PROV. CCSS MES' },
 ];
-
-// Verde de la columna Dif (pantalla)
-const DIF_HDR   = 'rgba(0,166,81,0.28)';
-const DIF_BG    = 'rgba(0,166,81,0.12)';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
 
-
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 
 // Qué cuenta como diferencia sale del monto del cliente (D-069).
@@ -246,7 +239,7 @@ export function renderRendXEeResults(results, container) {
           : `${diffRows.length} de ${matchedRows.length} legajos tienen diferencia en Costo Total.`,
         body: diffRows.length === 0
           ? `${matchedRows.length} legajo${matchedRows.length === 1 ? '' : 's'} verificados, sin diferencias.`
-          : `Diferencia total de <strong>${fmt(totDif)}</strong> (Reporte − Calculado). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmt(totDif)}</strong> (Reporte − Calculado). El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -273,107 +266,66 @@ export function renderRendXEeResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderRendXEeDetalle(panel, { rows, totals, totDif, results }); },
+    planilla(panel) { renderRendXEePlanilla(panel, { rows, totDif, results }); },
   });
 }
 
-function renderRendXEeDetalle(container, { rows, totals, totDif, results }) {
-  // ── Encabezados con detalle de conceptos por categoría ────────────────────
-  const { conceptConfig: cc, colByCode: cbc } = results.meta || {};
-  const catHdrs = CATS.map(c => {
-    if (!cc || !cbc) return `<th style="text-align:right;background:${c.hdr};">${esc(c.label)}</th>`;
-    const entries = cc[c.key] || [];
-    const conceptList = entries
-      .filter(e => cbc[e.code])
-      .map(e => {
-        const sign = e.sign === -1 ? '−' : '+';
-        return `<span style="display:inline-block;margin:1px 3px;white-space:nowrap;">${sign} ${esc(cbc[e.code])}</span>`;
-      })
-      .join('');
-    const missing = entries.filter(e => !cbc[e.code]);
-    const missingNote = missing.length
-      ? `<span style="display:block;margin-top:2px;color:var(--color-warning);font-size:10px;">⚠ ${missing.length} código${missing.length > 1 ? 's' : ''} no hallado${missing.length > 1 ? 's' : ''} en Tabulado</span>`
-      : '';
-    const conceptDetail = entries.length
-      ? `<details style="font-size:10px;font-weight:400;text-align:left;margin-top:2px;">
-           <summary style="cursor:pointer;list-style:none;text-align:center;color:inherit;opacity:0.75;">▾ ${entries.length} concepto${entries.length !== 1 ? 's' : ''}</summary>
-           <div style="padding:3px 0;line-height:1.6;">${conceptList}${missingNote}</div>
-         </details>`
-      : `<div style="font-size:10px;font-weight:400;opacity:0.6;">(sin conceptos)</div>`;
-    return `<th style="text-align:center;background:${c.hdr};">${esc(c.label)}${conceptDetail}</th>`;
-  }).join('');
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// Tres bandas: lo que informa el reporte de M4, lo que sale de sumar el Tabulado
+// (con sus cinco categorías abiertas) y el control. **Qué conceptos componen
+// cada categoría** ya no vive adentro del `<th>` de la banda —ahí no entra— sino
+// en la leyenda de arriba, la misma que usa Rendimiento vs Tabulado.
+const COLS_REND_X_EE = [
+  { key: 'legajo', label: 'Legajo', band: 'Identificación' },
+  { key: 'nombre', label: 'Nombre', band: 'Identificación' },
 
-  const maxAbsDif = Math.max(1, ...rows.map(r => Math.abs(r.dif ?? 0)));
+  { key: 'repTotal', label: 'COSTO TOTAL', sub: 'lo que informa el reporte de M4',
+    band: 'Reporte', num: true, close: true },
 
-  // ── Filas de datos ─────────────────────────────────────────────────────────
-  const dataRows = rows.map(r => {
-    const rowStyle = (r.sinTabData || r.soloEnTab) ? ' style="opacity:0.55;"' : '';
-    const catCells = CATS.map(c =>
-      `<td style="text-align:right;background:${c.bg};">${fmt(r[c.key])}</td>`
-    ).join('');
-    return `
-      <tr${rowStyle}>
-        <td style="white-space:nowrap;font-family:monospace;">${esc(r.legajo)}</td>
-        <td style="white-space:nowrap;font-size:var(--text-sm);">${esc(r.nombre)}</td>
-        <td style="text-align:right;">${fmt(r.repTotal)}</td>
-        ${catCells}
-        <td style="text-align:right;background:rgba(64,64,64,0.07);">${fmt(r.calcTotal)}</td>
-        ${diffCellHtml(r.dif, { max: maxAbsDif, background: DIF_BG })}
-      </tr>
-    `;
-  }).join('');
+  ...CATS.map(c => ({
+    key: c.key, label: c.label, sub: 'la suma de sus conceptos en el Tabulado',
+    band: 'Calculado desde el Tabulado', num: true,
+  })),
+  { key: 'calcTotal', label: 'COSTO TOTAL', sub: 'la suma de las cinco categorías',
+    band: 'Calculado desde el Tabulado', num: true, close: true },
+];
 
-  const totCatCells = CATS.map(c =>
-    `<td style="text-align:right;background:${c.hdr};font-weight:600;">${fmt(totals[c.key])}</td>`
-  ).join('');
+/** El segundo eje: por qué un legajo no se pudo comparar (§3). */
+const MARCAS_REND_X_EE = [
+  { value: 'sinTab',    label: 'Sin datos en el Tabulado', match: r => r.sinTabData },
+  { value: 'soloEnTab', label: 'Sólo en el Tabulado',      match: r => r.soloEnTab },
+];
 
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const { searchEl, exportEl } = createResultsToolbar(container);
-
-  const tableWrap = document.createElement('div');
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th style="white-space:nowrap;">Legajo</th>
-          <th>Nombre</th>
-          <th style="text-align:center;">COSTO TOTAL<br><small style="font-weight:400;">Reporte</small></th>
-          ${catHdrs}
-          <th style="text-align:center;background:rgba(64,64,64,0.18);">COSTO TOTAL<br><small style="font-weight:400;">Calculado</small></th>
-          <th style="text-align:center;background:${DIF_HDR};"><strong>Dif</strong><br><small style="font-weight:400;white-space:nowrap;">Reporte − Calculado</small></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${dataRows}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="2" style="font-weight:600;white-space:nowrap;">TOTAL GENERAL</td>
-          <td style="text-align:right;font-weight:600;">${fmt(totals.repTotal)}</td>
-          ${totCatCells}
-          <td style="text-align:right;background:rgba(64,64,64,0.18);font-weight:600;">${fmt(totals.calcTotal)}</td>
-          ${diffCellHtml(totDif, { background: DIF_HDR })}
-        </tr>
-      </tfoot>
-    </table>
-  `;
-  container.appendChild(tableWrap);
-
-  // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre
-  wireTableTools(tableWrap.querySelector('table'), {
-    rows,
-    getLabel: r => `${r.legajo} — ${r.nombre}`,
-    searchEl,
-    stickyCols: 2,
-  });
+function renderRendXEePlanilla(container, { rows, totDif, results }) {
+  const columns = [
+    ...COLS_REND_X_EE,
+    { key: 'dif', label: 'Dif', sub: 'Reporte − Calculado', band: 'Control',
+      diff: true, close: true, absentLabel: 'sin comparar',
+      // La resta de los totales, no la suma de la columna: los legajos que están
+      // de un solo lado suman de un lado y de ninguno del otro. Es el número de
+      // la tile "Dif. COSTO TOTAL" del Resumen.
+      total: () => totDif },
+  ];
 
   const csvHeaders = ['Legajo', 'Nombre', 'COSTO TOTAL (Reporte)', ...CATS.map(c => c.label), 'COSTO TOTAL (Calculado)', 'Dif (Reporte - Calculado)'];
   const csvRows = () => rows.map(r => [r.legajo, r.nombre, fmt(r.repTotal), ...CATS.map(c => fmt(r[c.key])), fmt(r.calcTotal), fmt(r.dif)]);
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportRendXEeToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `RendXEE_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns,
+    rows,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDeFila([r.dif]),
+    marcas: MARCAS_REND_X_EE,
+    getLabel: r => `${r.legajo} — ${r.nombre}`,
+    stickyCols: 2,
+    empty: 'Sin datos.',
+    beforeTable: (host) => leyendaDeConceptos(host, { cols: CATS, meta: results.meta }),
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportRendXEeToXlsx(results),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `RendXEE_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
 }
 

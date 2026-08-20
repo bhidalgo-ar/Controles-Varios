@@ -2,7 +2,8 @@
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { estadoDeFila } from '../ui/tableTools.js';
+import { renderPlanillaPanel, reporteColumns, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -11,7 +12,7 @@ import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -133,11 +134,6 @@ export function runGsPers(gsRows, tabRows, mapping) {
   };
 }
 
-const CYAN_BG   = 'rgba(0,172,212,0.10)';
-const CYAN_HDR  = 'rgba(0,172,212,0.22)';
-const LILAC_BG  = 'rgba(130,80,200,0.09)';
-const LILAC_HDR = 'rgba(130,80,200,0.20)';
-
 // Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
 // DTO_COCHERA en cualquiera de las dos fuentes — la mayoría de los legajos no
 // tienen ninguno de los dos (CLAUDE.md §11.1).
@@ -204,7 +200,7 @@ export function renderGsPersResults(results, container) {
           ? 'El archivo de GS Pers no aportó ningún valor en GTOS_PERSONALES ni en DTO_COCHERA — revisá el mapeo de columnas de ese archivo.'
           : diffRows.length === 0
           ? `${unitsEvaluated} legajo${unitsEvaluated === 1 ? '' : 's'} con algún valor real, verificados contra el Tabulado sin diferencias.`
-          : `Diferencia total de <strong>${fmt(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmt(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmt(diffGtos)}</strong> en GTOS_PERSONALES y <strong>${fmt(diffDto)}</strong> en DTO_COCHERA (Tab − GS Pers). El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -242,103 +238,61 @@ export function renderGsPersResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderGsPersDetalle(panel, { relevantRows, diffRows, results }); },
+    planilla(panel) { renderGsPersPlanilla(panel, { relevantRows, results }); },
   });
 }
 
-function renderGsPersDetalle(container, { relevantRows, diffRows, results }) {
-  if (relevantRows.length === 0) {
-    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún legajo tiene valor real en GTOS_PERSONALES o DTO_COCHERA.</p>`;
-    return;
-  }
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// Una banda por concepto y, adentro, las tres columnas de siempre: lo que
+// informa el Reporte de GS Pers, lo que dice el Tabulado y la resta. El tinte de
+// las bandas sale de la pieza compartida — este módulo lo escribía a mano en
+// celeste y lila, y el lila no es de la marca.
+const COLS_GS_PERS = [
+  { key: 'legajo', label: 'Legajo', band: 'Identificación' },
 
-  const filterSel = document.createElement('select');
-  filterSel.className = 'form-select form-select--sm';
-  // El filtro de estado es lo que se dibuja como chips (§3 de
-  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
-  filterSel.dataset.chips = '1';
-  filterSel.innerHTML = `
-    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
-    <option value="all">Todos los evaluados (${relevantRows.length})</option>
-  `;
-  if (diffRows.length === 0) filterSel.value = 'all';
+  { key: 'gtos',       label: 'GS Pers', sub: 'lo que informa el reporte',            band: 'GTOS_PERSONALES', num: true },
+  { key: 'tabValGtos', label: 'Tab',     sub: 'la columna GTOS_PERSONALES del Tabulado', band: 'GTOS_PERSONALES', num: true },
+  { key: 'ctrlGtos',   label: 'CTRL',    sub: 'Tab − GS Pers',                        band: 'GTOS_PERSONALES', diff: true, close: true,
+    absentLabel: 'sin comparar',
+    total: (rows) => sumaDe(rows, 'tabValGtos') - sumaDe(rows, 'gtos') },
 
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterSel });
+  { key: 'dto',       label: 'GS Pers', sub: 'lo que informa el reporte',        band: 'DTO_COCHERA', num: true },
+  { key: 'tabValDto', label: 'Tab',     sub: 'la columna DTO_COCHERA del Tabulado', band: 'DTO_COCHERA', num: true },
+  { key: 'ctrlDto',   label: 'CTRL',    sub: 'Tab − GS Pers',                    band: 'DTO_COCHERA', diff: true, close: true,
+    absentLabel: 'sin comparar',
+    total: (rows) => sumaDe(rows, 'tabValDto') - sumaDe(rows, 'dto') },
+];
 
+/**
+ * El TOTAL de una columna CTRL es la **resta de los totales** (Σ Tab − Σ GS Pers)
+ * y no la suma de la columna: en cuanto un legajo no se puede comparar los dos
+ * números dejan de coincidir, y el de la resta es el que muestra la tile
+ * "Dif. GTOS_PERSONALES" del Resumen.
+ */
+function sumaDe(rows, key) {
+  return rows.reduce((acc, r) => acc + (r[key] ?? 0), 0);
+}
+
+function renderGsPersPlanilla(container, { relevantRows, results }) {
   const csvHeaders = ['Legajo', 'GTOS_PERSONALES', 'CTRL GTOS_PERSONALES', 'DTO_COCHERA', 'CTRL DTO_COCHERA', 'GTOS_PERSONALES (Tab)', 'DTO_COCHERA (Tab)'];
   const csvRows = () => relevantRows.map(r => [r.legajo, fmt(r.gtos), fmt(r.ctrlGtos), fmt(r.dto), fmt(r.ctrlDto), fmt(r.tabValGtos), fmt(r.tabValDto)]);
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportGsPersToXlsx({ ...results, rows: relevantRows }),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `GsPers_Control_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns: COLS_GS_PERS,
+    rows: relevantRows,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDeFila([r.ctrlGtos, r.ctrlDto]),
+    getLabel: r => `${r.legajo}`,
+    // Una sola columna de identificación: este control no trae el nombre.
+    stickyCols: 1,
+    empty: 'Ningún legajo tiene valor real en GTOS_PERSONALES o DTO_COCHERA.',
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportGsPersToXlsx({ ...results, rows: relevantRows }),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `GsPers_Control_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
-
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function renderTable() {
-    const shownRows = filterSel.value === 'dif' ? diffRows : relevantRows;
-    const maxAbs = Math.max(1, ...shownRows.flatMap(r => [Math.abs(r.ctrlGtos ?? 0), Math.abs(r.ctrlDto ?? 0)]));
-    const totGtos = shownRows.reduce((s, r) => s + (r.gtos ?? 0), 0);
-    const totGtosTab = shownRows.reduce((s, r) => s + (r.tabValGtos ?? 0), 0);
-    const totDto = shownRows.reduce((s, r) => s + (r.dto ?? 0), 0);
-    const totDtoTab = shownRows.reduce((s, r) => s + (r.tabValDto ?? 0), 0);
-
-    tableHost.innerHTML = `
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr>
-            <th rowspan="2">Legajo</th>
-            <th colspan="3" style="text-align:center;background:${CYAN_HDR};">GTOS_PERSONALES</th>
-            <th colspan="3" style="text-align:center;background:${LILAC_HDR};">DTO_COCHERA</th>
-          </tr>
-          <tr>
-            <th style="background:${CYAN_HDR};">GS Pers</th>
-            <th style="background:${CYAN_HDR};">Tab</th>
-            <th style="background:${CYAN_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
-            <th style="background:${LILAC_HDR};">GS Pers</th>
-            <th style="background:${LILAC_HDR};">Tab</th>
-            <th style="background:${LILAC_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − GS Pers</small></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${shownRows.map(r => `
-            <tr>
-              <td>${esc(r.legajo)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.gtos)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValGtos)}</td>
-              ${diffCellHtml(r.ctrlGtos, { max: maxAbs, background: CYAN_BG })}
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.dto)}</td>
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValDto)}</td>
-              ${diffCellHtml(r.ctrlDto, { max: maxAbs, background: LILAC_BG })}
-            </tr>
-          `).join('')}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td><strong>TOTAL</strong> — ${shownRows.length}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtos)}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totGtosTab)}</td>
-            ${diffCellHtml(totGtosTab - totGtos, { background: CYAN_HDR })}
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDto)}</td>
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totDtoTab)}</td>
-            ${diffCellHtml(totDtoTab - totDto, { background: LILAC_HDR })}
-          </tr>
-        </tfoot>
-      </table>
-    `;
-
-    wireTableTools(tableHost.querySelector('table'), {
-      rows: shownRows,
-      getLabel: r => `${r.legajo}`,
-      searchEl,
-      stickyCols: 1,
-    });
-  }
-
-  filterSel.addEventListener('change', renderTable);
-  renderTable();
 }
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
@@ -443,7 +397,7 @@ export function renderGsPersReporteResults(results, container) {
           : `Reporte de GS Pers generado — ${rows.length} registro${rows.length === 1 ? '' : 's'}.`,
         body: sinColumnas
           ? 'Volvé al paso de Controles y completá los campos de la sección "GS Pers".'
-          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
+          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Planilla».',
       });
       if (!sinColumnas) {
         const mapeadas = 3 + Object.values(cols).filter(Boolean).length;
@@ -453,62 +407,63 @@ export function renderGsPersReporteResults(results, container) {
         ]);
       }
     },
-    detalle(panel) { renderGsPersReporteDetalle(panel, { rows, cols, colDefs, sinColumnas, results }); },
+    planilla(panel) { renderGsPersReportePlanilla(panel, { rows, cols, colDefs, sinColumnas, results }); },
   });
 }
 
-function renderGsPersReporteDetalle(container, { rows, cols, colDefs, sinColumnas, results }) {
+// ── La planilla del Reporte (§5) ─────────────────────────────────────────────
+//
+// Las columnas y su orden son las del contrato de exportación (el archivo que se
+// entrega) y no se tocan. Lo que agrega la vista estándar es la banda y el
+// sublabel: de dónde sale cada valor, que es la duda de siempre —si un importe
+// es el de una liquidación o el de todas las del mes.
+const BANDAS_REPORTE_GS_PERS = {
+  fecIni:    { band: 'Identificación',    sub: 'primer día hábil del período' },
+  fecFin:    { band: 'Identificación',    sub: 'último día hábil del período' },
+  legajo:    { band: 'Identificación',    sub: 'el legajo del Tabulado' },
+  nombre:    { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  apellido1: { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  // El código del centro de costo va con las fechas y el nombre queda al final:
+  // así lo pide el archivo entregable, y una banda tiene que ser un bloque
+  // seguido de columnas — dos bandas separadas con el mismo rótulo se leerían
+  // como un error de la pantalla.
+  fecPago:   { band: 'Datos del legajo',  sub: 'de la última liquidación del mes' },
+  fecAlta:   { band: 'Datos del legajo',  sub: 'de la última liquidación del mes' },
+  idCC:      { band: 'Datos del legajo',  sub: 'el código de CC de la última liquidación' },
+  gtos:      { band: 'Importes del mes',  sub: 'suma de todas las liquidaciones del mes' },
+  dto:       { band: 'Importes del mes',  sub: 'suma de todas las liquidaciones del mes' },
+  nCC:       { band: 'Centro de costo',   sub: 'el nombre, de la última liquidación' },
+};
+
+function renderGsPersReportePlanilla(container, { rows, cols, colDefs, sinColumnas, results }) {
   if (sinColumnas) {
     container.innerHTML = '';
     return;
   }
 
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
-
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const { searchEl, exportEl } = createResultsToolbar(container);
-
-  const tableWrap = document.createElement('div');
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          ${colDefs.map(c => `<th>${esc(c.label)}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            ${colDefs.map(c =>
-              c.type === 'num'
-                ? `<td style="text-align:right;">${fmt(r[c.key])}</td>`
-                : `<td>${fmtTxt(r[c.key])}</td>`
-            ).join('')}
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-
-  container.appendChild(tableWrap);
-
-  const legajoKey  = colDefs.find(c => c.key === 'legajo') ? 'legajo' : colDefs[0].key;
-  const nombreKey  = cols.hasNombre ? 'nombre' : (cols.hasApellido1 ? 'apellido1' : null);
-  // stickyCols:0 — la 1ª/2ª columna real son FECHA_INI/FECHA_FIN, no Legajo/Nombre.
-  wireTableTools(tableWrap.querySelector('table'), {
-    rows,
-    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
-    searchEl,
-    stickyCols: 0,
-  });
+  const legajoKey = colDefs.find(c => c.key === 'legajo') ? 'legajo' : colDefs[0].key;
+  const nombreKey = cols.hasNombre ? 'nombre' : (cols.hasApellido1 ? 'apellido1' : null);
 
   const csvHeaders = colDefs.map(c => c.label);
   const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportGsPersReporteToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `GsPers_Reporte_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns: reporteColumns(colDefs, BANDAS_REPORTE_GS_PERS),
+    rows,
+    unitLabel: 'legajos',
+    // Genera el archivo desde el Tabulado, no cruza nada: los cuatro chips de
+    // caso salen en gris con su porqué, y la barra queda igual a las otras.
+    estadoDe: () => null,
+    noAplica: NO_APLICA_REPORTE,
+    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
+    // stickyCols:0 — la 1ª y la 2ª columna son FECHA_INI/FECHA_FIN (el orden es
+    // el del archivo entregable), no Legajo/Nombre.
+    stickyCols: 0,
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportGsPersReporteToXlsx(results),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `GsPers_Reporte_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
 }
 
@@ -552,11 +507,6 @@ function fmtDate(v) {
   }
   const s = String(v).trim();
   return s === '' ? null : s;
-}
-
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function firstBusinessDay(year, month) {

@@ -54,10 +54,16 @@ function contrastRatio(colorA, colorB) {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-/** Color de texto y fondo efectivo de un `th` (sube por el árbol hasta el primer fondo opaco). */
+/**
+ * Color de texto y fondo efectivo de un `th` de la fila de COLUMNAS del
+ * encabezado (sube por el árbol hasta el primer fondo opaco).
+ *
+ * Es la ÚLTIMA fila del `<thead>`: en la planilla del estándar arriba va la fila
+ * de bandas, que se pinta aparte y sobre fondo oscuro (§5).
+ */
 async function headerColors(page, nth) {
   const raw = await page.evaluate((i) => {
-    const th = document.querySelectorAll('table.rb-grid thead th')[i];
+    const th = document.querySelectorAll('table.rb-grid thead tr:last-child th')[i];
     // Todas las capas de fondo, de la celda hacia arriba, hasta la primera opaca.
     const capas = [];
     for (let el = th; el; el = el.parentElement) {
@@ -82,7 +88,7 @@ for (const colorScheme of ['light', 'dark']) {
 
     test('el encabezado de la tabla de resultados se lee', async ({ page }) => {
       await page.goto(`${FIXTURE}?caso=dif`);
-      await page.click('text=Detalle');
+      await page.click('text=Planilla');
       await expect(page.locator('table.rb-grid')).toBeVisible();
 
       // La 1ª columna es la sticky: es la que quedaba blanco sobre blanco.
@@ -91,7 +97,7 @@ for (const colorScheme of ['light', 'dark']) {
       expect(contrastRatio(legajo.color, legajo.fondo),
         `"Legajo": ${legajo.color} sobre ${legajo.fondo}`).toBeGreaterThanOrEqual(4.5);
 
-      // Una columna de concepto: las pintan los controles con un tinte translúcido,
+      // Una columna de concepto: las pinta el sistema con un tinte translúcido,
       // que sólo se lee como tinte sobre un encabezado neutro.
       const concepto = await headerColors(page, 2);
       expect(contrastRatio(concepto.color, concepto.fondo),
@@ -102,7 +108,7 @@ for (const colorScheme of ['light', 'dark']) {
 
 test('un control sin diferencias sigue teniendo exportable y tabla de evaluados', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=ok`);
-  await page.click('text=Detalle');
+  await page.click('text=Planilla');
 
   // El cartel de "todo coincide" sigue estando: es la respuesta a "¿cerró?".
   await expect(page.getByText('No hay diferencias para revisar')).toBeVisible();
@@ -110,20 +116,24 @@ test('un control sin diferencias sigue teniendo exportable y tabla de evaluados'
   // …y además el exportable, que es lo que el analista archiva.
   await expect(page.getByRole('button', { name: /Exportar/i })).toBeVisible();
 
-  // El alcance arranca en "todos los evaluados": con cero diferencias es lo
-  // único que hay para mirar, y es lo que se exporta (si no, el .xlsx saldría vacío).
-  await expect(page.locator('[data-nr-scope-filter]')).toHaveValue('all');
-  await expect(page.locator('table.rb-grid tbody tr')).toHaveCount(2);
+  // Con cero diferencias el filtro de estado arranca en "Todos": es lo único que
+  // hay para mirar, y es lo que se exporta (si no, el .xlsx saldría vacío).
+  await expect(page.locator('.results-toolbar select[data-chips]')).toHaveValue('todos');
+  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
 });
 
 test('un control con diferencias arranca mostrando sólo las diferencias', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=dif`);
-  await page.click('text=Detalle');
+  await page.click('text=Planilla');
 
-  await expect(page.locator('[data-nr-scope-filter]')).toHaveValue('dif');
-  await expect(page.locator('table.rb-grid tbody tr')).toHaveCount(1);
+  await expect(page.locator('.results-toolbar select[data-chips]')).toHaveValue('conDif');
+  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
 
-  // Cambiar el alcance a "todos" trae los evaluados sin diferencia.
-  await page.selectOption('[data-nr-scope-filter]', 'all');
+  // Los chips no re-dibujan la tabla: esconden filas. Por eso las dos siguen en
+  // el DOM y el TOTAL puede pasar a ser el de la selección.
   await expect(page.locator('table.rb-grid tbody tr')).toHaveCount(2);
+
+  // Pasar a "Todos" trae los evaluados sin diferencia.
+  await page.selectOption('.results-toolbar select[data-chips]', 'todos');
+  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
 });

@@ -2,7 +2,8 @@
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { estadoDeFila } from '../ui/tableTools.js';
+import { renderPlanillaPanel, reporteColumns, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -11,7 +12,7 @@ import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -151,11 +152,6 @@ export function runBrutos(brutosRows, tabRows, mapping) {
   };
 }
 
-const CYAN_BG   = 'rgba(0,172,212,0.10)';
-const CYAN_HDR  = 'rgba(0,172,212,0.22)';
-const LILAC_BG  = 'rgba(130,80,200,0.09)';
-const LILAC_HDR = 'rgba(130,80,200,0.20)';
-
 // Un legajo es "evaluable" si hay algún valor real de alguno de los dos
 // conceptos, en cualquiera de las dos fuentes (Brutos o Tabulado).
 //
@@ -232,7 +228,7 @@ export function renderBrutosResults(results, container) {
           ? 'El archivo de Brutos no aportó ningún valor en SAL_BASE ni en A_CTA_FUT_AUMEN — revisá el mapeo de columnas de ese archivo.'
           : diffRows.length === 0
           ? `${unitsEvaluated} legajo${unitsEvaluated === 1 ? '' : 's'} verificados contra el Tabulado, sin diferencias.`
-          : `Diferencia total de <strong>${fmt(diffSal)}</strong> en SAL_BASE y <strong>${fmt(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmt(diffSal)}</strong> en SAL_BASE y <strong>${fmt(diffAcu)}</strong> en A_CTA_FUT_AUMEN (Tab − Brutos). El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -272,107 +268,63 @@ export function renderBrutosResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderBrutosDetalle(panel, { relevantRows, diffRows, results }); },
+    planilla(panel) { renderBrutosPlanilla(panel, { relevantRows, results }); },
   });
 }
 
-function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
-  if (relevantRows.length === 0) {
-    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún legajo tiene valor real en SAL_BASE o A_CTA_FUT_AUMEN.</p>`;
-    return;
-  }
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// Dos bandas, una por concepto, y adentro de cada una las tres columnas de
+// siempre: lo que informa el Reporte de Brutos, lo que dice el Tabulado y la
+// resta. El tinte de las bandas lo pone la pieza compartida — hasta acá este
+// módulo lo escribía a mano en celeste y lila, y el lila no es de la marca.
+const COLS_BRUTOS = [
+  { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+  { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
 
-  // Barra: filtro Sólo con diferencia/Todos (izquierda) + buscador + exportar (derecha)
-  const filterSel = document.createElement('select');
-  filterSel.className = 'form-select form-select--sm';
-  // El filtro de estado es lo que se dibuja como chips (§3 de
-  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
-  filterSel.dataset.chips = '1';
-  filterSel.innerHTML = `
-    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
-    <option value="all">Todos los evaluados (${relevantRows.length})</option>
-  `;
-  if (diffRows.length === 0) filterSel.value = 'all';
+  { key: 'salBase',     label: 'Brutos', sub: 'lo que informa el reporte',        band: 'Salario Base', num: true },
+  { key: 'tabValSal',   label: 'Tab',    sub: 'la columna de sueldo del Tabulado', band: 'Salario Base', num: true },
+  { key: 'ctrlSalBase', label: 'CTRL',   sub: 'Tab − Brutos',                      band: 'Salario Base', diff: true, close: true,
+    absentLabel: 'sin comparar',
+    total: (rows) => sumaDe(rows, 'tabValSal') - sumaDe(rows, 'salBase') },
 
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterSel });
+  { key: 'aCuFutAumen',     label: 'Brutos', sub: 'lo que informa el reporte',              band: 'A Cta Fut Aumen', num: true },
+  { key: 'tabValAcu',       label: 'Tab',    sub: 'la columna A_CTA_FUT_AUMEN del Tabulado', band: 'A Cta Fut Aumen', num: true },
+  { key: 'ctrlACuFutAumen', label: 'CTRL',   sub: 'Tab − Brutos',                            band: 'A Cta Fut Aumen', diff: true, close: true,
+    absentLabel: 'sin comparar',
+    total: (rows) => sumaDe(rows, 'tabValAcu') - sumaDe(rows, 'aCuFutAumen') },
+];
 
+/**
+ * El TOTAL de una columna CTRL es la **resta de los totales** (Σ Tab − Σ Brutos)
+ * y no la suma de la columna: son números distintos en cuanto un legajo no se
+ * pudo comparar —el que está en el reporte y no en el Tabulado suma de un lado
+ * y de ninguno del otro— y el de la resta es el que muestra la tile
+ * "Dif. SAL_BASE" del Resumen. Si acá saliera la suma de la columna, la misma
+ * pantalla diría dos cosas distintas.
+ */
+function sumaDe(rows, key) {
+  return rows.reduce((acc, r) => acc + (r[key] ?? 0), 0);
+}
+
+function renderBrutosPlanilla(container, { relevantRows, results }) {
   // Exportar siempre incluye todos los legajos evaluados, sin importar el filtro de pantalla.
   const csvHeaders = ['Legajo', 'Nombre', 'SAL_BASE', 'CTRL SALARIO BASE', 'A_CTA_FUT_AUMEN', 'CTRL A_CTA_FUT_AUMEN', 'SAL_BASE (Tab)', 'A_CTA_FUT (Tab)'];
   const csvRows = () => relevantRows.map(r => [r.legajo, r.nombre, fmt(r.salBase), fmt(r.ctrlSalBase), fmt(r.aCuFutAumen), fmt(r.ctrlACuFutAumen), fmt(r.tabValSal), fmt(r.tabValAcu)]);
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportBrutosToXlsx({ ...results, rows: relevantRows }),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Brutos_Control_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns: COLS_BRUTOS,
+    rows: relevantRows,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDeFila([r.ctrlSalBase, r.ctrlACuFutAumen]),
+    getLabel: r => `${r.legajo} — ${r.nombre}`,
+    empty: 'Ningún legajo tiene valor real en SAL_BASE o A_CTA_FUT_AUMEN.',
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportBrutosToXlsx({ ...results, rows: relevantRows }),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Brutos_Control_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
-
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function renderTable() {
-    const shownRows = filterSel.value === 'dif' ? diffRows : relevantRows;
-    const maxAbs = Math.max(1, ...shownRows.flatMap(r => [Math.abs(r.ctrlSalBase ?? 0), Math.abs(r.ctrlACuFutAumen ?? 0)]));
-    const totSal = shownRows.reduce((s, r) => s + (r.salBase ?? 0), 0);
-    const totSalTab = shownRows.reduce((s, r) => s + (r.tabValSal ?? 0), 0);
-    const totAcu = shownRows.reduce((s, r) => s + (r.aCuFutAumen ?? 0), 0);
-    const totAcuTab = shownRows.reduce((s, r) => s + (r.tabValAcu ?? 0), 0);
-
-    tableHost.innerHTML = `
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr>
-            <th rowspan="2">Legajo</th>
-            <th rowspan="2">Nombre</th>
-            <th colspan="3" style="text-align:center;background:${CYAN_HDR};">Salario Base</th>
-            <th colspan="3" style="text-align:center;background:${LILAC_HDR};">A Cta Fut Aumen</th>
-          </tr>
-          <tr>
-            <th style="background:${CYAN_HDR};">Brutos</th>
-            <th style="background:${CYAN_HDR};">Tab</th>
-            <th style="background:${CYAN_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
-            <th style="background:${LILAC_HDR};">Brutos</th>
-            <th style="background:${LILAC_HDR};">Tab</th>
-            <th style="background:${LILAC_HDR};"><strong>CTRL</strong><br><small style="font-weight:400;">Tab − Brutos</small></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${shownRows.map(r => `
-            <tr>
-              <td>${esc(r.legajo)}</td>
-              <td style="font-size:var(--text-sm);">${esc(r.nombre)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.salBase)}</td>
-              <td style="text-align:right;background:${CYAN_BG};">${fmt(r.tabValSal)}</td>
-              ${diffCellHtml(r.ctrlSalBase, { max: maxAbs, background: CYAN_BG })}
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.aCuFutAumen)}</td>
-              <td style="text-align:right;background:${LILAC_BG};">${fmt(r.tabValAcu)}</td>
-              ${diffCellHtml(r.ctrlACuFutAumen, { max: maxAbs, background: LILAC_BG })}
-            </tr>
-          `).join('')}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2"><strong>TOTAL</strong> — ${shownRows.length} legajo${shownRows.length === 1 ? '' : 's'}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSal)}</td>
-            <td style="text-align:right;background:${CYAN_HDR};">${fmt(totSalTab)}</td>
-            ${diffCellHtml(totSalTab - totSal, { background: CYAN_HDR })}
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcu)}</td>
-            <td style="text-align:right;background:${LILAC_HDR};">${fmt(totAcuTab)}</td>
-            ${diffCellHtml(totAcuTab - totAcu, { background: LILAC_HDR })}
-          </tr>
-        </tfoot>
-      </table>
-    `;
-
-    wireTableTools(tableHost.querySelector('table'), {
-      rows: shownRows,
-      getLabel: r => `${r.legajo} — ${r.nombre}`,
-      searchEl,
-      stickyCols: 2,
-    });
-  }
-
-  filterSel.addEventListener('change', renderTable);
-  renderTable();
 }
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
@@ -484,7 +436,7 @@ export function renderBrutosReporteResults(results, container) {
           : `Reporte de Brutos generado — ${rows.length} registro${rows.length === 1 ? '' : 's'}.`,
         body: sinColumnas
           ? 'Volvé a cargar el Tabulado y completá los campos de la sección "Brutos".'
-          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Detalle».',
+          : 'Armado directo desde el Tabulado. El detalle completo está en la solapa «Planilla».',
       });
       if (!sinColumnas) {
         const mapeadas = 3 + Object.values(cols).filter(Boolean).length; // 3 fijas + opcionales
@@ -494,64 +446,61 @@ export function renderBrutosReporteResults(results, container) {
         ]);
       }
     },
-    detalle(panel) { renderBrutosReporteDetalle(panel, { rows, cols, colDefs, sinColumnas, results }); },
+    planilla(panel) { renderBrutosReportePlanilla(panel, { rows, cols, colDefs, sinColumnas, results }); },
   });
 }
 
-function renderBrutosReporteDetalle(container, { rows, cols, colDefs, sinColumnas, results }) {
+// ── La planilla del Reporte (§5) ─────────────────────────────────────────────
+//
+// Las columnas y su orden son las del contrato de exportación —o sea, las del
+// archivo que se entrega— y no se tocan. Lo que agrega la vista estándar es la
+// BANDA (qué es cada bloque de columnas) y el SUBLABEL: de dónde sale cada
+// valor. Es lo que contesta, sin preguntar, la duda de siempre: si un importe
+// del reporte es el de una liquidación o el de todas las del mes.
+const BANDAS_REPORTE_BRUTOS = {
+  fecIni:      { band: 'Identificación',    sub: 'primer día hábil del período' },
+  fecFin:      { band: 'Identificación',    sub: 'último día hábil del período' },
+  legajo:      { band: 'Identificación',    sub: 'el legajo del Tabulado' },
+  nombre:      { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  apellido1:   { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  fecAlta:     { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  fecBaja:     { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  fecPago:     { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  salBase:     { band: 'Importes del mes',  sub: 'suma de todas las liquidaciones del mes' },
+  aCuFutAumen: { band: 'Importes del mes',  sub: 'suma de todas las liquidaciones del mes' },
+  puesto:      { band: 'Puesto',            sub: 'de la última liquidación del mes' },
+};
+
+function renderBrutosReportePlanilla(container, { rows, cols, colDefs, sinColumnas, results }) {
   if (sinColumnas) {
     container.innerHTML = '';
     return;
   }
 
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
-
-  // Barra: buscador (izquierda) + menú de exportar (derecha)
-  const { searchEl, exportEl } = createResultsToolbar(container);
-
-  // Tabla
-  const tableWrap = document.createElement('div');
-  tableWrap.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          ${colDefs.map(c => `<th>${esc(c.label)}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            ${colDefs.map(c =>
-              c.type === 'num'
-                ? `<td style="text-align:right;">${fmt(r[c.key])}</td>`
-                : `<td>${fmtTxt(r[c.key])}</td>`
-            ).join('')}
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-
-  container.appendChild(tableWrap);
-
-  const legajoKey  = colDefs.find(c => c.key === 'legajo') ? 'legajo' : colDefs[0].key;
-  const nombreKey  = cols.hasNombre ? 'nombre' : (cols.hasApellido1 ? 'apellido1' : null);
-  // stickyCols:0 — la 1ª/2ª columna real son FECHA_INI/FECHA_FIN (mismo orden
-  // que el archivo de Brutos), no Legajo/Nombre, así que no conviene anclarlas.
-  wireTableTools(tableWrap.querySelector('table'), {
-    rows,
-    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
-    searchEl,
-    stickyCols: 0,
-  });
+  const legajoKey = colDefs.find(c => c.key === 'legajo') ? 'legajo' : colDefs[0].key;
+  const nombreKey = cols.hasNombre ? 'nombre' : (cols.hasApellido1 ? 'apellido1' : null);
 
   const csvHeaders = colDefs.map(c => c.label);
   const csvRows = () => rows.map(r => colDefs.map(c => c.type === 'num' ? fmt(r[c.key]) : (r[c.key] ?? '')));
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportBrutosReporteToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Brutos_Reporte_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns: reporteColumns(colDefs, BANDAS_REPORTE_BRUTOS),
+    rows,
+    unitLabel: 'legajos',
+    // Este control no cruza nada: genera el archivo desde el Tabulado. Los cinco
+    // chips salen igual —los cuatro de caso en gris y con su porqué— para que la
+    // barra sea la misma que en las otras veinte pantallas.
+    estadoDe: () => null,
+    noAplica: NO_APLICA_REPORTE,
+    getLabel: r => nombreKey ? `${r[legajoKey]} — ${r[nombreKey]}` : `${r[legajoKey]}`,
+    // stickyCols:0 — la 1ª y la 2ª columna son FECHA_INI/FECHA_FIN (el orden es
+    // el del archivo entregable), no Legajo/Nombre: anclarlas no ayudaría a nadie.
+    stickyCols: 0,
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportBrutosReporteToXlsx(results),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Brutos_Reporte_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
 }
 
@@ -605,11 +554,6 @@ function fmtDate(v) {
   // Ya viene como string de fecha u otro formato — lo devuelve sin cambios
   const s = String(v).trim();
   return s === '' ? null : s;
-}
-
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Primer día hábil (lun–vie) del mes

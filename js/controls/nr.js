@@ -2,7 +2,8 @@
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { estadoDeFila } from '../ui/tableTools.js';
+import { renderPlanillaPanel, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -10,7 +11,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { writeGroupedContractSheet } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle, diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
@@ -169,11 +170,10 @@ function hasAnyNrValue(r) {
 // Qué cuenta como diferencia: el monto que el cliente puso en "Umbrales" (D-069).
 const isDif = v => isDiff(v);
 
-// Colores por grupo (compartidos entre tabla y export)
-const INDEM_BG  = 'rgba(56,142,60,0.08)';
-const INDEM_HDR = 'rgba(56,142,60,0.18)';
-const OTROS_BG  = 'rgba(245,124,0,0.08)';
-const OTROS_HDR = 'rgba(245,124,0,0.18)';
+// La banda de cada concepto: los 18 se leen como dos bloques, indemnizatorios y
+// el resto. El tinte lo pone la pieza compartida (antes lo escribía este módulo
+// en verde y naranja, con su propio rgba).
+const BANDA = { indem: 'Indemnizatorios', otros: 'Otros NR' };
 
 export function renderNrResults(results, container) {
   const { rows } = results;
@@ -207,7 +207,7 @@ export function renderNrResults(results, container) {
           : `${diffRows.length} de ${relevantRows.length} empleados con NR tienen alguna diferencia.`,
         body: diffRows.length === 0
           ? `${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores no remunerativos, verificados contra el Tabulado sin diferencias.`
-          : `Diferencia total de <strong>${fmtNum(totalDiffAmount)}</strong> entre los 18 conceptos no remunerativos. El detalle completo está en la solapa «Detalle».`,
+          : `Diferencia total de <strong>${fmtNum(totalDiffAmount)}</strong> entre los 18 conceptos no remunerativos. El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -238,192 +238,119 @@ export function renderNrResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderNrDetalle(panel, { relevantRows, diffRows, results }); },
+    planilla(panel) { renderNrPlanilla(panel, { relevantRows, diffRows, results }); },
   });
 }
 
-function renderNrDetalle(container, { relevantRows, diffRows, results }) {
-  if (relevantRows.length === 0) {
-    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún empleado tiene valor real en los 18 conceptos NR.</p>`;
-    return;
-  }
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// Una columna por concepto NR con la diferencia Tab − NR, agrupadas en dos
+// bandas (indemnizatorios y el resto) y con el TOTAL de cada una abajo. Los
+// conceptos que no se liquidaron en el período no salen como una columna de
+// ceros: se ocultan y se dice cuántos al pie (D-036).
+//
+// **Los 18 conceptos son el segundo eje y van en `Marcas ▾`, no en la fila de
+// chips**: 18 chips no son un filtro, son una pared (§3). La fila de chips dice
+// siempre lo mismo en las 21 pantallas y por eso son sólo los cinco estados.
 
-  // Cuando no hay ninguna diferencia igual se muestra la tabla de evaluados: es
-  // el respaldo de que el control se corrió y cerró. Antes acá se salía con el
-  // cartel de OK y sin toolbar, y eso se llevaba puesto el exportable — que es
-  // justo lo que el analista archiva cuando todo coincide.
-  if (diffRows.length === 0) {
-    const ok = document.createElement('div');
-    ok.style.cssText = 'display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-3);padding:var(--sp-4);border:1px solid var(--color-border);border-left:4px solid var(--color-success);border-radius:var(--radius-md);background:var(--color-surface);';
-    ok.innerHTML = `
-      <span style="font-size:var(--text-xl);color:var(--color-success);">✓</span>
-      <span>Todos los empleados con valores NR coinciden con el Tabulado. No hay diferencias para revisar.</span>
-    `;
-    container.appendChild(ok);
-  }
+/** Los conceptos que tienen algún valor real en la corrida — las columnas que se muestran. */
+function conceptosConValor(rows) {
+  return NR_CONCEPTS.filter(c => rows.some(r => hasValor(r.valores[c.key])));
+}
 
-  // ── Toolbar: alcance + filtro por concepto + buscador (izq) + exportar (der) ─
-  // Mismo molde que Brutos y GS Pers: con cero diferencias el alcance arranca en
-  // "Todos los evaluados", que es lo único que hay para mirar.
-  const scopeSel = document.createElement('select');
-  scopeSel.className = 'form-select form-select--sm';
-  scopeSel.dataset.nrScopeFilter = '';
-  // El filtro de estado es lo que se dibuja como chips (§3 de
-  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
-  scopeSel.dataset.chips = '1';
-  scopeSel.innerHTML = `
-    <option value="dif">Sólo con diferencia (${diffRows.length})</option>
-    <option value="all">Todos los evaluados (${relevantRows.length})</option>
-  `;
-  if (diffRows.length === 0) scopeSel.value = 'all';
+/**
+ * En qué estado cerró un legajo. Se miran SÓLO los conceptos que ese legajo
+ * liquidó: los otros 15 vienen en `null` porque no se liquidaron, y contarlos
+ * dejaría a todos los legajos en "Sin comparar" — que es distinto de "el
+ * concepto está de un solo lado", que sí es un sin comparar de verdad.
+ */
+function estadoDeLegajoNr(r, conceptos) {
+  const suyos = conceptos.filter(c => hasValor(r.valores[c.key]));
+  return estadoDeFila(suyos.map(c => r.valores[c.key].ctrl));
+}
 
-  const conceptSel = document.createElement('select');
-  conceptSel.className = 'form-select form-select--sm';
-  conceptSel.dataset.nrConceptFilter = '';
+/** Cuántos conceptos de este legajo tienen diferencia. */
+function difsDeLegajo(r) {
+  return NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length;
+}
 
-  const filterGroup = document.createElement('div');
-  filterGroup.className = 'form-group';
-  filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;display:flex;gap:var(--sp-2);flex-wrap:wrap;';
-  const scopeWrap = document.createElement('div');
-  scopeWrap.innerHTML = `<label class="form-label" style="font-size:var(--text-sm);">Alcance</label>`;
-  scopeWrap.appendChild(scopeSel);
-  const conceptWrap = document.createElement('div');
-  conceptWrap.innerHTML = `<label class="form-label" style="font-size:var(--text-sm);">Filtrar por concepto</label>`;
-  conceptWrap.appendChild(conceptSel);
-  filterGroup.append(scopeWrap, conceptWrap);
+/**
+ * La planilla lee filas planas y `runNr` guarda cada concepto anidado en
+ * `valores[key].ctrl`, así que se aplana acá —una vez, como ya hace el export— y
+ * la fila se queda con una referencia a la original para lo que no es un importe.
+ */
+function filasDePlanilla(rows, conceptos) {
+  return rows.map(r => {
+    const fila = { legajo: r.legajo, difs: difsDeLegajo(r), _row: r };
+    for (const c of conceptos) fila[c.key] = r.valores[c.key].ctrl;
+    return fila;
+  });
+}
 
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
+function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
+  const conceptos = conceptosConValor(relevantRows);
+  const ocultos = NR_CONCEPTS.length - conceptos.length;
+  const filas = filasDePlanilla(relevantRows, conceptos);
 
-  /** Filas del alcance elegido — de acá salen la tabla y el export. */
-  const scopeRows = () => (scopeSel.value === 'dif' ? diffRows : relevantRows);
+  const columns = [
+    { key: 'legajo', label: 'Legajo', band: 'Identificación' },
+    { key: 'difs', label: '# Difs', sub: 'conceptos con diferencia', band: 'Identificación',
+      cell: (f) => `<strong style="color:var(${f.difs > 0 ? '--color-danger' : '--color-success'});">${f.difs}</strong>`,
+      total: false },
+    ...conceptos.map(c => ({
+      key: c.key, label: c.label, sub: 'Tab − NR', band: BANDA[c.group],
+      diff: true, absentLabel: 'sin comparar',
+    })),
+  ];
 
-  /**
-   * Conceptos que el alcance actual tiene sentido mostrar: con diferencia
-   * cuando se miran las diferencias, con algún valor cuando se miran todos
-   * (si no, la tabla de un control que cerró en cero saldría sin columnas).
-   */
-  const conceptsInScope = () => scopeSel.value === 'dif'
-    ? NR_CONCEPTS.filter(c => diffRows.some(r => isDif(r.valores[c.key].ctrl)))
-    : NR_CONCEPTS.filter(c => relevantRows.some(r => {
-        const v = r.valores[c.key];
-        return tieneValor(v.nrVal) || tieneValor(v.tabVal);
-      }));
-
-  function renderConceptOptions() {
-    const inScope = conceptsInScope();
-    const label = scopeSel.value === 'dif' ? 'con diferencia' : 'con algún valor';
-    conceptSel.innerHTML = `
-      <option value="all">Todos los conceptos ${label} (${inScope.length})</option>
-      ${inScope.map(c => `<option value="${esc(c.key)}">${esc(c.label)}</option>`).join('')}
-    `;
-  }
-
-  // Exportar sigue al alcance, no al filtro de concepto: con diferencias el
-  // default es "sólo con diferencia" (lo que exportaba antes), y con el control
-  // en cero exporta los evaluados en vez de un archivo vacío. Siempre con los 18
-  // conceptos completos, igual que exportNrToXlsx.
+  // Exportar sigue trayendo los 18 conceptos y todos los legajos evaluados: el
+  // filtro de pantalla recorta lo que se ve, no lo que se archiva.
   const csvHeaders = ['Legajo', '# Difs', ...NR_CONCEPTS.map(c => c.label)];
-  const csvRows = () => scopeRows().map(r => {
-    const difs = NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length;
-    return [r.legajo, difs, ...NR_CONCEPTS.map(c => fmtNum(r.valores[c.key].ctrl))];
+  const csvRows = () => relevantRows.map(r => [
+    r.legajo, difsDeLegajo(r), ...NR_CONCEPTS.map(c => fmtNum(r.valores[c.key].ctrl)),
+  ]);
+
+  renderPlanillaPanel(container, {
+    columns,
+    rows: filas,
+    unitLabel: 'legajos',
+    estadoDe: (f) => estadoDeLegajoNr(f._row, conceptos),
+    marcas: conceptos.map(c => ({
+      value: c.key, label: c.label, match: (f) => hasValor(f._row.valores[c.key]),
+    })),
+    getLabel: (f) => `${f.legajo}`,
+    searchLabel: 'Buscar legajo',
+    stickyCols: 2,
+    empty: 'Ningún empleado tiene valor real en los 18 conceptos NR.',
+    beforeTable: (host) => {
+      // Con cero diferencias igual se muestra la tabla de evaluados: es el
+      // respaldo de que el control se corrió y cerró — y es lo que el analista
+      // archiva. Antes acá se salía con el cartel de OK y sin tabla, y eso se
+      // llevaba puesto el exportable.
+      if (diffRows.length > 0) return;
+      const ok = document.createElement('div');
+      ok.className = 'alert alert--success';
+      ok.style.cssText = 'margin:var(--sp-3);padding:var(--sp-3) var(--sp-4);';
+      ok.textContent = 'Todos los empleados con valores NR coinciden con el Tabulado. '
+        + 'No hay diferencias para revisar.';
+      host.appendChild(ok);
+    },
+    afterTable: (host) => {
+      const pie = document.createElement('p');
+      pie.className = 'text-muted';
+      pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
+      pie.textContent = 'Cada columna es la diferencia Tab − NR de ese concepto.'
+        + (ocultos > 0 ? ` Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin valores en el período.` : '')
+        + ' Exportá el .xlsx para ver los valores originales de cada fuente.';
+      host.appendChild(pie);
+    },
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportNrToXlsx({ ...results, rows: relevantRows }),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Control_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
-
-  renderExportMenu(exportEl, {
-    onExcel: () => exportNrToXlsx({ ...results, rows: scopeRows() }),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Control_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
-  });
-
-  // ── Tabla (se re-renderiza al cambiar el filtro de concepto) ───────────────
-  const cellBg = c => c.group === 'indem' ? INDEM_BG : OTROS_BG;
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function renderTable(selectedKey) {
-    const inScope = conceptsInScope();
-    const base = scopeRows();
-
-    // Filas: las del alcance, o sólo las que tienen algo en el concepto elegido.
-    const shownRows = selectedKey === 'all'
-      ? base
-      : base.filter(r => scopeSel.value === 'dif'
-          ? isDif(r.valores[selectedKey].ctrl)
-          : hasValor(r.valores[selectedKey]));
-
-    // Columnas: las del alcance (oculta las que no tienen nada), o sólo la elegida.
-    const shownConcepts = selectedKey === 'all'
-      ? inScope
-      : NR_CONCEPTS.filter(c => c.key === selectedKey);
-
-    const hiddenCols = NR_CONCEPTS.length - shownConcepts.length;
-    const maxAbs = Math.max(1, ...shownRows.flatMap(r => shownConcepts.map(c => Math.abs(r.valores[c.key].ctrl ?? 0))));
-    const totals = {};
-    for (const c of shownConcepts) totals[c.key] = shownRows.reduce((s, r) => s + (r.valores[c.key].ctrl ?? 0), 0);
-
-    tableHost.innerHTML = `
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr>
-            <th>Legajo</th>
-            <th style="text-align:center;"># Difs</th>
-            ${shownConcepts.map(c => {
-              const bg = c.group === 'indem' ? INDEM_HDR : OTROS_HDR;
-              return `<th style="background:${bg};font-size:0.72em;white-space:nowrap;">${esc(c.label)}</th>`;
-            }).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${shownRows.map(r => {
-            const difs = NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length;
-            return `
-              <tr>
-                <td>${esc(r.legajo)}</td>
-                <td style="text-align:center;font-weight:700;${difs > 0 ? 'color:var(--color-danger);' : 'color:var(--color-success);'}">${difs}</td>
-                ${shownConcepts.map(c => diffCellHtml(r.valores[c.key].ctrl, { max: maxAbs, background: cellBg(c) })).join('')}
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2"><strong>TOTAL</strong></td>
-            ${shownConcepts.map(c => diffCellHtml(totals[c.key], { background: c.group === 'indem' ? INDEM_HDR : OTROS_HDR })).join('')}
-          </tr>
-        </tfoot>
-      </table>
-      <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-        Mostrando ${shownRows.length} empleado${shownRows.length === 1 ? '' : 's'}
-        ${scopeSel.value === 'dif' ? 'con diferencia' : 'evaluado' + (shownRows.length === 1 ? '' : 's')}.
-        Valores: Tab − NR.
-        ${hiddenCols > 0 ? `Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} ${scopeSel.value === 'dif' ? 'sin diferencias' : 'sin valores'}.` : ''}
-        Exportá el .xlsx para ver los valores originales de cada fuente.
-      </p>
-    `;
-
-    // Paginación (tablas de cientos de legajos) + buscador por legajo — se
-    // re-inicializan porque el <tbody> se recrea entero en cada filtro.
-    wireTableTools(tableHost.querySelector('table'), {
-      rows: shownRows,
-      getLabel: r => `${r.legajo}`,
-      searchEl,
-      label: 'Buscar legajo',
-      stickyCols: 1,
-    });
-  }
-
-  conceptSel.addEventListener('change', (e) => renderTable(e.target.value));
-  scopeSel.addEventListener('change', () => {
-    // Cambiar el alcance cambia qué conceptos tienen sentido, así que la lista se
-    // rearma y el filtro de concepto vuelve a "todos" en vez de quedar apuntando
-    // a uno que ya no está en la lista.
-    renderConceptOptions();
-    renderTable('all');
-  });
-
-  renderConceptOptions();
-  renderTable('all');
 }
-
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
 
@@ -507,7 +434,7 @@ export function renderNrReporteResults(results, container) {
           ? `Reporte de NR generado — ${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores.`
           : 'Ningún empleado tiene valores NR distintos de cero en este período.',
         body: relevantRows.length > 0
-          ? `Armado directo desde el Tabulado, con ${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor. El detalle completo está en la solapa «Detalle».`
+          ? `Armado directo desde el Tabulado, con ${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor. El detalle completo está en la solapa «Planilla».`
           : null,
       });
       renderTiles(panel, [
@@ -516,123 +443,91 @@ export function renderNrReporteResults(results, container) {
         { label: 'Conceptos con valor', value: `${conceptsWithValue.length} / 18` },
       ]);
     },
-    detalle(panel) { renderNrReporteDetalle(panel, { relevantRows, conceptsWithValue, results }); },
+    planilla(panel) { renderNrReportePlanilla(panel, { relevantRows, conceptsWithValue, results }); },
   });
 }
 
-function renderNrReporteDetalle(container, { relevantRows, conceptsWithValue, results }) {
-  const fmtTxt = v => v === null ? '—' : esc(String(v));
+// ── La planilla del Reporte (§5) ─────────────────────────────────────────────
+//
+// Las columnas y su orden son las del archivo que se entrega. Lo que agrega la
+// vista estándar es la banda y el sublabel: de dónde sale cada valor. Los 18
+// conceptos siguen siendo un desplegable —ahora "Marcas ▾"— y no chips.
+const BANDAS_REPORTE_NR = {
+  legajo:       { band: 'Identificación',    sub: 'el legajo del Tabulado' },
+  nombre:       { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  apellido1:    { band: 'Identificación',    sub: 'de la última liquidación del mes' },
+  fecAlta:      { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  fecBaja:      { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  fecPago:      { band: 'Fechas del legajo', sub: 'de la última liquidación del mes' },
+  idCentroTrab: { band: 'Centro y categoría', sub: 'de la última liquidación del mes' },
+  idCategoria:  { band: 'Centro y categoría', sub: 'de la última liquidación del mes' },
+};
 
-  if (relevantRows.length === 0) {
-    container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Ningún empleado tiene valores NR distintos de cero en este período.</p>`;
-    return;
-  }
+/** Las ocho columnas fijas del layout del Reporte NR, antes de los conceptos. */
+const COLS_FIJAS_REPORTE_NR = [
+  { key: 'legajo',       label: 'ID_EMPLEADO' },
+  { key: 'nombre',       label: 'NOMBRE' },
+  { key: 'apellido1',    label: 'APELLIDO_1' },
+  { key: 'fecAlta',      label: 'FECHA_ALTA' },
+  { key: 'fecBaja',      label: 'FECHA_BAJA' },
+  { key: 'fecPago',      label: 'FEC_PAGO' },
+  { key: 'idCentroTrab', label: 'ID_CENTRO_TRAB' },
+  { key: 'idCategoria',  label: 'ID_CATEGORIA' },
+];
 
-  const filteredResults = { ...results, rows: relevantRows };
+function renderNrReportePlanilla(container, { relevantRows, conceptsWithValue, results }) {
+  const ocultos = NR_CONCEPTS.length - conceptsWithValue.length;
 
-  // ── Toolbar: filtro por concepto + buscador (izquierda) + exportar (derecha) ─
-  const filterGroup = document.createElement('div');
-  filterGroup.className = 'form-group';
-  filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
-  filterGroup.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Filtrar por concepto</label>
-    <select class="form-select form-select--sm" data-nr-concept-filter>
-      <option value="all">Todos los conceptos con valor (${conceptsWithValue.length})</option>
-      ${conceptsWithValue.map(c =>
-        `<option value="${esc(c.key)}">${esc(c.label)}</option>`
-      ).join('')}
-    </select>
-  `;
-
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
+  const columns = [
+    ...COLS_FIJAS_REPORTE_NR.map(c => ({
+      key: c.key, label: c.label,
+      band: BANDAS_REPORTE_NR[c.key].band, sub: BANDAS_REPORTE_NR[c.key].sub,
+    })),
+    ...conceptsWithValue.map(c => ({
+      key: c.key, label: c.label, band: BANDA[c.group], num: true,
+      sub: 'suma de todas las liquidaciones del mes',
+    })),
+  ];
 
   // Exportar siempre incluye TODOS los empleados con valores NR y las 18
   // columnas de conceptos completas (igual que exportNrReporteToXlsx) — el
-  // filtro de concepto de arriba sólo recorta lo que se ve en pantalla.
+  // filtro de pantalla sólo recorta lo que se ve.
   const csvHeaders = ['ID_EMPLEADO', 'NOMBRE', 'APELLIDO_1', 'FECHA_ALTA', 'FECHA_BAJA', 'FEC_PAGO', 'ID_CENTRO_TRAB', 'ID_CATEGORIA', ...NR_CONCEPTS.map(c => c.label)];
   const csvRows = () => relevantRows.map(r => [
     r.legajo, r.nombre ?? '', r.apellido1 ?? '', r.fecAlta ?? '', r.fecBaja ?? '', r.fecPago ?? '', r.idCentroTrab ?? '', r.idCategoria ?? '',
     ...NR_CONCEPTS.map(c => fmtNum(r[c.key])),
   ]);
 
-  renderExportMenu(exportEl, {
-    onExcel: () => exportNrReporteToXlsx(filteredResults),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Reporte_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  renderPlanillaPanel(container, {
+    columns,
+    rows: relevantRows,
+    unitLabel: 'legajos',
+    // Genera el archivo desde el Tabulado, no cruza nada: los cuatro chips de
+    // caso salen en gris con su porqué, y la barra queda igual a las otras.
+    estadoDe: () => null,
+    noAplica: NO_APLICA_REPORTE,
+    marcas: conceptsWithValue.map(c => ({
+      value: c.key, label: c.label, match: (r) => tieneValor(r[c.key]),
+    })),
+    getLabel: r => r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`,
+    stickyCols: 2,
+    empty: 'Ningún empleado tiene valores NR distintos de cero en este período.',
+    afterTable: (host) => {
+      const pie = document.createElement('p');
+      pie.className = 'text-muted';
+      pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
+      pie.textContent = (ocultos > 0
+        ? `Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin valores en el período. `
+        : '')
+        + 'El .xlsx exportado incluye las 18 columnas de conceptos en el layout estándar.';
+      host.appendChild(pie);
+    },
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportNrReporteToXlsx({ ...results, rows: relevantRows }),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Reporte_${periodSuffix(results.period)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
   });
-
-  // ── Tabla (re-render al cambiar el filtro) ────────────────────────────────
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function renderTable(selectedKey) {
-    const shownRows = selectedKey === 'all'
-      ? relevantRows
-      : relevantRows.filter(r => tieneValor(r[selectedKey]));
-
-    const shownConcepts = selectedKey === 'all'
-      ? conceptsWithValue
-      : NR_CONCEPTS.filter(c => c.key === selectedKey);
-
-    const hiddenCols = NR_CONCEPTS.length - shownConcepts.length;
-
-    tableHost.innerHTML = `
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr>
-            <th>ID_EMPLEADO</th>
-            <th>NOMBRE</th>
-            <th>APELLIDO_1</th>
-            <th>FECHA_ALTA</th>
-            <th>FECHA_BAJA</th>
-            <th>FEC_PAGO</th>
-            <th>ID_CENTRO_TRAB</th>
-            <th>ID_CATEGORIA</th>
-            ${shownConcepts.map(c => {
-              const bg = c.group === 'indem' ? INDEM_HDR : OTROS_HDR;
-              return `<th style="background:${bg};font-size:0.72em;white-space:nowrap;">${esc(c.label)}</th>`;
-            }).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${shownRows.map(r => `
-            <tr>
-              <td>${fmtTxt(r.legajo)}</td>
-              <td>${fmtTxt(r.nombre)}</td>
-              <td>${fmtTxt(r.apellido1)}</td>
-              <td>${fmtTxt(r.fecAlta)}</td>
-              <td>${fmtTxt(r.fecBaja)}</td>
-              <td>${fmtTxt(r.fecPago)}</td>
-              <td>${fmtTxt(r.idCentroTrab)}</td>
-              <td>${fmtTxt(r.idCategoria)}</td>
-              ${shownConcepts.map(c => {
-                const bg = c.group === 'indem' ? INDEM_BG : OTROS_BG;
-                return `<td style="text-align:right;background:${bg};">${fmtNum(r[c.key])}</td>`;
-              }).join('')}
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-        Mostrando ${shownRows.length} empleado${shownRows.length === 1 ? '' : 's'}.
-        ${hiddenCols > 0 ? `Se ocultan ${hiddenCols} concepto${hiddenCols === 1 ? '' : 's'} sin valores.` : ''}
-        El .xlsx exportado incluye las 18 columnas de conceptos en el layout estándar.
-      </p>
-    `;
-
-    // Paginación (tablas de cientos de legajos) + buscador por legajo/nombre —
-    // se re-inicializan porque el <tbody> se recrea entero en cada filtro.
-    wireTableTools(tableHost.querySelector('table'), {
-      rows: shownRows,
-      getLabel: r => r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`,
-      searchEl,
-      stickyCols: 2,
-    });
-  }
-
-  filterGroup.querySelector('[data-nr-concept-filter]')
-    .addEventListener('change', (e) => renderTable(e.target.value));
-  renderTable('all');
 }
 
 // ── Exports a Excel ───────────────────────────────────────────────────────────
@@ -686,7 +581,3 @@ function fmtDate(v) {
   return s === '' ? null : s;
 }
 
-function esc(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

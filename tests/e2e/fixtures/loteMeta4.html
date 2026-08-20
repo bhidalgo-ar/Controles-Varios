@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Fixture del lote Meta4/Marval de la vista estándar — NO es una pantalla de
+     la app. Monta la pantalla de resultados de UNO de los diez controles con los
+     datos inventados de loteMeta4.js, sin IndexedDB ni los CDN de index.html.
+
+     Parámetros de la URL:
+       ?control=brutos|brutos_reporte|gs_pers|gs_pers_reporte|nr|nr_reporte|
+                rend_vs_tabu|rend_x_ee|rend_vs_asiento|cat_x_empleados
+       &tema=sobrio|intenso|oscuro   (default: sobrio)
+       &solapa=planilla              (abre directo la solapa, sin clickear)
+-->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body><div id="host" class="page-content page-content--wide"></div>
+<script type="module">
+import { CONTROLES, TOLERANCIA } from './loteMeta4.js';
+import { withTolerance } from '../../../js/controls/tolerance.js';
+
+const params = new URLSearchParams(location.search);
+const id = params.get('control') || 'brutos';
+document.documentElement.setAttribute('data-theme', params.get('tema') || 'sobrio');
+
+// La preferencia de solapa vive en localStorage y se pega entre corridas del
+// fixture: acá se limpia para que cada carga abra donde abre de verdad.
+try { localStorage.clear(); } catch { /* modo privado */ }
+
+const caso = CONTROLES[id];
+if (!caso) {
+  document.getElementById('host').textContent = `No hay fixture para "${id}".`;
+} else {
+  document.title = caso.label;
+  withTolerance(TOLERANCIA, () => {
+    const results = caso.run();
+    window.__results = results;
+    caso.render(results, document.getElementById('host'));
+  });
+
+  // Abrir una solapa por nombre, para poder mirarla sin simular un click.
+  const solapa = params.get('solapa');
+  if (solapa) {
+    for (const tab of document.querySelectorAll('[role="tab"]')) {
+      if (tab.textContent.trim().toLowerCase() === solapa.toLowerCase()) tab.click();
+    }
+  }
+}
+</script></body></html>
