@@ -438,7 +438,7 @@ let comboIdCounter = 0;
  * @param {object} opts
  * @param {any[]} opts.rows - los datos originales, en el MISMO orden que se usó para pintar las filas
  * @param {HTMLTableRowElement[]} opts.trEls - los <tr> ya en el DOM, mismo orden que `rows` (ej: pagination.dataRows)
- * @param {(row: any) => string} opts.getLabel - texto buscable/mostrado de una fila (ej: "847 — Pérez Juan")
+ * @param {(row: any) => string} opts.getLabel - texto buscable/mostrado de una fila (ej: "847 — Sanguinetti Javier")
  * @param {{ setFilter: (s: Set|null) => void }} [opts.pagination] - resultado de initShowMorePagination
  * @param {string} [opts.label='Buscar legajo o nombre']
  * @param {string} [opts.placeholder='Buscá por legajo o nombre…']

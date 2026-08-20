@@ -1092,7 +1092,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
         <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;">
           <input type="radio" name="nombre_mode" value="junto"
             ${savedNombreMode === 'junto' ? 'checked' : ''}>
-          <span>En <strong>una sola columna</strong> (ej: "García Juan" o "GARCIA, JUAN")</span>
+          <span>En <strong>una sola columna</strong> (ej: "Sanguinetti Javier" o "SANGUINETTI, JAVIER")</span>
         </label>
         <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;">
           <input type="radio" name="nombre_mode" value="separado"
