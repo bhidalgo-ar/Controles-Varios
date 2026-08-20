@@ -1,7 +1,7 @@
 // novedadesImportador.spec.js — La pantalla del generador de importador de
 // novedades (N1 · Axton, D-070) en un navegador real.
 //
-// Lo que se verifica acá y no en el test de unidad: que el Resumen y el Detalle
+// Lo que se verifica acá y no en el test de unidad: que el Resumen y la Planilla
 // se dibujen de verdad, que la celda `cantidad$importe` se vea en pantalla tal
 // como va a salir al archivo —es lo único que le confirma al analista qué va a
 // subir a Axton—, que lo que quedó afuera se lea con su motivo, y que todo se lea
@@ -40,8 +40,8 @@ test('el Resumen muestra el veredicto, las tarjetas, lo que quedó afuera y los 
   expect(page.__errores).toEqual([]);
 });
 
-test('el Detalle muestra el importador tal como va a salir, con el formato cantidad$importe', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
+test('la Planilla muestra el importador tal como va a salir, con el formato cantidad$importe', async ({ page }) => {
+  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
   const tabla = page.locator('table.data-table');
   await expect(tabla).toBeVisible();
 
@@ -54,21 +54,34 @@ test('el Detalle muestra el importador tal como va a salir, con el formato canti
   expect(celdas.filter(t => t.trim() === '0,00').length).toBe(0);
 });
 
-test('las cuatro vistas del Detalle se dibujan, incluida la del importador ya armado', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
+test('las cuatro vistas de la Planilla se dibujan, cada una con su barra estándar', async ({ page }) => {
+  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
+  const tabla = page.locator('table.data-table:visible');
 
-  for (const vista of ['totales', 'afuera', 'contra', 'f2']) {
-    await page.selectOption('[data-nov-vista]', vista);
-    await expect(page.locator('table.data-table')).toBeVisible();
+  for (const vista of ['Totales por concepto', 'Quedó afuera', 'Contra el F2 armado', 'Lo que entra al importador']) {
+    await page.locator('[role="tab"]').filter({ hasText: vista }).click();
+    await expect(tabla).toBeVisible();
+    // Los cinco chips del estándar, en cada una de las cuatro (§3).
+    await expect(page.locator('.results-chip:visible')).toHaveCount(5);
   }
 
-  // La vista "Contra el F2 armado" nombra las bandas y el legajo que no llegó.
-  await page.selectOption('[data-nov-vista]', 'contra');
-  await expect(page.locator('table.data-table')).toContainText('Sólo en la planilla del cliente');
+  // "Contra el F2 armado" ordena las columnas en bandas: lo que arma la app
+  // contra el F2 que ya estaba, y la diferencia.
+  await page.locator('[role="tab"]').filter({ hasText: 'Contra el F2 armado' }).click();
+  // La barra arranca filtrada en "Con diferencia" cuando hay alguna (§3): para
+  // ver también lo que falta de un lado hay que volver a "Todos".
+  await page.locator('.results-chip:visible', { hasText: 'Todos' }).click();
+  await expect(tabla.locator('thead')).toContainText('Generado');
+  await expect(tabla.locator('thead')).toContainText('Importador armado');
+  await expect(tabla.locator('thead')).toContainText('Δ importe');
+  // La novedad que está de un solo lado NO es una diferencia de importe: es que
+  // falta un lado, y sale así en vez de como un cero.
+  await expect(tabla.locator('tbody')).toContainText('falta de un lado');
 
   // Y la de totales cierra con su fila de TOTAL nombrando la unidad (D-058/D-060).
-  await page.selectOption('[data-nov-vista]', 'totales');
-  await expect(page.locator('table.data-table tfoot')).toContainText('conceptos');
+  await page.locator('[role="tab"]').filter({ hasText: 'Totales por concepto' }).click();
+  await page.locator('.results-chip:visible', { hasText: 'Todos' }).click();
+  await expect(tabla.locator('tfoot')).toContainText('conceptos');
   expect(page.__errores).toEqual([]);
 });
 

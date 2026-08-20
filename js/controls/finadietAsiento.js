@@ -29,7 +29,8 @@
 
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -457,12 +458,6 @@ function contarLineas(asiento) {
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────
 
-const VISTAS = [
-  { id: 'asiento', label: 'ASIENTO' },
-  { id: 'cc',      label: 'Ctas Cbles CENTRO COSTO' },
-  { id: 'gral',    label: 'Cuentas Contables GRAL' },
-];
-
 export function renderFinadietAsientoResults(results, container) {
   if (results.error) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(results.error)}</p>`;
@@ -471,9 +466,10 @@ export function renderFinadietAsientoResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'finadiet_asiento',
-    detalleLabel: 'Solapas del archivo',
+    conDiferencias: !results.cierra
+      || results.sinClasificar.cuentas.length > 0 || results.sinClasificar.centros.length > 0,
     resumen: (panel) => renderResumenTab(panel, results),
-    detalle: (panel) => renderDetalleTab(panel, results),
+    planilla: (panel) => renderDetalleTab(panel, results),
   });
 }
 
@@ -556,137 +552,118 @@ function renderResumenTab(panel, results) {
   });
 }
 
+// ── Solapa Planilla ───────────────────────────────────────────────────────────
+//
+// Las tres solapas del archivo, cada una con la barra estándar completa (§3) y
+// las columnas de importe en las dos bandas naturales de un asiento: DEBE y
+// HABER. Antes eran un desplegable "Solapa" con una sola barra compartida.
+//
+// **Este control no compara contra un umbral**: el asiento cuadra al centavo
+// contra sí mismo (Debe = Haber). Por eso el chip "Dentro del margen" va en gris
+// y deshabilitado, con el motivo en su `title` — no oculto: sacarlo movería los
+// demás de lugar, que es justo lo que el estándar viene a arreglar.
+
+const NO_APLICA_ASIENTO = {
+  margen: 'el asiento cuadra al centavo contra sí mismo (Debe = Haber), no hay un umbral que medir',
+  sinComparar: 'las tres solapas salen del mismo archivo, así que no hay un lado que pueda faltar',
+};
+
 function renderDetalleTab(panel, results) {
-  const selector = document.createElement('div');
-  selector.className = 'form-group';
-  selector.style.marginBottom = '0';
-  selector.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Solapa</label>
-    <select class="form-select" data-fa-vista style="font-size:var(--text-sm);">
-      ${VISTAS.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}
-    </select>
-  `;
+  initTabs(panel, {
+    tabs: [
+      { id: 'asiento', label: 'ASIENTO', render: (p) => vistaAsiento(p, results) },
+      { id: 'cc',      label: 'Ctas Cbles CENTRO COSTO',
+        render: (p) => vistaPlana(p, results, results.ctasPorCentro,
+          'Una fila por cuenta + concepto, con la cuenta llevando su prefijo de centro de costo.') },
+      { id: 'gral',    label: 'Cuentas Contables GRAL',
+        render: (p) => vistaPlana(p, results, results.ctasGral,
+          'La misma tabla con el código de cuenta limpio, sin prefijo de centro de costo.') },
+    ],
+  });
+}
 
-  const { searchEl, exportEl } = createResultsToolbar(panel, { left: selector });
-  const tablaHost = document.createElement('div');
-  panel.appendChild(tablaHost);
-
-  const pie = document.createElement('p');
-  pie.className = 'text-muted';
-  pie.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-2) var(--sp-3) 0;';
-  panel.appendChild(pie);
-
+/** Los tres del estándar, iguales en las tres solapas: el archivo es uno solo. */
+function mountExportMenu(exportEl, results) {
   const csvHeaders = ['Código de cuenta', 'Concepto', 'Cód. concepto', 'Suma DEBE', 'Suma HABER'];
   const csvRows = () => results.ctasPorCentro.rows.map(r => [r.cuenta, r.concepto, r.nro, fmtNum(r.debe), fmtNum(r.haber)]);
-
   renderExportMenu(exportEl, {
     onExcel: () => exportFinadietAsientoToXlsx(results),
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), `FINADIET_Asiento_Ctas_CC_${periodSuffix(results.period)}.csv`),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
-
-  // La tabla se reconstruye entera al cambiar de solapa, así que las tools de
-  // tabla se vuelven a montar sobre la tabla nueva en cada render (el orden lo
-  // resuelve wireTableTools: paginar, después buscador, después sticky).
-  const pintar = (vistaId) => {
-    if (vistaId === 'asiento') {
-      pintarAsiento(tablaHost, searchEl, results);
-      pie.textContent = 'Las cuentas de Resultado van agrupadas por centro de costo; las Patrimoniales, '
-        + `consolidadas entre todos los centros bajo su categoría, con prefijo ${PREFIJO_PATRIMONIAL}.`;
-    } else {
-      const plana = vistaId === 'cc' ? results.ctasPorCentro : results.ctasGral;
-      pintarPlana(tablaHost, searchEl, plana);
-      pie.textContent = vistaId === 'cc'
-        ? 'Una fila por cuenta + concepto, con la cuenta llevando su prefijo de centro de costo.'
-        : 'La misma tabla con el código de cuenta limpio, sin prefijo de centro de costo.';
-    }
-  };
-
-  selector.querySelector('[data-fa-vista]').addEventListener('change', (e) => pintar(e.target.value));
-  pintar(VISTAS[0].id);
 }
 
-function pintarAsiento(host, searchEl, results) {
+function vistaAsiento(panel, results) {
+  // El bloque (centro de costo o categoría patrimonial) pasa a ser UNA COLUMNA
+  // en vez de una fila de título adentro del cuerpo: una fila de título se
+  // separa de su bloque en cuanto se filtra o se pagina, y además así se puede
+  // filtrar por bloque desde "Marcas ▾".
   const filas = [];
   for (const bloque of results.asiento.bloques) {
-    filas.push({ tipo: 'header', label: bloque.label });
-    for (const l of bloque.lineas) filas.push({ tipo: 'data', ...l, grupo: bloque.label });
+    for (const l of bloque.lineas) filas.push({ ...l, grupo: bloque.label });
   }
 
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr><th>Concepto</th><th>Cuenta</th><th class="text-right">Debe</th><th class="text-right">Haber</th></tr>
-      </thead>
-      <tbody>
-        ${filas.map(f => f.tipo === 'header'
-          ? `<tr><td colspan="4" style="background:var(--color-bg-subtle);"><strong>${esc(f.label)}</strong></td></tr>`
-          : `<tr>
-               <td>${esc(f.nombre || '—')}</td>
-               <td>${esc(f.cuenta)}</td>
-               <td class="text-right">${fmtNum(f.debe)}</td>
-               <td class="text-right">${fmtNum(f.haber)}</td>
-             </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="2">TOTAL</th>
-          <th class="text-right">${fmtNum(results.asiento.totalDebe)}</th>
-          <th class="text-right">${fmtNum(results.asiento.totalHaber)}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+  const columns = [
+    { key: 'grupo',  label: 'Bloque',   sub: 'centro de costo o categoría', band: 'Identificación' },
+    { key: 'nombre', label: 'Concepto', band: 'Identificación',
+      cell: f => esc(f.nombre || '—') },
+    { key: 'cuenta', label: 'Cuenta',   sub: 'código contable', band: 'Identificación', close: true },
+    { key: 'debe',  label: 'Debe',  sub: 'lo que se asienta', num: true, band: 'DEBE',  close: true,
+      total: () => results.asiento.totalDebe },
+    { key: 'haber', label: 'Haber', sub: 'lo que se asienta', num: true, band: 'HABER', close: true,
+      total: () => results.asiento.totalHaber },
+  ];
 
-  wireTableTools(host.querySelector('table'), {
+  renderPlanillaPanel(panel, {
     rows: filas,
-    getLabel: f => f.tipo === 'header' ? f.label : `${f.cuenta} ${f.nombre}`,
-    searchEl,
-    label: 'Buscar cuenta o concepto',
-    placeholder: 'Cuenta o concepto…',
-    // Un asiento se lee entero y son decenas de líneas, no cientos: paginarlo
-    // dejaría un bloque separado de su fila de título de centro/categoría.
+    columns,
+    unitLabel: 'líneas',
+    estadoDe: () => (results.cierra ? 'centavo' : 'conDif'),
+    noAplica: NO_APLICA_ASIENTO,
+    marcas: results.asiento.bloques.map(b => ({
+      value: b.label, label: b.label, match: f => f.grupo === b.label,
+    })),
+    getLabel: f => `${f.cuenta} ${f.nombre || ''}`,
+    searchLabel: 'Buscar cuenta o concepto',
+    searchPlaceholder: 'Cuenta o concepto…',
+    // Un asiento se lee entero y son decenas de líneas, no cientos.
     pageSize: 500,
+    // La 1ª y la 2ª columna no son las que conviene anclar acá (el bloque se
+    // repite y el concepto es largo): la tabla entra a lo ancho sin congelar.
     stickyCols: 0,
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'Ninguna línea del asiento quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${filas.length} línea${filas.length === 1 ? '' : 's'}. `
+      + 'Las cuentas de Resultado van agrupadas por centro de costo; las Patrimoniales, consolidadas '
+      + `entre todos los centros bajo su categoría, con prefijo ${PREFIJO_PATRIMONIAL}.`,
   });
 }
 
-function pintarPlana(host, searchEl, plana) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Código de cuenta</th><th>Concepto</th><th>Cód. concepto</th>
-          <th class="text-right">Suma Debe</th><th class="text-right">Suma Haber</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${plana.rows.map(r => `
-          <tr>
-            <td>${esc(r.cuenta)}</td>
-            <td>${esc(r.concepto || '—')}</td>
-            <td>${esc(r.nro || '—')}</td>
-            <td class="text-right">${fmtNum(r.debe)}</td>
-            <td class="text-right">${fmtNum(r.haber)}</td>
-          </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="3">TOTAL</th>
-          <th class="text-right">${fmtNum(plana.totalDebe)}</th>
-          <th class="text-right">${fmtNum(plana.totalHaber)}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+function vistaPlana(panel, results, plana, nota) {
+  const columns = [
+    { key: 'cuenta',   label: 'Código de cuenta', band: 'Identificación' },
+    { key: 'concepto', label: 'Concepto', band: 'Identificación', cell: r => esc(r.concepto || '—') },
+    { key: 'nro',      label: 'Cód. concepto', sub: 'el del Tabulado', band: 'Identificación', close: true,
+      cell: r => esc(r.nro || '—') },
+    { key: 'debe',  label: 'Suma Debe',  sub: 'lo que se asienta', num: true, band: 'DEBE',  close: true,
+      total: () => plana.totalDebe },
+    { key: 'haber', label: 'Suma Haber', sub: 'lo que se asienta', num: true, band: 'HABER', close: true,
+      total: () => plana.totalHaber },
+  ];
 
-  wireTableTools(host.querySelector('table'), {
+  renderPlanillaPanel(panel, {
     rows: plana.rows,
+    columns,
+    unitLabel: 'cuentas',
+    estadoDe: () => (results.cierra ? 'centavo' : 'conDif'),
+    noAplica: NO_APLICA_ASIENTO,
     getLabel: r => `${r.cuenta} ${r.nro} ${r.concepto}`,
-    searchEl,
-    label: 'Buscar cuenta o concepto',
-    placeholder: 'Cuenta o concepto…',
+    searchLabel: 'Buscar cuenta o concepto',
+    searchPlaceholder: 'Cuenta o concepto…',
     stickyCols: 0,
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'Ninguna cuenta quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${plana.rows.length} fila${plana.rows.length === 1 ? '' : 's'}. ${nota}`,
   });
 }
 

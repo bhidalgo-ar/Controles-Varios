@@ -24,7 +24,7 @@
 // Ver specs/control-variacion-quincenas-pop.md.
 
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -546,8 +546,9 @@ export function renderPopVariacionesResults(results, container) {
   container.innerHTML = '';
   renderResumenDetalle(container, {
     controlId: 'pop_variaciones',
+    conDiferencias: (results.control?.difs?.length ?? 0) > 0,
     resumen(panel) { renderResumen(panel, results); },
-    detalle(panel) { renderDetalle(panel, results); },
+    planilla(panel) { renderPlanilla(panel, results); },
   });
 }
 
@@ -624,6 +625,16 @@ function renderResumen(panel, results) {
   panel.appendChild(notas);
 }
 
+// ── Solapa Planilla ───────────────────────────────────────────────────────────
+//
+// El reporte entero en una sola tabla, en cuatro bandas que se leen de izquierda
+// a derecha: el valor hora de las dos quincenas y cómo se movió · las marcas del
+// período · el neto · y, si se cargó el reporte de Axton, el cuadre contra él.
+//
+// El escalón/histograma de este control vive en el Resumen y ahí se queda: acá
+// el eje es el legajo, no el tiempo.
+
+/** Las columnas del reporte, para el CSV y para copiar: el entregable completo. */
 const COLS_DETALLE = [
   { key: 'legajo',     label: 'Legajo',            tipo: 'txt' },
   { key: 'nombre',     label: 'Apellido y Nombre', tipo: 'txt' },
@@ -638,28 +649,70 @@ const COLS_DETALLE = [
   { key: 'neto',       label: 'Neto',              tipo: 'num' },
 ];
 
-function renderDetalle(container, results) {
+/**
+ * En qué estado cerró cada legajo. Lo que este control **controla** es el cuadre
+ * contra el reporte de variaciones de Axton: sin ese archivo no se comparó nada
+ * y todos los legajos salen en "Sin comparar" — que es la verdad, y nunca se lee
+ * como aprobado (D-073). La variación de valor hora no es un estado: es lo que
+ * el reporte informa, y va en "Marcas ▾".
+ */
+export function estadoDePop(r, { control, conDifAxton, soloGenerado }) {
+  if (!control) return 'sinComparar';
+  if (soloGenerado.has(r.legajo)) return 'sinComparar';
+  return conDifAxton.has(r.legajo) ? 'conDif' : 'centavo';
+}
+
+function renderPlanilla(container, results) {
   const { rows, control } = results;
 
-  const filtro = document.createElement('select');
-  filtro.className = 'form-select form-select--sm';
-  filtro.dataset.popVarFilter = '';
-  const conDifAxton = new Set((control?.difs || []).map(d => d.legajo));
-  filtro.innerHTML = `
-    <option value="todos">Todos (${rows.length})</option>
-    <option value="var">Sólo con variación (${rows.filter(r => r.mod === 'S').length})</option>
-    <option value="movs">Altas, bajas y cambios de CBU (${rows.filter(r => esMovimiento(r)).length})</option>
-    <option value="sindato">Sin valor hora (${rows.filter(r => r.vhAnterior === null || r.vhActual === null).length})</option>
-    ${control ? `<option value="difaxton">Con diferencia vs Axton (${conDifAxton.size})</option>` : ''}
-  `;
+  const conDifAxton  = new Set((control?.difs || []).map(d => d.legajo));
+  const soloGenerado = new Set(control?.soloGenerado || []);
+  const difsPorLegajo = new Map((control?.difs || []).map(d => [d.legajo, d.campos.length]));
 
-  const filterGroup = document.createElement('div');
-  filterGroup.className = 'form-group';
-  filterGroup.style.cssText = 'margin-bottom:0;min-width:220px;';
-  filterGroup.innerHTML = `<label class="form-label" style="font-size:var(--text-sm);">Qué se muestra</label>`;
-  filterGroup.appendChild(filtro);
+  const qAnterior = results.periodos.anterior.corta || 'quincena anterior';
+  const qActual   = results.periodos.actual.corta   || 'quincena actual';
 
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
+  const columns = [
+    { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+    { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
+
+    // El valor hora no se totaliza: sumar el valor hora de legajos distintos no
+    // da un número que signifique algo, y con los "sin dato" afuera el total de
+    // las dos quincenas ni siquiera cerraría contra el de la variación. El pie
+    // suma lo que ya sumaba: la variación y el neto.
+    { key: 'vhAnterior', label: `VH ${qAnterior}`, sub: `${results.conceptCode}: importe ÷ horas`,
+      num: true, band: 'Valor hora', total: false },
+    { key: 'vhActual',   label: `VH ${qActual}`,   sub: `${results.conceptCode}: importe ÷ horas`,
+      num: true, band: 'Valor hora', total: false },
+    // La variación NO es una diferencia contra otra fuente: es lo que este
+    // reporte informa. Va con flecha y signo (nunca sólo color) y no como badge
+    // de error — el badge rojo es para lo que no cuadra, que acá es el cuadre
+    // contra Axton y no el hecho de que el valor hora se haya movido.
+    { key: 'dif', label: 'Variación', sub: 'actual − anterior', num: true, band: 'Valor hora',
+      cell: r => (r.dif === null
+        ? SIN_DATO
+        : `<span class="${mvClass(r.dif, TOL_MOD)}">${mvArrow(r.dif, TOL_MOD)} ${esc(fmtSigned(r.dif))}</span>`) },
+    { key: 'pctLabel', label: 'Variación %', sub: 'sobre el anterior', num: true, band: 'Valor hora',
+      close: true, total: false, cell: r => esc(r.pctLabel) },
+
+    { key: 'mod',    label: 'MOD',     sub: 'cambió el valor hora', band: 'Marcas del período',
+      total: false, cell: r => flagHtml(r.mod) },
+    { key: 'modCbu', label: 'MOD CBU', sub: 'cambió el CBU',        band: 'Marcas del período',
+      total: false, cell: r => flagHtml(r.modCbu) },
+    { key: 'alta',   label: 'Alta',    sub: 'ingresó en el rango',  band: 'Marcas del período',
+      total: false, cell: r => flagHtml(r.alta) },
+    { key: 'baja',   label: 'Baja',    sub: 'egresó en el rango',   band: 'Marcas del período',
+      close: true, total: false, cell: r => flagHtml(r.baja) },
+
+    { key: 'neto', label: 'Neto', sub: 'de la quincena actual', num: true, close: true, band: 'Liquidación' },
+
+    // La columna "vs Axton" lleva CUÁNTOS campos difieren, no la lista: los
+    // nombres de los campos ensanchan la planilla y quedan cortados. Cuáles son
+    // está en el bloque de diferencias del Resumen, y el chip los aísla.
+    ...(control ? [{ key: 'vsAxton', label: 'vs Axton', sub: 'campos que no coinciden',
+      band: 'Contra el reporte de Axton', close: true, total: false,
+      cell: r => celdaVsAxton(r, difsPorLegajo, control) }] : []),
+  ];
 
   // Las tres salidas llevan SIEMPRE el reporte completo, sin importar el filtro
   // de pantalla: es el entregable que recibe HR del cliente.
@@ -667,87 +720,35 @@ function renderDetalle(container, results) {
   const csvRows = () => rows.map(r => COLS_DETALLE.map(c => (
     c.tipo === 'num' || c.tipo === 'signo' ? fmtNum(r[c.key]) : (r[c.key] ?? SIN_DATO)
   )));
-  renderExportMenu(exportEl, {
-    onExcel: () => exportPopVariacionesToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `${nombreArchivo(results)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+
+  const sinControl = 'no se cargó el reporte de variaciones de Axton, así que no se comparó nada';
+  const noAplica = control
+    ? { margen: 'los campos se cotejan uno a uno contra el reporte de Axton, no contra un umbral' }
+    : { margen: sinControl, conDif: sinControl, centavo: sinControl };
+
+  renderPlanillaPanel(container, {
+    rows,
+    columns,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDePop(r, { control, conDifAxton, soloGenerado }),
+    noAplica,
+    marcas: [
+      { value: 'var',     label: 'Con variación de valor hora',   match: r => r.mod === 'S' },
+      { value: 'movs',    label: 'Altas, bajas y cambios de CBU', match: esMovimiento },
+      { value: 'sindato', label: 'Sin valor hora',                match: r => r.vhAnterior === null || r.vhActual === null },
+    ],
+    getLabel: r => (r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`),
+    searchLabel: 'Buscar legajo o nombre',
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => exportPopVariacionesToXlsx(results),
+      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `${nombreArchivo(results)}.csv`),
+      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
+    emptyText: 'Ningún legajo quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${rows.length} legajos. «${SIN_DATO}» es sin dato, no cero. `
+      + `El valor hora sale del concepto ${results.conceptCode} (importe ÷ cantidad de horas).`
+      + (control ? '' : ' Sin el reporte de variaciones de Axton no hay contra qué cotejar: los legajos salen en «Sin comparar».'),
   });
-
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  // La columna "vs Axton" lleva CUÁNTOS campos difieren, no la lista: los
-  // nombres de los campos ensanchan la planilla y quedan cortados. Cuáles son
-  // está en el bloque de diferencias del Resumen, y el filtro de arriba aísla
-  // estos legajos.
-  const difsPorLegajo = new Map((control?.difs || []).map(d => [d.legajo, d.campos.length]));
-
-  function renderTable(modo) {
-    const shown = rows.filter(r => (
-      modo === 'var'       ? r.mod === 'S'
-      : modo === 'movs'    ? esMovimiento(r)
-      : modo === 'sindato' ? (r.vhAnterior === null || r.vhActual === null)
-      : modo === 'difaxton' ? conDifAxton.has(r.legajo)
-      : true
-    ));
-    tableHost.innerHTML = `
-      <table class="data-table data-table--compact">
-        <thead>
-          <tr>
-            ${COLS_DETALLE.map(c => `<th${c.tipo === 'num' || c.tipo === 'signo' || c.tipo === 'pct' ? ' style="text-align:right;"' : ''}>${esc(
-              c.key === 'vhAnterior' ? `VH ${results.periodos.anterior.corta || 'anterior'}`
-              : c.key === 'vhActual' ? `VH ${results.periodos.actual.corta || 'actual'}`
-              : c.label
-            )}</th>`).join('')}
-            ${control ? '<th>Axton</th>' : ''}
-          </tr>
-        </thead>
-        <tbody>
-          ${shown.map(r => `
-            <tr>
-              <td>${esc(r.legajo)}</td>
-              <td>${esc(r.nombre || SIN_DATO)}</td>
-              <td style="text-align:right;">${fmtNum(r.vhAnterior)}</td>
-              <td style="text-align:right;">${fmtNum(r.vhActual)}</td>
-              <td>${flagHtml(r.mod)}</td>
-              <td style="text-align:right;" class="${mvClass(r.dif)}">${r.dif === null ? SIN_DATO : `${mvArrow(r.dif)} ${fmtSigned(r.dif)}`}</td>
-              <td style="text-align:right;" class="${r.pctSinBase ? '' : mvClass(r.pct)}">${esc(r.pctLabel)}</td>
-              <td>${flagHtml(r.modCbu)}</td>
-              <td>${flagHtml(r.alta)}</td>
-              <td>${flagHtml(r.baja)}</td>
-              <td style="text-align:right;">${fmtNum(r.neto)}</td>
-              ${control ? `<td>${celdaVsAxton(r, difsPorLegajo, control)}</td>` : ''}
-            </tr>
-          `).join('')}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="2"><strong>TOTAL — ${shown.length} legajos</strong></td>
-            <td></td><td></td><td></td>
-            <td style="text-align:right;">${fmtNum(shown.reduce((t, r) => t + (r.dif ?? 0), 0))}</td>
-            <td></td><td></td><td></td><td></td>
-            <td style="text-align:right;">${fmtNum(shown.reduce((t, r) => t + (r.neto ?? 0), 0))}</td>
-            ${control ? '<td></td>' : ''}
-          </tr>
-        </tfoot>
-      </table>
-      <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-        Mostrando ${shown.length} de ${rows.length} legajos. «${SIN_DATO}» es sin dato, no cero.
-        El valor hora sale del concepto ${esc(results.conceptCode)} (importe ÷ cantidad de horas).
-      </p>
-    `;
-
-    wireTableTools(tableHost.querySelector('table'), {
-      rows: shown,
-      getLabel: r => (r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`),
-      searchEl,
-      label: 'Buscar legajo o nombre',
-      stickyCols: 2,
-    });
-  }
-
-  filtro.addEventListener('change', e => renderTable(e.target.value));
-  renderTable('todos');
 }
 
 const esMovimiento = r => r.alta === 'S' || r.baja === 'S' || r.modCbu === 'S';

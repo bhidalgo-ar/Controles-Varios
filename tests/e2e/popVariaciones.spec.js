@@ -1,7 +1,7 @@
 // popVariaciones.spec.js — La pantalla de resultados de "Variación entre
 // quincenas" (POP · Axton) en un navegador real.
 //
-// Lo que se verifica acá y no en el test de unidad: que el Resumen y el Detalle
+// Lo que se verifica acá y no en el test de unidad: que el Resumen y la Planilla
 // se dibujen de verdad, que la marca de "sin dato" se lea distinta de un cero
 // —que es la confusión que este control tiene que evitar— y que la pantalla se
 // lea en los tres temas. Fixture con datos inventados.
@@ -26,8 +26,8 @@ test('el Resumen muestra el veredicto, las tarjetas y los chequeos de coherencia
   await expect(page.locator('.rb-issues .rb-issue').first()).toBeVisible();
 });
 
-test('el Detalle lista los legajos y "—" no se lee como un cero', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
+test('la Planilla lista los legajos y "—" no se lee como un cero', async ({ page }) => {
+  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
   const tabla = page.locator('table.data-table');
   await expect(tabla).toBeVisible();
 
@@ -42,12 +42,12 @@ test('el Detalle lista los legajos y "—" no se lee como un cero', async ({ pag
   expect(heads.some(h => h.includes('2ª quinc. 07/2026'))).toBe(true);
 });
 
-test('el filtro deja ver sólo los movimientos y el total sigue a la selección', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
+test('"Marcas ▾" deja ver sólo los movimientos y el total sigue a la selección', async ({ page }) => {
+  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
   const filas = page.locator('table.data-table tbody tr');
   const todas = await filas.count();
 
-  await page.selectOption('[data-pop-var-filter]', 'movs');
+  await page.selectOption('[data-planilla-marca]', 'movs');
   const movs = await filas.count();
   expect(movs).toBeGreaterThan(0);
   expect(movs).toBeLessThan(todas);
@@ -63,7 +63,7 @@ test('el filtro deja ver sólo los movimientos y el total sigue a la selección'
 for (const tema of ['sobrio', 'intenso', 'oscuro']) {
   test(`${tema}: las marcas S/N y los "—" de la planilla se leen`, async ({ page }) => {
     await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), tema);
-    await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
+    await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
 
     const contraste = await page.locator('table.data-table tbody .badge').first().evaluate((el) => {
       const lum = (c) => {
@@ -73,13 +73,34 @@ for (const tema of ['sobrio', 'intenso', 'oscuro']) {
         });
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
       };
-      // El fondo efectivo: el primer ancestro con un fondo no transparente.
-      let fondo = 'rgb(255, 255, 255)';
+      // El fondo efectivo se COMPONE: la planilla tiñe la banda con un color
+      // translúcido, y leer ese `rgba(21, 38, 61, 0.043)` como si fuera opaco
+      // daba "texto negro sobre casi negro" — un contraste inventado. Se apilan
+      // las capas hasta la primera opaca y se mezclan de abajo hacia arriba.
+      const rgba = (c) => {
+        const n = (c.match(/[\d.]+/g) || []).map(Number);
+        return { r: n[0] || 0, g: n[1] || 0, b: n[2] || 0, a: n[3] === undefined ? 1 : n[3] };
+      };
+      const capas = [];
       for (let n = el; n; n = n.parentElement) {
-        const bg = getComputedStyle(n).backgroundColor;
-        if (bg && !bg.startsWith('rgba(0, 0, 0, 0)')) { fondo = bg; break; }
+        const c = rgba(getComputedStyle(n).backgroundColor);
+        if (c.a === 0) continue;
+        capas.push(c);
+        if (c.a === 1) break;
       }
-      const a = lum(getComputedStyle(el).color), b = lum(fondo);
+      if (!capas.length || capas[capas.length - 1].a < 1) capas.push({ r: 255, g: 255, b: 255, a: 1 });
+      let fondoRgb = capas[capas.length - 1];
+      for (let i = capas.length - 2; i >= 0; i--) {
+        const c = capas[i];
+        fondoRgb = {
+          r: c.r * c.a + fondoRgb.r * (1 - c.a),
+          g: c.g * c.a + fondoRgb.g * (1 - c.a),
+          b: c.b * c.a + fondoRgb.b * (1 - c.a),
+          a: 1,
+        };
+      }
+      const a = lum(getComputedStyle(el).color);
+      const b = lum(`rgb(${fondoRgb.r}, ${fondoRgb.g}, ${fondoRgb.b})`);
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     });
 

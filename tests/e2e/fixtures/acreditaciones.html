@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Acreditaciones — Generar Reporte" con la
+     vista estándar (specs/vista-estandar-resultados.md): la barra con los cinco
+     chips y la planilla de listas con bandas. Datos 100% inventados; los CBU son
+     dígitos repetidos escritos a mano (ver la ALLOWLIST de
+     scripts/check-datos-sensibles.mjs). -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runAcreditacionesReporte, renderAcreditacionesReporteResults, summarizeAcreditacionesReporte }
+  from '../../../js/controls/acreditaciones.js';
+
+// Uno por legajo: dos legajos con el mismo CBU dispararían la alerta de "CBU
+// compartido" y toda la pantalla saldría en rojo por un dato de prueba.
+const CBU1 = '0720000000000000000001';
+const CBU2 = '0720000000000000000002';
+const CBU3 = '0170000000000000000003';
+const CBU4 = '0170000000000000000004';
+const CBU5 = '0170000000000000000005';
+
+const ANTICIPO = 'Anticipo de sueldo (De carga) Julio 2026 (Anticipos 07-2026) (C)';
+const VACAC    = 'Anticipo vacaciones Julio 2026 (Anticipo vacaciones 07-2026) (C)';
+const QUINC1   = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) (C)';
+const QUINC2   = '2da Quincena c/ sobregiro Julio 2026 (2da Quincena 07-2026) (C)';
+
+const row = (o) => ({
+  legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cuit: '',
+  cliente: 'CLIENTE DEMO SA', uo_cliente: 'Mensualizados',
+  liquidacion: ANTICIPO, neto: null, listado: '', descripcion: '',
+  fecha_acreditacion: null, banco: 'BANCO DEMO', cbu: CBU1, empresa: 'CLIENTE DEMO SA',
+  ...o,
+});
+
+// Cuatro listas: dos limpias (cierran al centavo), una con una alerta (una fila
+// sin importe) y un grupo sin fecha, que queda pendiente de asignar.
+const acredRows = [
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO CESAR', cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN',  cbu: CBU3, neto: 500,  listado: '900', fecha_acreditacion: '2026-07-02', liquidacion: VACAC }),
+
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO CESAR', cbu: CBU2, neto: 4000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  // Sin importe: entra a la lista y deja una alerta.
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN',  cbu: CBU3, neto: null, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 5000, listado: '920', fecha_acreditacion: '2026-07-31', liquidacion: QUINC2 }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO CESAR', cbu: CBU2, neto: 6000, listado: '920', fecha_acreditacion: '2026-07-31', liquidacion: QUINC2 }),
+
+  // Listado completo sin ninguna fecha conocida → grupo pendiente.
+  row({ legajo: '4', apellido_nombre: 'ERVITI WALTER',       cbu: CBU4, neto: 800,  listado: '950', fecha_acreditacion: null }),
+  row({ legajo: '5', apellido_nombre: 'SILVA SANTIAGO',      cbu: CBU5, neto: 900,  listado: '950', fecha_acreditacion: null }),
+];
+
+const results = runAcreditacionesReporte(acredRows, [], { period: '2026-07' });
+window.__results = results;
+window.__summary = summarizeAcreditacionesReporte(results);
+renderAcreditacionesReporteResults(results, document.getElementById('host'));
+</script></body></html>
