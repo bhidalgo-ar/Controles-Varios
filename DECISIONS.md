@@ -2385,6 +2385,12 @@ numerador porque "no hay diferencia detectada". Se descartó porque el semáforo
 legajo que en realidad nunca se miró — la misma lógica que ya usa D-070 para la banda "no comparable" (no
 bloquea, pero tampoco aprueba), llevada al semáforo.
 
+**Con una excepción, encontrada en la revisión del propio PR:** el legajo cuyas novedades son **todas**
+conceptos que el analista declaró como "no llega a la liquidación" **no** entra al numerador. Ahí no hay
+nada que comparar por decisión suya y no por un hueco del archivo, y sin la excepción una sola columna
+informativa cargada para toda la nómina pintaba el control en rojo por lo que el propio analista había
+declarado como esperado — justo lo contrario de lo que promete el panel del Paso 2. Escrito como assert.
+
 **2. El Tabulado de Axton entra como archivo adicional (`tab_axton_cruce_file`), no por el casillero
 estándar del Tabulado.** Ese casillero cablea el lector de Meta4 (`parseTabuladoControl`), y además el
 `parseMetadata` del Tabulado principal no llega completo a `run()` — y este control necesita la metadata
@@ -2410,3 +2416,15 @@ justamente los que no traen columna propia para todos los conceptos.
 de cliente en el repo ni en el entorno de desarrollo. Hace falta un importador + un Tabulado + un Totales
 de Concepto reales del mismo período de una UO de SIASA 07/2026, y con eso un caso completo de un legajo
 (D-064) antes de generalizar cualquiera de las tres decisiones de arriba.
+
+**Deuda que dejó la revisión de este PR, en otros módulos y por eso no arreglada acá:**
+
+1. **`expNovParser.js` pierde una columna de concepto con código no numérico** cuando los códigos vienen en
+   la fila de **abajo** del ancla (la variante donde la fila de criollo ES la del ancla): el estirado del
+   bloque de identificación hacia la izquierda no corre, y la columna no aparece ni en `columnas` ni en
+   `columnasSinCodigo` ni en `avisos`. Las celdas desaparecen y el control informa que no falta ninguna
+   columna. Toca el contrato de N0a y cambia el resultado de N1, así que va en su propio PR con su test.
+2. **`novedadesImportador.js` (N1) y `acreditaciones.js` devuelven `status: 'warning'` en su rama de
+   error**, donde los otros nueve controles devuelven `'error'`. Con `'warning'` la tarjeta sale neutra y
+   la corrida se lee "N/N controles en verde" mientras el checklist pinta el mismo control en rojo. El test
+   de N1 fija hoy ese `'warning'` en tres asserts, así que corregirlo es un PR aparte.

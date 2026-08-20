@@ -35,7 +35,7 @@
 // - No infiere la cantidad a partir del importe cuando el Tabulado viene sólo
 //   con importes: informa que no se pudo comparar.
 
-import { groupRowsByLegajo, sumColumn } from './consolidate.js';
+import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { isDiff } from './tolerance.js';
 import { diffStats } from './semaforo.js';
@@ -74,7 +74,7 @@ const BANDA_LABEL = {
   sin_contraparte: 'Sin contraparte',
 };
 
-const MOTIVO_LABEL = {
+export const MOTIVO_LABEL = {
   // No comparable
   unidad_distinta_declarada:                'la novedad y la liquidación están en unidades distintas (marcado en el Paso 2)',
   novedad_en_cantidad_y_tabulado_sin_cantidades: 'la novedad vino en cantidad y el Tabulado no trae columnas de cantidad',
@@ -84,7 +84,9 @@ const MOTIVO_LABEL = {
   // Sin contraparte
   sin_liquidacion_esperada:                 'marcado en el Paso 2 como concepto que no llega a la liquidación',
   legajo_sin_liquidacion:                   'el legajo no aparece en el Tabulado ni en el totalizador del período',
-  no_liquidado:                             'el concepto se liquidó en otros legajos y en este no: la novedad no se liquidó',
+  // No dice "se liquidó en otros legajos": que el Tabulado traiga la columna no
+  // prueba que alguien lo haya liquidado, y el control no lo chequea.
+  no_liquidado:                             'el Tabulado trae columna para este concepto y este legajo no tiene valor: no se liquidó',
   tabulado_sin_columna_no_liquidado:        'el Tabulado no trae columna para este concepto y el totalizador tampoco lo tiene: no se liquidó',
   no_determinable_sin_totalizador:          'el Tabulado no trae columna para este concepto y sin el totalizador no se puede saber si se liquidó',
   liquidado_sin_novedad:                    'se liquidó y no hay novedad cargada para este concepto',
@@ -136,10 +138,16 @@ export function claveConcepto(codigo) {
   return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, '') : s.toUpperCase();
 }
 
+// Un solo formateador para toda la pantalla. `toLocaleString` con opciones
+// construye uno nuevo en cada llamada, y la tabla del Detalle tiene seis celdas
+// numéricas por fila: medido sobre una nómina de 900 legajos, eso son 5,7
+// segundos de navegador congelado contra 0,13 reusando el formateador.
+const NUM_FMT = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 /** Número para pantalla; `'—'` cuando no hay dato (que no es cero). */
-function fmtNum(v, decimales = 2) {
+function fmtNum(v) {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
-  return v.toLocaleString('es-AR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+  return NUM_FMT.format(v);
 }
 
 // ── El cruce ─────────────────────────────────────────────────────────────────
@@ -296,6 +304,10 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
   if (totalizadorCargado) {
     for (const [clave, group] of groupRowsByLegajo(totRows, 'legajo', { keyFn })) {
       const porConcepto = new Map();
+      // El legajo tal como lo escribió el cliente, para la fila que sólo existe
+      // en el totalizador. Va como propiedad del Map y no como una entrada más,
+      // así no se confunde con un código de concepto.
+      porConcepto.literalLegajo = String(group[0]?.legajo ?? clave);
       for (const r of group) {
         const k = claveConcepto(r.codigo);
         if (!k) continue;
@@ -316,15 +328,29 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
   // universo sin tener novedad cargada (la banda "liquidado sin novedad").
   const legajos = [...nov.keys()];
   const enNov = new Set(legajos);
-  for (const clave of tabPorLegajo.keys()) {
+  for (const [clave, group] of tabPorLegajo) {
     if (enNov.has(clave)) continue;
     const tieneAlgo = universo.some(k => tabValor(clave, k, 'imp') !== null || tabValor(clave, k, 'cant') !== null);
-    if (tieneAlgo) { legajos.push(clave); enNov.add(clave); }
+    if (!tieneAlgo) continue;
+    legajos.push(clave);
+    enNov.add(clave);
+    // El legajo tal como lo escribió el cliente y su nombre salen del Tabulado:
+    // sin esto, la fila "liquidado sin novedad" sale con la clave normalizada
+    // —sin los ceros a la izquierda— y sin nombre, y el analista no la encuentra
+    // filtrando por el número que tiene en su archivo.
+    const ficha = lastRow(group);
+    if (ficha) {
+      literalPorClave.set(clave, String(ficha.legajo ?? clave));
+      if (ficha.apellido_nombre) nombrePorLegajo.set(clave, ficha.apellido_nombre);
+    }
   }
   for (const [clave, porConcepto] of tot) {
     if (enNov.has(clave)) continue;
     const tieneAlgo = universo.some(k => porConcepto.has(k));
-    if (tieneAlgo) { legajos.push(clave); enNov.add(clave); }
+    if (!tieneAlgo) continue;
+    legajos.push(clave);
+    enNov.add(clave);
+    if (!literalPorClave.has(clave)) literalPorClave.set(clave, porConcepto.literalLegajo || clave);
   }
 
   const noComparablesCfg = new Set((cfg.conceptosNoComparables || []).map(claveConcepto).filter(Boolean));
@@ -336,6 +362,7 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
   const legajosNoComparables = new Set();
   const legajosConCruce = new Set();
   const legajosComparados = new Set();   // el legajo tuvo al menos un par realmente comparado
+  const legajosConAlgoSinResolver = new Set();   // …y al menos un par que no se pudo comparar y no era esperado
 
   for (const clave of legajos) {
     const delNov = nov.get(clave);
@@ -399,7 +426,10 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
             : colsPorConcepto.has(k) ? 'no_liquidado'
               : totalizadorCargado ? 'tabulado_sin_columna_no_liquidado'
                 : 'no_determinable_sin_totalizador';
-        if (fila.motivo !== 'sin_liquidacion_esperada') legajosConDif.add(clave);
+        if (fila.motivo !== 'sin_liquidacion_esperada') {
+          legajosConDif.add(clave);
+          legajosConAlgoSinResolver.add(clave);
+        }
         filas.push(fila);
         continue;
       }
@@ -409,6 +439,7 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
         fila.lado = 'solo_liquidacion';
         fila.motivo = 'liquidado_sin_novedad';
         legajosConDif.add(clave);
+        legajosConAlgoSinResolver.add(clave);
         filas.push(fila);
         continue;
       }
@@ -418,6 +449,7 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
         fila.banda = 'no_comparable';
         fila.motivo = 'unidad_distinta_declarada';
         legajosNoComparables.add(clave);
+        legajosConAlgoSinResolver.add(clave);
         filas.push(fila);
         continue;
       }
@@ -433,6 +465,7 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
             : (n.importe !== null && liqImp.v === null) ? 'liquidacion_sin_importe'
               : 'sin_dimension_en_comun';
         legajosNoComparables.add(clave);
+        legajosConAlgoSinResolver.add(clave);
         filas.push(fila);
         continue;
       }
@@ -458,9 +491,20 @@ export function runNovedadesLiquidacion(novRows, _tabRows, mapping = {}) {
   // Un legajo del que no se pudo comparar NADA no está aprobado: entra al
   // numerador del semáforo aunque no tenga ninguna diferencia. Verde ahí sería
   // decir "está bien" sobre algo que nunca se miró.
+  //
+  // Excepción: el legajo cuyas novedades son TODAS conceptos que el analista
+  // declaró como "no llega a la liquidación". Ahí no hay nada que comparar por
+  // decisión suya, no por un hueco del archivo, y meterlo al numerador pintaría
+  // rojo toda la nómina por una columna informativa.
+  const legajosSoloEsperados = new Set();
+  for (const clave of legajosConCruce) {
+    if (!legajosConAlgoSinResolver.has(clave)) legajosSoloEsperados.add(clave);
+  }
   const legajosSinNadaComparado = [];
   for (const clave of legajosConCruce) {
-    if (!legajosComparados.has(clave)) legajosSinNadaComparado.push(clave);
+    if (legajosComparados.has(clave)) continue;
+    if (legajosSoloEsperados.has(clave)) continue;
+    legajosSinNadaComparado.push(clave);
   }
 
   // ── Lo que no entró al cruce, con nombre ──────────────────────────────────
@@ -591,8 +635,13 @@ function periodosCoinciden(periodApp, periodoTabulado, periodoTotalizador) {
 
 export function summarizeNovedadesLiquidacion(results) {
   if (results?.error) {
+    // 'error' y no 'warning': es lo único que cortocircuita el semáforo y hace
+    // que las cuatro pantallas pinten el control en rojo con el texto del error.
+    // Con 'warning' + unitsTotal null la tarjeta sale neutra y la corrida se lee
+    // "1/1 controles en verde", mientras el checklist lo pinta rojo — el mismo
+    // control de dos colores según dónde se lo mire.
     return {
-      status: 'warning', headline: results.error, insights: [],
+      status: 'error', headline: results.error, insights: [],
       unit: null, unitsTotal: null, unitsWithDiff: null,
       diffTotalAmount: null, worstCase: null, contextNote: null,
     };
@@ -682,7 +731,8 @@ function renderResumen(results, panel) {
     { label: 'No comparables', value: String(s.noComparable), tone: s.noComparable > 0 ? 'warn' : undefined,
       sub: results.cantidadesEnTabulado ? 'por unidad o por medida ausente' : 'el Tabulado vino sólo con importes' },
     { label: 'Sin contraparte', value: String(s.sinContraparte), tone: s.sinContraparte > 0 ? 'warn' : undefined,
-      sub: `${s.soloEnImportador} pedidas y no liquidadas · ${s.soloEnLiquidacion} liquidadas sin novedad` },
+      sub: `${s.soloEnImportador} pedida${s.soloEnImportador === 1 ? '' : 's'} y no liquidada${s.soloEnImportador === 1 ? '' : 's'}`
+        + ` · ${s.soloEnLiquidacion} liquidada${s.soloEnLiquidacion === 1 ? '' : 's'} sin novedad` },
   ]);
 
   // Las columnas sin código van SIEMPRE en su propia sección: son novedades
@@ -703,12 +753,16 @@ function renderResumen(results, panel) {
   if (s.difiere > 0) {
     renderIssues(panel, {
       heading: 'Novedades que no coinciden con la liquidación',
+      // El concepto va en `what` y no en `sub`: cuando un legajo tiene dos
+      // novedades, renderIssues las agrupa por `who` y descarta el `sub` — y en
+      // un control cuya unidad es legajo + concepto, quedarse sin el concepto
+      // deja dos renglones de importes sin decir de qué son.
       items: results.filas.filter(f => f.banda === 'difiere').slice(0, 50).map(f => ({
         who: `Legajo ${f.legajo}${f.nombre ? ` — ${f.nombre}` : ''}`,
-        sub: `concepto ${f.codigo}${f.rotulo ? ` — ${f.rotulo}` : ''}`,
-        what: `novedad: cantidad ${fmtNum(f.novCantidad)} / importe ${fmtNum(f.novImporte)} · `
+        what: `concepto ${f.codigo}${f.rotulo ? ` — ${f.rotulo}` : ''} · `
+          + `novedad: cantidad ${fmtNum(f.novCantidad)} / importe ${fmtNum(f.novImporte)} · `
           + `liquidado: cantidad ${fmtNum(f.liqCantidad)} / importe ${fmtNum(f.liqImporte)}`,
-        why: `el dato liquidado sale de ${origenTexto(f)}${f.tabLiquidaciones > 1 ? `, sumando las ${f.tabLiquidaciones} liquidaciones del mes` : ''}`,
+        why: origenDetalle(f),
       })),
     });
   }
@@ -720,10 +774,10 @@ function renderResumen(results, panel) {
       items: sinContraparte.slice(0, 50).map(f => ({
         sev: f.motivo === 'sin_liquidacion_esperada' ? 'minor' : (f.lado === 'solo_novedad' ? 'hi' : undefined),
         who: `Legajo ${f.legajo}${f.nombre ? ` — ${f.nombre}` : ''}`,
-        sub: `concepto ${f.codigo}${f.rotulo ? ` — ${f.rotulo}` : ''}`,
-        what: f.lado === 'solo_novedad'
-          ? `se pidió liquidar (cantidad ${fmtNum(f.novCantidad)} / importe ${fmtNum(f.novImporte)}) y no aparece en la liquidación`
-          : `está liquidado (cantidad ${fmtNum(f.liqCantidad)} / importe ${fmtNum(f.liqImporte)}) y no hay novedad cargada`,
+        what: `concepto ${f.codigo}${f.rotulo ? ` — ${f.rotulo}` : ''} · `
+          + (f.lado === 'solo_novedad'
+            ? `se pidió liquidar (cantidad ${fmtNum(f.novCantidad)} / importe ${fmtNum(f.novImporte)}) y no aparece en la liquidación`
+            : `está liquidado (cantidad ${fmtNum(f.liqCantidad)} / importe ${fmtNum(f.liqImporte)}) y no hay novedad cargada`),
         why: MOTIVO_LABEL[f.motivo] || '',
       })),
     });
@@ -829,11 +883,51 @@ function agruparPorMotivo(filas) {
   }));
 }
 
-function origenTexto(f) {
+// De qué archivo salió el número liquidado, en dos formas: la suelta para la
+// celda de la tabla y la contraída para meterla en una frase. Con una sola forma
+// la frase queda "sale de el Tabulado" en todas las filas de la banda que el
+// analista abre primero.
+const ORIGEN_SUELTO = {
+  tabulado:    'el Tabulado',
+  totalizador: 'el reporte de Totales de Concepto',
+  ambos:       'el Tabulado y el reporte de Totales de Concepto',
+  ninguno:     'la liquidación',
+};
+export const ORIGEN_EN_FRASE = {
+  tabulado:    'del Tabulado',
+  totalizador: 'del reporte de Totales de Concepto',
+  ambos:       'del Tabulado y del reporte de Totales de Concepto',
+  ninguno:     'de la liquidación',
+};
+
+function origenClave(f) {
   const origenes = new Set([f.liqCantidadOrigen, f.liqImporteOrigen].filter(Boolean));
-  if (origenes.size === 0) return 'la liquidación';
-  if (origenes.size === 2) return 'el Tabulado y el reporte de Totales de Concepto';
-  return origenes.has('tabulado') ? 'el Tabulado' : 'el reporte de Totales de Concepto';
+  if (origenes.size === 0) return 'ninguno';
+  if (origenes.size === 2) return 'ambos';
+  return origenes.has('tabulado') ? 'tabulado' : 'totalizador';
+}
+
+function origenTexto(f) {
+  return ORIGEN_SUELTO[origenClave(f)];
+}
+
+/**
+ * De dónde salió el número liquidado y cuántas filas se sumaron para formarlo.
+ * Las liquidaciones del Tabulado se nombran sólo si el número salió de ahí: con
+ * el importe del totalizador, hablar de "las 3 liquidaciones del mes" manda al
+ * analista a buscarlo al archivo equivocado.
+ */
+function origenDetalle(f) {
+  const delTabulado = f.liqCantidadOrigen === 'tabulado' || f.liqImporteOrigen === 'tabulado';
+  const delTotalizador = f.liqCantidadOrigen === 'totalizador' || f.liqImporteOrigen === 'totalizador';
+  let texto = `el dato liquidado sale ${ORIGEN_EN_FRASE[origenClave(f)]}`;
+  if (delTabulado && f.tabLiquidaciones > 1) {
+    texto += `, sumando las ${f.tabLiquidaciones} liquidaciones del mes de este legajo`;
+  }
+  if (delTotalizador && f.totFilas > 1) {
+    texto += `, sumando las ${f.totFilas} filas del reporte de Totales de Concepto`;
+  }
+  return texto;
 }
 
 const VISTAS = ['difiere', 'sin_contraparte', 'no_comparable', 'coincide'];

@@ -599,5 +599,136 @@ const filaDe = (res, legajo, codigo) =>
     plano.headers[1] === 'Legajo' && plano.headers[3] === 'Codigo');
 }
 
+// ── 20. La rama de error pinta el control en rojo, no en neutro ──────────────
+// Con `status: 'warning'` + unitsTotal null la tarjeta sale neutra y la corrida
+// se lee "1/1 controles en verde", mientras el checklist lo pinta rojo: el mismo
+// control de dos colores según dónde se lo mire.
+{
+  const err = runNovedadesLiquidacion([], [], {});
+  assert('la rama de error devuelve status "error", como los otros controles del repo',
+    summarizeNovedadesLiquidacion(err).status === 'error');
+}
+
+// ── 21. El concepto declarado "no llega a la liquidación" no pinta el semáforo ─
+{
+  const nov = importador([
+    ['Legajo', 'Apellido y Nombres', '1000', '7777'],
+    ['1', 'Sanguinetti', '30$150000', '1$5000'],
+    ['2', 'Falcioni', null, '1$5000'],
+  ]);
+  const tab = tabuladoConCantidades(
+    ['1000 - Sueldo Basico'],
+    [
+      ['1', 'Sanguinetti', 'Mensual', 30, 150000, 1, 150000],
+      ['2', 'Falcioni', 'Mensual', null, null, 1, 0],
+    ],
+    ['TOTAL GENERAL', null, null, 30, 150000, 2, 150000],
+  );
+
+  const marcado = correr({ nov, tab, config: { conceptosSinLiquidacion: ['7777'] } });
+  assert('el concepto declarado sale sin contraparte con el motivo esperado',
+    marcado.filas.filter(f => f.motivo === 'sin_liquidacion_esperada').length === 2);
+  assert('y no cuenta como diferencia', marcado.summary.legajosConDiferencia === 0);
+  // El legajo cuya ÚNICA novedad es la declarada no tiene nada comparado, pero eso
+  // es una decisión del analista y no un hueco del archivo: no va al semáforo.
+  assert('el legajo cuya única novedad es la declarada no queda para revisar',
+    marcado.summary.legajosSinNadaComparado === 0
+    && summarizeNovedadesLiquidacion(marcado).unitsWithDiff === 0);
+
+  const sinMarcar = correr({ nov, tab });
+  assert('sin marcarlo, el mismo legajo sí queda para revisar',
+    summarizeNovedadesLiquidacion(sinMarcar).unitsWithDiff === 2);
+}
+
+// ── 22. El legajo que sólo está en la liquidación conserva su número y su nombre ─
+{
+  const res = correr({
+    nov: importador([
+      ['Legajo', 'Apellido y Nombres', '1000'],
+      ['1', 'Sanguinetti', '30$150000'],
+    ]),
+    tab: tabuladoConCantidades(
+      ['1000 - Sueldo Basico'],
+      [
+        ['1', 'Sanguinetti', 'Mensual', 30, 150000, 1, 150000],
+        ['007', 'Albella', 'Mensual', 3, 1500, 1, 1500],
+      ],
+      ['TOTAL GENERAL', null, null, 33, 151500, 2, 151500],
+    ),
+  });
+
+  const soloLiq = res.filas.find(f => f.motivo === 'liquidado_sin_novedad');
+  assert('el legajo sale como lo escribió el cliente, no con la clave normalizada',
+    soloLiq.legajo === '007');
+  assert('y con el nombre que trae el Tabulado', soloLiq.nombre === 'Albella');
+  const plano = buildCrucePlano(res);
+  assert('el export lleva el mismo legajo literal',
+    plano.rows.some(r => r[1] === '007' && r[2] === 'Albella'));
+}
+
+// ── 23. La vista previa del totalizador mira la misma hoja que el lector ──────
+// Con la vista previa apuntada a la primera hoja, un export con una portada
+// adelante no se puede ni subir: la carga corta antes de parsear.
+{
+  const { detectHeadersCruce } = await import('./js/parsers/totalesConceptoParser.js');
+  const wb = XLSXmod.utils.book_new();
+  XLSXmod.utils.book_append_sheet(wb, XLSXmod.utils.aoa_to_sheet([
+    ['Reporte generado por Axton'], ['Fecha 31/07/2026'],
+  ]), 'Portada');
+  XLSXmod.utils.book_append_sheet(wb, XLSXmod.utils.aoa_to_sheet([
+    ['Legajo', 'Nro', 'Concepto', 'Cantidad', 'Importe'],
+    ['1', '1000', 'Sueldo Basico', 30, 150000],
+  ]), 'totalesconcepto.20260731.1011');
+  const conPortada = XLSXmod.write(wb, { type: 'array', bookType: 'xlsx' });
+
+  const leido = readTotalesConcepto(conPortada);
+  assert('el lector encuentra la hoja del totalizador aunque haya una portada adelante',
+    leido.parsedRows.length === 1);
+  const previa = detectHeadersCruce(conPortada);
+  assert('y la vista previa muestra los encabezados de ESA hoja, no los de la portada',
+    previa.headers.includes('Legajo') && previa.headers.includes('Importe'));
+}
+
+// ── 24. Los textos que el analista lee no afirman lo que el control no verificó ─
+{
+  const { MOTIVO_LABEL } = await import('./js/controls/novedadesLiquidacion.js');
+  assert('el motivo "no se liquidó" no afirma nada sobre los otros legajos',
+    !/otros legajos/.test(MOTIVO_LABEL.no_liquidado));
+
+  // El origen del número liquidado: las liquidaciones del Tabulado se nombran
+  // sólo si el número salió de ahí.
+  const res = correr({
+    nov: importador([
+      ['Legajo', 'Apellido y Nombres', '1000', '5500'],
+      ['1', 'Sanguinetti', '45$225000', '3$12000'],
+    ]),
+    tab: tabuladoConCantidades(
+      ['1000 - Sueldo Basico'],
+      [
+        ['1', 'Sanguinetti', 'Mensual', 30, 150000, 1, 150000],
+        ['1', 'Sanguinetti', 'Baja', 15, 75000, 1, 75000],
+      ],
+      ['TOTAL GENERAL', null, null, 45, 225000, 2, 225000],
+    ),
+    tot: xlsxDe(HOJA_TOT, [
+      ['EA: Empresa Inventada | Reporte: Totales de Concepto | Periodo: 07/2026 - 07/2026 |'],
+      ['Legajo', 'Nro', 'Concepto', 'Cantidad', 'Importe'],
+      ['1', '5500', 'Concepto sin columna', 3, 9000],
+    ]),
+  });
+  const delTab = filaDe(res, '1', '1000');
+  const delTot = filaDe(res, '1', '5500');
+  assert('el concepto del Tabulado declara sus dos liquidaciones sumadas',
+    delTab.liqImporteOrigen === 'tabulado' && delTab.tabLiquidaciones === 2);
+  assert('el que salió del totalizador no arrastra el conteo de liquidaciones del Tabulado',
+    delTot.liqImporteOrigen === 'totalizador' && delTot.totFilas === 1);
+
+  // La frase que el analista lee está bien escrita: "sale del Tabulado", nunca
+  // "sale de el Tabulado".
+  const { ORIGEN_EN_FRASE } = await import('./js/controls/novedadesLiquidacion.js');
+  assert('no hay ninguna frase de origen que arranque con "el" detrás de "de"',
+    Object.values(ORIGEN_EN_FRASE).every(v => !/^el /.test(v)));
+}
+
 console.log(`\n${ok} OK, ${fail} FAIL`);
 if (fail > 0) process.exit(1);

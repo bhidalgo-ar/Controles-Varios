@@ -85,6 +85,7 @@ import {
   parseTotalesConcepto,
   readTotalesConcepto,
   detectHeaders as detectHeadersTotalesConcepto,
+  detectHeadersCruce as detectHeadersTotalesConceptoCruce,
 } from '../parsers/totalesConceptoParser.js';
 import {
   parseCuentasRedefinicion,
@@ -675,7 +676,10 @@ export const FILE_TYPES = {
     label: 'Totales de Concepto del período (para cruzar novedades)',
     siglas: ['TOTALESCONCEPTO', 'TOTALES DE CONCEPTO', 'TOTALESDECONCEPTO'],
     parse: readTotalesConcepto,
-    detectHeaders: detectHeadersTotalesConcepto,
+    // La vista previa tiene que mirar la MISMA hoja que el lector: con la de
+    // `totales_concepto_file` lee la primera hoja del libro, y un export con una
+    // portada adelante no se puede ni subir.
+    detectHeaders: detectHeadersTotalesConceptoCruce,
     autoDetect: null,
     meta: metaTotalesConceptoCruce,
     fields: [],

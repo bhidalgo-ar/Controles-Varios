@@ -377,8 +377,11 @@ al lado del código.
 
 **Unidad del semáforo: `legajo`.** `unitsTotal` son los legajos del cruce; `unitsWithDiff` es la
 unión de los que tienen diferencia o sin contraparte **más los legajos de los que no se pudo
-comparar nada** — no tener con qué comparar no es aprobar (D-073). El color sale de
-`computeSemaforoStatus`.
+comparar nada** — no tener con qué comparar no es aprobar (D-073). Excepción: el legajo cuyas
+novedades son todas conceptos declarados "no llega a la liquidación" no cuenta, porque ahí no hay
+nada que comparar por decisión del analista y no por un hueco del archivo. El color sale de
+`computeSemaforoStatus`, y la rama de error devuelve `status: 'error'`, que es lo único que hace que
+las cuatro pantallas pinten el control en rojo.
 
 **Ningún parser nuevo:** los tres lectores ya existían (N0a y N0b). Ningún control existente
 cambia de comportamiento.
