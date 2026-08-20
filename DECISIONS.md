@@ -2428,3 +2428,82 @@ de Concepto reales del mismo período de una UO de SIASA 07/2026, y con eso un c
    error**, donde los otros nueve controles devuelven `'error'`. Con `'warning'` la tarjeta sale neutra y
    la corrida se lee "N/N controles en verde" mientras el checklist pinta el mismo control en rojo. El test
    de N1 fija hoy ese `'warning'` en tres asserts, así que corregirlo es un PR aparte.
+
+---
+
+## D-074 — Control de Netos: las alícuotas y el acuerdo son del Tabulado y del convenio, no de una config única
+
+**Fecha:** 2026-08-20. **Instrucción de:** Willy, después de correr el control contra los cuatro
+Tabulados reales de 05/2026 (IFSA, RELEF, FGSA e Intelicar) y su planilla de armado manual "Formula
+sueldos 05.2026 afa actualizado" (hoja "personal en convenio" para el AFA, hoja "ESCALA COM" para la
+escala). Intelicar es Camioneros y queda fuera de este control (su recibo trae adicional de rama,
+MOPRE y viáticos, que el modelo no contempla). Con los tres Tabulados de Comercio: 619 legajos
+evaluados, 206 con diferencia sin explicar antes de estos cambios.
+
+**1. Las alícuotas de retención se leen del Tabulado, empleado por empleado — la config queda como
+respaldo, no como fuente.** El archivo trae una columna de porcentaje por cada aporte (610
+jubilación, 612 ley 19.032, 616 obra social, 632 ANSSAL, 676 sindicato, 623 FAECYS, 669 CEC, 677
+AMECYS, 678 retención del afiliado) y ahí está declarado quién aporta qué. Las alícuotas del Paso 2
+sólo se usan cuando el archivo no trae esas columnas. Si la columna está y dice 0, manda el 0: "no
+aporta" es un dato, no un hueco a completar con la config (Willy: *"si dice 0, va 0"*). Con esto
+entran tres retenciones que el control no conocía: el 1% de AMECYS (código 8559, 7 legajos), el 1%
+del CEC —que en este Tabulado se liquida bajo el código `8538-FAECYS_VAC`, cuyo nombre engaña— (52
+legajos) y los empleados sin obra social. La retención del afiliado (el segundo 2% al sindicato) sale
+del Tabulado por el mismo motivo y ya no tiene alícuota en la config (`cfg.tasas.afiliadoExtra` se
+elimina): el archivo es el único lugar que dice **quién** está afiliado, así que un porcentaje suelto
+en la config se lo cobraría a toda la nómina.
+   - Alternativa descartada: seguir derivando el factor remunerativo sumando los `%` de la config
+     (el diseño original de la spec, §6.1). Se descarta porque esa suma es igual para toda la nómina y
+     no puede distinguir al afiliado del que no, ni al que no tiene obra social.
+   - Nota técnica de soporte: las alícuotas y los años de antigüedad se leen con el **máximo** del
+     grupo de liquidaciones del legajo, no con la suma (función `maxCodes`). El Tabulado trae una fila
+     por liquidación (ver el gotcha de consolidación en `CLAUDE.md`) y el legajo con la mensual y la
+     baja del mismo mes declara su 11% de jubilación en las dos filas: sumadas daban 22%. Afecta a 4
+     legajos de Comercio en los archivos de 05/2026.
+
+**2. `1684-ANTIC_INCENTIVO` no aporta nada — familia nueva, `noRemuSinAporte`.** Estaba en
+`noRemuOtros` (no remunerativo común), y el control le cobraba el 2,5% gremial que la liquidación no
+le cobra: ese 2,5% quedaba como diferencia sin explicar en 109 legajos. Willy confirmó el criterio el
+2026-08-20: *"no aporta nada"*. `noRemuSinAporte` suma entero al neto, sin ningún descuento.
+   - Caso verificado (spec, D-064): el legajo cajero con 18 años de antigüedad. Base sueldo + AFA
+     1.119.857,62, anticipo de incentivo 44.704,94, residuo antes del cambio +1.117,63 — exactamente
+     el 2,5% de ese concepto. En el empleado que además tiene la obra social que cobra sobre lo no
+     remunerativo o el 2% del afiliado, la diferencia era ese mismo concepto por 5,5% o 4,5%.
+
+**3. El acuerdo es del convenio — no de todos los que liquida el cliente.** Config nueva, `convenio`
+(semilla `'Comercio'`), comparada contra la columna CONVENIO del Tabulado. Al empleado que no
+pertenece a ese convenio el control lo sigue controlando —Willy pidió expresamente que se los siga
+controlando a todos, no que se los excluya— pero le arma el recibo con su sueldo + AFA menos sus
+propios aportes: sin acuerdo no remunerativo, sin antigüedad, sin presentismo y sin descuento
+sindical (cuando la columna del porcentaje gremial no está para ese legajo, el respaldo es 0 y no el
+2% de la config, porque ese 2% es del convenio que no le corresponde).
+   - Alternativa descartada: la que había hasta este commit, calcularle a todos el acuerdo y los
+     adicionales del convenio de Comercio. Le inflaba el recibo teórico a cualquier fuera de convenio
+     —el ejemplo verificado es un legajo con 39 años de antigüedad, que la antigüedad sola ya lo sacaba
+     con diferencia— y eran 50 de los 206 legajos sin explicar.
+   - Si el Tabulado no trae la columna CONVENIO, no se adivina quién está fuera: se avisa en pantalla
+     y se los trata a todos como del convenio, que es lo que hacía el control antes de este cambio.
+
+**Resultado de la verificación.** Con los tres cambios, las diferencias sin explicar de los tres
+Tabulados de Comercio bajaron de 206 a **17** legajos. Los 37 legajos de la planilla manual de Willy
+cierran todos dentro de la tolerancia de $100, y en 32 de los 37 el neto teórico del control es
+idéntico al centavo al de la planilla; los 5 que difieren son los 4 afiliados al sindicato y el que
+paga AMECYS, donde el control contempla retenciones que la planilla de Willy no tiene — confirmado
+que el control es el que está bien, porque esos 5 legajos cierran contra la liquidación real.
+
+**Pendiente, sin resolver — no es un criterio confirmado, es una pregunta abierta.** De los 17
+legajos que siguen con diferencia, 15 son de fuera de convenio y 2 de Comercio, y los 17 tienen la
+columna OBRA_SOCIAL en 0. A los 15 la liquidación no les retuvo absolutamente nada (el neto liquidado
+es igual al remunerativo); a los 2 sólo les retuvo jubilación, aunque el Tabulado declara para todos
+ellos las alícuotas 11 / 3 / 2,55 / 0,45. Parecen directores o socios sin aportes, pero eso es una
+lectura de quien mira el dato, no una regla que Willy haya confirmado: **PENDIENTE: falta que Willy
+defina el criterio** antes de tocar el control para estos casos.
+
+**Fuera de esta decisión, identificado y sin arreglar:** el KPI "Legajos cruzados" del hero de
+resultados cuenta sólo los empleados del Tabulado principal (380 en esta corrida), mientras la
+tarjeta del control informa 619 porque las otras dos empresas entran por los casilleros adicionales
+del control. Es el mismo dato con dos poblaciones distintas en la misma pantalla; no se tocó en este
+commit.
+
+**Alcance.** Sigue siendo `scope: 'cliente'` de SPORTLINE (D-067). Verificado contra los tres
+Tabulados de Comercio del grupo (IFSA, RELEF, FGSA); Intelicar no participa de este control.
