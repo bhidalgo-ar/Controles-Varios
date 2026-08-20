@@ -1,5 +1,8 @@
 # ESTADO.md — dónde estamos hoy
 
+> **Qué falta probar del lado de Willy, agrupado por control: `docs/pruebas-pendientes.md`** (al
+> 2026-08-20). Este archivo dice dónde estamos; ése dice qué hay que abrir y con qué archivo.
+
 > Un bloque por frente abierto. Se pisa, no se acumula: el que avanza se reescribe, el que cierra se saca.
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
@@ -36,11 +39,11 @@
 - Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista.
 - Detalle: `specs/conta-desglosada-asiento.md`, D-066.
 
-## Control de Netos (Sportline) — 3 de los 4 ajustes que pidió Willy en vivo, resueltos sin commitear
+## Control de Netos (Sportline) — 3 de los 4 ajustes de Willy mergeados, y él todavía no los vio
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
-- Punto: Willy probó el PR #165 recién mergeado contra el archivo real de IFSA y reportó 4 problemas. Resueltos en el working tree de `claude/lote-3-controles-payroll-3kggma`, **sin commitear todavía**: rótulo de la tolerancia en pesos, columna Nombre, rótulo de Empresa configurable, y filtro de 4 categorías (que de paso corrigió que "N con diferencias" ignoraba la tolerancia configurada y usaba siempre $0,01). También salió, de un componente compartido, el fix de `.ctrl-detail-grid` que rompía el ancho de cualquier ficha con tabla ancha (D-068). Verificado en vivo con Playwright contra IFSA 05/2026: 0 con diferencias con tolerancia $100.
+- Punto: Willy probó el PR #165 recién mergeado contra el archivo real de IFSA y reportó 4 problemas. Resueltos y **mergeados en el PR #166**, que Willy todavía no probó: rótulo de la tolerancia en pesos, columna Nombre, rótulo de Empresa configurable, y filtro de 4 categorías (que de paso corrigió que "N con diferencias" ignoraba la tolerancia configurada y usaba siempre $0,01). También salió, de un componente compartido, el fix de `.ctrl-detail-grid` que rompía el ancho de cualquier ficha con tabla ancha (D-068). Verificado en vivo con Playwright contra IFSA 05/2026: 0 con diferencias con tolerancia $100.
 - **Cómo levantar la app acá:** el entorno remoto bloquea `unpkg.com` y `cdn.sheetjs.com` (Dexie y SheetJS de `index.html`) — se resuelve con `npm i --no-save dexie@4` apuntando esos `<script>` a `node_modules/`, parche local que no se commitea.
-- Próximo paso: commitear y abrir PR con estos 3 arreglos. El cuarto punto de Willy —el acuerdo no remunerativo varía por categoría, a veces fijo + porcentaje— sigue **sin tocar**: falta que aclare el mecanismo exacto antes de cambiar `noRemuAcuerdo`. Además siguen abiertas la tolerancia de la comparación con el mes anterior, qué hacer con el legajo a −1,62 de redondeo, y el **calculador de AFA** pendiente (comparte la fórmula pero corre antes de liquidar, sobre el Tabulado de prueba).
+- Próximo paso: que Willy abra la pantalla con el archivo real de IFSA y confirme los tres arreglos (el detalle de qué mirar, en `docs/pruebas-pendientes.md` §1). El cuarto punto de Willy —el acuerdo no remunerativo varía por categoría, a veces fijo + porcentaje— sigue **sin tocar**: falta que aclare el mecanismo exacto antes de cambiar `noRemuAcuerdo`. Además siguen abiertas la tolerancia de la comparación con el mes anterior, qué hacer con el legajo a −1,62 de redondeo, y el **calculador de AFA** pendiente (comparte la fórmula pero corre antes de liquidar, sobre el Tabulado de prueba).
 - Detalle: `specs/spec-control-netos.md`, D-067, **D-068**.
 
 ## Lector de Tabulado (pieza T) — detector + lector robusto del lado Axton
