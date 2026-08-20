@@ -115,7 +115,7 @@ Reglas:
 Verificación (D-064): reproducir de a UN caso el F2 real de SIASA 07/2026 desde
 su planilla modificada — un legajo completo, con el cruce de control y la
 descomposición de cualquier diferencia — y esperar mi confirmación antes de
-generalizar. Ojo: en Aguas y Gaseosas hay un legajo que está en la planilla y no
+generalizar. Ojo: en Aguas y Gaseosas hay un empleado que está en la planilla y no
 en el F2 real; el generador tiene que mostrarlo como diferencia, no esconderlo.
 
 Tests en la cadena. PR con doc al día.
@@ -150,7 +150,8 @@ computeSemaforoStatus, nunca de summary.status.
 
 Verificación (D-064): un caso completo de SIASA 07/2026 —los crudos, el cruce de
 control, el cálculo por las dos vías y la descomposición— y esperar confirmación
-antes de generalizar. El caso 12→11 de Aguas y Gaseosas tiene que salir marcado.
+antes de generalizar. El caso de Aguas y Gaseosas —un empleado que está en la
+planilla del cliente y no llegó al importador— tiene que salir marcado.
 
 Tests en la cadena. PR con doc al día.
 ```
@@ -162,7 +163,7 @@ Tests en la cadena. PR con doc al día.
 1. Abrir en el navegador las planillas bloqueadas por etiqueta de
    confidencialidad (Epiroc "Panilla de novedades", Red Bull "NN - Novedades",
    POP "templates") y pasar la estructura — o guardar una copia sin etiqueta.
-2. Preguntar a la analista de SIASA por el legajo que está en la planilla
-   recibida de Aguas y Gaseosas 07/2026 y no en el importador (12→11).
+2. Preguntar a la analista de SIASA por el empleado que está en la planilla
+   recibida de Aguas y Gaseosas 07/2026 y no llegó al importador.
 3. Confirmar que el manual de conceptos de cada cliente en SharePoint está
    vigente (POP y Geopagos tienen; ¿los demás?) — es la semilla del mapeo de N1.

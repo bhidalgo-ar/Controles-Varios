@@ -22,8 +22,8 @@ controlan):
 La evidencia de que los saltos fallan está en los propios archivos: el BUSCARV
 manual contra el export de Liquidaciones adentro de la planilla de POP 09/2025,
 el VLOOKUP de Coelsa contra el borrador del mes anterior que devuelve `#N/D`, y
-SIASA Aguas y Gaseosas 07/2026 donde el cliente mandó 12 empleados y al
-importador llegaron 11 (sin registro de por qué).
+SIASA Aguas y Gaseosas 07/2026, donde la planilla del cliente trae un empleado
+que no llegó al importador (sin registro de por qué).
 
 ## Decisiones de Guillermo (2026-08-20) — ver D-069
 
@@ -158,8 +158,8 @@ informa como no comparable.
 **Pilotos elegidos por evidencia:** SIASA guarda las tres capas del circuito en
 carpetas (`A - Novedades recibidas` / `B - Novedades modificadas` /
 `C - Importadores`, por 4 UOs) — es el único donde N1 y N2 se pueden verificar
-punta a punta contra un mes real ya cerrado, incluido el caso 12→11 de Aguas y
-Gaseosas. Merz es chico (43 legajos) y guarda ORIGINAL/MODIFICADO. La
+punta a punta contra un mes real ya cerrado, incluido el caso de Aguas y Gaseosas
+(un empleado en la planilla del cliente que no llegó al importador). Merz es chico (43 legajos) y guarda ORIGINAL/MODIFICADO. La
 verificación sigue D-064: de a un caso completo, nunca un conteo.
 
 ## Falta información (no traba las fases 0–1)
@@ -169,7 +169,7 @@ verificación sigue D-064: de a un caso completo, nunca un conteo.
    abre en el navegador y pasa la estructura, o exporta una copia sin etiqueta.
 2. **`Novedades sueldos Julio'26` de Coelsa** (2,6 MB): timeout del conector.
 3. **Las 9 hojas restantes** del workbook de novedades de jornales de POP.
-4. **El caso SIASA 12→11**: preguntar a la analista por qué se cayó un legajo
+4. **El caso de SIASA Aguas y Gaseosas**: preguntar a la analista por qué se cayó un empleado
    entre la planilla recibida y el importador (¿baja legítima?). Es el primer
    caso de verificación de N2.
 5. **Manual de conceptos por cliente**: existen al menos el de POP y el de

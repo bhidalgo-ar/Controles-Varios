@@ -2134,7 +2134,7 @@ detalle completo del relevamiento, cliente por cliente, está en `specs/familia-
 analista, y el importador `F2_Consolidada` que se sube a Axton. Los dos saltos se controlan a mano o no
 se controlan: hay BUSCARV manuales contra exports de Liquidaciones adentro de las planillas (POP 09/2025),
 VLOOKUP contra el borrador del mes anterior que devuelven `#N/D` (Coelsa), y un mes real donde el cliente
-mandó 12 empleados y al importador llegaron 11 sin registro de por qué (SIASA Aguas y Gaseosas 07/2026).
+informó un empleado que no llegó al importador, sin registro de por qué (SIASA Aguas y Gaseosas 07/2026).
 El relevamiento confirmó además que el importador `F2_Consolidada` es el formato común de Axton en toda la
 cartera — con lo cual el ítem B0 del catálogo maestro ("¿template único o negociado por cliente?") queda
 contestado sin negociar nada: el template es el importador.
