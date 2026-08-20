@@ -17,8 +17,11 @@ import { runMatching } from '../matching.js';
 import { computeInsights } from '../insights.js';
 import { formatAmount, formatDiff, formatDiffText, formatPct } from '../utils/currency.js';
 import {
-  renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, enhanceGrid,
+  renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, diffBadgeHtml,
 } from '../ui/resultBlocks.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderExportMenu } from '../ui/exportMenu.js';
+import { downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 
 export const DEFAULT_AGRUPADORES_CONFIG = {
   selectedGrouperIds: null, // null = "todos los agrupadores del cliente"
@@ -48,7 +51,10 @@ export function runAgrupadores(nominaRows, _tabRows, mapping) {
   const resultsPorGrupo = runMatching(nominaRows, resumenRows, grouperConceptsMap, thresholds);
   const insights = computeInsights(resultsPorGrupo, grouperDefs, nominaRows, resumenRows);
 
-  return { resultsPorGrupo, grouperDefs, ...insights };
+  // Los umbrales viajan en el resultado: son la base de cálculo que la planilla
+  // escribe abajo del título de cada columna de diferencia. Una corrida vieja no
+  // los trae y la pantalla cae en los del default (no se inventa otro número).
+  return { resultsPorGrupo, grouperDefs, thresholds, ...insights };
 }
 
 /**
@@ -172,141 +178,149 @@ export function renderAgrupadoresResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderAgrupadoresDetalle(panel, results); },
+    planilla(panel) { renderAgrupadoresPlanilla(panel, results); },
   });
 }
 
-function renderAgrupadoresDetalle(container, results) {
-  const { missingInResumen, missingInNomina, topDifferences, resultsPorGrupo, grouperDefs } = results;
+function buildPlanillaRows(results) {
+  const { resultsPorGrupo, grouperDefs } = results;
+  const porLegajo = new Map();
 
-  container.innerHTML = `
-    ${(missingInResumen.length || missingInNomina.length) ? `
-      <div class="card" style="margin-bottom:var(--sp-5);">
-        <div class="card__header"><h3 style="margin:0;">Legajos faltantes</h3></div>
-        <div class="card__body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-6);">
-            <div>
-              <p class="font-semibold" style="margin-bottom:var(--sp-3);">En Nómina pero NO en Resumen (${missingInResumen.length})</p>
-              ${missingInResumen.length
-                ? `<div class="pill-group">${missingInResumen.map(l => `<span class="badge badge--warning">${esc(l)}</span>`).join('')}</div>`
-                : `<p class="text-muted text-sm">Ninguno</p>`}
-            </div>
-            <div>
-              <p class="font-semibold" style="margin-bottom:var(--sp-3);">En Resumen pero NO en Nómina (${missingInNomina.length})</p>
-              ${missingInNomina.length
-                ? `<div class="pill-group">${missingInNomina.map(l => `<span class="badge badge--danger">${esc(l)}</span>`).join('')}</div>`
-                : `<p class="text-muted text-sm">Ninguno</p>`}
-            </div>
-          </div>
-        </div>
-      </div>
-    ` : ''}
+  for (const g of grouperDefs || []) {
+    for (const f of (resultsPorGrupo?.[g.id] || [])) {
+      let r = porLegajo.get(f.legajo);
+      if (!r) {
+        r = {
+          legajo: f.legajo,
+          nombre: [f.apellido, f.nombre].filter(Boolean).join(', ') || '—',
+          // Que un legajo esté en un solo archivo es del legajo, no del
+          // agrupador: runMatching lo repite igual en las filas de todos.
+          soloEnNomina:  f.soloEnNomina,
+          soloEnResumen: f.soloEnResumen,
+          porGrupo: {},
+        };
+        porLegajo.set(f.legajo, r);
+      }
+      r.porGrupo[g.id] = f;
+      // El lado que no tiene al legajo sale en `—`, no en 0,00: runMatching suma
+      // 0 sobre una fila que no existe, y un 0 ahí se leería como "liquidó cero"
+      // (`null` no es `0`). Sin el otro lado tampoco hay diferencia que mostrar:
+      // eso es "sin comparar", que es justo el estado en el que cae el legajo.
+      r[`nom_${g.id}`] = r.soloEnResumen ? null : f.sumNom;
+      r[`res_${g.id}`] = r.soloEnNomina  ? null : f.sumRes;
+      r[`dif_${g.id}`] = (r.soloEnNomina || r.soloEnResumen) ? null : f.diffAbs;
+      r[`pct_${g.id}`] = (r.soloEnNomina || r.soloEnResumen) ? null : f.diffPct;
+    }
+  }
 
-    ${topDifferences.length ? `
-      <div class="card" style="margin-bottom:var(--sp-5);">
-        <div class="card__header"><h3 style="margin:0;">Top ${topDifferences.length} diferencias más grandes</h3></div>
-        <div class="card__body" style="padding:0;overflow-x:auto;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Legajo</th>
-                <th>Apellido y Nombre</th>
-                <th>Agrupador</th>
-                <th style="text-align:right;">Nómina</th>
-                <th style="text-align:right;">Resumen</th>
-                <th style="text-align:right;">Diferencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${topDifferences.map(r => `
-                <tr class="row--diff">
-                  <td><code>${esc(r.legajo)}</code></td>
-                  <td>${esc([r.apellido, r.nombre].filter(Boolean).join(', ') || '—')}</td>
-                  <td><span class="badge badge--primary">${esc(r.grouperName || '')}</span></td>
-                  <td style="text-align:right;font-family:monospace;">$ ${formatAmount(r.sumNom)}</td>
-                  <td style="text-align:right;font-family:monospace;">$ ${formatAmount(r.sumRes)}</td>
-                  <td style="text-align:right;font-family:monospace;">${formatDiff(r.diffAbs)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    ` : ''}
-
-    <h3 style="margin-bottom:var(--sp-4);">Detalle completo por agrupador</h3>
-    ${(grouperDefs || []).map(g => renderGrouperDetail(g, resultsPorGrupo?.[g.id] || [])).join('')}
-  `;
-
-  // Sticky Legajo en cada tabla de detalle por agrupador.
-  container.querySelectorAll('.card table.data-table').forEach(t => enhanceGrid(t, { stickyCols: 1 }));
+  return [...porLegajo.values()].sort((a, b) => {
+    const na = parseInt(a.legajo, 10), nb = parseInt(b.legajo, 10);
+    if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
+    return String(a.legajo).localeCompare(String(b.legajo), 'es');
+  });
 }
 
-function renderGrouperDetail(grouper, rows) {
-  const rowsWithDiff = rows.filter(r => r.tieneDiff);
-  const rowsOk       = rows.filter(r => !r.tieneDiff);
+/** El redondeo de Excel: abajo de esto los dos archivos dicen lo mismo. */
+const CENTAVO = 0.01;
 
-  const SHOW_MAX = 100;
-  const rowsToShow = rowsWithDiff.slice(0, SHOW_MAX);
-  const extraDiffs = rowsWithDiff.length - rowsToShow.length;
+/**
+ * En qué estado cerró un legajo, con **la regla del propio control**: el monto,
+ * el porcentaje y el marcado de faltantes que el analista puso en "Agrupadores y
+ * umbrales" (D-069) ya están adentro de `tieneDiff` — los chips leen eso y no el
+ * monto de diferencia del cliente, que acá no manda.
+ */
+export function estadoDeLegajo(r, grouperDefs) {
+  if (r.soloEnNomina || r.soloEnResumen) return 'sinComparar';
+  const filas = (grouperDefs || []).map(g => r.porGrupo[g.id]).filter(Boolean);
+  if (filas.some(f => f.tieneDiff)) return 'conDif';
+  const max = filas.reduce((m, f) => Math.max(m, Math.abs(f.diffAbs ?? 0)), 0);
+  return max <= CENTAVO ? 'centavo' : 'margen';
+}
 
-  return `
-    <div class="card" style="margin-bottom:var(--sp-4);">
-      <div class="card__header">
-        <h4 style="margin:0;">${esc(grouper.name)}</h4>
-        <div style="display:flex;gap:var(--sp-2);">
-          ${rowsWithDiff.length
-            ? `<span class="badge badge--warning">${rowsWithDiff.length} con diferencia</span>`
-            : `<span class="badge badge--success">Sin diferencias</span>`}
-          <span class="badge badge--neutral">${rowsOk.length} OK</span>
-        </div>
-      </div>
-      ${rows.length === 0 ? `<div class="card__body"><p class="text-muted">No hay datos para este agrupador.</p></div>` : `
-        <div class="card__body" style="padding:0;overflow-x:auto;">
-          <table class="data-table data-table--compact">
-            <thead>
-              <tr>
-                <th>Legajo</th>
-                <th>Apellido / Nombre</th>
-                <th style="text-align:right;">Nómina</th>
-                <th style="text-align:right;">Resumen</th>
-                <th style="text-align:right;">Diferencia $</th>
-                <th style="text-align:right;">Diferencia %</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsToShow.map(r => `
-                <tr class="row--diff">
-                  <td><code>${esc(r.legajo)}</code></td>
-                  <td>${esc([r.apellido, r.nombre].filter(Boolean).join(', ') || '—')}</td>
-                  <td style="text-align:right;font-family:monospace;">$ ${formatAmount(r.sumNom)}</td>
-                  <td style="text-align:right;font-family:monospace;">$ ${formatAmount(r.sumRes)}</td>
-                  <td style="text-align:right;font-family:monospace;">${formatDiff(r.diffAbs)}</td>
-                  <td style="text-align:right;">${r.diffPct !== null ? formatPct(r.diffPct) : '—'}</td>
-                  <td>
-                    ${r.soloEnNomina  ? '<span class="badge badge--warning">Solo en nómina</span>'  : ''}
-                    ${r.soloEnResumen ? '<span class="badge badge--danger">Solo en resumen</span>'   : ''}
-                    ${!r.soloEnNomina && !r.soloEnResumen ? '<span class="badge badge--warning">Diferencia</span>' : ''}
-                  </td>
-                </tr>
-              `).join('')}
-              ${extraDiffs > 0 ? `
-                <tr><td colspan="7" class="text-center text-muted text-sm" style="padding:var(--sp-3);">
-                  ... y ${extraDiffs} fila(s) más con diferencia (limitado a ${SHOW_MAX} por rendimiento)
-                </td></tr>
-              ` : ''}
-              ${rowsOk.length > 0 ? `
-                <tr><td colspan="7" style="padding:var(--sp-2) var(--sp-4);background:var(--color-success-bg);">
-                  <span class="text-sm text-success">✅ ${rowsOk.length} legajo(s) sin diferencias</span>
-                </td></tr>
-              ` : ''}
-            </tbody>
-          </table>
-        </div>
-      `}
-    </div>
-  `;
+/**
+ * La celda de diferencia de un agrupador. El umbral de este control no es el
+ * monto de diferencia del cliente sino el suyo —monto, porcentaje y "marcar los
+ * que faltan", los tres juntos (D-069)—, y eso ya está resuelto en `tieneDiff`.
+ * Se le pasa a la pieza como un `eps` que cae del lado que corresponde, para que
+ * el badge rojo de la celda y el chip "Con diferencia" nunca cuenten distinto.
+ */
+function celdaDiferencia(r, g, maxDif) {
+  const f = r.porGrupo[g.id];
+  if (!f || r.soloEnNomina || r.soloEnResumen) {
+    return diffBadgeHtml(null, {
+      absentLabel: r.soloEnNomina ? 'no está en el resumen' : 'no está en la nómina',
+    });
+  }
+  return diffBadgeHtml(f.diffAbs, { eps: f.tieneDiff ? 0 : Infinity, max: maxDif });
+}
+
+/**
+ * La planilla: **una fila por legajo**, con una banda por agrupador adentro.
+ *
+ * Antes eran N tablas, una por agrupador, con una fila por legajo en cada una —
+ * o sea legajo × agrupador, ~1000 filas para ~100 empleados, y cada tabla
+ * cortada en 100 filas "por rendimiento". Con una banda por agrupador el legajo
+ * se lee entero de una, la fila de TOTAL cuenta legajos (que es la unidad que
+ * declara el control) y no hay corte: lo que sobra lo pagina la barra.
+ */
+function renderAgrupadoresPlanilla(panel, results) {
+  const { grouperDefs, thresholds } = results;
+  const umbralAbs = thresholds?.absoluteAmount ?? DEFAULT_AGRUPADORES_CONFIG.thresholds.absoluteAmount;
+  const umbralPct = thresholds?.percentage ?? DEFAULT_AGRUPADORES_CONFIG.thresholds.percentage;
+
+  const rows = buildPlanillaRows(results);
+  const maxDif = rows.reduce((m, r) => Math.max(m,
+    ...(grouperDefs || []).map(g => Math.abs(r[`dif_${g.id}`] ?? 0))), 0);
+
+  const columns = [
+    { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+    { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
+    ...(grouperDefs || []).flatMap(g => [
+      { key: `nom_${g.id}`, label: 'Nómina',  sub: 'Nómina Maestra', num: true, band: g.name },
+      { key: `res_${g.id}`, label: 'Resumen', sub: 'archivo Resumen', num: true, band: g.name },
+      { key: `dif_${g.id}`, label: 'Diferencia', sub: `nómina − resumen · > ${formatAmount(umbralAbs)}`,
+        num: true, band: g.name, mag: true,
+        cell: r => celdaDiferencia(r, g, maxDif) },
+      // El porcentaje no se totaliza: sumar porcentajes de legajos distintos no
+      // da nada. La columna cierra la banda igual — es el segundo umbral.
+      { key: `pct_${g.id}`, label: 'Diferencia %', sub: `sobre la nómina · > ${formatPct(umbralPct)}`,
+        num: true, band: g.name, close: true, total: false,
+        cell: r => esc(formatPct(r[`pct_${g.id}`])) },
+    ]),
+  ];
+
+  const csvHeaders = ['Legajo', 'Apellido y Nombre', ...(grouperDefs || []).flatMap(g => [
+    `${g.name} — Nómina`, `${g.name} — Resumen`, `${g.name} — Diferencia`, `${g.name} — Diferencia %`,
+  ])];
+  const csvRows = () => rows.map(r => [r.legajo, r.nombre, ...(grouperDefs || []).flatMap(g => [
+    formatAmount(r[`nom_${g.id}`]), formatAmount(r[`res_${g.id}`]),
+    formatAmount(r[`dif_${g.id}`]), formatPct(r[`pct_${g.id}`]),
+  ])]);
+
+  renderPlanillaPanel(panel, {
+    rows,
+    columns,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDeLegajo(r, grouperDefs),
+    // El segundo eje de este control es EL AGRUPADOR (§3 de la spec): en qué
+    // agrupador no cierra el legajo, que es otra pregunta que cómo cerró.
+    marcas: (grouperDefs || []).map(g => ({
+      value: String(g.id),
+      label: `Diferencia en ${g.name}`,
+      match: r => !!r.porGrupo[g.id]?.tieneDiff,
+    })),
+    getLabel: r => `${r.legajo} — ${r.nombre}`,
+    searchLabel: 'Buscar legajo o nombre',
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onCsv:  () => downloadCsv(csvHeaders, csvRows(), 'Cruce_por_Agrupadores.csv'),
+      onCopy: () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
+    emptyText: 'Ningún legajo quedó en este estado.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${rows.length} legajo${rows.length === 1 ? '' : 's'}. `
+      + `Una banda por agrupador; la diferencia es nómina menos resumen. `
+      + `«—» es que ese agrupador no tiene ningún concepto liquidado, no un cero. `
+      + `Un legajo que está en un solo archivo sale en «Sin comparar».`,
+  });
 }
 
 // ── Editor inline de "Agrupadores y umbrales" ────────────────────────────────

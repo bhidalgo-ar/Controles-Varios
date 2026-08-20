@@ -646,7 +646,14 @@ table.rb-grid .rb-band--next { border-left: 1px solid var(--line); }
    deliberadamente específicos: pisan el tinte por grupo de `paintColumnGroups`
    y el fondo neutro de las dos celdas congeladas, que ganan por especificidad. */
 table.rb-grid thead tr.rb-rubro__bands > th,
-table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th {
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th,
+/* Y la SEGUNDA banda con nombre y apellido: cuando la planilla tiene sólo dos
+   bandas (Identificación + una), esa celda es el `:nth-child(2)` de la primera
+   fila del encabezado, y la regla que fija la 2ª columna congelada
+   (`background: var(--color-surface)`, components.css) le ganaba por
+   especificidad — el rótulo quedaba en celeste sobre blanco, ilegible. Se ve en
+   cualquier control con dos bandas (Variación Sueldos fue el primero). */
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:nth-child(2) {
   background: var(--invert-bg);
   color: var(--invert-accent);
   font-size: 10.5px;

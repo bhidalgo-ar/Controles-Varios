@@ -45,7 +45,8 @@
 
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -573,9 +574,11 @@ export function renderContaDesglosadaResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'conta_desglosada',
-    detalleLabel: 'Archivos generados',
+    conDiferencias: !(results.cierra
+      && (!results.asiento || (results.asiento.cierraBruto && results.asiento.cierraNeteado
+        && results.asiento.sinCodigo.length === 0))),
     resumen: (panel) => renderResumenTab(panel, results),
-    detalle: (panel) => renderDetalleTab(panel, results),
+    planilla: (panel) => renderDetalleTab(panel, results),
   });
 }
 
@@ -691,37 +694,45 @@ function renderResumenTab(panel, results) {
   renderChecks(panel, { heading: 'Chequeos de coherencia', items: checks });
 }
 
-// Las tres tablas del Detalle son los tres archivos que se descargan: lo que se
-// ve en pantalla es lo que sale en el .xlsx, sin una segunda lista de columnas.
-function vistasDe(results) {
-  const vistas = [];
-  if (results.asiento) vistas.push({ id: 'asiento', label: 'Asiento Contable' });
-  vistas.push({ id: 'desglosada', label: 'Contabilidad Desglosada' });
-  if (results.asiento) vistas.push({ id: 'codigo', label: 'Desglosada con Código' });
-  return vistas;
-}
+// Las tres tablas de la Planilla son los tres archivos que se descargan: lo que
+// se ve en pantalla es lo que sale en el .xlsx, sin una segunda lista de
+// columnas. Cada una con la barra estándar completa (§3) y las columnas de
+// importe agrupadas en las dos bandas naturales de un asiento: DEBE y HABER.
+//
+// **Este control no compara contra un umbral**: la desglosada y el asiento
+// cuadran al centavo contra sí mismos. Por eso el chip "Dentro del margen" va en
+// gris y deshabilitado, con el motivo en su `title` — no oculto.
+
+const NO_APLICA_CONTA = {
+  margen: 'la desglosada y el asiento cuadran al centavo contra sí mismos (DEBE = HABER), no hay un umbral que medir',
+  sinComparar: 'las tres tablas salen del mismo archivo, así que no hay un lado que pueda faltar',
+};
 
 function renderDetalleTab(panel, results) {
-  const vistas = vistasDe(results);
-  const selector = document.createElement('div');
-  selector.className = 'form-group';
-  selector.style.marginBottom = '0';
-  selector.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Archivo</label>
-    <select class="form-select" data-cd-vista style="font-size:var(--text-sm);">
-      ${vistas.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}
-    </select>
-  `;
+  const cierraTodo = results.cierra
+    && (!results.asiento || (results.asiento.cierraBruto && results.asiento.cierraNeteado));
 
-  const { searchEl, exportEl } = createResultsToolbar(panel, { left: selector });
-  const tablaHost = document.createElement('div');
-  panel.appendChild(tablaHost);
+  const tabs = [];
+  if (results.asiento) {
+    tabs.push({ id: 'asiento', label: 'Asiento Contable',
+      render: (p) => vistaAsiento(p, results, cierraTodo) });
+  }
+  tabs.push({ id: 'desglosada', label: 'Contabilidad Desglosada',
+    render: (p) => vistaDesglosada(p, results, results.lineas, false, cierraTodo,
+      'Una línea por cada lado del movimiento. El "Neto a pagar" de cada legajo va al final: es la '
+      + 'cuenta de sueldos a pagar neteada por empleado.') });
+  if (results.asiento) {
+    tabs.push({ id: 'codigo', label: 'Desglosada con Código',
+      render: (p) => vistaDesglosada(p, results, results.asiento.desglosadaConCodigo, true, cierraTodo,
+        'La desglosada completa con el código de cuenta de cada línea: es la que permite auditar el '
+        + 'asiento línea por línea.') });
+  }
 
-  const pie = document.createElement('p');
-  pie.className = 'text-muted';
-  pie.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-2) var(--sp-3) 0;';
-  panel.appendChild(pie);
+  initTabs(panel, { tabs });
+}
 
+/** El mismo menú en las tres tablas: los tres archivos más lo que está en pantalla. */
+function mountExportMenu(exportEl, results, vistaId) {
   const items = [
     { key: 'desglosada', label: '📊 Contabilidad Desglosada (.xlsx)',
       desc: 'Una línea por cada lado del movimiento, con legajo y concepto.',
@@ -737,134 +748,104 @@ function renderDetalleTab(panel, results) {
         action: () => exportConCodigoToXlsx(results) },
     );
   }
-  const vistaActual = () => selector.querySelector('[data-cd-vista]').value;
   items.push(
     { key: 'csv', label: '📄 Exportar CSV de lo que estás viendo',
       desc: 'La tabla de esta pantalla, tal como está.',
-      action: () => filasDeVista(results, vistaActual()).csv() },
+      action: () => filasDeVista(results, vistaId).csv() },
     { key: 'copy', label: '📋 Copiar la tabla de esta pantalla',
       desc: 'Se pega directo en Excel, respetando las columnas.',
-      action: () => filasDeVista(results, vistaActual()).copiar() },
+      action: () => filasDeVista(results, vistaId).copiar() },
   );
 
   renderExportMenu(exportEl, {
     items,
     note: 'La Contabilidad Desglosada lleva legajo y fecha de ingreso: es papel de trabajo del analista.',
   });
-
-  const pintar = (vistaId) => {
-    if (vistaId === 'asiento') {
-      pintarAsiento(tablaHost, searchEl, results.asiento);
-      pie.textContent = 'Las cuentas patrimoniales (código 1x/2x) van consolidadas en una línea, sin centro de '
-        + 'costo; las de resultado, agrupadas por cuenta y centro. El neteo es lo que se asienta.';
-    } else if (vistaId === 'codigo') {
-      pintarDesglosada(tablaHost, searchEl, results.asiento.desglosadaConCodigo, true);
-      pie.textContent = 'La desglosada completa con el código de cuenta de cada línea: es la que permite '
-        + 'auditar el asiento línea por línea.';
-    } else {
-      pintarDesglosada(tablaHost, searchEl, results.lineas, false);
-      pie.textContent = 'Una línea por cada lado del movimiento. El "Neto a pagar" de cada legajo va al final: '
-        + 'es la cuenta de sueldos a pagar neteada por empleado.';
-    }
-  };
-
-  selector.querySelector('[data-cd-vista]').addEventListener('change', (e) => pintar(e.target.value));
-  pintar(vistas[0].id);
 }
 
-function pintarAsiento(host, searchEl, asiento) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Nro Cuenta</th><th>Nombre de cuenta</th><th>Centro de costo</th>
-          <th class="text-right">DEBE</th><th class="text-right">HABER</th>
-          <th class="text-right">NETO DEBE</th><th class="text-right">NETO HABER</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${asiento.filas.map(f => `
-          <tr>
-            <td>${esc(f.nro || 'sin código')}</td>
-            <td>${esc(f.cuenta)}</td>
-            <td>${esc(f.centro_costo || '—')}</td>
-            <td class="text-right">${fmtNum(f.debe)}</td>
-            <td class="text-right">${fmtNum(f.haber)}</td>
-            <td class="text-right">${fmtNum(f.neto_debe)}</td>
-            <td class="text-right">${fmtNum(f.neto_haber)}</td>
-          </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="2">TOTAL — ${asiento.filas.length} cuentas contables</th>
-          <th></th>
-          <th class="text-right">${fmtNum(asiento.totalDebe)}</th>
-          <th class="text-right">${fmtNum(asiento.totalHaber)}</th>
-          <th class="text-right">${fmtNum(asiento.totalNetoDebe)}</th>
-          <th class="text-right">${fmtNum(asiento.totalNetoHaber)}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+function vistaAsiento(panel, results, cierraTodo) {
+  const a = results.asiento;
 
-  wireTableTools(host.querySelector('table'), {
-    rows: asiento.filas,
+  // Las columnas se agrupan por LADO del asiento y no por bruto/neteado: DEBE y
+  // HABER son las dos bandas naturales, y adentro de cada una va primero el
+  // bruto y después lo que se asienta. El .xlsx mantiene su propio orden
+  // (DEBE · HABER · NETO DEBE · NETO HABER), que es el layout del entregable.
+  const columns = [
+    { key: 'nro',    label: 'Nro Cuenta', sub: 'código contable', band: 'Identificación',
+      cell: f => esc(f.nro || 'sin código') },
+    { key: 'cuenta', label: 'Nombre de cuenta', band: 'Identificación' },
+    { key: 'centro_costo', label: 'Centro de costo', band: 'Identificación', close: true,
+      cell: f => esc(f.centro_costo || '—') },
+    { key: 'debe',      label: 'DEBE',      sub: 'bruto',              num: true, band: 'DEBE' },
+    { key: 'neto_debe', label: 'NETO DEBE', sub: 'lo que se asienta',  num: true, band: 'DEBE', close: true },
+    { key: 'haber',      label: 'HABER',      sub: 'bruto',             num: true, band: 'HABER' },
+    { key: 'neto_haber', label: 'NETO HABER', sub: 'lo que se asienta', num: true, band: 'HABER', close: true },
+  ];
+
+  renderPlanillaPanel(panel, {
+    rows: a.filas,
+    columns,
+    unitLabel: 'cuentas contables',
+    // Una cuenta sin código todavía no es una línea del asiento, y así la cuenta
+    // el semáforo: sale marcada aunque el asiento cuadre.
+    estadoDe: f => (!cierraTodo || !f.nro ? 'conDif' : 'centavo'),
+    noAplica: NO_APLICA_CONTA,
+    marcas: [{ value: 'sin_codigo', label: 'Sin código de cuenta', match: f => !f.nro }],
     getLabel: f => `${f.nro || ''} ${f.cuenta}`,
-    searchEl,
-    label: 'Buscar cuenta',
-    placeholder: 'Código o nombre de cuenta…',
+    searchLabel: 'Buscar cuenta',
+    searchPlaceholder: 'Código o nombre de cuenta…',
     stickyCols: 2,
     // El código de cuenta del cliente tiene 9 dígitos: con el ancho de columna
     // fija por default (pensado para un legajo) sale cortado.
     col1Width: 112,
+    onExport: (exportEl) => mountExportMenu(exportEl, results, 'asiento'),
+    emptyText: 'Ninguna cuenta quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${a.filas.length} cuenta${a.filas.length === 1 ? '' : 's'} contables. `
+      + 'Las cuentas patrimoniales (código 1x/2x) van consolidadas en una línea, sin centro de costo; '
+      + 'las de resultado, agrupadas por cuenta y centro. El neteo es lo que se asienta.',
   });
 }
 
-function pintarDesglosada(host, searchEl, lineas, conCodigo) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Legajo</th><th>Ingreso</th><th>Nro</th><th>Concepto</th>
-          <th class="text-right">Importe</th><th>Centro de Costo</th><th>Cuenta</th>
-          ${conCodigo ? '<th>Código</th>' : ''}
-          <th>D/H</th><th class="text-right">DEBE</th><th class="text-right">HABER</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineas.map(l => `
-          <tr>
-            <td>${esc(l.legajo)}</td>
-            <td>${esc(l.ingreso || '—')}</td>
-            <td>${esc(l.nro || '—')}</td>
-            <td>${esc(l.concepto || '—')}</td>
-            <td class="text-right">${l.importe === null ? '—' : fmtNum(l.importe)}</td>
-            <td>${esc(l.centro_costo || '—')}</td>
-            <td>${esc(l.cuenta)}</td>
-            ${conCodigo ? `<td>${esc(l.codigo || 'sin código')}</td>` : ''}
-            <td>${esc(l.debe_haber)}</td>
-            <td class="text-right">${l.debe === null ? '—' : fmtNum(l.debe)}</td>
-            <td class="text-right">${l.haber === null ? '—' : fmtNum(l.haber)}</td>
-          </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="2">TOTAL — ${lineas.length} líneas</th>
-          <th colspan="${conCodigo ? 7 : 6}"></th>
-          <th class="text-right">${fmtNum(lineas.reduce((a, l) => a + (l.debe || 0), 0))}</th>
-          <th class="text-right">${fmtNum(lineas.reduce((a, l) => a + (l.haber || 0), 0))}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+function vistaDesglosada(panel, results, lineas, conCodigo, cierraTodo, nota) {
+  const columns = [
+    { key: 'legajo',  label: 'Legajo',  band: 'Identificación' },
+    { key: 'ingreso', label: 'Ingreso', sub: 'fecha de ingreso', band: 'Identificación', close: true,
+      cell: l => esc(l.ingreso || '—') },
 
-  wireTableTools(host.querySelector('table'), {
+    { key: 'nro',      label: 'Nro',      sub: 'código de concepto', band: 'Concepto',
+      cell: l => esc(l.nro || '—') },
+    { key: 'concepto', label: 'Concepto', band: 'Concepto', cell: l => esc(l.concepto || '—') },
+    { key: 'importe',  label: 'Importe',  sub: 'lo liquidado', num: true, band: 'Concepto', close: true },
+
+    { key: 'centro_costo', label: 'Centro de Costo', band: 'Imputación',
+      cell: l => esc(l.centro_costo || '—') },
+    { key: 'cuenta', label: 'Cuenta', band: 'Imputación' },
+    ...(conCodigo ? [{ key: 'codigo', label: 'Código', sub: 'el de la cuenta', band: 'Imputación',
+      cell: l => esc(l.codigo || 'sin código') }] : []),
+    { key: 'debe_haber', label: 'D/H', sub: 'de qué lado va', band: 'Imputación', close: true },
+
+    { key: 'debe',  label: 'DEBE',  sub: 'lo que se asienta', num: true, band: 'DEBE',  close: true },
+    { key: 'haber', label: 'HABER', sub: 'lo que se asienta', num: true, band: 'HABER', close: true },
+  ];
+
+  renderPlanillaPanel(panel, {
     rows: lineas,
+    columns,
+    unitLabel: 'líneas',
+    estadoDe: l => (!cierraTodo || (conCodigo && !l.codigo) ? 'conDif' : 'centavo'),
+    noAplica: NO_APLICA_CONTA,
+    marcas: [
+      { value: 'debe',  label: 'Sólo el DEBE',  match: l => l.debe_haber === 'D' },
+      { value: 'haber', label: 'Sólo el HABER', match: l => l.debe_haber === 'H' },
+      ...(conCodigo ? [{ value: 'sin_codigo', label: 'Sin código de cuenta', match: l => !l.codigo }] : []),
+    ],
     getLabel: l => `${l.legajo} ${l.concepto || ''} ${l.cuenta}`,
-    searchEl,
-    label: 'Buscar legajo, concepto o cuenta',
-    placeholder: 'Legajo, concepto o cuenta…',
+    searchLabel: 'Buscar legajo, concepto o cuenta',
+    searchPlaceholder: 'Legajo, concepto o cuenta…',
     stickyCols: 2,
+    onExport: (exportEl) => mountExportMenu(exportEl, results, conCodigo ? 'codigo' : 'desglosada'),
+    emptyText: 'Ninguna línea quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${lineas.length} línea${lineas.length === 1 ? '' : 's'}. ${nota}`,
   });
 }
 

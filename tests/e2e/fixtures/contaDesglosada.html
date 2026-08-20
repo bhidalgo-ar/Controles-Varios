@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Contabilidad Desglosada + Asiento" con la
+     vista estándar (specs/vista-estandar-resultados.md): las tres tablas, cada
+     una con la barra de los cinco chips y las columnas de importe en las bandas
+     DEBE y HABER. Este control cuadra al centavo contra sí mismo, así que el chip
+     "Dentro del margen" tiene que salir deshabilitado y con su motivo, no oculto.
+     Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runContaDesglosada, renderContaDesglosadaResults, summarizeContaDesglosada }
+  from '../../../js/controls/contaDesglosada.js';
+
+const fila = ({ legajo, nro, concepto, importe, ceco = '10', debe = '', haber = '', liq = 'Mensual' }) => ({
+  legajo, centro_costo: ceco, ingreso: '01/03/2020',
+  nro_concepto: nro, concepto, importe,
+  cuenta_debe: debe, cuenta_haber: haber, liquidacion: liq,
+});
+
+// Cinco legajos en dos centros de costo. Todas las cuentas están en el reporte
+// de referencia menos una, que queda sin código y sale marcada.
+const rows = [
+  fila({ legajo: '1', nro: '100', concepto: 'Sueldo',    importe: '150.000,00', ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '1', nro: '120', concepto: 'Descuento', importe: '12.000,00',  ceco: '10', debe: 'Sueldos a pagar', haber: 'Descuentos varios' }),
+  fila({ legajo: '2', nro: '100', concepto: 'Sueldo',    importe: '180.000,00', ceco: '20', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '3', nro: '100', concepto: 'Sueldo',    importe: '160.000,00', ceco: '20', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '4', nro: '110', concepto: 'Cargas',    importe: '48.000,00',  ceco: '10', debe: 'Cargas sociales', haber: 'Cargas sociales a pagar' }),
+  fila({ legajo: '5', nro: '100', concepto: 'Sueldo',    importe: '140.000,00', ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+];
+
+const cuentasRef = [
+  { nombre: 'Sueldos Ventas',    codigo: '710100110', centro_costo: '10' },
+  { nombre: 'Sueldos Ventas',    codigo: '710100120', centro_costo: '20' },
+  { nombre: 'Cargas sociales',   codigo: '710100139', centro_costo: null },
+  { nombre: 'Descuentos varios', codigo: '115200100', centro_costo: null },
+  { nombre: 'Sueldos a pagar',   codigo: '215100100', centro_costo: null },
+  // "Cargas sociales a pagar" NO está: queda sin código y se lista.
+];
+
+const results = runContaDesglosada(rows, [], {
+  period: '2026-05', legajoKeyMode: 'sin_ceros',
+  contaDesglosadaConfig: null, cuentas_refRows: cuentasRef,
+});
+window.__results = results;
+window.__summary = summarizeContaDesglosada(results);
+renderContaDesglosadaResults(results, document.getElementById('host'));
+</script></body></html>

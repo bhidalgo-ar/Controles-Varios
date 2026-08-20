@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del "Cruce por Agrupadores" con la vista
+     estándar (specs/vista-estandar-resultados.md): la barra con los cinco chips
+     y la planilla con una banda por agrupador. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runAgrupadores, renderAgrupadoresResults, summarizeAgrupadores }
+  from '../../../js/controls/agrupadores.js';
+
+// Seis legajos, uno por estado de la barra:
+//   1 — coincide exacto en los dos agrupadores      → Al centavo
+//   2 — $100 de diferencia en Sueldo                → Con diferencia
+//   3 — sólo está en la Nómina                      → Sin comparar
+//   4 — 0,004 de diferencia (el redondeo de Excel)  → Al centavo
+//   5 — $0,60 de diferencia, abajo del umbral de $1 → Dentro del margen
+//   6 — sólo está en el Resumen                     → Sin comparar
+const nominaRows = [
+  { legajo: '1', apellido: 'SANGUINETTI', nombre: 'JAVIER',      '100': 1000,     '200': 500 },
+  { legajo: '2', apellido: 'FALCIONI',    nombre: 'JULIO CESAR', '100': 2000,     '200': 300 },
+  { legajo: '3', apellido: 'DATOLO',      nombre: 'JESUS',       '100': 1500,     '200': 200 },
+  { legajo: '4', apellido: 'ERVITI',      nombre: 'WALTER',      '100': 1800.004, '200': 250 },
+  { legajo: '5', apellido: 'SILVA',       nombre: 'SANTIAGO',    '100': 1700.60,  '200': 400 },
+];
+
+const resumenLargoRows = [
+  { legajo: '1', '100': 1000, '200': 500 },
+  { legajo: '2', '100': 1900, '200': 300 },
+  { legajo: '4', '100': 1800, '200': 250 },
+  { legajo: '5', '100': 1700, '200': 400 },
+  { legajo: '6', '100': 900,  '200': 150 },
+];
+
+const results = runAgrupadores(nominaRows, [], {
+  resumenLargoRows,
+  grouperDefs: [{ id: 1, name: 'Sueldo' }, { id: 2, name: 'Cargas sociales' }],
+  grouperConceptsMap: { 1: ['100'], 2: ['200'] },
+  agrupadoresConfig: { thresholds: { absoluteAmount: 1, percentage: 0.1, flagMissing: true } },
+});
+window.__results = results;
+window.__summary = summarizeAgrupadores(results);
+renderAgrupadoresResults(results, document.getElementById('host'));
+</script></body></html>

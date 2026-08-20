@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Variación Sueldos" y de "Variación
+     Conceptos" con la vista estándar (specs/vista-estandar-resultados.md): la
+     barra con los cinco chips y "Marcas ▾", y la planilla con una banda por
+     concepto. `?reporte=conceptos` monta el segundo. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runVariacionesSueldos, runVariacionesConceptos, renderVariacionesSueldosResults,
+         summarizeVariacionesSueldos }
+  from '../../../js/controls/variaciones.js';
+
+const C899  = '899999 - BASE de Escala para Reporte Variaciones';
+const C1000 = '1000 - Sueldo mensual';
+const C2517 = '2517 - Premio de progreso';
+const C2519 = '2519 - Premio productividad';
+
+const fila = (legajo, nombre, valores) => ({ 'Legajo': legajo, 'Apellido y Nombre': nombre, ...valores });
+const meta = (period, quincena) => ({ period, quincena, tipoLiquidacion: `${quincena}da Quincena` });
+
+const mapping = {
+  tab: { empleadoColumn: 'Legajo', apellidoNombreColumn: 'Apellido y Nombre' },
+  variaciones: {
+    config: null,
+    anterior: { meta: meta('2026-06', 2), columnas: null },
+    actual:   { meta: meta('2026-07', 2), columnas: null },
+  },
+};
+
+// Seis legajos, uno por estado y por marca de la barra:
+//   1 — sin variación                                   → Al centavo
+//   2 — sube $500 en sueldos y en los dos premios        → Con diferencia · aumento
+//   3 — baja de escalón (100 % → 70 %) sin causa cargada → Con diferencia · baja
+//   4 — 0,004 de diferencia (el redondeo de Excel)       → Al centavo
+//   5 — alta: no estaba en el período anterior           → Con diferencia · alta
+//   6 — baja: no está en el período actual               → Con diferencia · baja
+const anterior = [
+  fila('1', 'SANGUINETTI JAVIER',  { [C899]: '5.000,00', [C1000]: '0,00', [C2517]: '1.000,00', [C2519]: '800,00' }),
+  fila('2', 'FALCIONI JULIO CESAR',{ [C899]: '6.000,00', [C1000]: '0,00', [C2517]: '1.200,00', [C2519]: '900,00' }),
+  fila('3', 'ERVITI WALTER',       { [C899]: '4.000,00', [C1000]: '0,00', [C2517]: '1.000,00', [C2519]: '700,00' }),
+  fila('4', 'SILVA SANTIAGO',      { [C899]: '3.000,004', [C1000]: '0,00', [C2517]: '500,00', [C2519]: '400,00' }),
+  fila('6', 'DATOLO JESUS',        { [C899]: '2.500,00', [C1000]: '0,00', [C2517]: '600,00', [C2519]: '300,00' }),
+];
+
+const actual = [
+  fila('1', 'SANGUINETTI JAVIER',  { [C899]: '5.000,00', [C1000]: '0,00', [C2517]: '1.000,00', [C2519]: '800,00' }),
+  fila('2', 'FALCIONI JULIO CESAR',{ [C899]: '6.500,00', [C1000]: '0,00', [C2517]: '1.500,00', [C2519]: '1.100,00' }),
+  fila('3', 'ERVITI WALTER',       { [C899]: '2.800,00', [C1000]: '0,00', [C2517]: '700,00', [C2519]: '490,00' }),
+  fila('4', 'SILVA SANTIAGO',      { [C899]: '3.000,00', [C1000]: '0,00', [C2517]: '500,00', [C2519]: '400,00' }),
+  fila('5', 'URZI AGUSTIN',        { [C899]: '3.500,00', [C1000]: '0,00', [C2517]: '900,00', [C2519]: '600,00' }),
+];
+
+const esConceptos = new URLSearchParams(location.search).get('reporte') === 'conceptos';
+const results = esConceptos
+  ? runVariacionesConceptos(anterior, actual, mapping)
+  : runVariacionesSueldos(anterior, actual, mapping);
+window.__results = results;
+window.__summary = summarizeVariacionesSueldos(results);
+renderVariacionesSueldosResults(results, document.getElementById('host'));
+</script></body></html>
