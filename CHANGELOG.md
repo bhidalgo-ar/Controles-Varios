@@ -7,6 +7,56 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(ui): barra estándar y planilla con bandas en las diez pantallas del lote Meta4/Marval — 2026-08-20
+
+- **Es la tanda 2 de `specs/vista-estandar-resultados.md`** (D-078, §9 punto 2): Brutos, GS Pers y
+  Control NR (Controlar y Generar Reporte de los tres), Rendimiento vs Tabulado, Rendimiento x EE,
+  Rendimiento vs Asiento y EE x CATEG pasan a la barra y la planilla estándar. Ningún cálculo cambió: en
+  las diez pantallas se compararon los números de antes y después, fila por fila y columna por columna.
+- **La solapa que antes se llamaba "Detalle" pasa a llamarse "Planilla" en las diez.** Arriba lleva la
+  misma barra que Acumuladores Ganancias — los cinco chips de estado en el mismo orden, el buscador,
+  `Marcas ▾` donde el control tiene un segundo eje, los KPIs y el `⬇ Exportar ▾` siempre último a la
+  derecha — y la tabla se arma con rubros agrupados en bandas y la base de cálculo abajo de cada título,
+  para que la planilla se explique sola.
+- **En Brutos y GS Pers (Controlar y Generar Reporte) y en Control NR (Controlar y Generar Reporte)**, el
+  encabezado deja de pintarse con colores escritos a mano — desaparece un violeta que no era de la marca
+  — y pasa al tinte de banda compartido. En Control NR, los 18 conceptos siguen siendo un desplegable,
+  ahora `Marcas ▾`, y cada marca dice "el legajo liquidó ese concepto" (no "tiene diferencia ahí").
+- **Rendimiento vs Tabulado y Rendimiento x EE**: la lista de qué conceptos del Tabulado componen cada
+  columna sale del encabezado (donde con quince conceptos no entraba) y pasa a una leyenda desplegable
+  arriba de la planilla, con la misma información.
+- **Rendimiento vs Asiento** pierde el orden por columna de su planilla principal (clickear el
+  encabezado) — vuelve cuando el control tenga su ficha por centro de costo — y el desglose que colgaba
+  de la fila de TOTAL (el desglose por celda, centro de costo por centro de costo, sigue igual). El
+  rótulo de esa fila pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo", como en el resto de las
+  planillas.
+- **EE x CATEG**: las tres tablas de diferencias que tenía (falta en el Tabulado / falta en Rep. Categ. /
+  campo que no coincide) se fusionan en una sola planilla, con una fila por caso y una columna "Qué
+  pasa". Sin bandas y sin fila de TOTAL — compara campos de texto, no importes. Las dos distribuciones
+  (por puesto y por centro de costo) siguen abajo, sin cambios.
+- **Tres bugs que aparecieron al migrar, arreglados en la pieza compartida y que afectan a los 21
+  controles, no sólo a estos diez:** una solapa se dibujaba con el monto de diferencia fijo de $ 0,01 en
+  vez del monto que configuró el cliente, así que el mismo legajo podía figurar "sin diferencia" en el
+  Resumen y en rojo en la Planilla; las dos primeras celdas de la fila de bandas no tomaban el color de
+  fondo de la banda (se veían en blanco, invisibles); y en los controles con una sola columna de
+  identificación (GS Pers), el rótulo de la fila de TOTAL se pisaba con una suma apenas el analista
+  filtraba.
+- Pieza nueva: `js/ui/planillaPanel.js` (`renderPlanillaPanel()`), el gemelo de la ficha para la solapa
+  Planilla — un control declara sus columnas, en qué estado cerró cada fila y qué exporta, y hereda la
+  barra, el TOTAL y el cruce de filtros.
+- `js/ui/planillaPanel.js` (nuevo), `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `css/results.css`,
+  `js/controls/brutos.js`, `js/controls/gsPers.js`, `js/controls/nr.js`, `js/controls/rendVsTabu.js`,
+  `js/controls/rendXEe.js`, `js/controls/rendVsAsiento.js`, `js/controls/catXEmpleados.js`. 68 asserts en
+  `tests/vistaEstandar.test.js` y 92 pruebas de navegador nuevas en `tests/e2e/loteMeta4.spec.js` con su
+  fixture (`tests/e2e/fixtures/loteMeta4.html`/`.js`), datos inventados (jugadores de Banfield).
+  Verificado en Chromium, tres temas, con fixture — el mismo `run()` y el mismo `render()` de cada
+  control con datos inventados. **No se corrió ningún control de punta a punta en la app entera**: no hay
+  archivos de cliente en el repo con los cuales llegar a una pantalla de resultados por el camino del
+  analista. Los tres e2e que apuntaban a la solapa "Detalle" vieja se actualizaron
+  (`detalleTabla.spec.js`, `gridHeaderContrast.spec.js`, `resultsResumen.spec.js`).
+- **El PR queda en borrador**: falta que Willy mire las diez pantallas en el navegador antes de
+  mergear. Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), **D-078**.
+
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
 
 - **Es la tanda 1 de `specs/vista-estandar-resultados.md`** (D-074): las piezas compartidas que faltaban más el primer control migrado, para poder verlo funcionando en el navegador. Ningún cálculo ni conteo de Acumuladores Ganancias cambió — `summarize` no se tocó.
