@@ -301,7 +301,11 @@ function openDrillModal({ detalle, ccKey, catKey, ccLabel, cellValue }) {
   const catTitle = catKey === 'total' ? 'COSTO TOTAL' : (cats[0]?.label || '');
 
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:var(--sp-4);';
+  // El velo sale del token y no de un negro escrito acá: en Oscuro necesita más
+  // cuerpo (un negro al 45 % sobre un fondo casi negro no separa el modal del
+  // resto), y eso ya lo resuelve `--overlay-bg`.
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--overlay-bg);z-index:var(--z-modal);'
+    + 'display:flex;align-items:center;justify-content:center;padding:var(--sp-4);';
   overlay.innerHTML = `
     <div style="background:var(--color-bg);border-radius:var(--radius-md);box-shadow:var(--shadow-md);max-width:min(980px,96vw);width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;" role="dialog" aria-modal="true">
       <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--color-border);background:var(--color-surface);">
