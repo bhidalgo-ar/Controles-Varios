@@ -2428,3 +2428,80 @@ de Concepto reales del mismo período de una UO de SIASA 07/2026, y con eso un c
    error**, donde los otros nueve controles devuelven `'error'`. Con `'warning'` la tarjeta sale neutra y
    la corrida se lee "N/N controles en verde" mientras el checklist pinta el mismo control en rojo. El test
    de N1 fija hoy ese `'warning'` en tres asserts, así que corregirlo es un PR aparte.
+
+---
+
+## D-074 — La pantalla de resultados es la misma en los 21 controles: tres solapas, cinco chips fijos, exportar siempre último
+
+**Fecha:** 2026-08-20. **Contexto:** el handoff de diseño de la solapa Detalle del Control de Netos
+(Sportline) propone una vista de fichas desplegables y una planilla con los rubros en bandas. Willy pidió
+generalizarlo: *"quiero que todos tengan una vista similar y que sea productiva… quiero que todo lo que
+construyamos salga con esto por defecto al igual que los botones, deben estar siempre en el mismo lugar"*.
+La spec completa es `specs/vista-estandar-resultados.md`; los prompts de cada tanda,
+`docs/prompts-vista-estandar.md`. **Nada implementado a esta fecha.**
+
+El punto de partida medido: de los 17 módulos con pantalla, 12 usan la barra compartida y 5 armaron una
+propia; el botón de exportar está en tres lugares distintos según el control; tres controles pintan las
+bandas del encabezado con colores escritos a mano; y un solo control tiene fichas, de primera generación,
+con los estilos adentro del módulo.
+
+**1. Tres solapas con nombres fijos: `Resumen · Fichas · Planilla`.** Un control sin fichas muestra dos,
+nunca un tercer nombre para lo mismo. Abre en **Fichas** si el control terminó con diferencias y en
+**Planilla** si cerró (decisión de Willy). La preferencia del analista pisa el default pero se guarda **por
+control y por estado del control** (`viewPref:<controlId>:conDif` / `:sinDif`): guardada sólo por control,
+la primera vez que alguien cambia de solapa la regla de arriba deja de aplicar para siempre.
+
+**La tercera solapa se llama "Planilla" y no "Totales por rubro", que es el rótulo del mockup.** Es la
+palabra que el analista ya usa (y la que Acumuladores tiene hoy), y hay controles donde no hay importes que
+totalizar —EE x CATEG cruza campos de texto—, donde el rótulo del mockup prometería algo que la solapa no
+da. Willy puede revertirlo: es una palabra.
+
+**2. Cinco chips de estado, las mismas palabras y el mismo orden en los 21 controles:** `Todos` ·
+`Con diferencia` · `Dentro del margen` · `Al centavo` · `Sin comparar`. Se leen de peor a cerrado.
+"Sin comparar" va **último y en ámbar** porque no es un grado de cierre, es el resto: nunca se lee como
+aprobado (D-073), y en ámbar no se confunde con el verde de lo que cerró.
+
+- **Un chip sin casos se muestra igual**, en gris, deshabilitado y con su 0, y el `title` distingue "ninguno
+  en esta corrida" de "no aplica a este control" (el que cuadra al centavo por definición no tiene "Dentro
+  del margen"). **Alternativa descartada:** ocultarlo. Se descartó porque mueve de lugar a los demás, que es
+  exactamente lo que esta decisión viene a arreglar — el valor está en que la fila sea idéntica, y un 0 en
+  gris además informa.
+- **Qué se chipifica se declara, no se adivina.** Hoy `chipifySelect()` convierte a chips cualquier
+  `<select>` de la izquierda de la barra con 2 a 4 opciones, o sea por accidente y por conteo. Pasa a
+  chipificarse **sólo** el select de estado, marcado de forma explícita; cualquier otro filtro queda
+  desplegable por diseño. Sin esto, el "límite de chips" es un número que hay que ir subiendo (el handoff
+  pedía pasarlo de 4 a 6) y la fila deja de ser la misma en cada pantalla.
+
+**3. Las marcas propias de cada control NO son chips: van en un desplegable `Marcas ▾`** a la derecha del
+buscador. Son dos ejes distintos —el estado dice **cómo cerró** el caso, la marca dice **qué más le pasa**—
+y mezclarlos hace que la fila de chips diga cosas distintas en cada pantalla, que es lo contrario de lo
+pedido. **Alternativa descartada:** los seis chips del mockup de Netos (los cinco estados más "Fuera de
+escala" y "Topearon aportes"). Esas dos son marcas, ya se muestran como pills en la ficha, y filtrar por
+ellas es una necesidad secundaria. De paso resuelve NR sin tocarlo: su filtro de 18 conceptos ya es un
+desplegable y ahí se queda — 18 chips no son un filtro, son una pared.
+
+**4. El orden de la barra es fijo:** chips · buscador · `Marcas ▾` · *(espacio)* · `Orden ▾` (sólo en
+Fichas) · KPI de la selección · **`⬇ Exportar ▾` último, siempre**. Ningún control inventa otro botón de
+exportar ni le cambia el rótulo, y el exportar de la corrida entera sigue en la barra superior de la app,
+sin duplicarse. Es la mitad literal del pedido de Willy: *"deben estar siempre en el mismo lugar"*.
+
+**5. La ficha tiene dos bloques obligatorios y dos opcionales.** Obligatorios: la tira de conciliación
+(la cascada en pastillas) y la conclusión (qué mirar, no un resumen del importe que ya se ve arriba).
+Opcionales según lo que el control tenga: las dos tablas al lado —*cómo debería ser* / *cómo salió*— y la
+tabla de detalle línea por línea. Así la forma es idéntica en las 21 pantallas y el contenido puede ser
+distinto, que es lo que tiene que pasar: la ficha de Netos explica una cascada de aportes, la de
+Acreditaciones no.
+
+**6. Por qué el mapa dice que 10 controles llevan ficha y no 21.** La tarjeta es genérica y se construye una
+vez, pero **adentro va contenido que el control tiene que calcular**. Donde el detalle son dos números y su
+diferencia (Brutos, GS Pers, Rendimiento x EE, Variación Sueldos) la fila de la planilla ya dice todo y la
+ficha sería un envoltorio vacío; donde son N conceptos, N agrupadores o N campos por unidad, la ficha es la
+única forma de ver el caso completo. El mapa control por control, aprobado por Willy, está en el §8 de la
+spec, con las tres unidades que no son el legajo: centro de costo (Rendimiento vs Tabulado), cuenta contable
+(Asiento, Contabilidad Desglosada) y lista de acreditación (Acreditaciones, D-021 — y con D-020 vigente
+sobre lo que puede llevar el archivo que va a Finanzas).
+
+**7. Lo que esta decisión NO toca.** Ningún cálculo, ninguna diferencia y ningún conteo del semáforo:
+`unitsTotal`/`unitsWithDiff` se siguen contando en la unidad que declara `unit` y el color sigue saliendo de
+`computeSemaforoStatus()`. Cada tanda de migración anota los números que el control muestra antes y los
+comprueba después; si uno se movió, es un bug de esa tanda, no un efecto de la vista nueva.
