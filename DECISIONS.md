@@ -391,10 +391,10 @@ equipo la define una vez.
 **Fecha:** 2026-08-07
 **Contexto:** Implementación de `specs/acumuladores-fase1-verificacion.md` (D-027) sobre el control ya validado al centavo (D-026): agrega una capa de chequeos de pantalla y una pantalla de resultados de 3 solapas, sin tocar el `.xlsx` exportado ni la lógica de `run()` ya verificada.
 **Decisión:**
-1. **Chequeos nuevos, todos calculados de los propios datos subidos (nunca de una escala legal externa):** reconciliación aritmética (recalcula `DATOS.total` independientemente y lo compara contra el guardado — detecta un bug de parseo, no un error del cliente), CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica, nunca intenta adivinar causa — cierra el caso del legajo 137 tal como pidió Guillermo), "salto grande" vs. el mes anterior (requiere ≥2 archivos; umbral configurable, default 2x), y coherencia de topes de jubilación/obra social — **estos últimos quedan apagados (`null`) hasta que Guillermo cargue el monto vigente**, nunca se inventa un valor.
+1. **Chequeos nuevos, todos calculados de los propios datos subidos (nunca de una escala legal externa):** reconciliación aritmética (recalcula `DATOS.total` independientemente y lo compara contra el guardado — detecta un bug de parseo, no un error del cliente), CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica, nunca intenta adivinar causa — cierra el caso del legajo sin movimiento tal como pidió Guillermo), "salto grande" vs. el mes anterior (requiere ≥2 archivos; umbral configurable, default 2x), y coherencia de topes de jubilación/obra social — **estos últimos quedan apagados (`null`) hasta que Guillermo cargue el monto vigente**, nunca se inventa un valor.
 2. **`js/ui/pinGate.js` nuevo, reusable:** un PIN único de la app en `localStorage`, documentado explícitamente en el propio componente como freno operativo, no autenticación real (sin backend, sin usuarios — cualquiera con devtools lo evita). Detrás del gate: topes de jubilación/obra social, multiplicador de "salto grande", on/off por chequeo. El régimen (RG4003/RG4030) y los códigos de acumulador siguen fuera del gate, como ya estaban (D-026) — no son un dato sensible de tocar "por error".
 3. **Pantalla de 3 solapas (Resumen · Fichas · Planilla)** armada con `initTabs` directamente, reusando `renderVerdict`/`renderTiles`/`renderIssues`/`renderChecks`/`enhanceGrid` de `resultBlocks.js` (D-027) sin modificarlo. Fichas (Dirección B) es nueva: tarjetas expandibles por legajo (`<details>`) con buscador de texto libre, filtro (todos/con algo para revisar/sin movimiento) y orden (mayor bruto/mayor SAC teórico/legajo/nombre) — no usa `initSearchCombobox` porque filtra tarjetas, no filas de una tabla.
-4. **Scatter de total anual gravado vs. impuesto retenido** (Resumen), SVG inline sin librería: la "línea de piso" es la mediana de impuesto/total de la propia ventana subida, nunca una escala AFIP externa. Los puntos muy por debajo de esa mediana se etiquetan "para revisar" en texto neutral, nunca "error" — mismo criterio que el caso del legajo 1561 (spec §3).
+4. **Scatter de total anual gravado vs. impuesto retenido** (Resumen), SVG inline sin librería: la "línea de piso" es la mediana de impuesto/total de la propia ventana subida, nunca una escala AFIP externa. Los puntos muy por debajo de esa mediana se etiquetan "para revisar" en texto neutral, nunca "error" — mismo criterio que el caso del legajo fuera de patrón (spec §3).
 5. **CUIL se resuelve en `consolidateFile()`** desde las filas `SUMA` (ya lo traía el parser, se descartaba) y viaja en `mes.rows`/`datos.rows` — sólo para mostrar, no se exporta al `.xlsx`.
 **Alternativas descartadas:** Inferir el tope de jubilación/obra social de una tabla hardcodeada en el código (es exactamente el tipo de dato regulatorio que cambia y esta app no puede mantener actualizado sin depender de un release — CLAUDE.md lo prohíbe explícitamente); usar `initSearchCombobox` para las fichas (fue diseñado para filtrar filas de `<tr>`, no tarjetas `<details>`; una búsqueda simple por texto alcanza y es más clara acá).
 **Motivo:** Cierre de la Fase 1 acordada con Guillermo el 2026-08-07. Cubierto por 13 asserts nuevos en `tests/acumuladoresGananciasControl.test.js` (47 en total) + verificación visual en navegador con Playwright sobre un dataset sintético (verdict/tiles/issues/checks/scatter en Resumen, filtro/búsqueda/orden/expansión en Fichas, sticky en Planilla, PIN: bloqueo/configuración/PIN incorrecto/PIN correcto).
@@ -2027,7 +2027,7 @@ necesaria y el neto acordado resultó no ser el número que la planilla usa.
 **1. El neto contra el que se compara es un recibo teórico, no el neto pactado.** La columna que Meli
 usa como objetivo del mes (`NETO ACORDADO final`) es la columna **W** de su planilla: el neto que
 resulta de la estructura salarial vigente —básico de escala + AFA, antigüedad, presentismo, el acuerdo
-no remunerativo y las retenciones—, no el neto que se pactó con el empleado. Para el legajo 10087 el
+no remunerativo y las retenciones—, no el neto que se pactó con el empleado. Para el legajo del acuerdo de categoría el
 pactado es 1.740.000 y la comparación va contra 1.795.943,68. El control lo **calcula**, no lo pide:
 todo lo que necesita está en el Tabulado, y `sueldo + AFA` es invariante entre meses porque el AFA
 absorbe exactamente lo que sube el básico por paritaria (verificado: 1.135.835 + 156.344,95 en mayo
@@ -2051,7 +2051,7 @@ lado se corregía).
   no un error, así que entra en el recibo teórico y no en la lista de lo que se devuelve al neto.
 - **El tope de la base imponible (1 legajo).** Los cuatro aportes del 17% (jubilación, ley 19.032, obra
   social, ANSSAL) se calculan hasta un tope; sindicato y FAECYS no lo tienen — verificado dividiendo
-  cada aporte por su alícuota. Al legajo 10815 el plus vacacional lo llevó por encima del tope: 71.879,63
+  cada aporte por su alícuota. Al legajo que superó el tope el plus vacacional lo llevó por encima: 71.879,63
   quedaron sin aportar, y 71.879,63 × 17% = **12.219,54** contra el residuo de 12.219,53 de la planilla.
   Willy pidió que el tope **se muestre siempre** y que el analista pueda cambiarlo y volver a ejecutar,
   así que es configuración editable del Paso 2 y no una constante. El control además detecta del propio
@@ -2187,3 +2187,58 @@ lado— declara sólo `note`. Reemplaza a `ownThresholdNote`, que se borró.
 **Detalle.** `js/controls/tolerance.js` (el módulo), `tests/tolerance.test.js` (la regla como assert,
 incluido el barrido que falla si alguien vuelve a cablear un `0,01` suelto en `js/controls/`),
 `tests/e2e/umbralDiferencia.spec.js` (el panel y la persistencia en el navegador). Cierra ROADMAP 3.10.
+
+---
+
+## D-070 — Familia de Novedades (Axton): la app genera el importador, el cruce informa lo no comparable sin bloquear, y las columnas sin código se listan siempre
+
+**Fecha:** 2026-08-20. **Instrucción de:** Willy, tras el relevamiento del formato de novedades y de
+liquidación de julio 2026 en los 7 clientes Axton (POP, Merz, Epiroc, SIASA, Geopagos, Red Bull, Coelsa)
+— 14 barridos de SharePoint con agentes de recolección; ningún archivo de cliente entró al repo. El
+detalle completo del relevamiento, cliente por cliente, está en `specs/familia-novedades-axton.md`.
+
+**Contexto.** La novedad viaja en tres pasos: la planilla del cliente, la planilla depurada por el
+analista, y el importador `F2_Consolidada` que se sube a Axton. Los dos saltos se controlan a mano o no
+se controlan: hay BUSCARV manuales contra exports de Liquidaciones adentro de las planillas (POP 09/2025),
+VLOOKUP contra el borrador del mes anterior que devuelven `#N/D` (Coelsa), y un mes real donde el cliente
+informó un empleado que no llegó al importador, sin registro de por qué (SIASA Aguas y Gaseosas 07/2026).
+El relevamiento confirmó además que el importador `F2_Consolidada` es el formato común de Axton en toda la
+cartera — con lo cual el ítem B0 del catálogo maestro ("¿template único o negociado por cliente?") queda
+contestado sin negociar nada: el template es el importador.
+
+**Qué se decidió.**
+
+1. **La app genera el importador, no controla la transcripción a posteriori.** El analista sube la
+   planilla del cliente, la app arma el `F2` por unidad organizativa, el analista lo valida en pantalla y
+   lo descarga. El error de transcripción (B2a del catálogo) desaparece por diseño en vez de detectarse
+   después. Con el importador validado, el cruce contra la liquidación (B2b) compara ese archivo contra
+   el Tabulado y el reporte "Totales de Concepto" del período.
+2. **El cruce compara cantidad E importe cuando los dos lados los tienen.** Cuando no son comparables
+   —una novedad en días u horas contra un Tabulado que sólo trae importes, o la cantidad ausente de la
+   variante sólo-Imp— el control **no bloquea ni aprueba: informa claramente** el motivo. Todo lo extraño
+   se marca. Consistente con D-065 (nada se convierte ni se infiere).
+3. **Las columnas sin código se listan aparte, siempre.** Existen con datos cargados adentro (Coelsa trae
+   una columna "Revisar que se aplique descuento por ayuda especial" con importes). Nada se ignora en
+   silencio — es la misma regla del default silencioso de `CLAUDE.md`, aplicada a columnas enteras.
+
+**Hallazgos que condicionan el diseño** (verificados contra archivos reales, detalle en la spec): el
+bloque de identificación mide 3, 6, 8, 9 o 31 columnas según cliente y variante, así que el primer
+concepto puede caer en D, E, F, G, I, J o AF — nunca asumir "columna J" ni "fila 2"; en SIASA y Coelsa el
+bloque está corrido una fila; la fila de nombres en criollo puede no existir; la fecha de la fila 1 puede
+ser la de la plantilla original y no la del período (POP: 09/08/2024 en archivos de 2026); hay códigos
+duplicados en dos columnas (605705, 1530, 1600), códigos no numéricos (`SAL BAS`) y 17 códigos con rótulo
+distinto entre dos archivos del mismo cliente y mes (Coelsa) — refuerza D-039: matchear siempre por
+código; el valor del importador viene como `cantidad$importe` pegados en una celda y es formato normal,
+no error; y el Tabulado **no trae todos los conceptos liquidados** (Red Bull: un concepto sumado en la
+columna Exento sin columna propia, verificado por suma), por lo que N2 necesita también el totalizador.
+
+**Alternativas descartadas:** controlar la transcripción planilla→importador como control aparte (B2a) —
+lo disuelve el generador; negociar un template de novedades con cada cliente (B0) — el importador ya es
+el template común; convertir unidades para comparar horas contra importes — D-065; bloquear la corrida
+cuando algo no es comparable — esconde el resto del cruce que sí funciona.
+
+**Motivo:** decisión explícita de Willy en la sesión del 2026-08-20, sobre las tres preguntas que dejó el
+relevamiento. El roadmap por fases (N0a lector ExpNov, N0b parser Axton de Tabulado, N1 generador, N2
+cruce), los pilotos (SIASA y Merz; POP para volumen) y lo que queda afuera están en
+`specs/familia-novedades-axton.md`; los prompts de arranque de cada frente, en
+`docs/prompts-familia-novedades.md`.

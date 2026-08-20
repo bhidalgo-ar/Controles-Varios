@@ -14,7 +14,7 @@ Cómo leerlo: cada control dice QUÉ cruza y CONTRA qué. La condición de falla
 |---|---|---|
 | A0 | **Jerarquía de fuentes**: por dato, qué archivo tiene el valor definitivo (padrón, importador, tabulado, nómina declarada en F.931). La nómina del F.931 es el ancla propuesta: declara a todos los que tuvieron liquidación en el mes y el organismo la valida contra el registro de altas y bajas. | Familia A |
 | E0 | **Registro de oficios judiciales**: legajo, carátula, monto total, cuotas, saldo. Hoy el saldo vive solo en el sistema. Guille está buscando cómo recolectar estos datos. | E1, E2, E3 |
-| B0 | **Template de novedades por sistema**: formato definido de planilla del cliente y de importador, por sistema de liquidación. Decisión previa: ¿template único bajado a todos los clientes, o negociado por cliente? | B1 escalón 1, B2 |
+| B0 | **Template de novedades por sistema**: formato definido de planilla del cliente y de importador, por sistema de liquidación. **Contestado para Axton (2026-08-20, D-070):** el template común es el propio importador `F2_Consolidada`, presente en los 7 clientes Axton relevados — no hace falta negociar nada con los clientes. Queda pendiente para Meta4. Detalle: `specs/familia-novedades-axton.md` | B1 escalón 1, B2 |
 
 ## Pieza común T — Lector de tabulado
 
@@ -60,6 +60,8 @@ Validaciones (iguales en los tres escalones): legajo inexistente o egresado, con
 - B2c: registro de que se controló, archivado por período.
 
 Requiere B0 (template por sistema, cada sistema con sus inputs). Anotado y NO desarrollado: una ejecución previa de normalización — decidir antes de correr estos controles en Loopsys, no antes de construirlos. Estado POP: sin cubrir.
+
+**Actualización 2026-08-20 (D-070), para Axton:** B2a se disuelve por diseño — la app **genera** el importador desde la planilla del cliente (control N1 del repo, con validación del analista en pantalla), así que no hay transcripción que controlar. B2b se construye como control N2 (importador vs Tabulado + Totales de Concepto). Roadmap y formato relevado: `specs/familia-novedades-axton.md` del repo Controles-Varios.
 
 ## Familia C — Remuneración, categoría y valores parametrizados
 

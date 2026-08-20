@@ -24,7 +24,7 @@ abajo) no cambia nada visualmente.
 
 ### `acumuladoresGanancias.js` — se toca en esta pasada
 - Ya usa `sev: 'hi'|'lo'` por issue y puede traer **más de un issue por
-  legajo** (ej. legajo 137 del mock: `sacNoCalculado` + `sinMovimiento`) →
+  legajo** (ej. un legajo del mock: `sacNoCalculado` + `sinMovimiento`) →
   es el único control donde el agrupado por `who` cambia algo visible hoy.
 - El issue de CUIL faltante (`type: 'cuil'`, hoy `sev: 'lo'`) pasa a
   `sev: 'minor'` — es calidad de dato del crudo, no una diferencia a revisar.

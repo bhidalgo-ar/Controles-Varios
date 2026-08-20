@@ -7,6 +7,14 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs: Familia de Novedades (Axton) — relevamiento de los 7 clientes, decisiones de diseño y roadmap de construcción — 2026-08-20
+
+- **Se relevó el formato real de novedades y de liquidación de julio 2026 en los 7 clientes Axton** (POP, Merz, Epiroc, SIASA, Geopagos, Red Bull, Coelsa) con 14 barridos de SharePoint. Ningún archivo de cliente entró al repo; lo que entró es la **firma** de cada formato: dónde están los códigos, cuántas columnas de identificación hay (3 a 31, según cliente), qué se corre de fila, qué viene sin código y qué trae el Tabulado de cada uno (preámbulo de 0/1/2 filas, con o sin cantidades, con o sin fila por liquidación, `TOTAL GENERAL` simple o duplicado).
+- **La novedad viaja en tres pasos** —planilla del cliente → planilla depurada por el analista → importador `F2_Consolidada` que se sube a Axton— y SIASA guarda las tres capas en carpetas, por sus 4 convenios: es el piloto natural. Ya apareció un caso real esperando al control: en Aguas y Gaseosas 07/2026 la planilla del cliente trae un empleado que no llegó al importador.
+- **Willy cerró las tres decisiones de diseño (D-070):** la app **genera** el importador (el analista lo valida en pantalla antes de descargar — el error de transcripción desaparece por diseño); el cruce contra la liquidación compara **cantidad e importe** cuando ambos existen y lo no comparable **informa sin bloquear**; y las columnas sin código **se listan aparte, siempre** — nada se ignora en silencio.
+- **B0 del catálogo maestro quedó contestado sin negociar nada con los clientes:** el template común de novedades de Axton es el propio importador, que ya existe en los 7.
+- Spec completa con el roadmap por fases (N0a lector ExpNov · N0b parser Axton de Tabulado · N1 generador · N2 cruce), lo que falta de información y lo que queda afuera: `specs/familia-novedades-axton.md`. Prompts de arranque de los 4 chats de construcción, con modelo, esfuerzo y orden: `docs/prompts-familia-novedades.md`.
+
 ### fix: el monto de diferencia del panel "Umbrales" ahora filtra de verdad, en todos los controles — 2026-08-19
 
 - **Lo que pasaba:** el panel "Umbrales" del wizard mostraba "$ 1,00" y "0,1 %", pero eran **números escritos a mano que ningún control leía**. No se podían editar y no filtraban nada: adentro, cada control tenía cableado su propio margen de un centavo. Un analista que quería ignorar las diferencias de menos de $ 100 no tenía cómo, y lo que veía en pantalla no era con lo que la app estaba midiendo.
@@ -338,7 +346,7 @@
 
 ### feat: Acumuladores Ganancias — Fase 1: panel de verificación, fichas por legajo y gate de PIN — 2026-08-07
 
-- `js/controls/acumuladoresGanancias.js` — chequeos de pantalla (nunca tocan el `.xlsx` exportado): reconciliación aritmética de `DATOS.total`, CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica — cierra el caso del legajo 137 sin adivinar causa), "salto grande" de bruto vs. el mes anterior (requiere ≥2 archivos, umbral configurable), y coherencia de topes de jubilación/obra social (apagados hasta que se configure el valor vigente — nunca inventado).
+- `js/controls/acumuladoresGanancias.js` — chequeos de pantalla (nunca tocan el `.xlsx` exportado): reconciliación aritmética de `DATOS.total`, CUIL faltante, "sin movimiento en el mes" (alerta siempre genérica — cierra el caso del legajo sin movimiento, sin adivinar causa), "salto grande" de bruto vs. el mes anterior (requiere ≥2 archivos, umbral configurable), y coherencia de topes de jubilación/obra social (apagados hasta que se configure el valor vigente — nunca inventado).
 - Pantalla de resultados con 3 solapas (Resumen · Fichas · Planilla), reusando `js/ui/resultBlocks.js` (D-027): veredicto + tiles + casos para revisar + chequeos de coherencia + scatter de total anual gravado vs. impuesto retenido (Resumen), fichas expandibles por legajo con buscador/filtro/orden (Fichas), tabla existente con sticky vía `enhanceGrid()` (Planilla).
 - `js/ui/pinGate.js` nuevo — freno operativo por PIN (client-side, `localStorage`, documentado como no-seguridad-real) que protege el editor de topes/umbrales de los chequeos.
 - `tests/acumuladoresGananciasControl.test.js` — 13 asserts nuevos (47 en total) cubriendo cada chequeo nuevo.

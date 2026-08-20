@@ -10,6 +10,12 @@
 - Próximo paso: que Willy lo pruebe con un archivo real y confirme el monto que quiere dejar por cliente. Abierto a definir: si Cruce por Agrupadores —que hoy conserva su monto, su porcentaje y su marcado de faltantes en su propio panel— debería pasar a usar el monto del cliente cuando salga de `hidden`.
 - Detalle: **D-069**, `tests/tolerance.test.js`, `tests/e2e/umbralDiferencia.spec.js`.
 
+## Familia de Novedades (Axton) — relevada y decidida, lista para construir
+- Qué es: el circuito planilla del cliente → planilla depurada → importador `F2_Consolidada` → liquidación, para los 7 clientes Axton. Dos controles: **N1** genera el importador desde la planilla del cliente (el analista valida en pantalla y descarga), **N2** cruza el importador contra el Tabulado + Totales de Concepto. Dos cimientos antes: **N0a** lector de la familia ExpNov y **N0b** parser Axton del Tabulado (extiende la pieza T).
+- Punto: el 2026-08-20 se relevó el formato real de julio 2026 en los 7 clientes (14 barridos de SharePoint, nada entró al repo) y Willy cerró las tres decisiones de diseño (D-070): la app genera el importador, el cruce compara cantidad e importe y lo no comparable informa sin bloquear, y las columnas sin código se listan siempre. B0 del catálogo quedó contestado: el template común de Axton es el propio importador. Ya hay un caso real esperando al control: en SIASA Aguas y Gaseosas 07/2026 la planilla del cliente trae un empleado más que el importador que se subió.
+- Próximo paso: construir en 4 chats, en orden — N0a, N0b (paralelizable con N1), N1, N2 — con los prompts, modelo y esfuerzo ya escritos en `docs/prompts-familia-novedades.md`. De Willy: abrir en el navegador las planillas bloqueadas por etiqueta de confidencialidad (Epiroc, Red Bull, POP templates) y preguntar a la analista de SIASA por el empleado que quedó fuera del importador en Aguas y Gaseosas.
+- Detalle: `specs/familia-novedades-axton.md`, D-070.
+
 ## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
 - Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
 - Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.
