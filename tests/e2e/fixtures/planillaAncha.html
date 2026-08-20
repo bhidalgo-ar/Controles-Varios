@@ -30,7 +30,7 @@ const rows = Array.from({ length: 308 }, (_, i) => ({
   legajo: String(i + 1),
   // Nombres largos a propósito: la columna de nombre empuja a las de importes
   // y es ahí donde el navegador aprieta los totales (el caso que reprodujo el bug).
-  nombre: i === 0 ? 'PEREZ JUAN CARLOS' : 'GOMEZ SUSANA MARIA',
+  nombre: i === 0 ? 'SANGUINETTI JAVIER ESTEBAN' : 'FALCIONI JULIO CESAR',
   vals: BASE.map(v => v * (1 + i / 100)),
 }));
 const fmt = n => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -261,7 +261,7 @@ export function renderBrutosResults(results, container) {
             const worst = Math.abs(r.ctrlSalBase ?? 0) >= Math.abs(r.ctrlACuFutAumen ?? 0) ? r.ctrlSalBase : r.ctrlACuFutAumen;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',
-              // Sin `esc()`: `renderIssues` ya escapa `who` (se veía "PEREZ &amp;amp; GOMEZ").
+              // Sin `esc()`: `renderIssues` ya escapa `who` (se veía "SANGUINETTI &amp;amp; FALCIONI").
               who: r.nombre || `Legajo ${r.legajo}`,
               sub: `Legajo ${r.legajo}`,
               what: bits.join(' · '),

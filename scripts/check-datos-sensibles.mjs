@@ -17,6 +17,18 @@ const ALLOWLIST = new Set([
   '.claude/skills/payroll-recon-ar/src/parsers/parseExcel.js',
   '.claude/skills/payroll-recon-ar/src/validators/validateCBU.js',
   '.claude/skills/payroll-recon-ar/src/validators/validateCUIT.js',
+  // Tests de los controles que cruzan CBU y CUIT (Acreditaciones, POP
+  // Variaciones, Acumuladores de Ganancias, avisos de corrida): necesitan un
+  // CBU de 22 dígitos y un CUIT bien formado para ejercitarse. Los de acá son
+  // inventados a mano (ceros y dígitos repetidos) y así tienen que quedar
+  // (CLAUDE.md § Privacidad). El chequeo sigue activo en el resto de `tests/`:
+  // un CBU nuevo en otro archivo de test lo frena igual.
+  'tests/acreditacionesControl.test.js',
+  'tests/acumuladoresGananciasControl.test.js',
+  'tests/exportSinWriterConformidad.test.js',
+  'tests/popVariacionesControl.test.js',
+  'tests/runWarnings.test.js',
+  'tests/e2e/fixtures/popVariaciones.html',
 ]);
 
 // Archivos que no tiene sentido escanear por contenido (hashes, minificados).

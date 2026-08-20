@@ -15,7 +15,7 @@
 //      incluido el "0 vs —" que Axton completa con cero.
 //   5. Cada rama de `{ error }`, y la entrada del registry.
 //
-// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Perez/Gomez/Lopez).
+// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Sanguinetti/Falcioni/Lucchetti).
 
 globalThis.document = { addEventListener: () => {} };
 
@@ -41,7 +41,7 @@ function assert(desc, val) {
 const LIQ_1RA = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) - (v)';
 const LIQ_2DA = '2da Quincena c/ sobregiro Julio 2026 (2da Quincena 07-2026) - (v)';
 
-function fila({ legajo, nombre = 'Perez Juan', cant = null, imp = null, neto = null,
+function fila({ legajo, nombre = 'Sanguinetti Javier', cant = null, imp = null, neto = null,
                 cbu = '0170099220000012345678', ingreso = '2015-09-01', egreso = null, liq = LIQ_2DA }) {
   return {
     esTotalGeneral: false, legajo, apellido_nombre: nombre, cuil: '20111111112',
@@ -145,7 +145,7 @@ const correr = (prev, act, extra = {}) => runPopVariaciones(prev, [], {
 {
   const prev = [
     fila({ legajo: '1', cant: 80, imp: 80000, liq: LIQ_1RA }),
-    fila({ legajo: '2', cant: 80, imp: 80000, liq: LIQ_1RA, nombre: 'Gomez Ana' }),
+    fila({ legajo: '2', cant: 80, imp: 80000, liq: LIQ_1RA, nombre: 'Falcioni Julio' }),
   ];
   const act = [fila({ legajo: '1', cant: 80, imp: 80000 })];
   const r = correr(prev, act);
@@ -163,7 +163,7 @@ const correr = (prev, act, extra = {}) => runPopVariaciones(prev, [], {
   const prev = [fila({ legajo: '1', cant: 80, imp: 80000, liq: LIQ_1RA })];
   const act  = [
     fila({ legajo: '1', cant: 80, imp: 80000, egreso: '2026-07-20' }),
-    fila({ legajo: '3', cant: 40, imp: 40000, nombre: 'Lopez Ema', ingreso: '2026-07-18' }),
+    fila({ legajo: '3', cant: 40, imp: 40000, nombre: 'Lucchetti Ema', ingreso: '2026-07-18' }),
   ];
   const r = correr(prev, act);
   assert('egreso dentro de la quincena actual → Baja = S',
@@ -241,7 +241,7 @@ const correr = (prev, act, extra = {}) => runPopVariaciones(prev, [], {
 // ── 9. El control contra el reporte de variaciones de Axton ──────────────────
 
 const axtonRow = (o) => ({
-  legajo: '1', apellido_nombre: 'Perez Juan', vh_anterior: 1000, vh_actual: 1000,
+  legajo: '1', apellido_nombre: 'Sanguinetti Javier', vh_anterior: 1000, vh_actual: 1000,
   mod: 'N', variacion: null, pct_variacion: null, mod_cbu: 'N',
   puesto_anterior: 'M100', puesto_actual: 'M100', mod_puesto: 'N',
   alta: 'N', baja: 'N', neto: 600000, ...o,

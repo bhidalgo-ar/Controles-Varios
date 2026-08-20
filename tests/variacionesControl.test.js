@@ -6,7 +6,7 @@
 // Tabulado que llega como HTML disfrazado de .xls, la comparación entre dos
 // períodos, la consolidación por legajo y las ramas de error.
 //
-// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Perez/Gomez/Lopez).
+// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Sanguinetti/Falcioni/Lucchetti).
 
 globalThis.document = { addEventListener: () => {} };
 
@@ -96,8 +96,8 @@ function aBuffer(str) {
 
 const htmlDemo = tabuladoHtmlDemo({
   filas: [
-    { legajo: '1', nombre: 'PEREZ JUAN',  valores: [1000, 5000] },
-    { legajo: '2', nombre: 'GOMEZ ANA',   valores: [2000, 7000] },
+    { legajo: '1', nombre: 'SANGUINETTI JAVIER',  valores: [1000, 5000] },
+    { legajo: '2', nombre: 'FALCIONI JULIO',   valores: [2000, 7000] },
   ],
 });
 const bufDemo = aBuffer(htmlDemo);
@@ -137,8 +137,8 @@ assert('la fila de encabezados desalineada corta con un error explicativo',
     // 4 columnas de datos pero la fila de <th> trae 3 → antes salía sin avisar.
     const roto = `<span>EA: X | Periodo: 03/2025 - 03/2025 | </span>`
       + `<table><tr><th>Legajo</th><th>Apellido y Nombre</th><th>Bruto</th></tr>`
-      + `<tr><td>1</td><td>PEREZ JUAN</td><td>1.000,00</td><td>2.000,00</td></tr>`
-      + `<tr><td>2</td><td>GOMEZ ANA</td><td>1.000,00</td><td>2.000,00</td></tr></table>`;
+      + `<tr><td>1</td><td>SANGUINETTI JAVIER</td><td>1.000,00</td><td>2.000,00</td></tr>`
+      + `<tr><td>2</td><td>FALCIONI JULIO</td><td>1.000,00</td><td>2.000,00</td></tr></table>`;
     try { parseHtmlTabulado(aBuffer(roto)); return false; }
     catch (e) { return /4 columnas de datos pero la fila de encabezados trae 3/.test(e.message); }
   })());
@@ -162,8 +162,8 @@ assert('parseHtmlTabulado informa el desfasaje de la fila TOTAL GENERAL',
 const htmlDup = tabuladoHtmlDemo({
   conceptos: ['2517 - Premio de progreso', '2517 - Premio de progreso'],
   filas: [
-    { legajo: '1', nombre: 'PEREZ JUAN', valores: [100, 200] },
-    { legajo: '2', nombre: 'GOMEZ ANA',  valores: [300, 400] },
+    { legajo: '1', nombre: 'SANGUINETTI JAVIER', valores: [100, 200] },
+    { legajo: '2', nombre: 'FALCIONI JULIO',  valores: [300, 400] },
   ],
 });
 const objsDup = htmlTabuladoToObjects(parseHtmlTabulado(aBuffer(htmlDup)));
@@ -173,7 +173,7 @@ assert('un código repetido deja las dos columnas (la 2ª con sufijo __2)',
 
 const objs = htmlTabuladoToObjects(parsed);
 assert('las filas se convierten a objetos con clave = nombre de columna',
-  objs[0]['Legajo'] === '1' && objs[0]['Apellido y Nombre'] === 'PEREZ JUAN');
+  objs[0]['Legajo'] === '1' && objs[0]['Apellido y Nombre'] === 'SANGUINETTI JAVIER');
 assert('los importes quedan como texto es-AR para que los parsee el control',
   objs[0]['899999 - BASE de Escala'] === '1.000,00');
 
@@ -201,8 +201,8 @@ function xlsxTabuladoConPreambulo() {
     ['TOTAL GENERAL', null, null, 2000, 6000],       // ya sin colspan: Excel lo expandió
     ['Legajo', 'Apellido y Nombre', 'CUIL', 'Bruto', C2517_NOMBRE],
     [null, null, null, 'Imp', 'Imp'],
-    ['1', 'PEREZ JUAN', '20-1234-5', 1000, 2000],
-    ['2', 'GOMEZ ANA',  '20-6789-0', 1000, 4000],
+    ['1', 'SANGUINETTI JAVIER', '20-1234-5', 1000, 2000],
+    ['2', 'FALCIONI JULIO',  '20-6789-0', 1000, 4000],
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Tabulado');
@@ -236,7 +236,7 @@ assert('los importes del .xlsx quedan como número (los parsea igual el control)
 const wbNormal = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(wbNormal, XLSX.utils.aoa_to_sheet([
   ['EMPLEADO', 'APELLIDO Y NOMBRE', 'PUESTO'],
-  ['0870', 'PEREZ JUAN', 'OPERARIO'],
+  ['0870', 'SANGUINETTI JAVIER', 'OPERARIO'],
 ]), 'Hoja1');
 const detNormal = detectHeadersTabulado(XLSX.write(wbNormal, { type: 'array', bookType: 'xlsx' }));
 assert('un Tabulado de Excel normal no cambia de comportamiento',
@@ -291,8 +291,8 @@ const runConceptos = (act, prev, opts) => runVariacionesConceptos(prev, act, map
 // ── run(): sin diferencias ───────────────────────────────────────────────────
 
 const iguales = [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.000,00' }),
-  fila('2', 'GOMEZ ANA',  { [C899]: '6.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.000,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C899]: '6.000,00' }),
 ];
 const rSinDif = runVariacionesSueldos(iguales, iguales, mapa());
 assert('run() sin diferencias no devuelve error', !rSinDif.error);
@@ -309,8 +309,8 @@ assert('la etiqueta del headline lleva la quincena, no sólo el mes',
 // ── run(): una diferencia conocida ───────────────────────────────────────────
 
 const actual = [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.500,00' }),   // +500
-  fila('2', 'GOMEZ ANA',  { [C899]: '6.000,00' }),   // igual
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.500,00' }),   // +500
+  fila('2', 'FALCIONI JULIO',  { [C899]: '6.000,00' }),   // igual
 ];
 const rDif = runVariacionesSueldos(iguales, actual, mapa());
 const sDif = summarizeVariacionesSueldos(rDif);
@@ -325,12 +325,12 @@ assert('el empleado sin cambios queda en 0,00',
 // ── Sueldos: 899999 + 1000 se suman en una sola columna ──────────────────────
 
 const prevMixto = [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.000,00' }),                    // jornalizado
-  fila('2', 'GOMEZ ANA',  { [C1000]: '8.000,00' }),                   // mensualizado
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.000,00' }),                    // jornalizado
+  fila('2', 'FALCIONI JULIO',  { [C1000]: '8.000,00' }),                   // mensualizado
 ];
 const actMixto = [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.000,00' }),
-  fila('2', 'GOMEZ ANA',  { [C1000]: '9.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.000,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C1000]: '9.000,00' }),
 ];
 const rMixto = runSueldos(actMixto, prevMixto);
 assert('Sueldos suma 899999 y 1000 en la misma columna',
@@ -343,13 +343,13 @@ assert('el empleado que liquida por el otro concepto no se ve afectado',
 // El legajo '1' tiene DOS liquidaciones en el período actual: 3.000 + 2.500 = 5.500.
 // Si no se consolidara, se compararía solo una de las dos y daría una diferencia falsa.
 const actualDosLiq = [
-  fila('1', 'PEREZ JUAN', { [C899]: '3.000,00' }),
-  fila('1', 'PEREZ JUAN', { [C899]: '2.500,00' }),
-  fila('2', 'GOMEZ ANA',  { [C899]: '6.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '3.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '2.500,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C899]: '6.000,00' }),
 ];
 const rConsol = runSueldos(actualDosLiq, [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.500,00' }),
-  fila('2', 'GOMEZ ANA',  { [C899]: '6.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.500,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C899]: '6.000,00' }),
 ]);
 assert('un legajo con dos liquidaciones se SUMA, no se duplica ni se pisa',
   rConsol.rows.length === 2);
@@ -361,11 +361,11 @@ assert('sin diferencias tras consolidar: status success',
 // ── Legajo presente en un solo período ───────────────────────────────────────
 
 const rAltaBaja = runSueldos([
-  fila('1', 'PEREZ JUAN', { [C899]: '5.000,00' }),
-  fila('3', 'LOPEZ LUIS', { [C899]: '4.000,00' }),   // alta del mes
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.000,00' }),
+  fila('3', 'LUCCHETTI CRISTIAN', { [C899]: '4.000,00' }),   // alta del mes
 ], [
-  fila('1', 'PEREZ JUAN', { [C899]: '5.000,00' }),
-  fila('2', 'GOMEZ ANA',  { [C899]: '6.000,00' }),   // baja del mes
+  fila('1', 'SANGUINETTI JAVIER', { [C899]: '5.000,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C899]: '6.000,00' }),   // baja del mes
 ]);
 assert('los legajos de los dos períodos entran en el reporte', rAltaBaja.rows.length === 3);
 const alta = rAltaBaja.rows.find(r => r.legajo === '3');
@@ -380,9 +380,9 @@ assert('la baja del mes da -100%', Math.abs(baja.valores.total.pct + 100) < 0.01
 // ── Conceptos: una sección por concepto ──────────────────────────────────────
 
 const rConceptos = runConceptos([
-  fila('1', 'PEREZ JUAN', { [C2517]: '5.000,00', [C2519]: '1.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '5.000,00', [C2519]: '1.000,00' }),
 ], [
-  fila('1', 'PEREZ JUAN', { [C2517]: '4.000,00', [C2519]: '1.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '4.000,00', [C2519]: '1.000,00' }),
 ]);
 assert('Variación Conceptos arma un grupo por concepto', rConceptos.grupos.length === 2);
 assert('los grupos son 2517 y 2519',
@@ -395,9 +395,9 @@ assert('2519 no varió', Math.abs(rConceptos.rows[0].valores['2519'].diff) < 0.0
 // ── Concepto que no se liquidó en un período ──────────────────────────────────
 
 const rFaltante = runConceptos([
-  fila('1', 'PEREZ JUAN', { [C2517]: '5.000,00' }),        // sin 2519 este mes
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '5.000,00' }),        // sin 2519 este mes
 ], [
-  fila('1', 'PEREZ JUAN', { [C2517]: '5.000,00', [C2519]: '2.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '5.000,00', [C2519]: '2.000,00' }),
 ]);
 assert('un concepto no liquidado no es error', !rFaltante.error);
 assert('el concepto ausente se reporta como faltante',
@@ -414,20 +414,20 @@ assert('el concepto ausente se computa en 0 y da variación negativa',
 const C1530 = '1530 - Lic. Enfermedad';
 
 const prevEscala = [
-  fila('1', 'PEREZ JUAN',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
-  fila('2', 'GOMEZ ANA',    { [C2517]: '10.000,00', Bruto: '50.000,00' }),
-  fila('3', 'LOPEZ LUIS',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
-  fila('4', 'DIAZ MARIA',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),
-  fila('5', 'RUIZ PEDRO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),
-  fila('6', 'TORRES SARA',  { [C2517]: '7.000,00',  Bruto: '40.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('2', 'FALCIONI JULIO',    { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('3', 'LUCCHETTI CRISTIAN',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),
+  fila('4', 'DATOLO JESUS',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),
+  fila('5', 'SILVA SANTIAGO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),
+  fila('6', 'URZI AGUSTIN',  { [C2517]: '7.000,00',  Bruto: '40.000,00' }),
 ];
 const actEscala = [
-  fila('1', 'PEREZ JUAN',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),                      // sin cambio (100%)
-  fila('2', 'GOMEZ ANA',    { [C2517]: '7.000,00',  Bruto: '45.000,00' }),                       // bajó 100→70, sin causa
-  fila('3', 'LOPEZ LUIS',   { [C2517]: '0,00', [C1530]: '5.000,00', Bruto: '35.000,00' }),       // bajó 100→0, con licencia
-  fila('4', 'DIAZ MARIA',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),                       // sin cambio (50%)
-  fila('5', 'RUIZ PEDRO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),                       // sin cambio (0%)
-  fila('6', 'TORRES SARA',  { [C2517]: '10.000,00', Bruto: '43.000,00' }),                       // subió 70→100
+  fila('1', 'SANGUINETTI JAVIER',   { [C2517]: '10.000,00', Bruto: '50.000,00' }),                      // sin cambio (100%)
+  fila('2', 'FALCIONI JULIO',    { [C2517]: '7.000,00',  Bruto: '45.000,00' }),                       // bajó 100→70, sin causa
+  fila('3', 'LUCCHETTI CRISTIAN',   { [C2517]: '0,00', [C1530]: '5.000,00', Bruto: '35.000,00' }),       // bajó 100→0, con licencia
+  fila('4', 'DATOLO JESUS',   { [C2517]: '5.000,00',  Bruto: '30.000,00' }),                       // sin cambio (50%)
+  fila('5', 'SILVA SANTIAGO',   { [C2517]: '0,00',      Bruto: '20.000,00' }),                       // sin cambio (0%)
+  fila('6', 'URZI AGUSTIN',  { [C2517]: '10.000,00', Bruto: '43.000,00' }),                       // subió 70→100
 ];
 const rEscala = runConceptos(actEscala, prevEscala);
 const g2517 = rEscala.grupos.find(g => g.key === '2517');
@@ -459,12 +459,12 @@ assert('la columna de Sueldos (suma de dos conceptos) nunca detecta escala',
 // sin ese concepto liquidó 0 del escalón — pero un alta/baja (no presente) no.
 const prevNull = [
   ...prevEscala,
-  fila('7', 'AGUIRRE OMAR', {}),   // sin 2517 en ninguno de los dos: escalón 0 → 0, no es caso
+  fila('7', 'ALBELLA GUSTAVO', {}),   // sin 2517 en ninguno de los dos: escalón 0 → 0, no es caso
 ];
 const actNull = [
   ...actEscala,
-  fila('7', 'AGUIRRE OMAR', {}),
-  fila('8', 'PAZ CARLOS', { [C2517]: '10.000,00', Bruto: '50.000,00' }),   // alta del mes
+  fila('7', 'ALBELLA GUSTAVO', {}),
+  fila('8', 'PALACIO RODRIGO', { [C2517]: '10.000,00', Bruto: '50.000,00' }),   // alta del mes
 ];
 const rNull = runConceptos(actNull, prevNull);
 const leg7 = rNull.rows.find(r => r.legajo === '7').valores['2517'];
@@ -536,8 +536,8 @@ assert('comparar tipos de liquidación distintos sale como aviso',
 
 // El código sugiere una columna, pero el analista apunta el concepto a OTRA:
 // manda lo mapeado, no el código.
-const prevMapeo = [fila('1', 'PEREZ JUAN', { [C2517]: '1.000,00', 'Otra columna': '7.000,00' })];
-const actMapeo  = [fila('1', 'PEREZ JUAN', { [C2517]: '1.000,00', 'Otra columna': '9.000,00' })];
+const prevMapeo = [fila('1', 'SANGUINETTI JAVIER', { [C2517]: '1.000,00', 'Otra columna': '7.000,00' })];
+const actMapeo  = [fila('1', 'SANGUINETTI JAVIER', { [C2517]: '1.000,00', 'Otra columna': '9.000,00' })];
 const rMapeado = runConceptos(actMapeo, prevMapeo, {
   columnas: { anterior: { '2517': 'Otra columna' }, actual: { '2517': 'Otra columna' } },
 });
@@ -556,8 +556,8 @@ assert('"no se liquidó" sale como concepto faltante',
 // ── Validación contra la fila TOTAL GENERAL del archivo ──────────────────────
 
 const filasTot = [
-  fila('1', 'PEREZ JUAN', { [C2517]: '1.000,00' }),
-  fila('2', 'GOMEZ ANA',  { [C2517]: '2.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '1.000,00' }),
+  fila('2', 'FALCIONI JULIO',  { [C2517]: '2.000,00' }),
 ];
 const metaConTotal = (totalDeclarado) => ({
   // headers/totalRow como los devuelve el parser HTML: la fila TOTAL GENERAL
@@ -613,8 +613,8 @@ assert('se puede comparar una columna que no tiene código de concepto',
 // existir (renombre, o el Tabulado se re-exportó distinto), usarla igual
 // sería un 0,00 silencioso indistinguible de "no se liquidó" (CLAUDE.md §11.5).
 
-const prevHuerfana = [fila('1', 'PEREZ JUAN', { [C2517]: '1.000,00' })];
-const actHuerfana  = [fila('1', 'PEREZ JUAN', { [C2517]: '3.000,00' })];
+const prevHuerfana = [fila('1', 'SANGUINETTI JAVIER', { [C2517]: '1.000,00' })];
+const actHuerfana  = [fila('1', 'SANGUINETTI JAVIER', { [C2517]: '3.000,00' })];
 const rHuerfana = runConceptos(actHuerfana, prevHuerfana, {
   columnas: { anterior: { '2517': 'Columna Vieja Que Ya No Existe' } },
 });
@@ -632,9 +632,9 @@ assert('una columna confirmada que SÍ existe en el archivo no genera huérfanas
 // ── Filtro de secciones fantasma en el PDF (gruposParaImprimir) ──────────────
 
 const rConceptoAusenteEnLosDos = runConceptos([
-  fila('1', 'PEREZ JUAN', { [C2517]: '5.000,00' }),   // 2519 no existe en ningún archivo
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '5.000,00' }),   // 2519 no existe en ningún archivo
 ], [
-  fila('1', 'PEREZ JUAN', { [C2517]: '4.000,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C2517]: '4.000,00' }),
 ]);
 assert('un concepto ausente en los dos archivos se marca faltante en los dos lados',
   rConceptoAusenteEnLosDos.faltantes.some(f => f.codigo === '2519' && f.enPrev === false && f.enAct === false));
@@ -648,9 +648,9 @@ assert('el grupo con dato real sí entra al PDF', impresos.some(g => g.key === '
 // en un Tabulado de mensualizados), el grupo sigue teniendo dato real por la
 // otra entrada y no se omite del PDF.
 const rSueldosParcial = runSueldos([
-  fila('1', 'PEREZ JUAN', { [C1000]: '8.000,00' }),   // sólo mensualizados
+  fila('1', 'SANGUINETTI JAVIER', { [C1000]: '8.000,00' }),   // sólo mensualizados
 ], [
-  fila('1', 'PEREZ JUAN', { [C1000]: '7.500,00' }),
+  fila('1', 'SANGUINETTI JAVIER', { [C1000]: '7.500,00' }),
 ]);
 assert('899999 queda faltante en los dos lados (no existe en ningún Tabulado)',
   rSueldosParcial.faltantes.some(f => f.codigo === '899999' && !f.enPrev && !f.enAct));

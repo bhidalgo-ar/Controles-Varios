@@ -23,7 +23,7 @@
 //      para decidir si algo es diferencia. Ese es el barrido que impide que el
 //      próximo control nazca con el bug de nuevo.
 //
-// Datos 100% inventados (legajos '1'/'2', apellidos Perez/Gomez).
+// Datos 100% inventados (legajos '1'/'2', apellidos Sanguinetti/Falcioni).
 
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -174,7 +174,7 @@ assert('una corrida vieja (sin el campo) se lee al centavo, como se midió enton
 
 // ── 7. Resolución: control > cliente > default ───────────────────────────────
 
-assert('cliente sin monto → default', resolveClientTolerance({ name: 'Perez SA' }) === 0.01);
+assert('cliente sin monto → default', resolveClientTolerance({ name: 'Sanguinetti SA' }) === 0.01);
 assert('cliente con monto → el suyo', resolveClientTolerance({ diffTolerance: 250 }) === 250);
 
 const ctrlSinPropio = { id: 'x' };
