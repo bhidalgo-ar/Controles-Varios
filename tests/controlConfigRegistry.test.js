@@ -35,8 +35,10 @@ for (const cfg of todas) {
 }
 
 assert(`hay controles con config declarada (${conConfig.length})`, conConfig.length >= 10);
-assert(`son 12 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
-  porClave.size === 12);
+// La 13ª es `novedades_importador_config`, del generador de importador de
+// novedades (D-070): el mapeo rótulo → código y la unidad organizativa.
+assert(`son 13 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
+  porClave.size === 13);
 
 // ── Forma de cada declaración ───────────────────────────────────────────────
 

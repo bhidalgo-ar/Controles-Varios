@@ -2199,6 +2199,11 @@ async function executeControls(state, container, root) {
         if (fileData) {
           mapping[fileSpec.key]         = fileData.mapping || {};
           mapping[`${fileSpec.key}Rows`] = fileData.parsedRows || [];
+          // La metadata de lo leído, no sólo las filas. Hay formatos donde lo
+          // que el parser NO pudo asignar es parte del resultado —las columnas
+          // sin código de la planilla de novedades (D-070)— y sin esto el
+          // control no tiene con qué informarlo: quedaría ignorado en silencio.
+          mapping[`${fileSpec.key}Meta`] = fileData.parseMetadata || {};
         }
       }
 

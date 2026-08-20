@@ -26,8 +26,10 @@
 //     único que identifica (D-039).
 //   · **No convierte unidades.** Informa lo que declara la celda y listo (D-065).
 //   · **No ignora nada en silencio.** Las columnas sin código salen listadas con
-//     su rótulo y cuántas celdas cargadas tienen; los valores que no se pueden
-//     leer, las filas sin legajo y las hojas que no se leyeron salen como aviso.
+//     su rótulo y cuántas celdas cargadas tienen, y su contenido celda por celda
+//     en `celdasSinCodigo` —para que quien las consuma pueda ofrecer resolver el
+//     código y decir quién quedó afuera—; los valores que no se pueden leer, las
+//     filas sin legajo y las hojas que no se leyeron salen como aviso.
 //
 /* global XLSX */
 import { toNum } from '../utils/currency.js';
@@ -91,6 +93,7 @@ export function parseExpNov(arrayBuffer) {
   const legajosVistos = new Set();
   const filasSinLegajo = [];
   const noParseables   = [];
+  const celdasSinCodigo = [];
 
   for (let f = filaDatos; f < rows.length; f++) {
     const fila   = rows[f] || [];
@@ -137,8 +140,30 @@ export function parseExpNov(arrayBuffer) {
       });
     }
 
+    // Una columna sin código no tiene concepto al que asignarle el valor, pero
+    // lo que tiene escrito adentro no se descarta: viaja en `celdasSinCodigo`
+    // con su rótulo. Es lo que le permite al control ofrecerle al analista
+    // resolver el código contra el catálogo del cliente (D-039) sin volver a
+    // abrir el archivo, y decir QUIÉN quedó afuera y no sólo cuántas celdas.
     for (const col of columnasSinCodigo) {
-      if (textoCrudo(fila[col.col]) !== '') col.celdasCargadas++;
+      const v = parseValorCelda(fila[col.col]);
+      if (v.vacia) continue;                    // celda vacía = no tiene esa novedad; NO es cero
+      col.celdasCargadas++;
+      celdasSinCodigo.push({
+        legajo,
+        rotulo:          col.rotulo,
+        cantidad:        v.cantidad ?? null,
+        importe:         v.importe ?? null,
+        unidadDeclarada: v.unidadDeclarada ?? null,
+        texto:           v.texto ?? null,
+        // Motivo cuando no es un número (`"Revisar que se aplique…"`): la
+        // columna todavía no tiene código, así que no es un valor no parseable
+        // de un concepto — se informa recién si el analista le asigna uno.
+        noParseable:     v.error || null,
+        fila:            f + 1,
+        col:             col.col,
+        letraCol:        col.letra,
+      });
     }
   }
 
@@ -196,6 +221,11 @@ export function parseExpNov(arrayBuffer) {
         ({ col, letra, codigo, rotulo, celdasCargadas, duplicado, codigoNoNumerico })),
       columnasSinCodigo: columnasSinCodigo.map(({ col, letra, rotulo, celdasCargadas }) =>
         ({ col, letra, rotulo, celdasCargadas })),
+      // Los valores que traen esas columnas, celda por celda. Están acá y no en
+      // `parsedRows` a propósito: `parsedRows` es lo que YA tiene concepto, y
+      // mezclar las dos cosas haría que un total de novedades incluya en
+      // silencio lo que todavía no se pudo asignar.
+      celdasSinCodigo,
       empleados,
       noParseables,
       filasSinLegajo,
@@ -257,6 +287,51 @@ export function parseValorCelda(v) {
   const n = toNum(s);
   if (n === null) return { error: `no es un número: "${s}"`, texto: s };
   return { cantidad: n, importe: null, unidadDeclarada: 'cantidad', texto: s };
+}
+
+/**
+ * Vista previa del archivo, para la pantalla de confirmación de la carga
+ * (`fixedFormat: false` en la ficha del tipo). No sirve el detector genérico:
+ * la hoja del importador puede no ser la primera del libro —hay workbooks de
+ * hasta 10 hojas, algunas ocultas— y la fila de encabezados no es la 1.
+ *
+ * Los encabezados que devuelve son los que el analista reconoce: el bloque de
+ * identificación con su rótulo, y cada concepto como `código — rótulo`. Si el
+ * archivo no tiene la forma esperada, no corta acá: devuelve la fila 1 de la
+ * primera hoja y el error sale al parsear, con su mensaje completo.
+ *
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {{ headers: string[], preview: Array<Array<*>> }}
+ */
+export function detectHeaders(arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  try {
+    const { nombre, rows, maxCol, ancla } = elegirHoja(workbook, []);
+    const { filaCodigos, filaCriollo } = resolverFilasDeEncabezado(rows, ancla, maxCol, nombre);
+    const { columnas, columnasSinCodigo, primerConcepto } =
+      resolverColumnas(rows, filaCodigos, filaCriollo, ancla, maxCol, []);
+
+    const porColumna = new Map();
+    for (const c of columnas)          porColumna.set(c.col, c.rotulo ? `${c.codigo} — ${c.rotulo}` : c.codigo);
+    for (const c of columnasSinCodigo) porColumna.set(c.col, c.rotulo ? `${c.rotulo} (sin código)` : '(sin código)');
+
+    const headers = [];
+    for (let c = 0; c <= maxCol; c++) {
+      headers.push(c < primerConcepto
+        ? textoCrudo((rows[ancla.fila] || [])[c])
+        : (porColumna.get(c) || ''));
+    }
+
+    const filaDatos = Math.max(ancla.fila, filaCodigos) + 1;
+    return { headers, preview: rows.slice(filaDatos, filaDatos + 3) };
+  } catch {
+    const sheet   = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }) : [];
+    return {
+      headers: (rawRows[0] || []).map(h => textoCrudo(h)),
+      preview: rawRows.slice(1, 4),
+    };
+  }
 }
 
 // ── Firma del archivo ────────────────────────────────────────────────────────

@@ -2245,7 +2245,63 @@ cruce), los pilotos (SIASA y Merz; POP para volumen) y lo que queda afuera está
 
 ---
 
-## D-071 — El lector robusto del Tabulado de Axton vive aparte del parser estricto, y el totalizador se distingue por el campo `Reporte:`
+## D-071 — El importador de novedades que genera la app: layout deducido (a confirmar), una UO por corrida, y el cuadre cierra al centavo
+
+**Fecha:** 2026-08-20. **Contexto:** implementación de N1, el generador de importador de la familia de
+Novedades de Axton (D-070, `specs/familia-novedades-axton.md`). Cuatro decisiones que el código no explica
+solo y que conviene no volver a discutir sin motivo — la primera está **abierta a confirmación de Willy**.
+
+**1. El layout del `F2` generado se dedujo del relevamiento y falta confirmarlo contra un archivo real.**
+Fila 1 la metadata de la unidad organizativa (o `Empresa` cuando la planilla declara empresa y no UO),
+fila 2 el encabezado —`Legajo`, `Apellido y Nombres` y un código de concepto por columna—, datos desde la
+fila 3, **sin fila de nombres en criollo**: los F2 de SIASA y de Merz, los dos pilotos, traen sólo códigos.
+La celda va como texto (`1$159811,7958` interpretado por Excel se vuelve una moneda) y el legajo también
+(los ceros a la izquierda se pierden como número), y el legajo se escribe **tal como lo trae la planilla**,
+no normalizado: Axton lo espera como lo conoce el cliente. Lo que sostiene esto mientras no haya un F2
+real: el **ida y vuelta** escrito como assert —el archivo que genera la app lo vuelve a leer el lector
+ExpNov con los mismos valores— que prueba coherencia interna y no que Axton lo acepte. Si el sistema
+espera otra cosa, el archivo se rechaza al subirlo y eso no se descubre leyendo código: es el primer ítem
+de "Lo que N1 espera de un archivo real" en la spec.
+
+**2. Una unidad organizativa por corrida.** El `F2` sale por UO y la planilla del cliente cubre una: así
+están guardadas las de SIASA, una carpeta por UO, y con 4 UOs son 4 corridas. La UO sale de la fila 1 del
+archivo o de lo que el analista carga en el Paso 2; si no la declara nadie, el importador se genera igual
+y la pantalla lo avisa — no se inventa un número de UO. **Alternativa descartada:** partir una planilla en
+varios F2 por una columna de UO. El lector no devuelve la UO por empleado y ninguna planilla relevada la
+trae por fila: agrupar por una columna que hay que adivinar es exactamente el default silencioso que
+`CLAUDE.md` prohíbe. Si aparece un cliente que manda las UOs juntas, se extiende el lector primero.
+
+**3. El mapeo rótulo → código se guarda por rótulo, no por letra de columna.** El juego de conceptos
+cambia mes a mes y se corre de columna (Epiroc pasó de 12 a 11 entre junio y julio, "se corre todo una
+letra"): una config por posición queda apuntando al concepto de al lado al mes siguiente, sin que nada
+avise. Y el catálogo de conceptos del cliente **sugiere** el código de una columna que sólo trae criollo,
+con match **exacto** sobre el rótulo normalizado, pero no lo aplica: la confirmación es del analista
+(D-039). Un match parcial —"COCHERA" contra `4899-COCHERA_IG` y `8805-DTO_COCHERA`— propone el concepto
+equivocado con la misma cara de acierto que uno bueno.
+
+**4. Los dos cuadres del control cierran al centavo, y no con el monto de diferencia del cliente
+(D-069).** El control declara `ownTolerance`. Los dos lados de cada comparación son **el mismo dato del
+mismo mes**: el archivo generado contra la planilla de la que salió, y el archivo generado contra el
+importador que se armó a mano. Una diferencia de $ 0,50 ahí es un error de armado, no una diferencia de
+criterio, y subir el umbral taparía justamente lo que el control existe para mostrar. Se suma que además
+de importes se comparan **cantidades** (horas, días): medirlas con un monto en pesos escondería tres horas
+de diferencia detrás de un umbral de $ 100.
+
+**Dos cambios de contrato que entraron con esto:**
+
+- **`parseMetadata.celdasSinCodigo`** en el lector ExpNov (N0a): el **contenido** de las columnas sin
+  código, celda por celda, que antes sólo se contaba. Es lo que permite ofrecerle al analista resolver el
+  código en pantalla y decir **quién** quedó afuera, no sólo cuántas celdas. Va aparte de `parsedRows` a
+  propósito: `parsedRows` es lo que ya tiene concepto, y mezclarlos haría que un total de novedades
+  incluya en silencio lo que todavía no se pudo asignar.
+- **`mapping['<key>Meta']`** en `controlsWizard.js`: la metadata de cada `additionalFile` viaja al `run()`
+  igual que sus filas, de forma genérica para cualquier control. Hay formatos donde lo que el parser **no
+  pudo** asignar es parte del resultado; sin esto el control no tiene con qué informarlo y volvería a
+  quedar ignorado en silencio.
+
+---
+
+## D-072 — El lector robusto del Tabulado de Axton vive aparte del parser estricto, y el totalizador se distingue por el campo `Reporte:`
 
 **Fecha:** 2026-08-20. **Contexto:** construcción del cimiento N0b de la familia de Novedades
 (`specs/familia-novedades-axton.md`), sobre el relevamiento de los 7 clientes Axton y las firmas de
@@ -2311,4 +2367,3 @@ cierra contra el `TOTAL GENERAL` — esconde el resto del archivo, que sí sirve
 
 **Pendiente de verificación:** el lector todavía no se corrió contra un Tabulado real — los del
 relevamiento no entraron al repo. Ahí puede aparecer alguna variante de firma no vista.
-

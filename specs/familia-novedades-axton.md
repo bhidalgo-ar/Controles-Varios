@@ -1,7 +1,10 @@
 # Familia de Novedades (Axton) — spec
 
-**Estado:** relevada, con decisiones cerradas y con los dos cimientos implementados —N0a (lector
-ExpNov) y N0b (lector del Tabulado de Axton + totalizador)— el 2026-08-20. N1 y N2 siguen en diseño.
+**Estado:** relevada, con decisiones cerradas, y con los dos cimientos —N0a (lector ExpNov) y
+N0b (lector del Tabulado de Axton + totalizador)— más el generador N1 implementados el
+2026-08-20. **N2 sigue en diseño.** N1 está construido pero **sin verificar contra un archivo
+real**: ver "Lo que N1 espera de un archivo real". El lector de Tabulado tampoco se corrió
+todavía contra un Tabulado real.
 **Origen:** relevamiento de Guillermo sobre SharePoint, 2026-08-20 — carpetas de
 Novedades y de Liquidaciones de **julio 2026** de los 7 clientes Axton: Plastic
 Pilar (POP), Merz, Epiroc, SIASA, Geopagos, Red Bull y Coelsa (más el histórico
@@ -185,7 +188,7 @@ identificación puede medir 12, 15, 16 o 31 columnas sin que cambie nada.
   `filasSinLegajo` y `avisos`.
 - **El corte de las filas agregadas a mano es el ÚLTIMO `TOTAL GENERAL`**, no el
   primero: en la variante duplicada la copia de arriba puede caer debajo de los
-  subencabezados y cortar ahí tiraría la nómina entera (D-071).
+  subencabezados y cortar ahí tiraría la nómina entera (D-072).
 - **Las sumas se validan contra el `TOTAL GENERAL` del propio archivo**, con
   tolerancia de un centavo. Lo que no cierra sale en `totalesQueNoCierran` con los
   dos números y en un aviso — aviso y no error: el export puede venir retocado a
@@ -210,17 +213,112 @@ Tabulado, `readTabAxton` corta diciendo qué archivo es y dónde va.
 **Ningún control existente cambia y todavía no hay pantalla.** Pendiente: correrlo
 contra un Tabulado real —los del relevamiento no entraron al repo— y que
 `tabAxtonParser.js` (el estricto, que hoy usa Variaciones de POP) pase a delegar en
-el lector, en un PR aparte (D-071).
+el lector, en un PR aparte (D-072).
 
-### N1 — Generador de importador ("Generar Reporte")
+### N1 — Generador de importador ("Generar Reporte") — **hecho** (2026-08-20)
 
-Entrada: planilla del cliente (por N0a cuando trae códigos; con mapeo
-nombre→código del **catálogo del cliente** cuando no — semillas en los manuales
-de conceptos que ya existen en SharePoint). Salida: `F2` por UO con el formato
-`cantidad$importe`, más el listado de **lo que quedó afuera y por qué** (sin
-código, sin legajo, no mapeable). El analista valida en pantalla antes de
-descargar. Nada se completa por analogía (D-039): concepto sin mapeo se pide o
-sale listado, nunca se inventa.
+`js/controls/novedadesImportador.js` + `js/ui/novedadesImportadorConfigEditor.js`.
+Control `novedades_importador`, scope `sistema` / `axton`, grupo propio, modo
+"Generar Reporte", `tabRequired: false`.
+
+Entrada: la planilla de novedades del cliente (ficha `novedades_axton_file`, la
+lee N0a) y, **opcional**, el importador ya armado (ficha `f2_armado_file`, alias
+de la anterior — es el mismo formato en el otro extremo del circuito). Salida: el
+`F2_Consolidada` en `.xlsx`, más la pantalla de validación.
+
+**Layout del F2 que genera** (deducido de los F2 reales de SIASA y de Merz —los
+dos pilotos—, pendiente de confirmar contra uno real):
+
+| Fila | Qué |
+|---|---|
+| 1 | `Unidad Organizativa` · nro · nombre · fecha de generación. `Empresa` · nombre · fecha cuando la planilla declara empresa y no UO |
+| 2 | `Legajo` · `Apellido y Nombres` · un código de concepto por columna |
+| 3+ | un empleado por fila; celda `cantidad$importe` cuando hay los dos, la cantidad sola cuando no hay importe, **vacía** cuando no hay novedad |
+
+**No lleva fila de nombres en criollo**: los F2 de SIASA y de Merz traen sólo
+códigos. El legajo sale **tal como lo escribió el cliente**, no normalizado
+(Axton lo espera como lo conoce); si la planilla escribe el mismo legajo de dos
+formas (`007` y `7`), se consolida y **se avisa**. La celda va como texto para
+que Excel no interprete `1$500` como una moneda, y el legajo también (los ceros a
+la izquierda se pierden como número).
+
+**Cómo se resuelve el concepto de cada columna** (D-039, en este orden):
+
+1. el código que trae la propia planilla — es el caso normal;
+2. lo que el analista confirmó en el Paso 2, guardado en `controlConfigs` por
+   `[clientCode+controlId]` con la clave `novedades_importador_config`. Se guarda
+   **por rótulo normalizado, no por letra de columna**: el juego de conceptos
+   cambia mes a mes y se corre de columna (Epiroc pasó de 12 a 11 entre junio y
+   julio), así que una config por posición queda mal al mes siguiente sin avisar;
+3. nada más. Una columna con datos, sin código y sin confirmación **no entra** al
+   importador: sale listada como "quedó afuera", con el motivo.
+
+El catálogo de conceptos del cliente (si está cargado en la app) **sugiere** el
+código de una columna cuyo rótulo coincide exacto con la descripción o un alias.
+Sugiere y nada más: la sugerencia se ve como un botón y no entra hasta que el
+analista la confirma. El match es exacto a propósito — uno parcial ("COCHERA"
+contra `4899-COCHERA_IG` y `8805-DTO_COCHERA`) propone el concepto equivocado con
+la misma cara de acierto. El analista también puede marcar una columna como "no
+va al importador" (Observaciones de Merz, notas del analista): queda afuera **a
+propósito** y se informa como tal, no como problema.
+
+**Qué se informa antes de descargar:** legajos y conceptos que entran, total de
+cantidad y de importe por concepto, la planilla completa tal como va a salir, y
+en "quedó afuera" —con su motivo— las columnas sin código, las filas con datos y
+sin legajo, y los valores que no son un número. Más cuatro chequeos de armado:
+que los importes y las cantidades del F2 sumen lo mismo que la planilla leída
+(al centavo — es estructural), que todas las columnas con datos tengan concepto,
+y que la unidad organizativa esté declarada.
+
+**Contra el importador ya armado** (cuando el analista lo carga): cruce por
+legajo + código, consolidando por legajo **los dos lados** con la misma clave, en
+cuatro bandas — coincide / difiere / sólo en la planilla del cliente / sólo en el
+importador armado. La tercera es el caso que originó el frente: un empleado que
+estaba en la planilla y no llegó al importador. Cierra al centavo (`CUADRE_EPS`):
+son dos versiones del mismo dato del mismo mes, así que el monto de diferencia
+del cliente no aplica —el control lo declara en `ownTolerance`—, y además se
+comparan cantidades (horas, días), que medidas con un monto en pesos esconderían
+tres horas detrás de un umbral de $ 100.
+
+**Unidad del semáforo: `legajo`.** `unitsTotal` = legajos que entran al
+importador; `unitsWithDiff` = **unión** (no suma) de los que tienen algo afuera y
+los que difieren contra el importador armado. Si el archivo generado no cuadra
+contra la planilla leída, se marcan todos: el importador entero es sospechoso.
+
+**Una UO por corrida.** La planilla del cliente cubre una unidad organizativa
+—así están guardadas las de SIASA, una carpeta por UO— y el `F2` sale por UO. Con
+4 UOs son 4 corridas, una por planilla. La UO sale de la fila 1 del archivo o de
+lo que el analista carga en el Paso 2; si no la declara nadie, el importador se
+genera igual y se avisa. Una planilla con varias UOs adentro necesitaría que el
+lector devuelva la UO por empleado, que hoy no existe.
+
+Contrato escrito como test ejecutable en `tests/novedadesImportadorControl.test.js`
+(72 asserts, datos inventados), en la cadena de `package.json`, más
+`tests/e2e/novedadesImportador.spec.js` (6 pruebas de navegador, los tres temas).
+Entre los asserts está el **ida y vuelta**: el F2 que genera la app lo vuelve a
+leer el lector ExpNov con los mismos valores — es lo que ocupa el lugar de la
+comparación contra el archivo real mientras no haya uno.
+
+Sin contrato en `js/exports/contracts.js` a propósito: las columnas del F2 son
+las de los conceptos que trajo la planilla de ese mes —cambian en cada corrida—,
+y un contrato describe un juego fijo de columnas. Mismo caso que
+`acumuladores_ganancias` y `control_netos`.
+
+#### Lo que N1 espera de un archivo real (D-064 — no se generaliza sin confirmación)
+
+1. **Un F2 real de una UO de SIASA 07/2026** (o de Merz) para confirmar el layout
+   de arriba: si Axton espera otra cosa —otra fila de metadata, otro rótulo de
+   encabezado, la fila de criollo presente— el archivo generado se rechaza al
+   subirlo, y eso no se descubre leyendo código.
+2. **Un caso completo**: un legajo de la planilla modificada de SIASA 07/2026, sus
+   datos crudos, dos o tres valores del F2 real reproducidos desde esos crudos, el
+   cálculo por las dos vías y la descomposición de la diferencia. Uno, revisado, y
+   después el resto.
+3. **Que el lector reconozca la planilla real**: las variantes de firma del
+   relevamiento están cubiertas, pero ninguna planilla real entró al repo.
+4. El caso de **Aguas y Gaseosas**: cargando la planilla del cliente y el F2 real
+   como archivo opcional, el empleado que no llegó tiene que salir en la banda
+   "sólo en la planilla del cliente".
 
 ### N2 — Novedades vs Liquidación (B2b del catálogo)
 
@@ -239,8 +337,8 @@ informa como no comparable.
 |---|---|---|
 | 0 | ~~N0a Lector ExpNov + tests~~ **hecho** (`js/parsers/expNovParser.js`) | — |
 | 0 | ~~N0b Lector Axton de Tabulado + totalizador + tests~~ **hecho** (`js/parsers/tabAxtonReader.js`, `readTotalesConcepto`) | detector D-065 (hecho) |
-| 1 | N1 Generador de importador (piloto: SIASA y Merz) | N0a |
-| 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b (los dos hechos) |
+| 1 | ~~N1 Generador de importador~~ **hecho**, sin verificar contra archivo real (`js/controls/novedadesImportador.js`) | N0a |
+| 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b + N1 (los tres hechos) |
 
 **Pilotos elegidos por evidencia:** SIASA guarda las tres capas del circuito en
 carpetas (`A - Novedades recibidas` / `B - Novedades modificadas` /

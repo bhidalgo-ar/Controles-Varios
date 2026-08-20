@@ -43,11 +43,13 @@
 //     legajo y los conceptos cuya suma no cierra contra el archivo salen como
 //     aviso (D-070).
 //
-// **No reemplaza a `tabAxtonParser.js`** todavía: ése lee el Tabulado de Axton en
-// su forma estricta (encabezados en la fila 1, pares Cant/Imp obligatorios) y lo
-// consume hoy el control de Variación entre quincenas de POP. Que ese parser pase
-// a delegar acá es deuda declarada — se hace aparte, con sus tests, para no
-// cambiar de paso el resultado de un control que ya está en producción.
+// **No reemplaza a `tabAxtonParser.js`** todavía (D-072): ése lee el Tabulado de
+// Axton en su forma estricta (encabezados en la fila 1, pares Cant/Imp
+// obligatorios) y lo consume hoy el control de Variación entre quincenas de POP.
+// Que ese parser pase a delegar acá es deuda declarada — se hace aparte, con sus
+// tests, para no cambiar de paso el resultado de un control que ya está en
+// producción. Mientras conviven, **cualquier firma nueva se agrega acá**, no al
+// parser estricto.
 //
 /* global XLSX */
 import { toNum } from '../utils/currency.js';

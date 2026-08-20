@@ -168,8 +168,12 @@ for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
 // quincenas: su panel del Paso 2 dice si el código del concepto matchea una
 // columna en CADA Tabulado cargado, así que cargar uno cambia lo que ese panel
 // puede mostrar.
-assert(`redibujan el paso o tienen hueco propio exactamente los 5 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
-  specsDeclarados.sort().join(', ') === 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
+// El de `novedades_importador` se sumó con el generador de importador de
+// novedades (D-070): las columnas de la planilla cargada son lo que el panel de
+// conceptos del Paso 2 ofrece resolver, así que cargarla cambia ese panel.
+assert(`redibujan el paso o tienen hueco propio exactamente los 6 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
+  specsDeclarados.sort().join(', ') === 'novedades_importador.novedades, '
+    + 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
     + 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
 
 // El hueco del Tabulado anterior es el que existe en el layout de Variaciones.

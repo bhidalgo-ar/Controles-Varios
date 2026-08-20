@@ -14,7 +14,8 @@
 > | 4 | Novedades vs Liquidación (N2) | **Opus 5** | **alto** | El cruce con las 4 bandas; depende de 1 y 2 |
 >
 > El 2 puede correr en paralelo con el 3 (no se pisan). El 4 recién cuando 1, 2
-> y 3 estén mergeados. **Al 2026-08-20 el 1 y el 2 están hechos; quedan el 3 y el 4.** Sonnet 5 alcanza para retoques posteriores de UI o de
+> y 3 estén mergeados. **Al 2026-08-20 están hechos el 1 (N0a), el 2 (N0b) y el 3 (N1);
+> queda el 4.** Sonnet 5 alcanza para retoques posteriores de UI o de
 > textos sobre estos módulos, no para construirlos.
 
 ---
@@ -56,7 +57,7 @@ No toques ningún control existente. Terminá en PR con la doc al día
 ## Chat 2 — N0b: Parser Axton del Tabulado + Totales de Concepto — **hecho (2026-08-20)**
 
 > Resultado: `js/parsers/tabAxtonReader.js` + `readTotalesConcepto` en
-> `js/parsers/totalesConceptoParser.js` + el campo `Reporte:` en el detector. Ver **D-071**
+> `js/parsers/totalesConceptoParser.js` + el campo `Reporte:` en el detector. Ver **D-072**
 > y `specs/lector-tabulado-formatos.md`. El prompt queda como registro de lo que se pidió.
 
 ```
@@ -87,7 +88,12 @@ comportamiento de ningún control existente en este PR — sólo dejá el lector
 listo para que N2 lo consuma. PR con doc al día.
 ```
 
-## Chat 3 — N1: Generador de importador de novedades
+## Chat 3 — N1: Generador de importador de novedades — **hecho (2026-08-20)**
+
+> Construido: control `novedades_importador`. Lo que quedó pendiente y por qué
+> está en `specs/familia-novedades-axton.md` § "Lo que N1 espera de un archivo
+> real" — el layout del F2 y el caso completo de SIASA 07/2026 necesitan un
+> archivo real, que no entró al repo.
 
 ```
 Leé specs/familia-novedades-axton.md y D-070, y usá la skill nuevo-control para
