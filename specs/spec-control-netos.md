@@ -1,4 +1,4 @@
-**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **0** (ver D-074), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. La solapa Detalle se rediseñó el mismo día siguiendo un handoff de diseño: abre en **Fichas** (una tarjeta por legajo con la cascada del residuo) en vez de la planilla plana, que pasó a **Totales por rubro** (ver D-075). Sigue **pendiente**: probar en el navegador el tilde de jubilado del Paso 2; el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría); y el export por solapa que pedía el handoff de Detalle (hoy las dos solapas comparten el export general) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
+**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **0** (ver D-075), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. La solapa Detalle se rediseñó el mismo día siguiendo un handoff de diseño: abre en **Fichas** (una tarjeta por legajo con la cascada del residuo) en vez de la planilla plana, que pasó a **Planilla**, con los cinco chips y el `Marcas ▾` de la vista estándar (ver D-076 y `specs/vista-estandar-resultados.md`). Sigue **pendiente**: probar en el navegador el tilde de jubilado del Paso 2; el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría); y el export por solapa que pedía el handoff de Detalle (hoy las dos solapas comparten el export general) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
 
 > **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-067).** Este brief planteaba comparar
 > contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"
@@ -23,7 +23,7 @@
 > Lo que sigue vigente de este documento: el §0, el §1 (scope) y el §2 (qué resuelve). El resto se lee
 > como el diseño anterior. La implementación está en `js/controls/controlNetos.js`.
 
-> **Nota del 2026-08-20 — lo que cambió al verificar contra los tres Tabulados reales (D-074).** El
+> **Nota del 2026-08-20 — lo que cambió al verificar contra los tres Tabulados reales (D-075).** El
 > §4 de este brief (`aporteRemPctConcepts` como config fija) y el §6.1 (factor derivado sumando los `%`
 > de la fila) quedan superados: las alícuotas de retención se leen del Tabulado **por legajo**
 > (columnas 610/612/616/632/676/623/669/677/678) y las de config pasan a ser el respaldo para el
@@ -37,14 +37,14 @@
 > contra la columna PUESTO: a esos empleados no se les calcula jubilación, ley 19.032, obra social ni
 > ANSSAL, diga lo que diga su columna de porcentaje. El criterio es el puesto y no la obra social en
 > cero — hay empleados con la obra social en cero que aportan normal y cierran. Detalle completo, con
-> los números de la verificación, en D-074. Y un quinto, `jubilados`: el control **sospecha** al
+> los números de la verificación, en D-075. Y un quinto, `jubilados`: el control **sospecha** al
 > jubilado que sigue trabajando —le retuvieron sólo jubilación teniendo las cuatro alícuotas
 > declaradas— y el analista lo confirma con un tilde en el Paso 2; recién tildado se le dejan de
 > calcular ley 19.032, obra social y ANSSAL.
 
-> **Nota del 2026-08-20 — la solapa Detalle: tres vistas y la cascada del residuo (D-075).** El §8
+> **Nota del 2026-08-20 — la solapa Detalle: tres vistas y la cascada del residuo (D-076).** El §8
 > de este brief ("tabla por legajo, ordenable, con paginación") queda superado: siguiendo un handoff
-> de diseño, el Detalle pasa a **tres solapas — Resumen · Fichas · Totales por rubro — y abre en
+> de diseño, el Detalle pasa a **tres solapas — Resumen · Fichas · Planilla — y abre en
 > Fichas**, no en la planilla. **Fichas** (nueva) es una tarjeta por legajo: cerrada muestra identidad
 > y las marcas del caso (vacaciones en el mes, básico fuera de escala, topeó aportes, perfil de
 > jubilado sin confirmar, fuera de convenio, sin aportes por su puesto, conceptos del mes, sin mes
@@ -52,7 +52,7 @@
 > (neto teórico → explicado por el mes → neto esperado → neto liquidado ajustado → sin explicar), el
 > recibo teórico y lo liquidado lado a lado, la cascada de conceptos del mes con su efecto real en el
 > neto, y una conclusión con qué mirar. El cuerpo de cada ficha se arma al abrirla, no antes.
-> **Totales por rubro** reemplaza a la planilla plana: los mismos rubros en cuatro bandas de
+> **Planilla** reemplaza a la tabla plana: los mismos rubros en cuatro bandas de
 > encabezado (Identificación, Recibo teórico, Lo que se liquidó, Conciliación), 14 columnas, cada
 > rubro con su base de cálculo abajo del título, legajo y empleado congelados, y la fila de TOTAL
 > cierra por columna, no sólo en el neto. El dato nuevo que hace posibles las dos vistas es la

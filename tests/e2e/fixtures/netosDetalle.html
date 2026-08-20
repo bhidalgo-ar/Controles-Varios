@@ -63,7 +63,16 @@ const results = {
 // ?caso=vieja simula una corrida guardada antes de que el control publicara el
 // desglose: la app re-dibuja los resultados desde la base, así que la pantalla
 // tiene que aguantar filas sin cascada, sin marcas y sin alícuotas por legajo.
-if (new URLSearchParams(location.search).get('caso') === 'vieja') {
+const caso = new URLSearchParams(location.search).get('caso');
+
+// ?caso=cierra: la corrida sin diferencias, para ver los chips en cero y la
+// solapa que abre cuando el control cerró.
+if (caso === 'cierra') {
+  results.rows = results.rows.map(r => ({ ...r, residuo: 0, netoLiquidado: r.netoTeorico,
+    netoAjustado: r.netoTeorico, escalaOk: true, netoEsperado: r.netoTeorico, explicado: 0 }));
+}
+
+if (caso === 'vieja') {
   for (const r of results.rows) {
     delete r.cascada; delete r.marcas; delete r.devueltoDetalle;
     delete r.netoEsperado; delete r.tasas;

@@ -26,7 +26,7 @@ const ES_DIFERENCIA = /diferencia|sin explicar/i;
  *  de un legajo en siete (todos, sin explicar, dentro del margen, al centavo,
  *  fuera de escala, topearon aportes, sin comparar). Con siete etiquetas cortas
  *  siguen entrando en una fila; el control que tenga más los deja en el select. */
-const MAX_CHIP_OPTIONS = 7;
+const MAX_CHIP_OPTIONS = 4;
 
 /**
  * Monta la barra de arriba de la tabla Detalle (pantalla 7 del rediseño):
@@ -107,7 +107,17 @@ export function createResultsToolbar(container, { left } = {}) {
  */
 function chipifySelect(sel) {
   const options = [...sel.options];
-  if (options.length < 2 || options.length > MAX_CHIP_OPTIONS) return null;
+  // `data-chips` es la marca explícita: este select se dibuja como chips diga
+  // lo que diga la cuenta de opciones. Sin la marca se sigue decidiendo por
+  // cantidad —o sea por accidente—, que es lo que la vista estándar viene a
+  // sacar (`specs/vista-estandar-resultados.md`, D-074): cuando las 21
+  // pantallas declaren su select de estado, el límite de abajo se va.
+  // `data-chips="0"` es lo contrario: este filtro es un desplegable por diseño
+  // —las marcas del control, que son otro eje— y no entra a la fila de chips
+  // aunque tenga pocas opciones.
+  if (sel.dataset.chips === '0') return null;
+  const declarado = sel.dataset.chips === '1';
+  if (!declarado && (options.length < 2 || options.length > MAX_CHIP_OPTIONS)) return null;
   if (sel.dataset.chipped === '1') return null;
   sel.dataset.chipped = '1';
   sel.classList.add('results-filter-sr');
@@ -118,9 +128,12 @@ function chipifySelect(sel) {
   group.innerHTML = options.map(o => {
     // "Sólo con diferencia (23)" → el texto y el número, que se leen distinto.
     const m = o.textContent.trim().match(/^(.*?)\s*\((\d[\d.,\s]*)\)$/);
+    // Un estado sin casos se muestra igual, apagado y con su 0: sacarlo movería
+    // los demás de lugar, que es justo lo que la fila de chips viene a evitar.
     return `
       <button type="button" tabindex="-1" data-chip-value="${esc(o.value)}"
-              class="results-chip${ES_DIFERENCIA.test(o.textContent) ? ' results-chip--dif' : ''}">
+              ${o.disabled ? 'disabled title="' + esc(o.title) + '"' : ''}
+              class="results-chip${o.disabled ? ' results-chip--vacio' : ''}${ES_DIFERENCIA.test(o.textContent) ? ' results-chip--dif' : ''}">
         ${esc(m ? m[1] : o.textContent.trim())}
         ${m ? `<span class="results-chip__count">${esc(m[2])}</span>` : ''}
       </button>
@@ -135,7 +148,7 @@ function chipifySelect(sel) {
 
   const listeners = [];
   chips.forEach(chip => chip.addEventListener('click', () => {
-    if (chip.dataset.chipValue === sel.value) return;
+    if (chip.disabled || chip.dataset.chipValue === sel.value) return;
     sel.value = chip.dataset.chipValue;
     paint();
     listeners.forEach(fn => fn(sel.value));

@@ -14,12 +14,21 @@ const FIXTURE = '/tests/e2e/fixtures/netosDetalle.html';
 test('el Detalle abre en Fichas y la ficha muestra la cascada del residuo', async ({ page }) => {
   await page.goto(FIXTURE);
 
-  await expect(page.locator('.tabs__tab')).toHaveText(['Resumen', 'Fichas', 'Totales por rubro']);
+  // Los nombres y el orden son los de la vista estándar de toda la app (D-074).
+  await expect(page.locator('.tabs__tab')).toHaveText(['Resumen', 'Fichas', 'Planilla']);
+  // Con diferencias abre en Fichas: lo primero que se ve es por qué falla.
   await expect(page.locator('.tabs__tab--active')).toHaveText('Fichas');
 
-  // Arranca filtrado por "Sin explicar": errores primero, y se dice por qué.
-  await expect(page.locator('.results-chip--active')).toContainText('Sin explicar');
+  // Los cinco estados, con las palabras exactas y en ese orden, siempre.
+  await expect(page.locator('.results-chip')).toHaveText([
+    /Todos/, /Con diferencia/, /Dentro del margen/, /Al centavo/, /Sin comparar/,
+  ]);
+  // Arranca filtrado en "Con diferencia": errores primero, y se dice por qué.
+  await expect(page.locator('.results-chip--active')).toContainText('Con diferencia');
   await expect(page.locator('.results-toolbar__hint')).toBeVisible();
+  // Lo que le pasa ADEMÁS al legajo no es un chip: es una marca, y va aparte.
+  await expect(page.locator('.results-chips')).not.toContainText('fuera de escala');
+  await expect(page.locator('select[aria-label="Filtrar por marca del legajo"]')).toBeVisible();
 
   const ficha = page.locator('.netos-ficha').first();
   await expect(ficha.locator('.netos-ficha__monto')).toContainText('250.000,00');
@@ -47,9 +56,9 @@ test('la ficha sin neto liquidado dice "sin comparar" y no un cero', async ({ pa
   await expect(ficha.locator('.netos-conclusion')).toContainText('no tiene neto liquidado');
 });
 
-test('la planilla por rubro tiene las bandas alineadas con sus columnas', async ({ page }) => {
+test('la planilla tiene las bandas alineadas con sus columnas', async ({ page }) => {
   await page.goto(FIXTURE);
-  await page.locator('.tabs__tab', { hasText: 'Totales por rubro' }).click();
+  await page.locator('.tabs__tab', { hasText: 'Planilla' }).click();
 
   const bandas = page.locator('.netos-banda');
   await expect(bandas).toHaveText([/Identificación/, /Recibo teórico/, /Lo que se liquidó/, /Conciliación/]);
@@ -77,6 +86,18 @@ test('una corrida vieja, guardada sin el desglose, se dibuja igual y lo dice', a
   await expect(page.locator('.netos-t--cascada')).toHaveCount(0);
   await expect(page.locator('.netos-ficha').first().locator('.netos-t')).toHaveCount(2);
   expect(errores).toEqual([]);
+});
+
+test('un estado sin casos se muestra igual, apagado y sin poder tocarse', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=cierra`);
+  // El fixture ?caso=cierra deja a todos al centavo: los otros tres estados
+  // quedan en cero y tienen que seguir estando, en su mismo lugar.
+  await expect(page.locator('.results-chip')).toHaveCount(5);
+  const vacio = page.locator('.results-chip', { hasText: 'Sin comparar' });
+  await expect(vacio).toBeDisabled();
+  await expect(vacio).toContainText('0');
+  // Sin diferencias, la que abre es Planilla y no Fichas.
+  await expect(page.locator('.tabs__tab--active')).toHaveText('Planilla');
 });
 
 for (const tema of ['claro', 'oscuro']) {

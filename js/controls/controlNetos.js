@@ -975,22 +975,28 @@ export function renderControlNetosResults(results, container) {
     container.innerHTML = '<p class="text-muted">Sin datos.</p>';
     return;
   }
-  // Tres solapas. **Fichas es la de entrada**: con cientos de legajos, lo
-  // primero que el analista necesita no es la planilla entera sino por qué un
-  // neto no cierra, y eso sólo se lee legajo por legajo. La planilla sigue
-  // estando, ordenada en bandas, para comparar entre legajos y totalizar.
-  // Una preferencia vieja ('detalle', de cuando eran dos solapas) cae en Fichas
-  // y no en la primera de la lista.
-  const guardada = getViewPreference('control_netos').tab;
-  const activeId = ['resumen', 'fichas', 'rubro'].includes(guardada) ? guardada : 'fichas';
+  // Tres solapas —Resumen · Fichas · Planilla— con esos nombres, que son los de
+  // la vista estándar de toda la app (`specs/vista-estandar-resultados.md`,
+  // D-074). Abre en **Fichas si el control terminó con diferencias** —lo primero
+  // que se ve es por qué falla— y en **Planilla si cerró**, donde lo que sirve es
+  // comparar y totalizar. La preferencia del analista pisa ese default pero se
+  // guarda por control Y POR ESTADO: con una sola clave, la primera vez que
+  // alguien cambia de solapa la regla de arriba deja de aplicar para siempre.
+  const tol = results.tolerancia;
+  const conDif = results.rows.some(r => r.residuo !== null && Math.abs(r.residuo) > tol);
+  const prefKey = `control_netos:${conDif ? 'conDif' : 'sinDif'}`;
+  const guardada = getViewPreference(prefKey).tab;
+  const activeId = ['resumen', 'fichas', 'planilla'].includes(guardada)
+    ? guardada
+    : (conDif ? 'fichas' : 'planilla');
   initTabs(container, {
     tabs: [
-      { id: 'resumen', label: 'Resumen',           render: (host) => renderResumen(results, host) },
-      { id: 'fichas',  label: 'Fichas',            render: (host) => renderFichas(results, host) },
-      { id: 'rubro',   label: 'Totales por rubro', render: (host) => renderRubro(results, host) },
+      { id: 'resumen',  label: 'Resumen',  render: (host) => renderResumen(results, host) },
+      { id: 'fichas',   label: 'Fichas',   render: (host) => renderFichas(results, host) },
+      { id: 'planilla', label: 'Planilla', render: (host) => renderRubro(results, host) },
     ],
     activeId,
-    onChange(id) { setViewPreference('control_netos', { tab: id }); },
+    onChange(id) { setViewPreference(prefKey, { tab: id }); },
   });
 }
 
@@ -1001,35 +1007,79 @@ export function renderControlNetosResults(results, container) {
 // vista, el chip "Sin explicar 116" de una solapa y el de la otra empezaban a
 // contar distinto.
 
+// Los CINCO estados de la vista estándar, con las palabras y el orden exactos:
+// son los mismos en los 21 controles, y se leen de peor a cerrado. "Sin
+// comparar" va último y no es un grado de cierre, es el resto — nunca se lee
+// como aprobado (D-073). Lo que le pasa ADEMÁS al legajo (fuera de escala,
+// topeó aportes) no entra acá: eso es una marca, no un estado, y va al
+// desplegable "Marcas ▾" (D-074, §3).
 const CATEGORIAS = [
-  { id: 'todos',       label: 'Todos',              test: () => true },
-  { id: 'diferencia',  label: 'Sin explicar',       test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > tol },
-  { id: 'margen',      label: 'Dentro del margen',  test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > REDONDEO_EPS && Math.abs(r.residuo) <= tol },
-  { id: 'exacto',      label: 'Al centavo',         test: (r) => r.residuo !== null && Math.abs(r.residuo) <= REDONDEO_EPS },
-  { id: 'escala',      label: 'Fuera de escala',    test: (r) => r.escalaOk === false },
-  { id: 'tope',        label: 'Topearon aportes',   test: (r) => r.excedenteTope > REDONDEO_EPS },
-  { id: 'sinComparar', label: 'Sin comparar',       test: (r) => r.residuo === null },
+  { id: 'todos',       label: 'Todos',             test: () => true },
+  { id: 'diferencia',  label: 'Con diferencia',    test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > tol },
+  { id: 'margen',      label: 'Dentro del margen', test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > REDONDEO_EPS && Math.abs(r.residuo) <= tol },
+  { id: 'exacto',      label: 'Al centavo',        test: (r) => r.residuo !== null && Math.abs(r.residuo) <= REDONDEO_EPS },
+  { id: 'sinComparar', label: 'Sin comparar',      test: (r) => r.residuo === null },
 ];
+
+// Las marcas del control: el segundo eje. El estado dice CÓMO CERRÓ el legajo;
+// la marca, QUÉ MÁS le pasa. Van en su propio desplegable y no en la fila de
+// chips, que tiene que decir lo mismo en las 21 pantallas (D-074, §3).
+const MARCAS_FILTRO = [
+  { id: 'escala',   label: 'Básico fuera de escala',        test: (r) => r.escalaOk === false },
+  { id: 'tope',     label: 'Topeó aportes',                 test: (r) => r.excedenteTope > REDONDEO_EPS },
+  { id: 'vacaciones', label: 'Vacaciones en el mes',        test: (r) => (r.cascada || []).some(x => VACACIONES_CODES.includes(x.code)) },
+  { id: 'jubilado', label: 'Perfil de jubilado sin confirmar', test: (r) => r.perfilJubilado && !r.jubilado },
+  { id: 'fueraConv', label: 'Fuera del convenio',           test: (r) => r.aplicaAcuerdo === false },
+  { id: 'sinPrev',  label: 'Sin mes anterior cargado',      test: (r) => r.netoTeoricoPrev === null },
+];
+
+/** Los conceptos que hacen que un legajo tenga "vacaciones en el mes". */
+const VACACIONES_CODES = ['3553', '4743', '3556', '4556', '4557', '4558', '4559'];
 
 /**
  * El `<select>` de estado, ya con los conteos de esta corrida.
  *
- * Las categorías vacías no se ofrecen: un chip "Fuera de escala 0" es un filtro
- * que sólo puede devolver una lista vacía. Arranca en "Sin explicar" si hay
- * alguno —errores primero— y en "Todos" si el control cerró limpio.
+ * **Los cinco estados se muestran siempre**, incluso en cero: sacar el que no
+ * tiene casos movería los demás de lugar, que es justo lo que la vista estándar
+ * viene a arreglar. El que está en cero queda deshabilitado y su `title` dice
+ * que en esta corrida no hubo ninguno. Arranca en "Con diferencia" si hay alguno
+ * —errores primero— y en "Todos" si el control cerró limpio.
+ *
+ * `data-chips` es la marca explícita de que ESTE select se dibuja como chips:
+ * sin ella, `chipifySelect()` decide por la cantidad de opciones, o sea por
+ * accidente (D-074, §3).
  */
 function selectDeEstado(rows, tol) {
   const sel = document.createElement('select');
   sel.className = 'form-select';
-  const disponibles = CATEGORIAS
-    .map(c => ({ ...c, n: rows.filter(r => c.test(r, tol)).length }))
-    .filter(c => c.n > 0);
-  sel.innerHTML = disponibles
-    .map(c => `<option value="${esc(c.id)}">${esc(c.label)} (${c.n})</option>`).join('');
-  const arranque = disponibles.find(c => c.id === 'diferencia') ? 'diferencia' : 'todos';
-  sel.value = arranque;
+  sel.dataset.chips = '1';
+  const conteos = CATEGORIAS.map(c => ({ ...c, n: rows.filter(r => c.test(r, tol)).length }));
+  sel.innerHTML = conteos.map(c => `
+    <option value="${esc(c.id)}"${c.n === 0 ? ' disabled title="Ningún legajo en este estado en esta corrida"' : ''}>
+      ${esc(c.label)} (${c.n})
+    </option>`).join('');
+  sel.value = conteos.find(c => c.id === 'diferencia').n > 0 ? 'diferencia' : 'todos';
   return sel;
 }
+
+/** El desplegable "Marcas ▾": las marcas con casos en esta corrida. */
+function selectDeMarcas(rows) {
+  const disponibles = MARCAS_FILTRO
+    .map(m => ({ ...m, n: rows.filter(r => m.test(r)).length }))
+    .filter(m => m.n > 0);
+  if (disponibles.length === 0) return null;
+  const sel = document.createElement('select');
+  sel.className = 'form-select';
+  // Desplegable por diseño: las marcas son el otro eje y no van a la fila de
+  // chips, que tiene que decir lo mismo en las 21 pantallas (D-074, §3).
+  sel.dataset.chips = '0';
+  sel.setAttribute('aria-label', 'Filtrar por marca del legajo');
+  sel.innerHTML = `<option value="">Marcas: todas</option>`
+    + disponibles.map(m => `<option value="${esc(m.id)}">${esc(m.label)} (${m.n})</option>`).join('');
+  return sel;
+}
+
+const testDeMarca = (id) => MARCAS_FILTRO.find(m => m.id === id)?.test || (() => true);
 
 const testDeCategoria = (id) => CATEGORIAS.find(c => c.id === id)?.test || (() => true);
 
@@ -1223,6 +1273,7 @@ function renderFichas(results, host) {
   }
 
   const estadoSel = selectDeEstado(rows, tol);
+  const marcaSel  = selectDeMarcas(rows);
   const ordenSel  = document.createElement('select');
   ordenSel.className = 'form-select';
   ordenSel.innerHTML = `
@@ -1232,7 +1283,8 @@ function renderFichas(results, host) {
     <option value="empresa">Empresa</option>
   `;
 
-  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host, { left: estadoSel });
+  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host,
+    { left: marcaSel ? [estadoSel, marcaSel] : estadoSel });
   const ordenWrap = document.createElement('label');
   ordenWrap.className = 'netos-orden';
   ordenWrap.append(document.createTextNode('Orden '), ordenSel);
@@ -1264,6 +1316,7 @@ function renderFichas(results, host) {
   function visibles() {
     const test = testDeCategoria(estadoSel.value);
     let out = rows.filter(r => test(r, tol));
+    if (marcaSel?.value) out = out.filter(testDeMarca(marcaSel.value));
     if (porBusqueda) out = out.filter(r => porBusqueda.has(r));
     const orden = ordenSel.value;
     return out.slice().sort((a, b) => {
@@ -1307,8 +1360,9 @@ function renderFichas(results, host) {
     det.dataset.pintada = '1';
   }, true);
 
-  estadoSel.addEventListener('change', () => { estado.pagina = 1; pintar(); });
-  ordenSel.addEventListener('change', () => { estado.pagina = 1; pintar(); });
+  for (const el of [estadoSel, marcaSel, ordenSel].filter(Boolean)) {
+    el.addEventListener('change', () => { estado.pagina = 1; pintar(); });
+  }
 
   initSearchCombobox(searchEl, {
     rows,
@@ -1563,7 +1617,9 @@ function renderRubro(results, host) {
   const rows = results.rows;
 
   const estadoSel = selectDeEstado(rows, tol);
-  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host, { left: estadoSel });
+  const marcaSel  = selectDeMarcas(rows);
+  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host,
+    { left: marcaSel ? [estadoSel, marcaSel] : estadoSel });
   const filasEl = document.createElement('span');
   filasEl.className = 'results-kpi';
   kpisEl.appendChild(filasEl);
@@ -1588,7 +1644,8 @@ function renderRubro(results, host) {
 
   const draw = () => {
     const test  = testDeCategoria(estadoSel.value);
-    const shown = rows.filter(r => test(r, tol));
+    const marca = marcaSel?.value ? testDeMarca(marcaSel.value) : () => true;
+    const shown = rows.filter(r => test(r, tol) && marca(r));
     filasEl.innerHTML = `<strong>${shown.length}</strong> fila${shown.length === 1 ? '' : 's'}`;
     tableHost.innerHTML = shown.length === 0
       ? '<p class="text-muted">Ningún legajo en esta categoría.</p>'
@@ -1606,7 +1663,7 @@ function renderRubro(results, host) {
     });
   };
 
-  estadoSel.addEventListener('change', draw);
+  for (const el of [estadoSel, marcaSel].filter(Boolean)) el.addEventListener('change', draw);
   draw();
 }
 

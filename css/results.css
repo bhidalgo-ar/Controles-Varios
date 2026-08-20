@@ -883,3 +883,13 @@ table.netos-rubro td.netos-dif-h {
   font-weight: var(--fw-bold);
 }
 table.netos-rubro th.netos-dif-h .netos-sub { color: var(--warn-tx); }
+
+/* Un estado sin casos en esta corrida: se muestra igual —sacarlo movería los
+   demás de lugar— apagado y sin poder tocarse (D-074, §3). */
+.results-chip--vacio {
+  opacity: 0.55;
+  cursor: default;
+  background: var(--color-bg-subtle);
+  color: var(--t3);
+}
+.results-chip--vacio:hover { border-color: var(--color-border); color: var(--t3); }
