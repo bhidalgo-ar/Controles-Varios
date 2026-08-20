@@ -22,6 +22,10 @@ const ALLOWLIST = new Set([
 // Archivos que no tiene sentido escanear por contenido (hashes, minificados).
 const SKIP_CONTENT = [/^package-lock\.json$/, /^node_modules\//, /^\.git\//];
 
+// Los tests usan datos inventados por política (CLAUDE.md § Privacidad), así que
+// un "legajo 1001" ahí es deliberado. La regla de legajo no aplica a esos archivos.
+const SKIP_LEGAJO = [/^tests\//, /^scripts\/check-datos-sensibles\.mjs$/];
+
 const RULES = [
   {
     id: 'planilla-de-cliente',
@@ -38,6 +42,16 @@ const RULES = [
     id: 'cuit',
     content: /\b\d{2}-\d{8}-\d\b/,
     msg: 'parece un CUIT/CUIL.',
+  },
+  {
+    id: 'legajo',
+    // Instrucción de Willy (2026-08-20): el número de legajo se pasa por chat
+    // —es lo que le deja encontrar la fila en su archivo— pero no queda escrito
+    // en un documento del repo. En una spec, el caso se nombra por lo que le
+    // pasa ("el legajo sin movimiento en el mes"), no por su número.
+    content: /\blegajos?\s+\d{2,}/i,
+    skip: SKIP_LEGAJO,
+    msg: 'es un número de legajo. Por chat sí, en el repo no: nombrá el caso por lo que le pasa ("el legajo con doble quincena").',
   },
 ];
 
@@ -60,6 +74,7 @@ for (const file of files) {
       continue;
     }
     if (SKIP_CONTENT.some((re) => re.test(file))) continue;
+    if (rule.skip?.some((re) => re.test(file))) continue;
 
     let text;
     try {
@@ -87,7 +102,8 @@ for (const h of hits) {
 console.error(`
 Qué hacer:
   - Si es un dato real: sacalo. En una captura, regenerá la imagen con datos
-    inventados; en un texto, reemplazá por un caso genérico ("el legajo 137").
+    inventados; en un texto, nombrá el caso por lo que le pasa ("el legajo sin
+    movimiento en el mes"), no por su número.
   - Si es inventado y el chequeo se equivocó: agregá el archivo a ALLOWLIST en
     scripts/check-datos-sensibles.mjs con el motivo.
   - Sólo si estás seguro y apurado: git commit --no-verify (CI vuelve a

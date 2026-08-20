@@ -144,11 +144,11 @@
 - Escalas de Ganancias (art. 94), deducciones SIRADIG F572, licencias,
   cualquier cálculo de "¿está bien liquidado el impuesto?" — Fase 3, control
   aparte, pasa primero por `controles-payroll` en modo CAPTURA.
-- Cualquier veredicto tipo "este legajo está mal" sobre el caso 1561 o
+- Cualquier veredicto tipo "este legajo está mal" sobre el caso fuera de patrón de tributación o
   cualquier "fuera de patrón" de tributación — se muestra como dato a
   revisar, nunca como afirmación de error, porque sin las deducciones no se
   puede saber.
-- El caso puntual del legajo 137: **cerrado como "no
+- El caso puntual del legajo sin movimiento en el mes: **cerrado como "no
   resoluble sin el Tabulado".** Guillermo confirmó (2026-08-07): probablemente
   es una licencia sin goce, pero Acumuladores Ganancias no tiene ese dato —
   sólo lo tendría cruzando contra el Tabulado, y este control es
@@ -197,7 +197,7 @@
 - Cualquier caso donde el dato real (cuando Guillermo suba un archivo de
   prueba) contradiga un supuesto de esta spec — parar y avisar, no
   reinterpretar en silencio.
-- El caso del legajo 137 ya está resuelto (ver §3): la alerta es genérica,
+- El caso del legajo sin movimiento ya está resuelto (ver §3): la alerta es genérica,
   no hay más que consultar acá — no diseñar ninguna heurística que intente
   adivinar "licencia" vs. "egreso mal cargado" sin el Tabulado.
 
@@ -224,7 +224,7 @@
 - Tocar otros controles o el contrato del registry.
 - Convertir el gate de PIN en un sistema de autenticación real (usuarios,
   roles, backend) — es un freno simple, nada más.
-- Afirmar que el legajo 1561 tiene un error, ni asumir la causa del 137
+- Afirmar que el legajo fuera de patrón tiene un error, ni asumir la causa del que no tuvo movimiento
   (licencia / egreso mal cargado / liquidación faltante) — quedan como
   "casos para revisar" con dato neutral, nunca como veredicto.
 
@@ -236,7 +236,7 @@ este scope, el agente para y avisa — no amplía el alcance por su cuenta.
 **Fecha de creación:** 2026-08-07
 **Confirmada por el usuario:** con supuestos pendientes — ver arriba (topes
 regulatorios y columnas del padrón quedan explícitamente abiertos hasta que
-Guillermo los resuelva). El caso del legajo 137 quedó cerrado el 2026-08-07:
+Guillermo los resuelva). El caso del legajo sin movimiento quedó cerrado el 2026-08-07:
 no resoluble sin el Tabulado, se muestra genérico.
 
 **Cerrada:** 2026-08-07 — implementación completa (ver D-029 en

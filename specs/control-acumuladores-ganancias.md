@@ -41,9 +41,9 @@ acumulador.** Encabezados en la fila 1, datos desde la 2:
 
 Verificado en el archivo de POP de julio:
 
-- Legajo 59, Bruto para ganancias: `SUMA` 24.346.073,30 + mes 5.375.194,53 =
+- Legajo de referencia (una liquidación en el mes), Bruto para ganancias: `SUMA` 24.346.073,30 + mes 5.375.194,53 =
   29.721.267,83, que es exactamente lo que muestra `TD TODOS`.
-- Legajo 1015: **dos filas de mes** para el mismo acumulador (una por quincena),
+- Legajo con dos quincenas: **dos filas de mes** para el mismo acumulador (una por quincena),
   1.191.045,59 + 861.586,72. 204 de los 308 legajos están en esta situación.
 - Los totales por legajo de las filas de `Operacion` vacía coinciden exactamente
   con la suma de las liquidaciones del mes (contrastado contra la hoja `07-2026`,
@@ -273,13 +273,13 @@ uno por tabla, que arma el `.xlsx` con las dos hojas.
 Corriendo con el crudo de julio de POP (RG 4030, un solo mes):
 
 - 308 legajos en `DATOS`, 307 con movimiento en el mes;
-- `DATOS` legajo 59: Bruto 29.721.267,83 · No Rem gravado 93.063,88 · SAC 1ra
+- `DATOS` legajo de referencia: Bruto 29.721.267,83 · No Rem gravado 93.063,88 · SAC 1ra
   2.350.322,84 · jubilación 4.164.817,54 · obra social 892.460,91 · IMPUESTO
   1.108.705,52;
-- `07-2026` legajo 59: Bruto 5.375.194,53 · No Rem gravado 92.663,88 ·
+- `07-2026` legajo de referencia: Bruto 5.375.194,53 · No Rem gravado 92.663,88 ·
   jubilación 631.339,44 · obra social 135.287,02 · Retenciones efectuadas
   296.740,47;
-- legajo 1015, mes: Bruto 1.191.045,59 + 861.586,72 = 2.052.632,31 (regression
+- legajo con dos quincenas, mes: Bruto 1.191.045,59 + 861.586,72 = 2.052.632,31 (regression
   test de la consolidación por legajo, cubierto en
   `tests/acumuladoresGananciasControl.test.js`).
 

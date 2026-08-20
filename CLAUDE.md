@@ -43,6 +43,11 @@ la planilla. El caso que originó la regla y el por qué están en D-063 y D-064
 Del caso participa el **número de legajo** —es lo que le permite a Willy encontrar la fila en su archivo—
 y los códigos de concepto y de acumulador, que son configuración. Nombre, CUIL y CBU no.
 
+**Ese legajo viaja por el chat y no queda escrito en el repo.** En una spec, un CHANGELOG o una entrada
+de DECISIONS el caso se nombra por lo que le pasa —"el legajo con doble quincena", "el legajo sin
+movimiento en el mes"—, nunca por su número: el chequeo automático lo frena. Los importes del caso sí
+pueden quedar, son las anclas que hacen verificable la spec.
+
 ---
 
 ## Gotchas — lo que cuesta caro si no lo sabés de antemano
@@ -130,10 +135,12 @@ personales — avisarlo donde se descargan. El banner de privacidad de `index.ht
 negocio: no se saca.
 
 **Antes de commitear corre un chequeo automático** (`scripts/check-datos-sensibles.mjs`): frena
-planillas (`.xlsx`, `.csv`, `.xls`) y textos con CBU o CUIT. Se activa una sola vez por máquina con
-`npm run hooks:install`; CI lo repite sobre los archivos del PR, así que si alguien no lo instaló, el
-PR sale en rojo. No cubre nombres ni sueldos —eso no se detecta por patrón—: para una captura de
-pantalla o un ejemplo en una spec, los datos se inventan siempre, aunque el repo sea privado.
+planillas (`.xlsx`, `.csv`, `.xls`), textos con CBU o CUIT, y **`legajo` seguido de un número** (los
+`tests/` quedan afuera de esa última regla: ahí los datos inventados son la política). Se activa una
+sola vez por máquina con `npm run hooks:install` — **en una sesión remota el contenedor es nuevo, así
+que hay que instalarlo de nuevo**; CI lo repite sobre los archivos del PR, así que si alguien no lo
+instaló, el PR sale en rojo. No cubre nombres ni sueldos —eso no se detecta por patrón—: para una
+captura de pantalla o un ejemplo en una spec, los datos se inventan siempre, aunque el repo sea privado.
 
 ---
 
