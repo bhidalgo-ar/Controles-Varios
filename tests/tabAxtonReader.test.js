@@ -12,7 +12,9 @@
 // varios conceptos en el totalizador (SIASA `605130`).
 //
 // Los datos son inventados —un export de cliente no entra al repo ni como fixture—:
-// lo que se reproduce es la FORMA del archivo, no su contenido.
+// lo que se reproduce es la FORMA del archivo, no su contenido. Los nombres salen de
+// la lista de jugadores de Banfield de CLAUDE.md § Privacidad, que es lo que hace que
+// un dato de prueba se distinga de uno real de un solo vistazo.
 //
 // El assert más importante del archivo es el de la consolidación por legajo: el
 // lector emite una fila por liquidación y **el que consolida es el control**, con
@@ -62,10 +64,10 @@ const pop = xlsxDe('Liquidaciones.20260728.035742.6', [
   ['Legajo', 'Apellido y Nombre', `Centro${NBSP}de Costo`, 'Ingreso', 'Bruto', null,
     '1000 - Sueldo Basico', null, '1100 - Horas Extras 50%', null, 'TOTAL -', null, 'LSD', 'liquidacion'],
   [null, null, null, null, 'Cant', 'Imp', 'Cant', 'Imp', 'Cant', 'Imp', 'Cant', 'Imp', null, null],
-  ['1', 'Perez', 'PLANTA', '01/03/2020', 30, 105000, 30, 100000, 5, 5000, null, null, 'S', 'Mensual 07-2026'],
-  ['1', 'Perez', 'PLANTA', '01/03/2020', 15, 50000, 15, 50000, null, null, null, null, 'S', '1ra Quincena 07-2026'],
-  ['1', 'Perez', 'PLANTA', '01/03/2020', 15, 50000, 15, 50000, 0, 0, null, null, 'S', '2da Quincena 07-2026'],
-  ['12-B', 'Gomez', 'ADM', '15/06/2021', 30, 200000, 30, 200000, null, null, null, null, 'S', 'Mensual 07-2026'],
+  ['1', 'Sanguinetti', 'PLANTA', '01/03/2020', 30, 105000, 30, 100000, 5, 5000, null, null, 'S', 'Mensual 07-2026'],
+  ['1', 'Sanguinetti', 'PLANTA', '01/03/2020', 15, 50000, 15, 50000, null, null, null, null, 'S', '1ra Quincena 07-2026'],
+  ['1', 'Sanguinetti', 'PLANTA', '01/03/2020', 15, 50000, 15, 50000, 0, 0, null, null, 'S', '2da Quincena 07-2026'],
+  ['12-B', 'Falcioni', 'ADM', '15/06/2021', 30, 200000, 30, 200000, null, null, null, null, 'S', 'Mensual 07-2026'],
   ['TOTAL GENERAL', null, null, null, 90, 405000, 90, 400000, 5, 5000, null, null, null, null],
 ]);
 
@@ -150,9 +152,9 @@ const siasa = xlsxDe('Liquidaciones.20260730.114122.4', [
   ['TOTAL GENERAL', null, null, 300, 200],
   ['Legajo', 'Apellido y Nombre', 'Recibo', '999 - Sueldo Basico', '1000 - Sueldo Basico'],
   [null, null, null, 'Imp', 'Imp'],
-  ['1', 'Perez', 'R1', 100, null],
-  ['007', 'Gomez', 'R2', 200, null],
-  ['2', 'Lopez', 'R3', null, 200],
+  ['1', 'Sanguinetti', 'R1', 100, null],
+  ['007', 'Falcioni', 'R2', 200, null],
+  ['2', 'Albella', 'R3', null, 200],
   ['TOTAL GENERAL', null, null, 300, 200],
 ]);
 
@@ -177,7 +179,7 @@ const siasa = xlsxDe('Liquidaciones.20260730.114122.4', [
   assert('dos códigos con el mismo rótulo se leen por separado',
     m.conceptos.map(c => c.codigo).join(',') === '999,1000' &&
     m.conceptos[0].nombre === m.conceptos[1].nombre);
-  assert('el legajo de la fila de Perez tiene sólo el concepto 999',
+  assert('el legajo de la fila de Sanguinetti tiene sólo el concepto 999',
     parsedRows[0].imp_999 === 100 && parsedRows[0].imp_1000 === null);
 
   assert('reconoce el TOTAL GENERAL duplicado arriba y abajo',
@@ -204,7 +206,7 @@ const coelsa = xlsxDe('Liquidaciones.20260731.090011.1', [
   ['Legajo', 'Apellido y Nombre', 'Centro de Costo',
     '1000 - Sueldo Basico', '1000 - Sueldo Basico (ajuste)', 'Ayuda especial', 'liquidacion'],
   [null, null, null, 'Imp', 'Imp', 'Imp', null],
-  ['1', 'Perez', 'ADM', 100, 50, 25, 'Mensual 07-2026'],
+  ['1', 'Sanguinetti', 'ADM', 100, 50, 25, 'Mensual 07-2026'],
   [null, null, null, 7, null, null, null],
   ['TOTAL GENERAL', null, null, 100, 50, 25, null],
   [null, 'Total calculado a mano', null, 100, null, null, null],
@@ -333,7 +335,7 @@ const coelsa = xlsxDe('Liquidaciones.20260731.090011.1', [
       ['EA: X | Reporte: Resumen de Liquidacion |'],
       ['Legajo', 'Apellido y Nombre', '1000 - Sueldo Basico', null],
       [null, null, 'Cant', 'Imp'],
-      ['1', 'Perez', 30, 100],
+      ['1', 'Sanguinetti', 30, 100],
     ],
   });
   assert('layoutTabAxton resuelve la fila de encabezados y la variante',
@@ -345,7 +347,7 @@ const coelsa = xlsxDe('Liquidaciones.20260731.090011.1', [
 // ── Cortes con error claro (nunca adivinar) ─────────────────────────────────
 
 assertThrows('sin fila de encabezados corta y dice qué columna se buscó',
-  () => readTabAxton(xlsxDe('Hoja1', [['Nombre', 'Apellido'], ['Perez', 'Juan']])),
+  () => readTabAxton(xlsxDe('Hoja1', [['Nombre', 'Apellido'], ['Sanguinetti', 'Javier']])),
   'Legajo');
 
 assertThrows('sin subencabezados Cant/Imp corta, en vez de adivinar si es cantidad o importe',
@@ -359,7 +361,7 @@ assertThrows('sin ninguna columna de concepto corta y muestra la forma esperada'
   () => readTabAxton(xlsxDe('Liquidaciones.20260728.035742.6', [
     ['Legajo', 'Apellido y Nombre', 'Bruto', null],
     [null, null, 'Cant', 'Imp'],
-    ['1', 'Perez', 30, 100],
+    ['1', 'Sanguinetti', 30, 100],
   ])),
   '1000 - Sueldo Basico');
 

@@ -48,7 +48,7 @@ class FakeWorkbook {
 
 const contract = EXPORT_CONTRACTS.gs_pers_reporte;
 const rows = [
-  { fecIni: '1/4/2026', fecFin: '30/4/2026', legajo: '1', nombre: 'Perez', apellido1: null,
+  { fecIni: '1/4/2026', fecFin: '30/4/2026', legajo: '1', nombre: 'Sanguinetti', apellido1: null,
     fecPago: null, fecAlta: null, idCC: null, gtos: 1000, dto: null, nCC: null },
   { fecIni: '1/4/2026', fecFin: '30/4/2026', legajo: '2', nombre: null, apellido1: null,
     fecPago: null, fecAlta: null, idCC: null, gtos: 0, dto: 200.5, nCC: null },
@@ -404,9 +404,9 @@ assert('NR Reporte: la columna spacer (A) sigue sin ningún estilo con el contra
 {
   const contract = EXPORT_CONTRACTS.rend_x_ee;
   const rows = [
-    { legajo: '1', nombre: 'Perez', repTotal: 1000, precio: 800, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    { legajo: '1', nombre: 'Sanguinetti', repTotal: 1000, precio: 800, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
       calcTotal: 800, dif: 200, sinTabData: false, soloEnTab: false },
-    { legajo: '2', nombre: 'Gomez', repTotal: null, precio: 500, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    { legajo: '2', nombre: 'Falcioni', repTotal: null, precio: 500, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
       calcTotal: 500, dif: null, sinTabData: false, soloEnTab: true },
   ];
   const totalRow = {
@@ -426,7 +426,7 @@ assert('NR Reporte: la columna spacer (A) sigue sin ningún estilo con el contra
     ws.rows[0].cells[3].fill.fgColor.argb === 'FFCCE0F5');
   assert('Rend x EE: Dif lleva el verde propio (no el de ninguna categoría)',
     ws.rows[0].cells[9].fill.fgColor.argb === 'FFA9D08E');
-  assert('Rend x EE: fila soloEnTab (Gomez) queda atenuada, incluido Legajo',
+  assert('Rend x EE: fila soloEnTab (Falcioni) queda atenuada, incluido Legajo',
     ws.rows[2].cells[0].font.color.argb === 'FF999999');
   assert('Rend x EE: TOTAL — headerRows:1 pinta TODA la fila, incluidas Legajo/Nombre (igual que el encabezado)',
     ws.rows[3].cells[0].fill.fgColor.argb === 'FFE0E0E0' && ws.rows[3].cells[0].font.bold === true);

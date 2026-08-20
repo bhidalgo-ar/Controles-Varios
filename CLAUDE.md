@@ -129,10 +129,33 @@ cascada, y su contrato completo está en `tests/clientDeletion.test.js` (D-037).
 
 Los datos de empleados viven sólo en el IndexedDB del navegador del analista. No hay telemetría ni
 analytics y no se agregan. Nada de `console.log` con datos de empleados si va a quedar commiteado.
-Los tests usan datos inventados (`'1'`/`'2'`, `Perez`/`Gomez`): un export de cliente no entra al
-repo, ni siquiera como fixture. El export JSON de sesión y el respaldo de base **sí** llevan datos
+Los tests usan datos inventados (`'1'`/`'2'`, `Sanguinetti`/`Falcioni`): un export de cliente no entra
+al repo, ni siquiera como fixture. El export JSON de sesión y el respaldo de base **sí** llevan datos
 personales — avisarlo donde se descargan. El banner de privacidad de `index.html` es requisito del
 negocio: no se saca.
+
+**Todo lo que se prueba se prueba con jugadores de Banfield.** Tests, fixtures, mockups, capturas de
+pantalla y ejemplos en una spec van con legajos y montos inventados, y los nombres salen de esta lista
+—se usa `APELLIDO NOMBRE`, en mayúsculas y sin tilde, como lo trae un export:
+
+| Nombre | Por qué está en la lista |
+| --- | --- |
+| SANGUINETTI JAVIER | récord de partidos del club (493) y capitán histórico |
+| ALBELLA GUSTAVO | máximo goleador histórico (136 goles) |
+| FALCIONI JULIO CESAR | DT del campeón del Apertura 2009 |
+| SILVA SANTIAGO | goleador del Apertura 2009 (14 goles) |
+| LUCCHETTI CRISTIAN | arquero del campeón 2009 |
+| ERVITI WALTER | ídolo, surgido del club, campeón 2009 |
+| RODRIGUEZ JAMES | surgido del club, campeón 2009 |
+| PALACIO RODRIGO | jugó en Banfield antes de Boca y la Selección |
+| CVITANICH DARIO | surgido del club, goleador, Selección |
+| DATOLO JESUS | surgido del club, Selección |
+| URZI AGUSTIN | surgido del club |
+| CARRANZA JULIAN | surgido del club |
+
+Si hace falta un nombre que no está, **verificalo antes de escribirlo**: no vale un jugador famoso que
+nunca jugó en Banfield. El apellido también sirve solo, para un consultor o un usuario de prueba
+(`Erviti`, `Cvitanich`).
 
 **Antes de commitear corre un chequeo automático** (`scripts/check-datos-sensibles.mjs`): frena
 planillas (`.xlsx`, `.csv`, `.xls`), textos con CBU o CUIT, y **`legajo` seguido de un número** (los

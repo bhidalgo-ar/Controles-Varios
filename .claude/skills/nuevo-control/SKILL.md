@@ -230,7 +230,8 @@ presente de un solo lado; y cada rama de `{ error }`.
 ## Reglas que no admiten criterio
 
 - **Datos de empleados.** Ni un `console.log` con ellos, ni un export de cliente en el repo. En los
-  tests, datos inventados: legajos `'1'`/`'2'`, apellidos `Perez`/`Gomez`.
+  tests, datos inventados: legajos `'1'`/`'2'`, y los nombres salen de la lista de jugadores de
+  Banfield de `CLAUDE.md` (`SANGUINETTI JAVIER`, `FALCIONI JULIO`, …).
 - **HR no va a entregables de Finanzas.** Si el archivo que genera el control lo recibe
   Finanzas/tesorería del cliente y no el equipo de Payroll, lleva sólo lo necesario para pagar
   (legajo, nombre, CUIT, CBU, banco, importe, fecha). Dotación, conteos, altas/bajas y excepciones van

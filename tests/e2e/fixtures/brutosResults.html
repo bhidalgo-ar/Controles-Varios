@@ -13,12 +13,12 @@ import { renderBrutosResults } from '../../../js/controls/brutos.js';
 const caso = new URLSearchParams(location.search).get('caso');
 
 const rowsNada = [
-  { legajo: '1', nombre: 'Perez', salBase: 999, aCuFutAumen: 999, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
-  { legajo: '2', nombre: 'Gomez', salBase: 999, aCuFutAumen: 999, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
+  { legajo: '1', nombre: 'Sanguinetti', salBase: 999, aCuFutAumen: 999, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
+  { legajo: '2', nombre: 'Falcioni', salBase: 999, aCuFutAumen: 999, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: null, ctrlACuFutAumen: null },
 ];
 const rowsOk = [
-  { legajo: '1', nombre: 'Perez', salBase: 850000, aCuFutAumen: 30000, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
-  { legajo: '2', nombre: 'Gomez', salBase: 920000, aCuFutAumen: 30000, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
+  { legajo: '1', nombre: 'Sanguinetti', salBase: 850000, aCuFutAumen: 30000, tabValSal: 850000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
+  { legajo: '2', nombre: 'Falcioni', salBase: 920000, aCuFutAumen: 30000, tabValSal: 920000, tabValAcu: 30000, ctrlSalBase: 0, ctrlACuFutAumen: 0 },
 ];
 
 const rows = caso === 'ok' ? rowsOk : rowsNada;

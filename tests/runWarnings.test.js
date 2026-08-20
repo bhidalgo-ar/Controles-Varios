@@ -34,8 +34,8 @@ function assert(desc, val) {
 
 // Un Tabulado donde la columna elegida para SUELDO trae texto, no importes.
 const tabRows = [
-  { 'ID_EMPLEADO': '1', '1003-SUELDO': 'MENSUAL', 'APELLIDO_NOMBRE': 'Perez' },
-  { 'ID_EMPLEADO': '2', '1003-SUELDO': 'JORNAL',  'APELLIDO_NOMBRE': 'Gomez' },
+  { 'ID_EMPLEADO': '1', '1003-SUELDO': 'MENSUAL', 'APELLIDO_NOMBRE': 'Sanguinetti' },
+  { 'ID_EMPLEADO': '2', '1003-SUELDO': 'JORNAL',  'APELLIDO_NOMBRE': 'Falcioni' },
 ];
 
 const avisosColumna = columnWarningsOf([

@@ -23,7 +23,8 @@ CUIT, ni un CBU, ni un importe de una persona. Sí van: nombres de columna
 literales, códigos de concepto, cantidad de filas, totales del período y el
 formato de una celda descrito en abstracto ("texto con coma decimal y separador
 de miles", no el valor). Si para explicar algo necesitás un ejemplo, inventalo
-(`'1'`, `'2'`, `Perez`, `Gomez`), como hacen los tests del repo.
+(`'1'`, `'2'`, `SANGUINETTI JAVIER`, `FALCIONI JULIO` — la lista de jugadores de
+Banfield de `CLAUDE.md`), como hacen los tests del repo.
 
 Y no copiás el archivo adentro del repo, ni lo movés, ni lo renombrás. Lo leés
 donde está.

@@ -30,9 +30,9 @@ assert('tabRequired es false (no usa el Tabulado)', ctrl.tabRequired === false);
 // ── Datos de prueba (inventados, sin datos reales de empleados) ──────────────
 
 const nominaRows = [
-  { legajo: '1', apellido: 'Perez', nombre: 'Juan', '100': 1000, '200': 500 },
-  { legajo: '2', apellido: 'Gomez', nombre: 'Ana',  '100': 2000, '200': 300 },
-  { legajo: '3', apellido: 'Diaz',  nombre: 'Lucas', '100': 1500, '200': 200 },
+  { legajo: '1', apellido: 'Sanguinetti', nombre: 'Javier', '100': 1000, '200': 500 },
+  { legajo: '2', apellido: 'Falcioni', nombre: 'Julio',  '100': 2000, '200': 300 },
+  { legajo: '3', apellido: 'Datolo',  nombre: 'Jesus', '100': 1500, '200': 200 },
 ];
 
 const resumenLargoRows = [

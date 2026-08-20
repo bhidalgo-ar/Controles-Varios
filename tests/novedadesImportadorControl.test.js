@@ -82,8 +82,8 @@ const base = [
   ['Unidad Organizativa', '1132', 'PLANTA NORTE', '09/08/2024'],
   [null, null, null, 'Sueldo Basico', 'Horas Extras 50%', 'Premio'],
   ['Legajo', 'Apellido y Nombres', 'CUIL', '1000', '1100', '2500'],
-  ['1', 'Perez', '(inventado)', '1$159811,7958', 8, null],
-  ['2', 'Gomez', '(inventado)', '1$400', null, 0],
+  ['1', 'Sanguinetti', '(inventado)', '1$159811,7958', 8, null],
+  ['2', 'Falcioni', '(inventado)', '1$400', null, 0],
 ];
 
 {
@@ -92,7 +92,7 @@ const base = [
   assert('la unidad organizativa sale del archivo cuando el archivo la trae',
     r.uo.nro === '1132' && r.uo.nombre === 'PLANTA NORTE' && r.uo.origen === 'archivo');
   assert('el nombre del empleado viaja al importador (lo recibe el analista, no Finanzas)',
-    r.filas[0].nombre === 'Perez');
+    r.filas[0].nombre === 'Sanguinetti');
   assert('separa cantidad e importe de la celda cantidad$importe',
     r.filas[0].valores.get('1000').cantidad === 1
     && Math.abs(r.filas[0].valores.get('1000').importe - 159811.7958) < 0.00001);
@@ -121,9 +121,9 @@ const base = [
   const r = correr([
     ['Unidad Organizativa', '1132', 'PLANTA NORTE'],
     ['Legajo', 'Apellido y Nombres', '1000', '1100'],
-    ['1', 'Perez', '1$500', 4],
-    ['1', 'Perez', '2$300,50', 3],
-    ['2', 'Gomez', '1$100', null],
+    ['1', 'Sanguinetti', '1$500', 4],
+    ['1', 'Sanguinetti', '2$300,50', 3],
+    ['2', 'Falcioni', '1$100', null],
   ]);
   assert('el legajo repetido queda como un solo empleado', r.filas.length === 2);
   assert('las cantidades del legajo repetido se suman',
@@ -141,8 +141,8 @@ const base = [
   const planilla = [
     ['Unidad Organizativa', '1132', 'PLANTA NORTE'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['007', 'Perez', '1$500'],
-    ['7', 'Perez', '1$300'],
+    ['007', 'Sanguinetti', '1$500'],
+    ['7', 'Sanguinetti', '1$300'],
   ];
   const conDefault = correr(planilla);
   assert('con la clave por default son el mismo empleado y se suman',
@@ -161,8 +161,8 @@ const conSinCodigo = [
   ['Unidad Organizativa', '1132', 'PLANTA NORTE'],
   [null, null, 'Sueldo Basico', 'Horas Extras 50%', 'Observaciones'],
   ['Legajo', 'Apellido y Nombres', '1000', null, null],
-  ['1', 'Perez', '1$500', 6, 'revisar con la analista'],
-  ['2', 'Gomez', '1$300', 2, null],
+  ['1', 'Sanguinetti', '1$500', 6, 'revisar con la analista'],
+  ['2', 'Falcioni', '1$300', 2, null],
 ];
 
 {
@@ -221,7 +221,7 @@ const conSinCodigo = [
   const r = correr([
     ['Unidad Organizativa', '1132', 'PLANTA NORTE'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
+    ['1', 'Sanguinetti', '1$500'],
     [null, 'TOTAL', '1$500'],
   ]);
   assert('la fila sin legajo no entra al importador', r.filas.length === 1);
@@ -235,7 +235,7 @@ const conSinCodigo = [
   const sinUo = [
     ['Empresa', 'MERZ ARGENTINA', '01/07/2026'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
+    ['1', 'Sanguinetti', '1$500'],
   ];
   const r = correr(sinUo);
   assert('cuando el archivo declara Empresa y no UO, se informa como tal',
@@ -243,7 +243,7 @@ const conSinCodigo = [
 
   const soloLegajo = correr([
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
+    ['1', 'Sanguinetti', '1$500'],
   ]);
   assert('sin unidad organizativa en ningún lado, el importador se arma pero lo avisa',
     soloLegajo.uo.origen === 'sin_declarar'
@@ -252,7 +252,7 @@ const conSinCodigo = [
 
   const declarada = correr(soloLegajo === null ? [] : [
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
+    ['1', 'Sanguinetti', '1$500'],
   ], { config: { uoNro: '4', uoNombre: 'AGUAS Y GASEOSAS' } });
   assert('la UO que carga el analista en el Paso 2 gana',
     declarada.uo.origen === 'analista' && declarada.uo.nombre === 'AGUAS Y GASEOSAS');
@@ -312,9 +312,9 @@ const conSinCodigo = [
   const planilla = [
     ['Unidad Organizativa', '4', 'AGUAS Y GASEOSAS'],
     ['Legajo', 'Apellido y Nombres', '1000', '1100'],
-    ['1', 'Perez', '1$500', 4],
-    ['2', 'Gomez', '1$300', null],
-    ['3', 'Lopez', '1$200', null],
+    ['1', 'Sanguinetti', '1$500', 4],
+    ['2', 'Falcioni', '1$300', null],
+    ['3', 'Lucchetti', '1$200', null],
   ];
   // El importador que se subió a mano: al legajo 3 no llegó (el caso real de
   // SIASA 07/2026), el 1 tiene otro importe, y al 2 alguien le agregó un
@@ -322,8 +322,8 @@ const conSinCodigo = [
   const armado = [
     ['Unidad Organizativa', '4', 'AGUAS Y GASEOSAS'],
     ['Legajo', 'Apellido y Nombres', '1000', '1100', '2500'],
-    ['1', 'Perez', '1$450', 4, null],
-    ['2', 'Gomez', '1$300', null, '1$100'],
+    ['1', 'Sanguinetti', '1$450', 4, null],
+    ['2', 'Falcioni', '1$300', null, '1$100'],
   ];
 
   const { parsedRows, parseMetadata } = parseExpNov(xlsxDe(planilla));
@@ -362,7 +362,7 @@ const conSinCodigo = [
   const planilla = [
     ['Unidad Organizativa', '4', 'AGUAS Y GASEOSAS'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['2', 'Perez', '2$800'],
+    ['2', 'Sanguinetti', '2$800'],
   ];
   // El mismo legajo en dos filas del lado del archivo armado: se SUMA, no se
   // pisa. Con la última pisando a la anterior, este caso daría una diferencia
@@ -370,8 +370,8 @@ const conSinCodigo = [
   const armado = [
     ['Unidad Organizativa', '4', 'AGUAS Y GASEOSAS'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['2', 'Perez', '1$500'],
-    ['2', 'Perez', '1$300'],
+    ['2', 'Sanguinetti', '1$500'],
+    ['2', 'Sanguinetti', '1$300'],
   ];
   const { parsedRows, parseMetadata } = parseExpNov(xlsxDe(planilla));
   const { parsedRows: filasArmado }   = parseExpNov(xlsxDe(armado));
@@ -387,7 +387,7 @@ const conSinCodigo = [
   const porCentavos = [
     ['Unidad Organizativa', '4', 'AGUAS Y GASEOSAS'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['2', 'Perez', '2$799,50'],
+    ['2', 'Sanguinetti', '2$799,50'],
   ];
   const c = parseExpNov(xlsxDe(porCentavos));
   const r2 = runNovedadesImportador(parsedRows, [], {

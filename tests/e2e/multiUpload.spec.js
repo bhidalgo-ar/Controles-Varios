@@ -9,7 +9,7 @@
 // `dropLabelFor`/`dropHintFor` (D-050: Acumuladores ya no tiene un `dropLabel`
 // propio, cae al mismo fallback que CONTA).
 //
-// Datos inventados, como manda el repo: legajos '1'/'2', Perez/Gomez.
+// Datos inventados, como manda el repo: legajos '1'/'2', Sanguinetti/Falcioni.
 
 import { test, expect } from '@playwright/test';
 

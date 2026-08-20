@@ -186,8 +186,8 @@ const synthHeaders = ['ID_EMPLEADO', 'NOMBRE', 'APELLIDO_1', 'ID_CONCEPTO', 'NOM
 const synthRows = [
   [1001, 'MARÍA',  'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A1', '10', 'PATENTES', 1000, 0, 'REMUNERACIONES'],
   [1001, 'MARÍA',  'GÓMEZ', '1003', 'SUELDO BÁSICO', '5208001', 'A2', '10', 'PATENTES',  500, 0, 'REMUNERACIONES'],
-  [1002, 'JUAN',   'PÉREZ', '1003', 'SUELDO BÁSICO', '5208001', 'A1', '10', 'PATENTES',  800, 0, 'REMUNERACIONES'],
-  [1002, 'JUAN',   'PÉREZ', '3572', 'PROV CCSS',     '5208005', 'A1', '10', 'PATENTES',  200, 50, 'PROVISIONES'],
+  [1002, 'JAVIER',   'SANGUINETTI', '1003', 'SUELDO BÁSICO', '5208001', 'A1', '10', 'PATENTES',  800, 0, 'REMUNERACIONES'],
+  [1002, 'JAVIER',   'SANGUINETTI', '3572', 'PROV CCSS',     '5208005', 'A1', '10', 'PATENTES',  200, 50, 'PROVISIONES'],
 ];
 const synthWs = XLSX.utils.aoa_to_sheet([synthHeaders, ...synthRows]);
 const synthWb = XLSX.utils.book_new();

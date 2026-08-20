@@ -23,10 +23,10 @@ function baseSeed(overrides = {}) {
     updatedBy: 'gesposito',
     sourceSystems: [{ id: 'meta4', label: 'Meta4' }, { id: 'axton', label: 'Axton' }],
     teams: [{ code: 'EQ_TEST', lead: 'Alguien' }],
-    consultants: [{ name: 'Ana' }, { name: 'Bruno' }],
+    consultants: [{ name: 'Erviti' }, { name: 'Cvitanich' }],
     clients: [
-      { code: 'ACME', name: 'Acme Demo SA', team: 'EQ_TEST', consultant: 'Ana', complexity: 2, pays: 50, ccts: ['Comercio'], entityCount: 1, sourceSystem: 'meta4', active: true, attributes: { pluriempleo: false } },
-      { code: 'DEMOCORP', name: 'Demo Corp SRL', team: 'EQ_TEST', consultant: 'Bruno', complexity: 3, pays: 200, ccts: ['Camioneros'], entityCount: 2, sourceSystem: 'axton', active: true, attributes: { paymentUsd: true } },
+      { code: 'ACME', name: 'Acme Demo SA', team: 'EQ_TEST', consultant: 'Erviti', complexity: 2, pays: 50, ccts: ['Comercio'], entityCount: 1, sourceSystem: 'meta4', active: true, attributes: { pluriempleo: false } },
+      { code: 'DEMOCORP', name: 'Demo Corp SRL', team: 'EQ_TEST', consultant: 'Cvitanich', complexity: 3, pays: 200, ccts: ['Camioneros'], entityCount: 2, sourceSystem: 'axton', active: true, attributes: { paymentUsd: true } },
     ],
     controlConfigs: [],
     catalogs: [],
@@ -161,7 +161,7 @@ function baseSeed(overrides = {}) {
 
   globalThis.fetch = async () => ({ ok: true, json: async () => baseSeed() });
   const consultants = await tryLoadKnownConsultants();
-  assert('trae los nombres de consultants[] cuando el fetch da OK', consultants.length === 2 && consultants.includes('Ana') && consultants.includes('Bruno'));
+  assert('trae los nombres de consultants[] cuando el fetch da OK', consultants.length === 2 && consultants.includes('Erviti') && consultants.includes('Cvitanich'));
 
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ foo: 'bar' }) });
   assert('un archivo sin "consultants" devuelve lista vacía', (await tryLoadKnownConsultants()).length === 0);
@@ -178,7 +178,7 @@ function baseSeed(overrides = {}) {
   const seed = baseSeed({ configVersion: 5 });
   await applySeed(seed);
   const stored = await getConfig('seedConsultants');
-  assert('seedConsultants queda guardado tras el import', stored?.length === 2 && stored.some(c => c.name === 'Ana'));
+  assert('seedConsultants queda guardado tras el import', stored?.length === 2 && stored.some(c => c.name === 'Erviti'));
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);

@@ -41,8 +41,8 @@ function xlsxDe(sheetName, aoa) {
 
 const meta4h = xlsxDe('tabulado_h', [
   ['ID_EMPLEADO', 'FEC_PAGO', 'APPELIDO Y NOMBRE', 'CUIL', '1003-SUELDO', '401-DIAS_TRAB', 'NETO'],
-  ['1', '2026-07-31', 'Perez', '(cuil inventado)', 100, 30, 100],
-  ['2', '2026-07-31', 'Gomez', '(cuil inventado)', 200, 30, 200],
+  ['1', '2026-07-31', 'Sanguinetti', '(cuil inventado)', 100, 30, 100],
+  ['2', '2026-07-31', 'Falcioni', '(cuil inventado)', 200, 30, 200],
   [null, null, null, null, null, null, null],
   [null, null, null, null, 300, 60, 300],
 ]);
@@ -60,7 +60,7 @@ const meta4h = xlsxDe('tabulado_h', [
 const axtonFull = xlsxDe('Liquidaciones.20260728.035742.6', [
   ['Legajo', 'Apellido y Nombre', 'CUIL', 'Bruto', null, '1000 - Sueldo Basico', null],
   [null, null, null, 'Cant', 'Imp', 'Cant', 'Imp'],
-  ['1', 'Perez', '(cuil inventado)', 30, 100, 30, 100],
+  ['1', 'Sanguinetti', '(cuil inventado)', 30, 100, 30, 100],
   ['TOTAL GENERAL', null, null, 30, 100, 30, 100],
 ]);
 
@@ -80,8 +80,8 @@ const axtonImp = xlsxDe('Liquidaciones.20260730.114122.4', [
   ['TOTAL GENERAL', null, null, null, 300, 300],
   ['Legajo', 'Apellido y Nombre', 'CUIL', 'Recibo', '999 - Sueldo Basico', '1000 - Sueldo Basico'],
   [null, null, null, 'Imp', 'Imp', 'Imp'],
-  ['1', 'Perez', '(cuil inventado)', null, 100, null],
-  ['2', 'Gomez', '(cuil inventado)', null, null, 200],
+  ['1', 'Sanguinetti', '(cuil inventado)', null, 100, null],
+  ['2', 'Falcioni', '(cuil inventado)', null, null, 200],
   ['TOTAL GENERAL', null, null, null, 300, 300],
 ]);
 
@@ -159,7 +159,7 @@ const totalesPorReporte = xlsxDe('Hoja1', [
   assert('hoja renombrada + fila 1 con ID_EMPLEADO y código pegado → meta4_h', r.format === 'meta4_h');
 }
 {
-  const r = classifyTabulado({ sheetName: 'Hoja1', rows: [['Nombre', 'Apellido'], ['Perez', 'Juan']] });
+  const r = classifyTabulado({ sheetName: 'Hoja1', rows: [['Nombre', 'Apellido'], ['Sanguinetti', 'Javier']] });
   assert('archivo sin ninguna firma → format null', r.format === null);
   assert('…y la evidencia dice qué se buscó', r.evidencia.some(e => e.includes('tabulado_h')));
 }
@@ -167,7 +167,7 @@ const totalesPorReporte = xlsxDe('Hoja1', [
 // ── Cortes con error claro (nunca adivinar el formato) ───────────────────────
 
 assertThrows('un Excel sin firma conocida corta y nombra las firmas buscadas',
-  () => detectTabFormat(xlsxDe('Hoja1', [['Nombre', 'Apellido'], ['Perez', 'Juan']])),
+  () => detectTabFormat(xlsxDe('Hoja1', [['Nombre', 'Apellido'], ['Sanguinetti', 'Javier']])),
   'No se reconoció el formato');
 
 {
