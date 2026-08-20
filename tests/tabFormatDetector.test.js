@@ -91,6 +91,55 @@ const axtonImp = xlsxDe('Liquidaciones.20260730.114122.4', [
   assert('axton_imp → sistema Axton', r.sistema === 'Axton');
 }
 
+// ── El campo `Reporte:` del preámbulo (N0b) ─────────────────────────────────
+// Los tres exports de Axton arrancan igual —mismo preámbulo, columna Legajo— y lo
+// único que los distingue es el campo `Reporte:`. Sin esa firma, el totalizador
+// subido en el casillero del Tabulado se clasificaba como `axton_imp` y el error
+// aparecía recién al leerlo, hablando de subencabezados que el archivo nunca tuvo.
+
+{
+  const r = detectTabFormat(axtonImp);
+  assert('el detector devuelve el campo Reporte: del preámbulo',
+    r.reporte === 'Resumen de Liquidacion');
+}
+{
+  const r = detectTabFormat(axtonFull);
+  assert('sin preámbulo (POP, Epiroc, Geopagos), reporte queda en null', r.reporte === null);
+}
+
+// El totalizador: formato largo, una fila por legajo × concepto × liquidación, sin
+// subencabezados Cant/Imp. Se reconoce por el `Reporte:` y por el nombre de hoja.
+const totalesPorReporte = xlsxDe('Hoja1', [
+  ['EA: Empresa de Ejemplo | Reporte: Totales de Concepto | Periodo: 07/2026 - 07/2026 |'],
+  ['----'],
+  ['Legajo', 'Nro', 'Concepto', 'Cantidad', 'Importe'],
+  ['1', '1000', 'Sueldo Basico', 30, 100],
+]);
+
+{
+  const r = detectTabFormat(totalesPorReporte);
+  assert('preámbulo con "Reporte: Totales de Concepto" → axton_tot', r.format === 'axton_tot');
+  assert('axton_tot → sistema Axton', r.sistema === 'Axton');
+  assert('…y la evidencia dice que no es el Tabulado',
+    r.evidencia.some(e => e.includes('no el Tabulado')));
+}
+{
+  const r = classifyTabulado({
+    sheetName: 'totalesconcepto.20260731.101122.3',
+    rows: [['Legajo', 'Nro', 'Concepto', 'Importe'], ['1', '1000', 'Sueldo Basico', 100]],
+  });
+  assert('hoja "totalesconcepto.*" → axton_tot aunque no haya preámbulo', r.format === 'axton_tot');
+}
+{
+  // Un Tabulado normal NO se confunde con el totalizador: su Reporte: es otro.
+  const r = classifyTabulado({
+    sheetName: 'Liquidaciones.20260730.114122.4',
+    rows: [['EA: Empresa | Reporte: Consulta de Liquidacion |'], ['Legajo'], [null, 'Imp']],
+  });
+  assert('"Reporte: Consulta de Liquidacion" sigue siendo Tabulado', r.format === 'axton_imp');
+  assert('…y el reporte viaja tal cual', r.reporte === 'Consulta de Liquidacion');
+}
+
 // ── Marcadores internos, cuando el nombre de hoja no alcanza ─────────────────
 // Un re-guardado puede cambiar marcas; el preámbulo EA o los encabezados de la
 // fila 1 tienen que alcanzar para clasificar igual.

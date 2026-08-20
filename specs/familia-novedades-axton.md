@@ -1,7 +1,7 @@
 # Familia de Novedades (Axton) — spec
 
-**Estado:** relevada, con decisiones cerradas y con el cimiento N0a implementado (2026-08-20).
-N0b, N1 y N2 siguen en diseño.
+**Estado:** relevada, con decisiones cerradas y con los dos cimientos implementados —N0a (lector
+ExpNov) y N0b (lector del Tabulado de Axton + totalizador)— el 2026-08-20. N1 y N2 siguen en diseño.
 **Origen:** relevamiento de Guillermo sobre SharePoint, 2026-08-20 — carpetas de
 Novedades y de Liquidaciones de **julio 2026** de los 7 clientes Axton: Plastic
 Pilar (POP), Merz, Epiroc, SIASA, Geopagos, Red Bull y Coelsa (más el histórico
@@ -143,13 +143,74 @@ Contrato escrito como test ejecutable en `tests/expNovParser.test.js` (68
 asserts, datos inventados), en la cadena de `package.json`. Pendiente: correrlo
 contra un archivo real de cliente — los del relevamiento no entraron al repo.
 
-### N0b — Parser Axton del Tabulado (cimiento, extiende la pieza T / D-065)
+### N0b — Lector del Tabulado de Axton (cimiento, extiende la pieza T / D-065) — **hecho** (2026-08-20)
 
-Preámbulo 0/1/2 filas (el campo `Reporte:` del preámbulo distingue Resumen /
-Consulta / Totales de Concepto), pares Cant/Imp vs sólo-Imp, `TOTAL GENERAL`
-simple o duplicado, fila por liquidación → **consolidar con
-`js/controls/consolidate.js`**, ignorar filas manuales post-total, normalizar
-U+00A0, y leer el totalizador `totalesconcepto` como fuente complementaria.
+`js/parsers/tabAxtonReader.js`. `readTabAxton(arrayBuffer)` devuelve
+`{ parsedRows, parseMetadata }` y `layoutTabAxton({ sheetName, rows, maxCol })` es
+la resolución de estructura sola, pura y exportada para testear las firmas.
+
+Cómo se ubica, sin asumir posición: **la fila de encabezados es la que trae la
+columna `Legajo`** (se busca en las primeras 12 filas, así se banca el preámbulo de
+0, 1 o 2 filas y el `TOTAL GENERAL` de arriba metido en el preámbulo); los
+subencabezados son la fila pegada abajo, y son los que dicen la variante —al menos
+un `Cant` → `axton`; sólo `Imp` → `axton_imp`— y qué columna es cantidad y cuál
+importe. Después cada columna se clasifica **por su encabezado**: ficha (por alias,
+sin acentos ni espacios duros), concepto (`1000 - Sueldo Basico`, **por código**),
+totalizador (`Bruto`/`Retenciones`/`Exento`/`Neto`), no-concepto conocido
+(`TOTAL -`, `LSD`) o columna que no se pudo atribuir. Así el bloque de
+identificación puede medir 12, 15, 16 o 31 columnas sin que cambie nada.
+
+- `parsedRows`: **una fila por liquidación**, no por empleado (un legajo hasta 3
+  veces en POP). Lleva la ficha con las claves que el archivo trae, los
+  totalizadores como `<nombre>_cant`/`<nombre>_imp` y cada concepto como
+  `cant_<codigo>`/`imp_<codigo>`. El legajo viaja **crudo**. Una columna que el
+  archivo no trae **no se emite como clave vacía** —se omite— para que el control
+  distinga "la columna no está" de "la celda vino vacía"; una celda vacía de
+  concepto es `null`, y `null` no es `0`. **La fila `TOTAL GENERAL` no viaja acá**,
+  para que ningún cruce la tome por un empleado: está en
+  `parseMetadata.totalGeneral`.
+- **Consolidar es del control**, con `js/controls/consolidate.js` y
+  `makeLegajoKey(mapping.legajoKeyMode)` en los dos lados del cruce (D-042). El
+  contrato está escrito como assert en `tests/tabAxtonReader.test.js`: agrupado por
+  legajo, el total por concepto reproduce el `TOTAL GENERAL` del archivo.
+- **Una cantidad ausente no se infiere** (D-065): en la variante sólo-Imp las claves
+  `cant_<codigo>` **no existen**, `cantidadesDisponibles` viaja en `false` y el
+  aviso pide el export con cantidades y anticipa que el control sale INCIERTO.
+- `parseMetadata` lleva además `formato`, `reporte` (el campo del preámbulo),
+  `empresa`, `periodo`, las filas de encabezado y de datos, `conceptos` y
+  `totalizadores` con sus claves, `uniqueLegajos`,
+  `legajosConVariasLiquidaciones` / `maxLiquidacionesPorLegajo`, `liquidaciones`,
+  `columnasSinClasificar`, `columnasIgnoradas`, `totalGeneralFilas`,
+  `totalGeneralDuplicado`, `totalesQueNoCierran`, `filasPostTotal`,
+  `filasSinLegajo` y `avisos`.
+- **El corte de las filas agregadas a mano es el ÚLTIMO `TOTAL GENERAL`**, no el
+  primero: en la variante duplicada la copia de arriba puede caer debajo de los
+  subencabezados y cortar ahí tiraría la nómina entera (D-071).
+- **Las sumas se validan contra el `TOTAL GENERAL` del propio archivo**, con
+  tolerancia de un centavo. Lo que no cierra sale en `totalesQueNoCierran` con los
+  dos números y en un aviso — aviso y no error: el export puede venir retocado a
+  mano (D-065) y el resto sigue sirviendo.
+
+El totalizador se lee con `readTotalesConcepto` en
+`js/parsers/totalesConceptoParser.js` —el mismo módulo que ya usa la Contabilidad
+Desglosada, compartiendo la lectura de la tabla en sus dos formatos (HTML y .xlsx
+real)— y devuelve la unidad **legajo × concepto × liquidación** con su cantidad y su
+importe, **sin exigir las cuentas contables**: el export que se baja para comparar
+novedades puede venir sin ellas y sirve igual. Avisa cuando no trae columna
+`Cantidad`, cuando una fila no tiene número de concepto, y cuando un mismo código
+agrupa varios conceptos reales (SIASA: `605130` son 10 obras sociales, `2250` tiene
+4 rótulos).
+
+El campo `Reporte:` del preámbulo entró al detector de formato con un cuarto
+formato, `axton_tot`: es lo único que distingue los tres exports de Axton, que
+arrancan todos igual. Si el analista sube el totalizador en el casillero del
+Tabulado, `readTabAxton` corta diciendo qué archivo es y dónde va.
+
+83 asserts en `tests/tabAxtonReader.test.js`, en la cadena de `package.json`.
+**Ningún control existente cambia y todavía no hay pantalla.** Pendiente: correrlo
+contra un Tabulado real —los del relevamiento no entraron al repo— y que
+`tabAxtonParser.js` (el estricto, que hoy usa Variaciones de POP) pase a delegar en
+el lector, en un PR aparte (D-071).
 
 ### N1 — Generador de importador ("Generar Reporte")
 
@@ -177,9 +238,9 @@ informa como no comparable.
 | Fase | Qué | Depende de |
 |---|---|---|
 | 0 | ~~N0a Lector ExpNov + tests~~ **hecho** (`js/parsers/expNovParser.js`) | — |
-| 0 | N0b Parser Axton de Tabulado + totalizador + tests | detector D-065 (hecho) |
+| 0 | ~~N0b Lector Axton de Tabulado + totalizador + tests~~ **hecho** (`js/parsers/tabAxtonReader.js`, `readTotalesConcepto`) | detector D-065 (hecho) |
 | 1 | N1 Generador de importador (piloto: SIASA y Merz) | N0a |
-| 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b |
+| 2 | N2 Novedades vs Liquidación (piloto: SIASA y Merz; volumen: POP) | N0a + N0b (los dos hechos) |
 
 **Pilotos elegidos por evidencia:** SIASA guarda las tres capas del circuito en
 carpetas (`A - Novedades recibidas` / `B - Novedades modificadas` /
