@@ -1,10 +1,13 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). Tandas 2 a 8 —el resto
-de los 21 controles— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de
-Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
-cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
+del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 3 hecha
+(2026-08-20, rama `feat/vista-estandar-barra-axton`):** barra + planilla en las 9 pantallas del lote
+Axton/general (D-078, D-079, D-080). **Tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en
+paralelo, todavía sin mergear — no está hecha.** Tandas 4 a 8 —las fichas por lote— siguen pendientes,
+en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los
+21 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
+`docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -110,6 +113,12 @@ propio de cada control y opcional. En Netos: fuera de escala, topeó aportes, va
 sin mes anterior cargado. En NR: los 18 conceptos (que ya son un desplegable hoy, y ahí se quedan —
 18 chips no son un filtro, son una pared). En Agrupadores: el agrupador.
 
+> **Nota — desvío en la implementación (D-080).** El piloto de la tanda 1 (Acumuladores) puso
+> `Marcas ▾` a la IZQUIERDA del buscador, no a la derecha como dice el párrafo de arriba, y la tanda 3
+> copió esa posición en las 9 pantallas del lote Axton/general para que las pantallas queden iguales
+> entre sí. Sigue así hasta que Willy lo vea en pantalla; si prefiere el orden de este documento, se
+> cambia en un solo lugar por pieza (`js/ui/fichaList.js`, `js/ui/planillaPanel.js`).
+
 ## 4. La ficha
 
 `<details>`/`<summary>` nativo: funciona sin JS, se navega con teclado, y el `Ctrl+F` del navegador
@@ -206,9 +215,20 @@ este entorno fuerza su propia barra de 2 px e ignora `::-webkit-scrollbar`, así
 en una pantalla de verdad. De paso quedó a la vista por qué nunca se había visto: declarar
 `scrollbar-width` o `scrollbar-color` en el mismo elemento apaga esos pseudo-elementos en Chromium.
 
-**Y una deuda que se sigue pagando en las próximas tandas (2 y 3):** Brutos, GS Pers y Rendimiento vs
-Asiento pintan las bandas con colores escritos a mano (`CYAN_HDR`, `LILAC_HDR`) en vez de usar el
-tinte compartido. Pasan a la pieza y desaparece el violeta que no es de la marca.
+**Construido en la tanda 3 (2026-08-20 — D-078, D-079, D-080), verificado en las 9 pantallas del lote
+Axton/general (agrupadores, variaciones_sueldos, variaciones_conceptos, pop_variaciones,
+acreditaciones_reporte, novedades_importador, novedades_liquidacion, finadiet_asiento,
+conta_desglosada):**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| La solapa Planilla entera, como pieza | `js/ui/planillaPanel.js` (nuevo) | gemelo de `fichaList.js` para los controles sin ficha (D-078) |
+| Paginación sobre lo que pasa el filtro, no sobre el índice original | `js/ui/tableTools.js` | un legajo en la fila 300 no aparecía con un filtro activo, y "Mostrar todas" se ocultaba sin dar salida (D-079) |
+| Rótulo de la 2ª banda legible con sólo dos bandas | `css/results.css` | salía celeste sobre blanco, le ganaba la regla de la columna congelada por especificidad (D-079) |
+
+**Y una deuda que sigue pendiente (tanda 2, en otra rama, todavía sin mergear):** Brutos, GS Pers y
+Rendimiento vs Asiento pintan las bandas con colores escritos a mano (`CYAN_HDR`, `LILAC_HDR`) en vez
+de usar el tinte compartido. Pasan a la pieza y desaparece el violeta que no es de la marca.
 
 ## 8. El mapa — control por control
 
@@ -217,24 +237,24 @@ Aprobado por Willy el 2026-08-20.
 | Control | Barra estándar | Planilla con bandas | Ficha | Nota |
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
-| **Cruce por Agrupadores** | sí *(hoy tiene barra propia)* | sí | **sí — el que más gana** | hoy son ~1000 filas para ~100 empleados: una fila por legajo × agrupador. La ficha por legajo con sus agrupadores adentro resuelve exactamente eso |
+| **Cruce por Agrupadores** | **sí (tanda 3)** | **sí (tanda 3)** | **sí — el que más gana** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. La ficha por legajo con sus agrupadores adentro (pendiente, tanda 5) resuelve exactamente eso |
 | **Control NR** | sí | sí | **sí** | 18 conceptos; hoy la fila dice "# Difs" y nada más |
-| **Novedades vs Liquidación** | sí | sí | **sí** | legajo × concepto en cuatro bandas — mismo caso que NR |
-| **Acumuladores Ganancias** | sí *(hoy tiene barra propia)* | sí | **sí — reemplaza la ficha vieja** | es el que fija el estándar: ya tiene fichas de primera generación para jubilar |
+| **Novedades vs Liquidación** | **sí (tanda 3)** | **sí (tanda 3)** | **sí** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha (mismo caso que NR) queda pendiente (tanda 4) |
+| **Acumuladores Ganancias** | **sí (tanda 1)** | **sí (tanda 1)** | **sí — reemplaza la ficha vieja** | migrado de punta a punta en la tanda 1, piloto del estándar (D-077) |
 | **EE x CATEG** | sí *(hoy tiene barra propia)* | **no** | **sí** | el detalle son campos de texto que no coinciden, no importes: no hay nada que totalizar. La tercera solapa útil acá es una **matriz campo × legajo** — en qué campo falla más — no totales |
-| **Variación Conceptos** | sí *(hoy tiene barra propia)* | sí | **sí** | un legajo con varios conceptos que se movieron |
+| **Variación Conceptos** | **sí (tanda 3)** | **sí (tanda 3)** | **sí** | un legajo con varios conceptos que se movieron; la ficha queda pendiente (tanda 4) |
 | **Rendimiento vs Tabulado** | sí | sí | **sí, por centro de costo** | la unidad es el CC, no el legajo |
 | **Rendimiento vs Asiento** | sí | sí | ya tiene algo parecido → migrar | |
 | Brutos — Controlar / Generar Reporte | sí | sí | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo |
 | GS Pers — Controlar / Generar Reporte | sí | sí | no la necesita | ídem |
 | Control NR — Generar Reporte | sí | sí | no | la salida es un archivo |
 | Rendimiento x EE | sí | sí | no la necesita | |
-| Variación Sueldos | sí *(hoy tiene barra propia)* | sí | no la necesita | la fila ya dice anterior / actual / variación |
-| Variación entre quincenas (POP) | sí | sí | no la necesita | |
-| **Asiento de Remuneraciones** | sí | sí (DEBE/HABER) | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen |
-| **Contabilidad Desglosada + Asiento** | sí | sí (DEBE/HABER) | **sí, por cuenta contable** | ídem |
-| **Acreditaciones** | sí | sí | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`) |
-| Importador de Novedades | sí | sí | no la necesita | la comparación contra el F2 ya armado sí gana con bandas (cantidad/importe generado vs armado) |
+| Variación Sueldos | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | la fila ya dice anterior / actual / variación |
+| Variación entre quincenas (POP) | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-080 |
+| **Asiento de Remuneraciones** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen. Ficha pendiente (tanda 7) |
+| **Contabilidad Desglosada + Asiento** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | ídem. Ficha pendiente (tanda 7) |
+| **Acreditaciones** | **sí (tanda 3)** | **sí (tanda 3)** | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`). Ficha pendiente (tanda 8) |
+| Importador de Novedades | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
 
 **Además de la ficha, dónde conviene otra cosa:**
 - **Variaciones y Variación entre quincenas** ya tienen el escalón/histograma, que es lo que sirve
@@ -253,9 +273,11 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    piezas de §7 más el primer control migrado de punta a punta, verificado en el navegador en los
    tres temas. **Todo lo demás depende de esta tanda, incluido el chat de Netos — que ya puede
    arrancar.**
-2. **Barra + planilla, lote Meta4/Marval** — 10 entradas del registry.
-3. **Barra + planilla, lote Axton/general** — 9 entradas. Puede ir en paralelo con la 2: no se
-   pisan archivos.
+2. **Barra + planilla, lote Meta4/Marval** — 10 entradas del registry. **En curso, en otra rama, en
+   paralelo con la 3 — todavía sin mergear.**
+3. **Barra + planilla, lote Axton/general — 9 entradas. Hecho el 2026-08-20 (D-078, D-079, D-080),
+   rama `feat/vista-estandar-barra-axton`.** Corrió en paralelo con la 2, sin pisar archivos: los
+   controles que tocó cada tanda no se superponen.
 4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.

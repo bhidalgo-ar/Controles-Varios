@@ -2759,3 +2759,81 @@ sirve así en un control de generación, se ajusta sin tocar el resto del están
 **Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
 `js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
 D-069, D-074, D-076.
+
+---
+
+## D-078 — `js/ui/planillaPanel.js` es una pieza compartida nueva, no una reescritura
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 3 de `specs/vista-estandar-resultados.md` (§9, punto 3) — la
+barra estándar y la planilla en las nueve pantallas del lote Axton/general. Decisión tomada sin Willy
+presente.
+
+La solapa Fichas ya tenía su pieza (`js/ui/fichaList.js`, D-077). La solapa Planilla, para los controles
+que NO llevan ficha, no tenía la suya: cada control repetía a mano las mismas ~35 líneas —contar los
+estados, chipificar, cruzar el filtro con la búsqueda, redibujar la tabla— y ahí es donde las 21 pantallas
+volvían a divergir entre sí.
+
+`renderPlanillaPanel()` es el gemelo de `renderFichasPanel()`: la misma barra (los cinco chips, el
+buscador, `Marcas ▾`, el KPI, `⬇ Exportar ▾` último) pero sobre `renderRubroGrid()` en vez de sobre una
+lista de tarjetas. El control declara sus columnas y en qué estado cerró cada fila (`estadoDe`); la pieza
+cuenta, filtra y redibuja.
+
+**Por qué archivo nuevo y no una extensión de `fichaList.js` o de `resultBlocks.js`:** la tanda 2 (lote
+Meta4/Marval, 10 entradas) corre en paralelo, en otra rama, sobre controles que hoy tampoco llevan ficha.
+Tocar una pieza compartida existente desde dos ramas a la vez es el escenario que se quiso evitar
+—pisarse los cambios sin que ninguna de las dos ramas lo note hasta el merge—, así que la tanda 3 abre un
+archivo propio en vez de modificar uno que la tanda 2 también puede estar tocando.
+
+**Pendiente.** Cuando la tanda 2 mergee, ver si sus 10 controles también encajan en `planillaPanel.js` o
+si hace falta una tercera forma. Si encajan, unificar es trabajo de una tanda de limpieza aparte, no de
+esta.
+
+**Detalle:** `js/ui/planillaPanel.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`, `js/ui/tableTools.js`,
+D-074, D-077.
+
+---
+
+## D-079 — Dos bugs en piezas compartidas, encontrados al migrar la tanda 3, que afectan a los 21 controles
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 3 de `specs/vista-estandar-resultados.md`. No son decisiones de
+diseño sino arreglos que aparecieron al migrar nueve pantallas y que valen para las 21, migradas o no
+—se documentan como decisión porque cambian el comportamiento de una pieza que ya estaba en producción.
+
+**1. `js/ui/tableTools.js` — `initShowMorePagination()` contaba la página sobre el índice original de la
+fila, no sobre las que pasan el filtro.** Con una tabla larga y un filtro activo (buscador o chip de
+estado), una fila que estaba en la posición 300 del archivo quedaba fuera de la primera página aunque
+fuera la única que hacía match — no aparecía, y el botón "Mostrar todas" además se ocultaba porque su
+condición miraba el filtro y no la cantidad visible: no había forma de llegar a esa fila desde la
+pantalla. Ahora cuenta como ya lo hacía `initListPagination()` para la lista de fichas: la página se
+arma sobre lo que pasó el filtro. Test de regresión con un fixture de 120 filas en
+`tests/e2e/vistaEstandarLote.spec.js`.
+
+**2. `css/results.css` — el rótulo de la segunda banda salía celeste sobre blanco cuando la planilla
+tiene sólo DOS bandas.** La regla que fija el fondo de la 2ª columna congelada (`components.css`) le
+ganaba por especificidad a la regla del rótulo de banda oscuro. Con tres bandas o más no se notaba porque
+la banda siguiente no coincide con esa columna; con dos (Identificación + una), sí. Primer caso visto:
+Variación Sueldos.
+
+**Detalle:** `js/ui/tableTools.js`, `css/results.css`, `js/ui/resultBlocks.js`, D-074, D-077.
+
+---
+
+## D-080 — Tanda 3: dos desvíos deliberados respecto de la spec de la vista estándar
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 3 de `specs/vista-estandar-resultados.md`. Decisiones tomadas
+sin Willy presente, a la espera de que las vea en pantalla.
+
+**1. `Marcas ▾` queda a la izquierda del buscador, no a la derecha como pide el §3.** El piloto de la
+tanda 1 (Acumuladores, ya mergeado) lo puso a la izquierda; la tanda 3 copia esa posición para que las 21
+pantallas terminen iguales entre sí, que es el objetivo real del frente — más que hacer que cada tanda
+cumpla la letra de la spec por separado. Si Willy prefiere el orden que dice el §3, el cambio es en un
+solo lugar por pieza: `js/ui/fichaList.js` y `js/ui/planillaPanel.js`.
+
+**2. En Variación entre quincenas (POP), la columna de valor hora no lleva TOTAL al pie.** El §5 de la
+spec pide "TOTAL en todas las columnas de importe". Se descarta para esta columna porque sumar el valor
+hora de legajos distintos no da un número que signifique algo (no es una masa que se pueda acumular como
+un importe) y el pie que tenía el reporte antes de esta migración tampoco lo totalizaba. Queda comentado
+en el código (`js/controls/popVariaciones.js`) como la excepción a la regla del §5.
+
+**Detalle:** `specs/vista-estandar-resultados.md` §3 y §5, `js/ui/fichaList.js`, `js/ui/planillaPanel.js`,
+`js/controls/popVariaciones.js`, D-074, D-077.
