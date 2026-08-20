@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/controlNetosDetalle.spec.js — NO es una pantalla de la app.
+     Monta las tres solapas de resultados del Control de Netos (Resumen · Fichas ·
+     Totales por rubro) con datos inventados, sin tocar IndexedDB ni los CDN de
+     index.html: es lo que permite verificar la capa visual en un navegador real.
+     Legajos y montos inventados; los nombres, de la lista de CLAUDE.md. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css"><link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body style="background:var(--color-bg)">
+<div class="control-card" style="margin:16px;background:var(--color-surface);border-radius:14px;overflow:clip">
+  <div id="host"></div>
+</div>
+<script type="module">
+import { renderControlNetosResults, DEFAULT_NETOS_CONFIG } from '../../../js/controls/controlNetos.js';
+
+const cfg = { ...DEFAULT_NETOS_CONFIG(), noRemuAcuerdo: 120000, tolerancia: 100 };
+const tasas = { jubilacion: 11, ley19032: 3, obraSocial: 2.55, anssal: 0.45,
+                sindicato: 2, faecys: 0.5, cec: 0, amecys: 0, afiliado: 2, delArchivo: true };
+
+const base = (o) => ({
+  legajo: '1', nombre: 'SANGUINETTI JAVIER', empresa: 'IFSA', categoria: 'VENDEDOR B',
+  obraSocial: '126205', afiliado: true, convenio: 'Comercio', aplicaAcuerdo: true,
+  puesto: 'Vendedor', sinAportes: false, tasas, noRemuSinAporteLiq: 0,
+  perfilJubilado: false, jubilado: false, netoTeoricoPrev: null, variacionMes: null,
+  aniosAntiguedad: 3, base: 1200000, sueldoLiq: 1000000,
+  antiguedadTeo: 36000, antiguedadLiq: 36000, presentismoTeo: 102996, presentismoLiq: 102996,
+  remuTeo: 1338996, remuLiquidado: 1338996, noRemuTeo: 133948, noRemuLiquidado: 133948,
+  retencionesTeo: 264511, netoTeorico: 1208433,
+  netoLiquidado: 1128433, devuelto: 80000, netoAjustado: 1208433,
+  devueltoDetalle: [{ code: '8500', label: 'Anticipo', importe: 80000 }],
+  explicado: 0, residuo: 0, netoEsperado: 1208433,
+  excedenteTope: 0, efectoTope: 0, baseJubLiquidada: 1338996,
+  escalaEsperada: 'VENDEDOR B', escalaMatch: '1002 Basico mayo 2026', escalaOk: true,
+  detalle: [], cascada: [],
+  marcas: [{ label: 'Sin conceptos del mes', tone: 'muted' }],
+  ...o,
+});
+
+const results = {
+  rows: [
+    // Con diferencia y con cascada: es la ficha que el test abre.
+    base({ residuo: 250000, explicado: -40000, netoEsperado: 1168433, netoAjustado: 1418433,
+           cascada: [
+             { label: 'Vacaciones', code: '3553', tipo: 'Remunerativo', importe: 200000, tasa: 0.195, efecto: 161000 },
+             { label: 'Descuento vacaciones', code: '4743', tipo: 'Remunerativo', importe: -260000, tasa: 0.195, efecto: -209300 },
+             { label: 'Anticipo de incentivo (sin aportes)', code: '1684', tipo: 'No remunerativo sin aportes', importe: 8300, tasa: 0, efecto: 8300 },
+           ],
+           marcas: [{ label: 'Vacaciones en el mes', tone: 'warn' }, { label: '3 conceptos del mes', tone: 'info' }] }),
+    base({ legajo: '2', nombre: 'ALBELLA GUSTAVO', empresa: 'FGSA', residuo: 120000, escalaOk: false,
+           marcas: [{ label: 'Básico fuera de escala', tone: 'error' }] }),
+    base({ legajo: '3', nombre: 'ERVITI WALTER', empresa: 'RELEF', residuo: null,
+           netoLiquidado: null, netoAjustado: null, devueltoDetalle: [],
+           marcas: [{ label: 'Sin neto liquidado', tone: 'warn' }] }),
+    base({ legajo: '4', nombre: 'LUCCHETTI CRISTIAN', residuo: 43.2,
+           marcas: [{ label: 'Perfil de jubilado sin confirmar', tone: 'warn' }], perfilJubilado: true }),
+  ],
+  avisos: [], tienePrev: false, empresas: ['IFSA', 'RELEF', 'FGSA'], config: cfg,
+  topeUsado: 4303619, topeDetectado: null, tolerancia: 100, period: '2026-05',
+};
+
+// ?caso=vieja simula una corrida guardada antes de que el control publicara el
+// desglose: la app re-dibuja los resultados desde la base, así que la pantalla
+// tiene que aguantar filas sin cascada, sin marcas y sin alícuotas por legajo.
+if (new URLSearchParams(location.search).get('caso') === 'vieja') {
+  for (const r of results.rows) {
+    delete r.cascada; delete r.marcas; delete r.devueltoDetalle;
+    delete r.netoEsperado; delete r.tasas;
+  }
+}
+
+renderControlNetosResults(results, document.getElementById('host'));
+</script></body></html>

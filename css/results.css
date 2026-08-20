@@ -560,3 +560,326 @@ table.rb-grid tfoot .rb-diffbadge {
   .results-toolbar__hint { display: none; }
   .results-toolbar--sticky .table-search { min-width: 160px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Control de Netos — vistas Fichas y Totales por rubro
+   ──────────────────────────────────────────────────────────────────────────
+   La planilla de 12 columnas dejaba el "por qué" de cada legajo en una línea
+   de texto que con cientos de legajos no se lee ni se compara. Fichas abre un
+   legajo a la vez con su cascada; Totales por rubro ordena la misma planilla
+   en bandas para comparar entre legajos. Todo con los tokens de tokens.css:
+   los dos temas oscuros repintan `--ink`, `--line` y la familia de estado, y
+   estas reglas los siguen sin preguntar cuál está activo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Fichas ─────────────────────────────────────────────────────────────── */
+.netos-fichas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--sp-3);
+  background: var(--color-bg);
+}
+.netos-fichas__pie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  font-size: var(--text-sm);
+  color: var(--neutral);
+}
+
+.netos-ficha {
+  /* Sin `flex: none` las tarjetas se comprimen en la lista flex y el contenido
+     se corta — el mismo bug que ya se arregló en Acumuladores. */
+  flex: none;
+  background: var(--color-surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--sh-ficha);
+  overflow: hidden;
+  transition: border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow  0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Sin `transform` en el hover: movería toda la lista. */
+.netos-ficha:hover,
+.netos-ficha[open] {
+  border-color: var(--celeste-border);
+  box-shadow: var(--sh-ficha-hover);
+}
+
+.netos-ficha__head {
+  cursor: pointer;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  list-style: none;
+}
+.netos-ficha__head::-webkit-details-marker { display: none; }
+
+.netos-ficha__avatar {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: var(--radius-full);
+  display: flex; align-items: center; justify-content: center;
+  font: var(--fw-bold) var(--text-sm)/1 var(--font-tool);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-white);
+  background: var(--celeste);
+}
+.netos-ficha__avatar--error { background: var(--error); }
+.netos-ficha__avatar--warn  { background: var(--warn); }
+.netos-ficha__avatar--ok    { background: var(--celeste); }
+
+.netos-ficha__id { flex: 1 1 auto; min-width: 0; }
+.netos-ficha__l1 { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
+.netos-ficha__nombre { font-size: 14px; color: var(--t1); }
+.netos-ficha__l2 {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--neutral);
+}
+.netos-ficha__l2 b { color: var(--t2); }
+.netos-ficha__l3 { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.netos-sep { color: var(--line); }
+
+.netos-ficha__empresa {
+  border-radius: var(--radius-sm);
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--celeste-dim);
+  color: var(--celeste-deeper);
+  white-space: nowrap;
+}
+/* Las marcas no se parten: sin `nowrap` una marca de tres palabras se corta y
+   ensucia toda la fila. */
+.netos-tag, .netos-pill {
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+  font-weight: var(--fw-semibold);
+}
+.netos-tag {
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.netos-tag--error { background: var(--error-bg); border-color: var(--error-bd); color: var(--error-tx); }
+.netos-tag--warn  { background: var(--warn-bg);  border-color: var(--warn-bd);  color: var(--warn-tx); }
+.netos-pill { padding: 2px 8px; font-size: 10px; }
+.netos-pill--info    { background: var(--celeste-dim); color: var(--celeste-deeper); }
+.netos-pill--neutral { background: var(--color-bg-subtle); color: var(--t2); }
+.netos-pill--muted   { background: var(--color-bg-subtle); color: var(--neutral); }
+
+.netos-ficha__right { flex: none; text-align: right; }
+.netos-ficha__label {
+  display: block;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+}
+.netos-ficha__monto {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+}
+.netos-ficha__monto--error { color: var(--error-tx); }
+.netos-ficha__monto--warn  { color: var(--warn-tx); }
+.netos-ficha__sin {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-bd);
+  color: var(--warn-tx);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+}
+.netos-caret {
+  flex: none;
+  font-size: 11px;
+  color: var(--t3);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.netos-ficha[open] .netos-caret { transform: rotate(90deg); }
+
+.netos-ficha__body { border-top: 1px solid var(--line); }
+
+/* La tira de conciliación: la cascada en cinco pastillas, en el orden en que
+   se lee (teórico → conceptos del mes → esperado → liquidado → sin explicar). */
+.netos-tira {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 18px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.netos-tira__p {
+  padding: 5px var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--color-surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.netos-tira__l { color: var(--t2); }
+.netos-tira__p b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.netos-tira__p--dark { background: var(--invert-bg); border-color: var(--invert-bg); }
+.netos-tira__p--dark .netos-tira__l,
+.netos-tira__p--dark b { color: var(--invert-fg); }
+.netos-tira__p--error {
+  background: var(--error-bg); border-color: var(--error-bd);
+}
+.netos-tira__p--error .netos-tira__l,
+.netos-tira__p--error b { color: var(--error-tx); }
+
+.netos-cols { display: grid; grid-template-columns: 1fr 1fr; }
+.netos-cols > .netos-col:first-child { border-right: 1px solid var(--line); }
+.netos-col > .rb-section-h { margin: var(--sp-3) 18px var(--sp-1); }
+
+table.netos-t { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+table.netos-t th,
+table.netos-t td {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-weight: var(--fw-regular);
+  color: var(--t2);
+}
+table.netos-t td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--t1);
+}
+.netos-t__code { color: var(--neutral); }
+.netos-t__ausente { color: var(--warn-tx); }
+table.netos-t .netos-t__row--sub th,
+table.netos-t .netos-t__row--sub td {
+  background: var(--color-bg-subtle);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+/* El `color` va también en `td.num`: si no, el importe del pie hereda el
+   `--t1` de la celda numérica y queda navy sobre navy — el número más
+   importante de la tabla, ilegible. */
+table.netos-t tfoot th,
+table.netos-t tfoot td,
+table.netos-t tfoot td.num {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  font-weight: var(--fw-bold);
+  border-bottom: none;
+}
+table.netos-t tfoot.netos-t__foot--dif th,
+table.netos-t tfoot.netos-t__foot--dif td,
+table.netos-t tfoot.netos-t__foot--dif td.num {
+  background: var(--solid-error-bg);
+  color: var(--solid-error-fg);
+}
+
+/* La cascada: cada renglón dice qué efecto tuvo en el neto, que es lo único
+   comparable contra el importe liquidado. */
+table.netos-t--cascada thead th {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+table.netos-t--cascada thead th.num { text-align: right; }
+table.netos-t--cascada .netos-t__row--pos { background: var(--ok-bg); }
+table.netos-t--cascada .netos-t__row--pos td:last-child b { color: var(--ok-tx); }
+table.netos-t--cascada .netos-t__row--neg { background: var(--error-bg); }
+table.netos-t--cascada .netos-t__row--neg td:last-child b { color: var(--error-tx); }
+table.netos-t--cascada tfoot th,
+table.netos-t--cascada tfoot td,
+table.netos-t--cascada tfoot td.num {
+  background: var(--color-bg-subtle);
+  color: var(--ink);
+  border-top: 2px solid var(--line);
+}
+
+.netos-conclusion {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: 14px 18px 18px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: 10px;
+  border: 1px solid var(--error-bd);
+  background: var(--error-bg);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--t1);
+}
+.netos-conclusion > span[aria-hidden] { font-size: var(--text-lg); color: var(--error-tx); }
+.netos-conclusion--warn { border-color: var(--warn-bd); background: var(--warn-bg); }
+.netos-conclusion--warn > span[aria-hidden] { color: var(--warn-tx); }
+.netos-conclusion--ok { border-color: var(--ok-bd); background: var(--ok-bg); }
+.netos-conclusion--ok > span[aria-hidden] { color: var(--ok-tx); }
+
+.netos-orden { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.netos-orden select { font-size: 12px; padding: 3px var(--sp-2); }
+.netos-nota {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  margin: var(--sp-2) var(--sp-3) 0;
+}
+
+/* ── Totales por rubro ──────────────────────────────────────────────────── */
+/* La fila de bandas es la única del encabezado que va sobre ink: la segunda
+   queda neutra como en todas las planillas, porque es la que lleva los tintes
+   por columna (ver `table.rb-grid thead` en components.css). */
+/* Pisa el fondo neutro que `components.css` le pone a toda celda de encabezado
+   —y el de las dos celdas congeladas de la primera fila, que es más
+   específico—: la fila de bandas es la única del encabezado que va sobre ink. */
+table.rb-grid.netos-rubro thead tr:first-child > th.netos-banda,
+table.netos-rubro thead tr:first-child th.netos-banda {
+  background: var(--invert-bg);
+  color: var(--invert-accent);
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  border-left: 2px solid var(--band-divider);
+  padding: 7px var(--sp-3);
+  text-align: left;
+}
+table.netos-rubro thead tr:first-child th.netos-banda--id { color: var(--invert-fg); }
+/* El rótulo viaja con el scroll horizontal: sin esto se mete abajo de las dos
+   columnas congeladas y desaparece, y la banda ES la idea de esta vista. */
+.netos-banda__l { position: sticky; left: var(--sp-3); display: inline-block; }
+.netos-sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: var(--fw-regular);
+  color: var(--neutral);
+  text-transform: none;
+  letter-spacing: 0;
+}
+table.netos-rubro th.netos-cierre,
+table.netos-rubro td.netos-cierre {
+  background: var(--color-bg-subtle);
+  font-weight: var(--fw-bold);
+  color: var(--ink);
+}
+table.netos-rubro th.netos-dif-h,
+table.netos-rubro td.netos-dif-h {
+  background: var(--error-bg);
+  color: var(--error-tx);
+  font-weight: var(--fw-bold);
+}
+table.netos-rubro th.netos-dif-h .netos-sub { color: var(--warn-tx); }

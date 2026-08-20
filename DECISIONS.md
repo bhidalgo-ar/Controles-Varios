@@ -2543,3 +2543,60 @@ commit.
 
 **Alcance.** Sigue siendo `scope: 'cliente'` de SPORTLINE (D-067). Verificado contra los tres
 Tabulados de Comercio del grupo (IFSA, RELEF, FGSA); Intelicar no participa de este control.
+
+## D-075 — Detalle de Netos: abre en Fichas (ficha por legajo) en vez de la planilla plana, y el bug de las columnas de unidades se corrige generalizando la detección
+
+**Fecha:** 2026-08-20. **Origen:** handoff de diseño sobre la solapa Detalle del Control de Netos.
+Con 116 de 380 legajos con diferencia en la corrida de referencia, la planilla de 12 columnas dejaba
+todo el "por qué" de cada legajo en una sola línea de texto ("Conceptos del mes") y eso no se leía ni
+se comparaba con cientos de legajos.
+
+**1. El Detalle pasa de dos solapas (Resumen/Detalle) a tres (Resumen · Fichas · Totales por rubro), y
+abre en Fichas, no en Resumen.** Fichas es nueva: una tarjeta por legajo, cerrada con la identidad y
+las marcas del caso, abierta con la tira de conciliación en cinco pasos y la cascada del residuo
+concepto por concepto. Totales por rubro reemplaza a la planilla plana de antes, ordenada en cuatro
+bandas de encabezado (Identificación, Recibo teórico, Lo que se liquidó, Conciliación) con fila de
+TOTAL que cierra por columna. Una preferencia guardada de la solapa vieja ('detalle', de cuando eran
+dos) cae en Fichas y no en la primera de la lista nueva.
+   - Alternativa descartada: mantener la planilla plana como vista de entrada y agregar el detalle
+     por legajo como un modal o una columna adicional. Se descarta porque el "por qué" de un legajo son
+     tres tablas (recibo teórico, liquidado, cascada de conceptos) y no entran en una celda ni se leen
+     en una ventana aparte sin perder la lista completa al lado.
+
+**2. El cuerpo de cada ficha se arma al abrirla, no antes.** Con cientos de legajos, pintar de
+entrada las tres tablas de cada uno cuesta segundos de pantalla en blanco para algo que el analista
+abre de a uno.
+   - Alternativa descartada: pre-renderizar el cuerpo de todas las fichas al cargar la vista. Se
+     descarta por el costo de pintar (segundos) para un contenido que la mayoría de las fichas nunca
+     llega a abrir.
+
+**3. Bug de paso, corregido generalizando en vez de parchear los dos casos encontrados: dos códigos
+de UNIDADES estaban en la lista de importes del control** (`1064-UN_ADIC_MES`, `4450-U_DIAS_FERIADOS`).
+El Tabulado trae, para varios conceptos, una columna con la cantidad y otra con el importe; el control
+sumaba la cantidad como si fueran pesos — "2,00" de haberes en 263 legajos de 05/2026, exactamente el
+"número mal pero coherente que no lo detecta nadie" de `CLAUDE.md`.
+   - Alternativa descartada: sacar sólo esos dos códigos de la lista de importes (el fix puntual, que
+     resuelve el caso encontrado). Se prefirió, además, que el control **detecte cualquier columna de
+     unidades por su prefijo** (`UN_` o `U_` después del código) e ignore y avise si un código
+     declarado como importe cae ahí — así un código nuevo que tenga el mismo problema no vuelve a
+     colarse en silencio. Explicó los centavos de residuo que quedaban en 82 legajos.
+
+**Lo que el handoff pedía y no quedó hecho, sin decisión tomada todavía — PENDIENTE: falta que Willy
+defina si vale la pena.** Cada solapa debía exportar lo que se está viendo (Fichas → una hoja por
+bloque con la conciliación y los conceptos de cada legajo; Totales por rubro → la matriz con la fila
+de TOTAL). Las dos solapas siguen compartiendo el export que ya existía, que baja la reconstrucción
+completa de todos los legajos: sirve, pero no es lo que pedía el handoff.
+
+**Verificación.** 113 asserts en `tests/controlNetosControl.test.js` (batería completa en verde) y
+5 pruebas de navegador nuevas en `tests/e2e/controlNetosDetalle.spec.js` con su fixture
+`tests/e2e/fixtures/netosDetalle.html`: el Detalle abre en Fichas, la ficha abre y muestra la cascada,
+la ficha sin neto liquidado dice "sin comparar" y no un cero, las bandas de Totales por rubro quedan
+alineadas con sus columnas, y los renglones invertidos (pie de tabla, fila de bandas) se leen en los
+dos temas. Las dos vistas se revisaron a ojo en Chromium real, claro y oscuro.
+
+**Fuera de esta decisión, de paso:** el scroll horizontal de todas las planillas de resultados pasa de
+10 a 14 px con pista visible (antes era gris igual que el borde y pista transparente, no avisaba que
+la tabla seguía a la derecha); los chips de filtro suben de 4 a 7 opciones (`MAX_CHIP_OPTIONS` en
+`js/ui/tableTools.js`); y se agregan los tokens de tema `--invert-bg/--invert-fg/--invert-accent` y
+`--solid-error-bg/--solid-error-fg` porque en los temas oscuros `--ink` es un color claro (se usa como
+texto fuerte) y "fondo ink + texto blanco" dejaba renglones blanco sobre blanco.

@@ -73,10 +73,12 @@ import { toNum } from '../utils/currency.js';
 import { categoriaKey } from '../parsers/escalaComercioParser.js';
 import { diffStats } from './semaforo.js';
 import {
-  renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks,
-  diffCellHtml,
+  renderVerdict, renderTiles, renderIssues, renderChecks,
+  diffCellHtml, diffBadgeHtml,
 } from '../ui/resultBlocks.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { initTabs } from '../ui/tabs.js';
+import { getViewPreference, setViewPreference } from '../ui/viewPreference.js';
+import { createResultsToolbar, wireTableTools, initSearchCombobox } from '../ui/tableTools.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadCsv, downloadBlob } from '../utils/exportData.js';
 
@@ -205,11 +207,19 @@ export const DEFAULT_CONCEPT_CODES = {
   noRemuSinAporte:  ['1684'],
 
   // Haberes remunerativos del mes que el recibo teórico no contempla.
+  // Ojo con los códigos de UNIDADES: el Tabulado trae, para varios conceptos,
+  // una columna con la cantidad (`1064-UN_ADIC_MES`, `4450-U_DIAS_FERIADOS`) y
+  // otra con el importe (`1062-ADIC_ART30`, `4453-DIAS_FERIADOS`). Los dos
+  // primeros estaban en esta lista y sumaban su cantidad como si fueran pesos:
+  // "2,00" de haberes en 263 legajos de 05/2026, que es exactamente la clase de
+  // número mal pero coherente que no detecta nadie (CLAUDE.md). Van sólo los
+  // importes; si un código nuevo resuelve a una columna de unidades, el control
+  // avisa en vez de sumarla.
   remuOtros:        ['4096', '3553', '4743', '3556', '4100', '4105', '1062',
                      '4110', '4115', '4120', '4124', '4125', '4126', '4127',
                      '4135', '4060', '4089', '4091', '4093', '4099', '4101',
-                     '1004', '1012', '1013', '1064', '1076', '1215', '1690',
-                     '2311', '2998', '3515', '4453', '4486', '4450'],
+                     '1004', '1012', '1013', '1076', '1215', '1690',
+                     '2311', '2998', '3515', '4453', '4486'],
 };
 
 // Nombre en criollo de cada renglón, para la pantalla.
@@ -230,12 +240,21 @@ const NETO_HEADERS = ['NETO', 'NETO A PAGAR', 'NETO_A_PAGAR'];
 const norm = (s) => String(s ?? '').trim();
 const pct  = (v) => (toNum(v) ?? 0) / 100;
 
+/**
+ * ¿Esta columna del Tabulado es de unidades y no de pesos?
+ *
+ * El archivo lo dice en el nombre: `1064-UN_ADIC_MES` es la cantidad y
+ * `1062-ADIC_ART30` el importe del mismo concepto. Sumar la cantidad como si
+ * fueran pesos da un número mal pero coherente, que es el que no detecta nadie.
+ */
+const esColumnaDeUnidades = (col) => /^\d+[-_](UN|U)_/i.test(String(col));
+
 /** Suma los códigos de una familia dentro de un grupo de liquidaciones. */
 function sumCodes(group, codes, colByCode) {
   let total = null;
   for (const code of codes || []) {
     const col = colByCode[code];
-    if (!col) continue;
+    if (!col || esColumnaDeUnidades(col)) continue;
     const v = sumColumn(group, col);
     if (v === null) continue;
     total = (total ?? 0) + v;
@@ -574,6 +593,20 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
         + 'Los legajos de esta empresa quedaron sin controlar.');
       continue;
     }
+    // Un código de importe que cae en una columna de unidades sumaría cantidades
+    // como si fueran pesos. El Tabulado marca esas columnas con el prefijo `UN_`
+    // o `U_` después del código, así que se puede avisar en vez de sumarlas.
+    for (const familia of ['remuOtros', 'noRemuOtros', 'noRemuSinAporte', 'noRemuAcuerdo', 'devolverAlNeto']) {
+      for (const code of c[familia] || []) {
+        const col = colByCode[code];
+        if (col && esColumnaDeUnidades(col)) {
+          avisos.push(`${empresa.label}: el concepto ${col} está declarado como importe pero la `
+            + 'columna es de unidades (cantidad, no pesos). No se sumó al recibo: revisá el código '
+            + 'en la configuración del control.');
+        }
+      }
+    }
+
     const catCol = headers.find(h => norm(h).toUpperCase() === 'CATEGORIA');
     const osCol  = headers.find(h => norm(h).toUpperCase() === 'OBRA_SOCIAL');
     const convCol = headers.find(h => CONVENIO_HEADERS.includes(norm(h).toUpperCase()));
@@ -661,6 +694,15 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
 
       // ── El cruce ───────────────────────────────────────────────────────────
       const devuelto = sum0(group, c.devolverAlNeto, colByCode);
+      // Qué descuentos se sumaron de vuelta, uno por uno: el analista tiene que
+      // poder ver que el anticipo que le falta al neto es el que él cargó.
+      const devueltoDetalle = (c.devolverAlNeto || []).map(code => {
+        const col = colByCode[code];
+        if (!col || esColumnaDeUnidades(col)) return null;
+        const v = sumColumn(group, col);
+        if (v === null || Math.abs(v) <= REDONDEO_EPS) return null;
+        return { code, label: CODE_LABELS[code] || String(col).replace(/^\d+[-_]/, ''), importe: v };
+      }).filter(Boolean);
       const netoAjustado = netoLiquidado === null ? null : netoLiquidado + devuelto;
 
       // El excedente del tope no aportó, así que sube el neto en esa proporción.
@@ -671,6 +713,15 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
                        + noRemuSinAporteLiq + efectoTope;
 
       const residuo = netoAjustado === null ? null : netoAjustado - netoTeorico - explicado;
+      // El neto que este legajo TENDRÍA que haber cobrado con lo que pasó en el
+      // mes: es el que se compara de verdad contra el liquidado, y el que hace
+      // legible la cascada (teórico → conceptos del mes → esperado → liquidado).
+      const netoEsperado = netoTeorico + explicado;
+      const cascada = cascadaDelMes(group, colByCode, cfg, {
+        tasaRemu, tasaNoRemu, tasaAportes: teo.tasaAportes,
+        antiguedadLiq, antiguedadTeo, presentismoLiq, presentismoTeo,
+        noRemuAcdoLiq, noRemuTeo, excedenteExtra,
+      });
 
       // Verificación de la escala: el básico liquidado tiene que ser el de la
       // categoría. Se prueba contra todas las columnas de la escala y se informa
@@ -691,7 +742,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       const netoTeoricoPrev = netoPrevPorLegajo.has(legajo) ? netoPrevPorLegajo.get(legajo) : null;
       const variacionMes    = netoTeoricoPrev === null ? null : netoTeorico - netoTeoricoPrev;
 
-      rows.push({
+      const row = {
         legajo, nombre, empresa: empresa.label, categoria, obraSocial, afiliado,
         convenio, aplicaAcuerdo, puesto, sinAportes, tasas: teo.tasas, noRemuSinAporteLiq,
         perfilJubilado: perfilJub, jubilado,
@@ -703,14 +754,18 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
         remuTeo, remuLiquidado, noRemuTeo, noRemuLiquidado,
         retencionesTeo, netoTeorico,
         netoLiquidado, devuelto, netoAjustado,
-        explicado, residuo,
+        explicado, residuo, netoEsperado, cascada, devueltoDetalle,
         excedenteTope, efectoTope,
         baseJubLiquidada,
         escalaEsperada: escala ? escala.categoria : null,
         escalaMatch,
         escalaOk: !escala ? null : escalaMatch !== null,
         detalle: detalleDeExtras(group, colByCode, cfg.codigos),
-      });
+      };
+      // Las marcas se calculan sobre la fila ya armada: son una lectura de lo
+      // que quedó, no un dato más que haya que ir a buscar al Tabulado.
+      row.marcas = marcasDelLegajo(row, cfg);
+      rows.push(row);
     }
   }
 
@@ -751,7 +806,7 @@ function detalleDeExtras(group, colByCode, codigos) {
   for (const tipo of ['remuOtros', 'noRemuOtros', 'noRemuSinAporte']) {
     for (const code of codigos[tipo] || []) {
       const col = colByCode[code];
-      if (!col) continue;
+      if (!col || esColumnaDeUnidades(col)) continue;
       const v = sumColumn(group, col);
       if (v === null || Math.abs(v) <= REDONDEO_EPS) continue;
       out.push({
@@ -763,6 +818,85 @@ function detalleDeExtras(group, colByCode, codigos) {
     }
   }
   return out;
+}
+
+/**
+ * La cascada del residuo, renglón por renglón.
+ *
+ * El control ya sabía CUÁNTO explicaban los conceptos del mes; esto dice de
+ * dónde sale cada peso de ese número. Cada renglón lleva su importe liquidado,
+ * la alícuota que le corresponde y el efecto que tiene sobre el neto —lo que
+ * queda después de los aportes—, que es lo único comparable contra el neto.
+ *
+ * **La suma de los efectos es, al centavo, `explicado`.** Es lo que hace que la
+ * pantalla se pueda leer de arriba abajo y cierre: si el desglose no suma lo
+ * mismo que el número que usa el cruce, el analista descarta la pantalla entera.
+ * Está escrito como assert en `tests/controlNetosControl.test.js`.
+ */
+function cascadaDelMes(group, colByCode, cfg, ctx) {
+  const { tasaRemu, tasaNoRemu, antiguedadLiq, antiguedadTeo, presentismoLiq,
+          presentismoTeo, noRemuAcdoLiq, noRemuTeo, excedenteExtra, tasaAportes } = ctx;
+  const c = cfg.codigos;
+  const out = [];
+
+  const push = (label, code, tipo, importe, tasa, efecto) => {
+    if (Math.abs(importe) <= REDONDEO_EPS && Math.abs(efecto) <= REDONDEO_EPS) return;
+    out.push({ label, code, tipo, importe, tasa, efecto });
+  };
+
+  const porFamilia = (familia, tipo, tasa) => {
+    for (const code of c[familia] || []) {
+      const col = colByCode[code];
+      if (!col || esColumnaDeUnidades(col)) continue;
+      const v = sumColumn(group, col);
+      if (v === null) continue;
+      push(CODE_LABELS[code] || String(col).replace(/^\d+[-_]/, ''), code, tipo, v, tasa, v * (1 - tasa));
+    }
+  };
+
+  porFamilia('remuOtros',       'Remunerativo',                 tasaRemu);
+  porFamilia('noRemuOtros',     'No remunerativo',              tasaNoRemu);
+  porFamilia('noRemuSinAporte', 'No remunerativo sin aportes',  0);
+
+  // Lo que el recibo teórico daba por sentado y el mes movió: una licencia baja
+  // el sueldo y con él la antigüedad y el presentismo. Sin estos tres renglones
+  // la cuenta no cierra y el analista no puede ver por qué.
+  const difAnt  = antiguedadLiq  - antiguedadTeo;
+  const difPres = presentismoLiq - presentismoTeo;
+  const difNr   = noRemuAcdoLiq  - noRemuTeo;
+  push(difAnt < 0 ? 'Antigüedad no liquidada este mes' : 'Antigüedad liquidada por encima del teórico',
+    c.antiguedad?.[0], 'Remunerativo', difAnt, tasaRemu, difAnt * (1 - tasaRemu));
+  push(difPres < 0 ? 'Presentismo no liquidado este mes' : 'Presentismo liquidado por encima del teórico',
+    c.presentismo?.[0], 'Remunerativo', difPres, tasaRemu, difPres * (1 - tasaRemu));
+  push(difNr < 0 ? 'Acuerdo no remunerativo no liquidado este mes'
+                 : 'Acuerdo no remunerativo liquidado por encima del teórico',
+    null, 'No remunerativo', difNr, tasaNoRemu, difNr * (1 - tasaNoRemu));
+
+  // El excedente del tope no aportó, así que sube el neto en esa proporción.
+  push('Excedente del tope de aportes', null, 'Sin aportes por el tope',
+    excedenteExtra, tasaAportes, excedenteExtra * tasaAportes);
+
+  return out;
+}
+
+/** Las marcas de la ficha: lo que hay que saber del legajo antes de mirar los números. */
+function marcasDelLegajo(r, cfg) {
+  const m = [];
+  if (r.residuo === null)   m.push({ label: 'Sin neto liquidado',        tone: 'warn' });
+  if (r.escalaOk === false) m.push({ label: 'Básico fuera de escala',    tone: 'error' });
+  if (r.escalaOk === true)  m.push({ label: `Básico en escala (${r.escalaMatch})`, tone: 'neutral' });
+  if (r.excedenteTope > REDONDEO_EPS) m.push({ label: 'Topeó aportes',   tone: 'info' });
+  if (!r.aplicaAcuerdo)     m.push({ label: `Fuera del convenio de ${cfg.convenio}`, tone: 'info' });
+  if (r.sinAportes)         m.push({ label: 'Sin aportes por su puesto', tone: 'info' });
+  if (r.jubilado)           m.push({ label: 'Jubilado confirmado',       tone: 'info' });
+  if (r.perfilJubilado && !r.jubilado) m.push({ label: 'Perfil de jubilado sin confirmar', tone: 'warn' });
+  if (r.afiliado)           m.push({ label: `Afiliado ${fmt(r.tasas.afiliado)} %`, tone: 'info' });
+  const n = r.cascada.length;
+  m.push(n === 0
+    ? { label: 'Sin conceptos del mes', tone: 'muted' }
+    : { label: `${n} ${n === 1 ? 'concepto' : 'conceptos'} del mes`, tone: 'info' });
+  if (r.netoTeoricoPrev === null) m.push({ label: 'Sin mes anterior cargado', tone: 'muted' });
+  return m;
 }
 
 // ── Resumen para la tarjeta ──────────────────────────────────────────────────
@@ -841,12 +975,63 @@ export function renderControlNetosResults(results, container) {
     container.innerHTML = '<p class="text-muted">Sin datos.</p>';
     return;
   }
-  renderResumenDetalle(container, {
-    resumen: (host) => renderResumen(results, host),
-    detalle: (host) => renderDetalle(results, host),
-    controlId: 'control_netos',
+  // Tres solapas. **Fichas es la de entrada**: con cientos de legajos, lo
+  // primero que el analista necesita no es la planilla entera sino por qué un
+  // neto no cierra, y eso sólo se lee legajo por legajo. La planilla sigue
+  // estando, ordenada en bandas, para comparar entre legajos y totalizar.
+  // Una preferencia vieja ('detalle', de cuando eran dos solapas) cae en Fichas
+  // y no en la primera de la lista.
+  const guardada = getViewPreference('control_netos').tab;
+  const activeId = ['resumen', 'fichas', 'rubro'].includes(guardada) ? guardada : 'fichas';
+  initTabs(container, {
+    tabs: [
+      { id: 'resumen', label: 'Resumen',           render: (host) => renderResumen(results, host) },
+      { id: 'fichas',  label: 'Fichas',            render: (host) => renderFichas(results, host) },
+      { id: 'rubro',   label: 'Totales por rubro', render: (host) => renderRubro(results, host) },
+    ],
+    activeId,
+    onChange(id) { setViewPreference('control_netos', { tab: id }); },
   });
 }
+
+// ── Las categorías de un legajo ──────────────────────────────────────────────
+//
+// Las mismas para las dos vistas: los chips de filtro, el conteo de cada uno y
+// el color del avatar de la ficha salen de acá. Con la lista duplicada en cada
+// vista, el chip "Sin explicar 116" de una solapa y el de la otra empezaban a
+// contar distinto.
+
+const CATEGORIAS = [
+  { id: 'todos',       label: 'Todos',              test: () => true },
+  { id: 'diferencia',  label: 'Sin explicar',       test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > tol },
+  { id: 'margen',      label: 'Dentro del margen',  test: (r, tol) => r.residuo !== null && Math.abs(r.residuo) > REDONDEO_EPS && Math.abs(r.residuo) <= tol },
+  { id: 'exacto',      label: 'Al centavo',         test: (r) => r.residuo !== null && Math.abs(r.residuo) <= REDONDEO_EPS },
+  { id: 'escala',      label: 'Fuera de escala',    test: (r) => r.escalaOk === false },
+  { id: 'tope',        label: 'Topearon aportes',   test: (r) => r.excedenteTope > REDONDEO_EPS },
+  { id: 'sinComparar', label: 'Sin comparar',       test: (r) => r.residuo === null },
+];
+
+/**
+ * El `<select>` de estado, ya con los conteos de esta corrida.
+ *
+ * Las categorías vacías no se ofrecen: un chip "Fuera de escala 0" es un filtro
+ * que sólo puede devolver una lista vacía. Arranca en "Sin explicar" si hay
+ * alguno —errores primero— y en "Todos" si el control cerró limpio.
+ */
+function selectDeEstado(rows, tol) {
+  const sel = document.createElement('select');
+  sel.className = 'form-select';
+  const disponibles = CATEGORIAS
+    .map(c => ({ ...c, n: rows.filter(r => c.test(r, tol)).length }))
+    .filter(c => c.n > 0);
+  sel.innerHTML = disponibles
+    .map(c => `<option value="${esc(c.id)}">${esc(c.label)} (${c.n})</option>`).join('');
+  const arranque = disponibles.find(c => c.id === 'diferencia') ? 'diferencia' : 'todos';
+  sel.value = arranque;
+  return sel;
+}
+
+const testDeCategoria = (id) => CATEGORIAS.find(c => c.id === id)?.test || (() => true);
 
 function renderResumen(results, host) {
   const tol  = results.tolerancia;
@@ -1001,66 +1186,413 @@ function renderResumen(results, host) {
   renderChecks(host, { heading: 'Chequeos', items: checks });
 }
 
-const COLUMNS = [
-  { key: 'legajo',          label: 'Legajo',            num: false },
-  { key: 'nombre',          label: 'Nombre',            num: false },
-  { key: 'empresa',         label: 'Empresa',           num: false },
-  { key: 'convenio',        label: 'Convenio',          num: false },
-  { key: 'base',            label: 'Sueldo + AFA',      num: true  },
-  { key: 'remuTeo',         label: 'Remunerativo teórico',   num: true },
-  { key: 'noRemuTeo',       label: 'No remun. teórico', num: true  },
-  { key: 'netoTeorico',     label: 'Neto teórico',      num: true  },
-  { key: 'netoAjustado',    label: 'Neto liquidado ajustado', num: true },
-  { key: 'explicado',       label: 'Explicado por el mes',    num: true },
-  { key: 'variacionMes',    label: 'Movió vs. mes anterior',  num: true },
-];
+// ── Vista Fichas — una tarjeta por legajo ────────────────────────────────────
+//
+// Es la vista de entrada del Detalle. La planilla de 12 columnas dejaba el
+// "por qué" de cada legajo en una sola línea de texto, que con cientos de
+// legajos no se lee ni se compara: acá cada legajo abre y muestra su recibo
+// teórico, lo que se liquidó, y la cascada del residuo concepto por concepto
+// (importe → aportes → efecto real en el neto). El patrón —`<details>` nativo,
+// lista paginada, buscador— es el de Acumuladores de Ganancias.
 
-// Las tres categorías que separan un legajo "cerrado" de uno para mirar.
-// $0,01 es el piso de todo el repo (redondeo de Meta4, CLAUDE.md); por encima
-// de eso y hasta la tolerancia del control es la zona gris que el analista
-// decidió tolerar a propósito; por encima de la tolerancia es lo que hay que
-// revisar. Un legajo sin neto liquidado (`residuo === null`) no entra en
-// ninguna de las tres: no se pudo comparar, no es que cerró.
-function categoriaDe(residuo, tol) {
-  if (residuo === null) return null;
-  const abs = Math.abs(residuo);
-  if (abs <= REDONDEO_EPS) return 'exacto';
-  if (abs <= tol) return 'margen';
-  return 'diferencia';
-}
+function renderFichas(results, host) {
+  const tol  = results.tolerancia;
+  // Una corrida guardada ANTES de que el control publicara el desglose no tiene
+  // cascada, marcas ni alícuotas por legajo: la app re-dibuja los resultados
+  // desde la base cuando el analista vuelve a abrir una corrida vieja, y sin
+  // esto la pantalla se caía. Se completa con lo que sí se puede afirmar —una
+  // lista vacía no es un cero inventado— y se dice que hay que volver a
+  // ejecutar para ver el detalle.
+  const vieja = results.rows.some(r => !Array.isArray(r.cascada));
+  const rows = results.rows.map(r => ({
+    ...r,
+    cascada: Array.isArray(r.cascada) ? r.cascada : [],
+    marcas:  Array.isArray(r.marcas)  ? r.marcas  : [],
+    devueltoDetalle: Array.isArray(r.devueltoDetalle) ? r.devueltoDetalle : [],
+    netoEsperado: r.netoEsperado ?? (r.netoTeorico + (r.explicado ?? 0)),
+    tasas: r.tasas ?? { ...results.config.tasas, afiliado: 0, cec: 0, amecys: 0, delArchivo: false },
+  }));
 
-function renderDetalle(results, host) {
-  const tol = results.tolerancia;
-  const porCategoria = results.rows.reduce((acc, r) => {
-    const cat = categoriaDe(r.residuo, tol);
-    if (cat) acc[cat].push(r);
-    return acc;
-  }, { exacto: [], margen: [], diferencia: [] });
+  if (vieja) {
+    const aviso = document.createElement('p');
+    aviso.className = 'netos-nota text-muted';
+    aviso.textContent = 'Esta corrida se guardó antes de que el control desarmara la diferencia '
+      + 'concepto por concepto, así que las fichas no traen ese detalle. Volvé a ejecutar el control '
+      + 'con los mismos archivos para verlo.';
+    host.appendChild(aviso);
+  }
 
-  const filterSel = document.createElement('select');
-  filterSel.className = 'form-select';
-  filterSel.innerHTML = `
-    <option value="todos">Todos los legajos</option>
-    <option value="exacto">Coinciden al centavo</option>
-    <option value="margen">Dentro del margen (hasta ${fmt(tol)})</option>
-    <option value="diferencia">Diferencia mayor al margen</option>
+  const estadoSel = selectDeEstado(rows, tol);
+  const ordenSel  = document.createElement('select');
+  ordenSel.className = 'form-select';
+  ordenSel.innerHTML = `
+    <option value="residuo">Mayor sin explicar</option>
+    <option value="legajo">Legajo</option>
+    <option value="nombre">Nombre</option>
+    <option value="empresa">Empresa</option>
   `;
 
-  const { searchEl, exportEl } = createResultsToolbar(host, { left: filterSel });
+  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host, { left: estadoSel });
+  const ordenWrap = document.createElement('label');
+  ordenWrap.className = 'netos-orden';
+  ordenWrap.append(document.createTextNode('Orden '), ordenSel);
+  kpisEl.appendChild(ordenWrap);
+  const sumaEl = document.createElement('span');
+  sumaEl.className = 'results-kpi__badge results-kpi__badge--error';
+  kpisEl.appendChild(sumaEl);
+  renderExportMenu(exportEl, {
+    onExcel: () => exportExcel(results),
+    onCsv:   () => exportCsv(results),
+    onCopy:  () => copiarAlPortapapeles(results),
+  });
+
+  const listHost = document.createElement('div');
+  listHost.className = 'netos-fichas';
+  host.appendChild(listHost);
+
+  const pieHost = document.createElement('div');
+  pieHost.className = 'netos-fichas__pie';
+  host.appendChild(pieHost);
+
+  // El buscador se monta UNA vez sobre la lista completa —así el desplegable
+  // ofrece cualquier legajo, no sólo los del filtro activo— y escribe su
+  // selección en el mismo lugar que el filtro de estado.
+  let porBusqueda = null;
+  const estado = { pagina: 1 };
+  const PAGE = 50;
+
+  function visibles() {
+    const test = testDeCategoria(estadoSel.value);
+    let out = rows.filter(r => test(r, tol));
+    if (porBusqueda) out = out.filter(r => porBusqueda.has(r));
+    const orden = ordenSel.value;
+    return out.slice().sort((a, b) => {
+      if (orden === 'residuo') return Math.abs(b.residuo ?? 0) - Math.abs(a.residuo ?? 0);
+      if (orden === 'nombre')  return String(a.nombre).localeCompare(String(b.nombre));
+      if (orden === 'empresa') return String(a.empresa).localeCompare(String(b.empresa))
+        || String(a.legajo).localeCompare(String(b.legajo), undefined, { numeric: true });
+      return String(a.legajo).localeCompare(String(b.legajo), undefined, { numeric: true });
+    });
+  }
+
+  function pintar() {
+    const shown = visibles();
+    const enPantalla = shown.slice(0, estado.pagina * PAGE);
+
+    // La suma sigue la SELECCIÓN, no la página: con 50 fichas a la vista, el
+    // total de las 116 filtradas es el número que el analista está mirando.
+    sumaEl.textContent = `Σ sin explicar ${fmt(shown.reduce((a, r) => a + Math.abs(r.residuo ?? 0), 0))}`;
+
+    listHost.innerHTML = enPantalla.length === 0
+      ? '<p class="text-muted" style="padding:var(--sp-4);">Ningún legajo en esta categoría.</p>'
+      : enPantalla.map(r => fichaHtml(r, tol)).join('');
+
+    const faltan = shown.length - enPantalla.length;
+    pieHost.innerHTML = `
+      ${faltan > 0 ? `<button type="button" class="btn btn--ghost btn--sm js-mas">Mostrar ${Math.min(PAGE, faltan)} más</button>` : ''}
+      <span class="text-muted">${enPantalla.length} de ${shown.length} ficha${shown.length === 1 ? '' : 's'}</span>
+    `;
+    pieHost.querySelector('.js-mas')?.addEventListener('click', () => { estado.pagina++; pintar(); });
+  }
+
+  // El cuerpo de cada ficha se arma al abrirla y no antes: con cientos de
+  // legajos, pintar de entrada las tres tablas de cada uno cuesta segundos de
+  // pantalla en blanco para algo que el analista abre de a uno.
+  listHost.addEventListener('toggle', (e) => {
+    const det = e.target.closest?.('.netos-ficha');
+    if (!det || !det.open || det.dataset.pintada === '1') return;
+    const r = rows.find(x => `${x.empresa}|${x.legajo}` === det.dataset.legajoKey);
+    if (!r) return;
+    det.querySelector('.netos-ficha__body').innerHTML = fichaBodyHtml(r, tol, results);
+    det.dataset.pintada = '1';
+  }, true);
+
+  estadoSel.addEventListener('change', () => { estado.pagina = 1; pintar(); });
+  ordenSel.addEventListener('change', () => { estado.pagina = 1; pintar(); });
+
+  initSearchCombobox(searchEl, {
+    rows,
+    // El combobox trabaja con elementos del DOM; acá la "fila" de cada legajo
+    // es su ficha, que puede no estar pintada todavía. Se le pasa un elemento
+    // testigo por legajo y se traduce su selección a filas de datos.
+    trEls: rows.map(r => {
+      const el = document.createElement('span');
+      el.dataset.legajoKey = `${r.empresa}|${r.legajo}`;
+      return el;
+    }),
+    getLabel: r => `${r.legajo} ${r.nombre} — ${r.empresa}`,
+    pagination: {
+      setFilter(matchSet) {
+        if (!matchSet) { porBusqueda = null; }
+        else {
+          const claves = new Set([...matchSet].map(el => el.dataset.legajoKey));
+          porBusqueda = new Set(rows.filter(r => claves.has(`${r.empresa}|${r.legajo}`)));
+        }
+        estado.pagina = 1;
+        pintar();
+      },
+    },
+  });
+
+  pintar();
+}
+
+/** La ficha cerrada: identidad, marcas y el importe sin explicar. */
+function fichaHtml(r, tol) {
+  const abs = Math.abs(r.residuo ?? 0);
+  const sev = r.residuo === null ? 'warn' : abs > tol ? 'error' : 'ok';
+  const importe = r.residuo === null
+    ? '<span class="netos-ficha__sin">sin comparar</span>'
+    : `<span class="netos-ficha__monto netos-ficha__monto--${sev}">${r.residuo > 0 ? '+' : ''}${fmt(r.residuo)}</span>`;
+
+  return `
+    <details class="netos-ficha" data-legajo-key="${esc(`${r.empresa}|${r.legajo}`)}">
+      <summary class="netos-ficha__head">
+        <span class="netos-ficha__avatar netos-ficha__avatar--${sev}">${esc(r.legajo)}</span>
+        <span class="netos-ficha__id">
+          <span class="netos-ficha__l1">
+            <strong class="netos-ficha__nombre">${esc(r.nombre || '(sin nombre)')}</strong>
+            <span class="netos-ficha__empresa">${esc(r.empresa)}</span>
+            ${r.marcas.filter(m => m.tone === 'error' || m.tone === 'warn')
+              .map(m => `<span class="netos-tag netos-tag--${m.tone}">${esc(m.label)}</span>`).join('')}
+          </span>
+          <span class="netos-ficha__l2">
+            ${r.categoria ? `Cat. <b>${esc(r.categoria)}</b>` : ''}
+            ${r.aniosAntiguedad ? `<span class="netos-sep">·</span> ${esc(r.aniosAntiguedad)} ${r.aniosAntiguedad === 1 ? 'año' : 'años'} de antigüedad` : ''}
+            ${r.obraSocial ? `<span class="netos-sep">·</span> OS ${esc(r.obraSocial)}` : ''}
+            ${r.convenio ? `<span class="netos-sep">·</span> ${esc(r.convenio)}` : ''}
+          </span>
+          <span class="netos-ficha__l3">
+            ${r.marcas.filter(m => m.tone !== 'error' && m.tone !== 'warn')
+              .map(m => `<span class="netos-pill netos-pill--${m.tone}">${esc(m.label)}</span>`).join('')}
+          </span>
+        </span>
+        <span class="netos-ficha__right">
+          <span class="netos-ficha__label">sin explicar</span>
+          ${importe}
+        </span>
+        <span class="netos-caret" aria-hidden="true">▶</span>
+      </summary>
+      <div class="netos-ficha__body"></div>
+    </details>
+  `;
+}
+
+/** El cuerpo de la ficha: la cascada del residuo, en el orden en que se lee. */
+function fichaBodyHtml(r, tol, results) {
+  const cfg = results.config;
+  const tira = [
+    { label: 'Neto teórico',            valor: fmt(r.netoTeorico) },
+    { label: 'Explicado por el mes',    valor: fmt(r.explicado) },
+    { label: 'Neto esperado',           valor: fmt(r.netoEsperado) },
+    { label: 'Neto liquidado ajustado', valor: fmt(r.netoAjustado), tone: 'dark' },
+    { label: 'Sin explicar',            valor: r.residuo === null ? 'sin comparar' : fmt(r.residuo), tone: 'error' },
+  ];
+
+  const teorico = [
+    ['Sueldo + a cuenta de futuros aumentos', '1003 + 1017', r.base],
+    [`Antigüedad ${r.aniosAntiguedad} ${r.aniosAntiguedad === 1 ? 'año' : 'años'} × ${fmt(cfg.antiguedadPorAnio)} %`, null, r.antiguedadTeo],
+    [`Presentismo ${fmt(cfg.presentismo)} %`, null, r.presentismoTeo],
+    ['Remunerativo', null, r.remuTeo, 'sub'],
+    ['No remunerativo del acuerdo', null, r.noRemuTeo],
+    [`Retenciones ${fmt(r.tasas.jubilacion + r.tasas.ley19032 + r.tasas.obraSocial + r.tasas.anssal)} % + gremiales`, null, -r.retencionesTeo],
+  ];
+
+  const liquidado = [
+    ['Neto a pagar del recibo', null, r.netoLiquidado],
+    ...r.devueltoDetalle.map(d => [`+ ${d.label}`, d.code, d.importe]),
+    ['Neto liquidado ajustado', null, r.netoAjustado, 'sub'],
+    ['Neto esperado', 'teórico + conceptos del mes', r.netoEsperado],
+    ['Base de aportes', r.excedenteTope > REDONDEO_EPS ? 'topeó este mes' : 'sin tope este mes', r.remuLiquidado - r.excedenteTope],
+  ];
+
+  const fila = ([label, sub, valor, cls]) => `
+    <tr${cls ? ` class="netos-t__row--${cls}"` : ''}>
+      <th scope="row">${esc(label)}${sub ? ` <span class="netos-t__code">(${esc(sub)})</span>` : ''}</th>
+      <td class="num">${valor === null || valor === undefined ? '—' : fmt(valor)}</td>
+    </tr>`;
+
+  const prev = r.netoTeoricoPrev === null
+    ? '<tr><th scope="row">Neto teórico del mes anterior</th><td class="num netos-t__ausente">sin Tabulado cargado</td></tr>'
+    : fila(['Neto teórico del mes anterior', null, r.netoTeoricoPrev]);
+
+  return `
+    <div class="netos-tira">
+      ${tira.map(p => `
+        <span class="netos-tira__p${p.tone ? ` netos-tira__p--${p.tone}` : ''}">
+          <span class="netos-tira__l">${esc(p.label)}:</span>
+          <b>${esc(p.valor)}</b>
+        </span>`).join('')}
+    </div>
+
+    <div class="netos-cols">
+      <div class="netos-col">
+        <div class="rb-section-h">Recibo teórico del mes</div>
+        <table class="netos-t">
+          <tbody>${teorico.map(fila).join('')}</tbody>
+          <tfoot><tr><th scope="row">Neto teórico</th><td class="num">${fmt(r.netoTeorico)}</td></tr></tfoot>
+        </table>
+      </div>
+      <div class="netos-col">
+        <div class="rb-section-h">Lo que se liquidó</div>
+        <table class="netos-t">
+          <tbody>${liquidado.map(fila).join('')}${prev}</tbody>
+          <tfoot class="netos-t__foot--dif"><tr><th scope="row">Sin explicar</th>
+            <td class="num">${r.residuo === null ? 'sin comparar' : fmt(r.residuo)}</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    ${r.cascada.length === 0 ? '' : `
+    <div class="rb-section-h">Conceptos del mes y su efecto en el neto</div>
+    <table class="netos-t netos-t--cascada">
+      <thead><tr>
+        <th>Concepto</th><th>Tipo</th><th class="num">Importe</th>
+        <th class="num">Aportes</th><th class="num">Efecto en el neto</th>
+      </tr></thead>
+      <tbody>
+        ${r.cascada.map(x => `
+          <tr class="netos-t__row--${x.efecto >= 0 ? 'pos' : 'neg'}">
+            <th scope="row">${esc(x.label)}${x.code ? ` <span class="netos-t__code">(${esc(x.code)})</span>` : ''}</th>
+            <td>${esc(x.tipo)}</td>
+            <td class="num">${x.importe > 0 ? '+' : ''}${fmt(x.importe)}</td>
+            <td class="num">${fmt(x.tasa * 100)} %</td>
+            <td class="num"><b>${x.efecto > 0 ? '+' : ''}${fmt(x.efecto)}</b></td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot><tr>
+        <th scope="row" colspan="2">Explicado por el mes</th>
+        <td class="num">${fmt(r.cascada.reduce((a, x) => a + x.importe, 0))}</td>
+        <td></td>
+        <td class="num">${fmt(r.explicado)}</td>
+      </tr></tfoot>
+    </table>`}
+
+    ${conclusionHtml(r, tol)}
+  `;
+}
+
+/**
+ * La conclusión de la ficha: qué mirar, descartando lo ya explicado.
+ *
+ * Es la única parte de la pantalla que no es un número: le dice al analista
+ * dónde seguir. Sin esto la ficha explica muy bien una diferencia y lo deja
+ * igual de solo que antes para resolverla.
+ */
+function conclusionHtml(r, tol) {
+  if (r.residuo === null) {
+    return `<div class="netos-conclusion netos-conclusion--warn">
+      <span aria-hidden="true">⚠</span>
+      <span>Este legajo no tiene neto liquidado en el Tabulado, así que no hay contra qué comparar el
+      recibo teórico. Revisá si corresponde que esté en la nómina de este mes.</span>
+    </div>`;
+  }
+  if (Math.abs(r.residuo) <= tol) {
+    return `<div class="netos-conclusion netos-conclusion--ok">
+      <span aria-hidden="true">✓</span>
+      <span>El neto liquidado coincide con el recibo teórico una vez descontados los conceptos del
+      mes${Math.abs(r.residuo) > REDONDEO_EPS ? `, con ${fmt(Math.abs(r.residuo))} de diferencia por el redondeo de cada concepto` : ''}.
+      No hay nada que revisar.</span>
+    </div>`;
+  }
+
+  const pistas = [];
+  if (r.perfilJubilado && !r.jubilado) {
+    pistas.push('tiene perfil de jubilado que sigue trabajando (le retuvieron sólo jubilación '
+      + 'teniendo las cuatro alícuotas declaradas): si lo es, tildalo en el Paso 2');
+  }
+  if (r.escalaOk === false) {
+    pistas.push('su básico no coincide con ninguna columna de la escala de la categoría '
+      + `"${r.categoria}", así que la diferencia puede venir de ahí`);
+  }
+  if (r.excedenteTope > REDONDEO_EPS) {
+    pistas.push(`superó el tope de la base de aportes en ${fmt(r.excedenteTope)}, verificá que el `
+      + 'tope cargado sea el del mes');
+  }
+  if (pistas.length === 0) {
+    pistas.push('los conceptos del mes ya están descontados, así que la diferencia no viene de ahí: '
+      + 'revisá el a cuenta de futuros aumentos y las alícuotas de retención de este legajo');
+  }
+
+  // La primera pista arranca la oración, así que va en mayúscula: se arma con
+  // fragmentos y sin esto la frase queda "de la tolerancia de 100,00. los
+  // conceptos del mes…".
+  const frase = pistas.join('; ');
+  return `<div class="netos-conclusion netos-conclusion--error">
+    <span aria-hidden="true">⚠</span>
+    <span>Quedan <b>${fmt(Math.abs(r.residuo))}</b> arriba de la tolerancia de ${fmt(tol)}.
+    ${esc(frase.charAt(0).toUpperCase() + frase.slice(1))}.</span>
+  </div>`;
+}
+
+// ── Vista "Totales por rubro" — la planilla, ordenada en bandas ──────────────
+//
+// Los mismos rubros de siempre, agrupados en tres bandas que se leen de
+// izquierda a derecha: cómo se arma el neto teórico → qué se liquidó → qué
+// queda sin explicar. Cada rubro dice abajo del título su base de cálculo, y la
+// fila de TOTAL cierra por columna: eso es lo que hace que la vista sirva para
+// comparar entre legajos, que es lo que la ficha no puede hacer.
+
+export const BANDAS = [
+  { label: 'Identificación',    cols: 2 },
+  { label: 'Recibo teórico',    cols: 7 },
+  { label: 'Lo que se liquidó', cols: 3 },
+  { label: 'Conciliación',      cols: 2 },
+];
+
+/** Las 14 columnas de la planilla, con la base de cálculo de cada rubro. */
+export const RUBROS = [
+  { key: 'legajo',         label: 'Legajo',               num: false },
+  { key: 'nombre',         label: 'Empleado',             num: false, empresa: true },
+  { key: 'base',           label: 'Sueldo + AFA',         sub: '1003 + 1017',           num: true },
+  { key: 'antiguedadTeo',  label: 'Antigüedad',           sub: '1 % por año',           num: true },
+  { key: 'presentismoTeo', label: 'Presentismo',          sub: '8,33 %',                num: true },
+  { key: 'remuTeo',        label: 'Remunerativo',         sub: 'base de aportes',       num: true },
+  { key: 'noRemuTeo',      label: 'No remunerativo',      sub: 'acuerdo, c/ antig.',    num: true },
+  { key: 'retencionesTeo', label: 'Retenciones',          sub: 'aportes + gremiales',   num: true },
+  { key: 'netoTeorico',    label: 'Neto teórico',         sub: 'remun + no rem − ret',  num: true, cierre: true },
+  { key: 'netoLiquidado',  label: 'Neto del recibo',      sub: 'Tabulado',              num: true },
+  { key: 'devuelto',       label: 'Ajustes',              sub: 'anticipos + ganancias', num: true },
+  { key: 'netoAjustado',   label: 'Neto ajustado',        sub: 'lo comparable',         num: true, cierre: true },
+  { key: 'explicado',      label: 'Explicado por el mes', sub: 'efecto en el neto',     num: true },
+  { key: 'residuo',        label: 'Sin explicar',         sub: null,                    num: true, dif: true },
+];
+
+function renderRubro(results, host) {
+  const tol  = results.tolerancia;
+  const rows = results.rows;
+
+  const estadoSel = selectDeEstado(rows, tol);
+  const { searchEl, exportEl, kpisEl } = createResultsToolbar(host, { left: estadoSel });
+  const filasEl = document.createElement('span');
+  filasEl.className = 'results-kpi';
+  kpisEl.appendChild(filasEl);
+  renderExportMenu(exportEl, {
+    onExcel: () => exportExcel(results),
+    onCsv:   () => exportCsv(results),
+    onCopy:  () => copiarAlPortapapeles(results),
+  });
+
   const tableHost = document.createElement('div');
   host.appendChild(tableHost);
 
-  // Arranca mostrando lo que hay que mirar; si no hay nada fuera de margen,
-  // no tiene sentido abrir en una lista vacía.
-  filterSel.value = porCategoria.diferencia.length > 0 ? 'diferencia' : 'todos';
+  const nota = document.createElement('p');
+  nota.className = 'netos-nota text-muted';
+  nota.textContent = 'Los mismos rubros de siempre, en tres bandas que se leen de izquierda a '
+    + 'derecha: cómo se arma el neto teórico, qué se liquidó, y qué queda sin explicar. Legajo y '
+    + 'empleado quedan fijos y la fila de TOTAL cierra por columna. El detalle largo de cada legajo '
+    + 'vive en Fichas: acá se compara entre legajos y se totaliza.';
+  host.appendChild(nota);
 
-  const maxDiff = results.rows.reduce((m, r) => Math.max(m, Math.abs(r.residuo ?? 0)), 0);
+  const maxDiff = rows.reduce((m, r) => Math.max(m, Math.abs(r.residuo ?? 0)), 0);
 
   const draw = () => {
-    const shown = filterSel.value === 'todos' ? results.rows : porCategoria[filterSel.value];
+    const test  = testDeCategoria(estadoSel.value);
+    const shown = rows.filter(r => test(r, tol));
+    filasEl.innerHTML = `<strong>${shown.length}</strong> fila${shown.length === 1 ? '' : 's'}`;
     tableHost.innerHTML = shown.length === 0
       ? '<p class="text-muted">Ningún legajo en esta categoría.</p>'
-      : tableHtml(shown, maxDiff, tol);
+      : tablaRubroHtml(shown, maxDiff, tol);
     const table = tableHost.querySelector('table');
     if (!table) return;
     wireTableTools(table, {
@@ -1068,58 +1600,63 @@ function renderDetalle(results, host) {
       getLabel: r => `${r.legajo} ${r.nombre} — ${r.empresa}`,
       searchEl,
       // enhanceGrid sólo sabe fijar 0, 1 o 2 columnas (css/components.css no
-      // define un tercer nivel): legajo + nombre quedan fijas, empresa
-      // scrollea con el resto — no es un límite de esta tabla en particular.
+      // define un tercer nivel): legajo + empleado quedan fijas y el resto
+      // scrollea — no es un límite de esta tabla en particular.
       stickyCols: 2,
     });
   };
 
-  filterSel.addEventListener('change', draw);
+  estadoSel.addEventListener('change', draw);
   draw();
-
-  renderExportMenu(exportEl, {
-    onExcel: () => exportExcel(results),
-    onCsv:   () => exportCsv(results),
-    onCopy:  () => copiarAlPortapapeles(results),
-  });
 }
 
-function tableHtml(rows, maxDiff, tol) {
-  const head = COLUMNS.map(c => `<th${c.num ? ' class="num"' : ''}>${esc(c.label)}</th>`).join('')
-    + '<th class="num">Sin explicar</th><th>Conceptos del mes</th>';
+function tablaRubroHtml(rows, maxDiff, tol) {
+  // El rótulo de cada banda va dentro de un `<span>` sticky: al scrollear a la
+  // derecha, sin eso se mete abajo de las dos columnas congeladas y desaparece
+  // —y la banda ES la idea de esta vista.
+  const bandas = BANDAS.map((b, i) => `
+    <th colspan="${b.cols}" class="netos-banda${i === 0 ? ' netos-banda--id' : ''}">
+      <span class="netos-banda__l">${esc(b.label)}</span>
+    </th>`).join('');
 
-  const body = rows.map(r => {
-    const cells = COLUMNS.map(c => c.num
-      ? `<td class="num">${fmt(r[c.key])}</td>`
-      : `<td>${esc(r[c.key])}</td>`).join('');
-    // En una sola línea: con un renglón por concepto, un legajo con tres
-    // conceptos estira TODAS las filas de la planilla y la vuelve inmirable.
-    // La planilla ya scrollea para el costado, que es donde sobra lugar.
-    const conceptos = r.detalle.length === 0
-      ? '<span class="text-muted">—</span>'
-      : r.detalle.map(d => `${esc(d.label)} <span class="text-muted">(${esc(d.code)})</span> ${fmt(d.importe)}`)
-          .join(' <span class="text-muted">·</span> ');
-    // `eps: tol` es lo que hace que esta celda —y el "N con diferencias" de la
-    // barra, que cuenta las celdas que salen en rojo acá— respete la
-    // tolerancia que el analista configuró y no el margen de $0,01 por
-    // defecto: sin esto, un legajo dentro del margen igual salía marcado.
-    return `<tr>${cells}${diffCellHtml(r.residuo, { max: maxDiff, eps: tol, absentLabel: 'sin comparar' })}`
-      + `<td>${conceptos}</td></tr>`;
+  // La base de cálculo va debajo del título de cada rubro de importe. Legajo y
+  // Empleado no tienen base: un sublabel ahí es ruido, no ayuda.
+  const rubros = RUBROS.map(c => {
+    const sub = c.dif ? `tolerancia ${fmt(tol)}` : c.sub;
+    return `
+    <th class="${c.num ? 'num ' : ''}${c.cierre ? 'netos-cierre ' : ''}${c.dif ? 'netos-dif-h' : ''}">
+      ${esc(c.label)}
+      ${sub ? `<span class="netos-sub">${esc(sub)}</span>` : ''}
+    </th>`;
   }).join('');
 
-  // Las tres primeras columnas las cubre el `colspan` del rótulo TOTAL; de ahí
-  // en adelante, cada columna suma o queda vacía según sea de importe o de
-  // texto. Con el índice cableado, agregar una columna de texto (Convenio)
-  // corría todos los totales una celda a la izquierda.
-  const totales = COLUMNS.slice(3).map(c => c.num
-    ? `<td class="num">${fmt(rows.reduce((a, r) => a + (r[c.key] ?? 0), 0))}</td>`
-    : '<td></td>').join('');
+  const celda = (r, c) => {
+    if (c.dif) return diffCellHtml(r.residuo, { max: maxDiff, eps: tol, absentLabel: 'sin comparar' });
+    if (!c.num) {
+      return `<td>${esc(r[c.key])}${c.empresa ? ` <span class="netos-ficha__empresa">${esc(r.empresa)}</span>` : ''}</td>`;
+    }
+    return `<td class="num${c.cierre ? ' netos-cierre' : ''}">${r[c.key] === null ? '—' : fmt(r[c.key])}</td>`;
+  };
+
+  const body = rows.map(r => `<tr>${RUBROS.map(c => celda(r, c)).join('')}</tr>`).join('');
+
+  // Se totaliza TODA columna de importe, no sólo las de cierre: es lo que hace
+  // que la vista se llame "por rubro" — el analista compara el total de
+  // antigüedad del mes contra el del mes pasado, no sólo el del neto.
+  const totales = RUBROS.slice(2).map(c => {
+    const suma = rows.reduce((a, r) => a + (r[c.key] ?? 0), 0);
+    if (c.dif) return `<td class="num netos-dif-h">${fmt(suma)}</td>`;
+    return `<td class="num${c.cierre ? ' netos-cierre' : ''}">${fmt(suma)}</td>`;
+  }).join('');
 
   return `
-    <table class="data-table data-table--compact">
-      <thead><tr>${head}</tr></thead>
+    <table class="data-table data-table--compact netos-rubro">
+      <thead>
+        <tr>${bandas}</tr>
+        <tr>${rubros}</tr>
+      </thead>
       <tbody>${body}</tbody>
-      <tfoot><tr><td colspan="3">TOTAL — ${rows.length} legajos</td>${totales}<td></td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="2">TOTAL — ${rows.length} legajos</td>${totales}</tr></tfoot>
     </table>
   `;
 }

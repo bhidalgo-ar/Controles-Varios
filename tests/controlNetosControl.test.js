@@ -17,8 +17,8 @@
 
 globalThis.document = { addEventListener: () => {} };
 
-const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG, detectarPerfilJubilado } =
-  await import('./js/controls/controlNetos.js');
+const { runControlNetos, summarizeControlNetos, DEFAULT_NETOS_CONFIG, detectarPerfilJubilado,
+        BANDAS, RUBROS } = await import('./js/controls/controlNetos.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { categoriaKey } = await import('./js/parsers/escalaComercioParser.js');
 
@@ -526,6 +526,100 @@ assert('un básico que no está en ninguna columna de la escala se marca',
   rEscala.rows[0].escalaOk === false);
 assert('el básico fuera de escala baja el status a warning',
   summarizeControlNetos(rEscala).status === 'warning');
+
+
+// ── La cascada del residuo (lo que muestran las dos vistas del Detalle) ──────
+//
+// El control no sólo dice CUÁNTO explican los conceptos del mes: dice de dónde
+// sale cada peso. La invariante que hace legible la pantalla es que la suma de
+// los efectos sea, al centavo, `explicado` — si el desglose no suma lo mismo
+// que el número que usa el cruce, el analista descarta la pantalla entera.
+
+const feriado2 = 30000;
+const presDelFeriado2 = feriado2 * PRES;
+const anticipoIncentivo = 44704.94;
+const rCascada = runControlNetos(escalaRows, [fila('1', {
+  '4096-DTO_FERIADO': feriado2,
+  '1011-PRESENTISMO': 109956 + presDelFeriado2,
+  '1684-ANTIC_INCENTIVO': anticipoIncentivo,
+  '3553-VACACIONES': 500000,
+  '4743-DESC_VACACIONES': -420000,
+  NETO: NETO_TEO,
+})], mapping);
+const casc = rCascada.rows[0];
+
+assert('la suma de los efectos de la cascada es, al centavo, "explicado"',
+  Math.abs(casc.cascada.reduce((a, x) => a + x.efecto, 0) - casc.explicado) < 0.01);
+assert('el neto esperado es el teórico más lo que explicó el mes',
+  Math.abs(casc.netoEsperado - (casc.netoTeorico + casc.explicado)) < 0.01);
+assert('cada renglón de la cascada trae importe, alícuota y efecto',
+  casc.cascada.length > 0 && casc.cascada.every(x =>
+    typeof x.label === 'string' && Number.isFinite(x.importe)
+    && Number.isFinite(x.tasa) && Number.isFinite(x.efecto)));
+assert('un concepto remunerativo del mes entra neto de aportes',
+  casc.cascada.some(x => x.code === '4096'
+    && Math.abs(x.efecto - feriado2 * (1 - TASA_AP - TASA_GREM)) < 0.01));
+assert('el no remunerativo sin aportes entra entero, con alícuota cero',
+  casc.cascada.some(x => x.code === '1684' && x.tasa === 0
+    && Math.abs(x.efecto - anticipoIncentivo) < 0.01));
+assert('el presentismo que el mes movió sale como su propio renglón',
+  casc.cascada.some(x => /Presentismo/i.test(x.label)));
+
+// Las marcas: lo que hay que saber del legajo antes de mirar los números.
+assert('las marcas dicen cuántos conceptos del mes tiene',
+  casc.marcas.some(m => /conceptos del mes/.test(m.label)));
+assert('un legajo sin conceptos del mes lo dice, en vez de no decir nada',
+  rOk.rows[0].marcas.some(m => m.label === 'Sin conceptos del mes'));
+assert('cada marca trae su tono, que es el que la pinta',
+  casc.marcas.every(m => typeof m.label === 'string' && typeof m.tone === 'string'));
+assert('el legajo sin mes anterior cargado lo dice como marca',
+  rOk.rows[0].marcas.some(m => m.label === 'Sin mes anterior cargado'));
+
+// Los descuentos que se devuelven al neto, uno por uno: el analista tiene que
+// poder ver que el anticipo que le falta al neto es el que él cargó.
+assert('los descuentos devueltos al neto se informan con su código',
+  rDevuelve.rows[0].devueltoDetalle.some(d => d.code === '8500'
+    && Math.abs(d.importe - 300000) < 0.01));
+
+// ── Columnas de unidades que no son importes ─────────────────────────────────
+//
+// El Tabulado trae, para varios conceptos, una columna con la CANTIDAD
+// (`1064-UN_ADIC_MES`) y otra con el importe (`1062-ADIC_ART30`). La cantidad
+// estaba en la lista de importes y se sumaba como pesos: "2,00" de haberes en
+// 263 legajos de 05/2026. Es la clase de número mal pero coherente que no
+// detecta nadie, así que además de no sumarse, se avisa.
+
+const rUnidades = runControlNetos(escalaRows, [fila('1', {
+  '1064-UN_ADIC_MES': 3,
+  NETO: NETO_TEO,
+})], mapping);
+assert('una columna de unidades no se suma como si fueran pesos',
+  Math.abs(rUnidades.rows[0].residuo) < 0.01);
+assert('y no aparece como concepto del mes en la cascada',
+  !rUnidades.rows[0].cascada.some(x => x.code === '1064'));
+
+const rUnidadesDeclarada = runControlNetos(escalaRows, [fila('1', {
+  '1064-UN_ADIC_MES': 3, NETO: NETO_TEO,
+})], { ...mapping, netosConfig: { ...CFG, codigos: { ...DEFAULT_NETOS_CONFIG().codigos,
+  remuOtros: ['1064'] } } });
+assert('si alguien declara un código de unidades como importe, el control avisa',
+  rUnidadesDeclarada.avisos.some(a => a.includes('unidades')));
+
+// ── El contrato de la planilla "Totales por rubro" ───────────────────────────
+//
+// Las bandas del encabezado se declaran con `colspan`, así que si alguien
+// agrega una columna y se olvida de la banda, el encabezado sale corrido sobre
+// los datos y no hay forma de notarlo mirando el código.
+
+assert('las bandas cubren exactamente las columnas de la planilla',
+  BANDAS.reduce((a, b) => a + b.cols, 0) === RUBROS.length);
+assert('toda columna de la planilla existe de verdad en la fila del control',
+  RUBROS.every(c => Object.prototype.hasOwnProperty.call(rOk.rows[0], c.key)));
+assert('las dos primeras columnas son las que se congelan: legajo y empleado',
+  RUBROS[0].key === 'legajo' && RUBROS[1].key === 'nombre'
+  && !RUBROS[0].num && !RUBROS[1].num);
+assert('todo rubro de importe dice su base de cálculo abajo del título',
+  RUBROS.filter(c => c.num && !c.dif).every(c => typeof c.sub === 'string' && c.sub.length > 0));
 
 // ── Ramas de error ───────────────────────────────────────────────────────────
 

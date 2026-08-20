@@ -1,4 +1,4 @@
-**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **0** (ver D-074), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. Sigue **pendiente**: probar en el navegador el tilde de jubilado del Paso 2, y el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
+**Estado:** verificado el 2026-08-20 contra los tres Tabulados reales de Comercio de 05/2026 (IFSA, RELEF y FGSA — Intelicar queda afuera del control por ser Camioneros) y la planilla de armado manual de Willy: de 619 legajos evaluados, las diferencias sin explicar bajaron de 206 a **0** (ver D-074), y los 37 legajos de la planilla manual cierran todos dentro de la tolerancia de $100. La solapa Detalle se rediseñó el mismo día siguiendo un handoff de diseño: abre en **Fichas** (una tarjeta por legajo con la cascada del residuo) en vez de la planilla plana, que pasó a **Totales por rubro** (ver D-075). Sigue **pendiente**: probar en el navegador el tilde de jubilado del Paso 2; el cuarto ajuste que Willy pidió el 2026-08-19, el acuerdo no remunerativo variable por categoría (`noRemuAcuerdo` sigue siendo un único monto de config, no varía por categoría); y el export por solapa que pedía el handoff de Detalle (hoy las dos solapas comparten el export general) · el §3 y el §4 de este brief quedaron **superados por D-067**, ver la nota de abajo.
 
 > **Nota del 2026-08-19 — lo que cambió al bajarlo a código (D-067).** Este brief planteaba comparar
 > contra un *neto acordado pegado a mano* y descontar una lista fija de conceptos "perdonados"
@@ -41,6 +41,26 @@
 > jubilado que sigue trabajando —le retuvieron sólo jubilación teniendo las cuatro alícuotas
 > declaradas— y el analista lo confirma con un tilde en el Paso 2; recién tildado se le dejan de
 > calcular ley 19.032, obra social y ANSSAL.
+
+> **Nota del 2026-08-20 — la solapa Detalle: tres vistas y la cascada del residuo (D-075).** El §8
+> de este brief ("tabla por legajo, ordenable, con paginación") queda superado: siguiendo un handoff
+> de diseño, el Detalle pasa a **tres solapas — Resumen · Fichas · Totales por rubro — y abre en
+> Fichas**, no en la planilla. **Fichas** (nueva) es una tarjeta por legajo: cerrada muestra identidad
+> y las marcas del caso (vacaciones en el mes, básico fuera de escala, topeó aportes, perfil de
+> jubilado sin confirmar, fuera de convenio, sin aportes por su puesto, conceptos del mes, sin mes
+> anterior cargado) y el importe sin explicar; abierta muestra la tira de conciliación en cinco pasos
+> (neto teórico → explicado por el mes → neto esperado → neto liquidado ajustado → sin explicar), el
+> recibo teórico y lo liquidado lado a lado, la cascada de conceptos del mes con su efecto real en el
+> neto, y una conclusión con qué mirar. El cuerpo de cada ficha se arma al abrirla, no antes.
+> **Totales por rubro** reemplaza a la planilla plana: los mismos rubros en cuatro bandas de
+> encabezado (Identificación, Recibo teórico, Lo que se liquidó, Conciliación), 14 columnas, cada
+> rubro con su base de cálculo abajo del título, legajo y empleado congelados, y la fila de TOTAL
+> cierra por columna, no sólo en el neto. El dato nuevo que hace posibles las dos vistas es la
+> **cascada del residuo por legajo** (concepto, código, tipo, importe, alícuota, efecto en el neto):
+> la suma de los efectos es, al centavo, el `explicado` que usa el cruce — verificado como assert y
+> contra los 619 legajos reales de 05/2026. De paso se corrigió un bug (dos códigos de UNIDADES
+> sumados como pesos) y sigue pendiente el export por solapa que pedía el handoff. Detalle completo
+> en D-075.
 
 # Control de Netos — brief para Claude Code
 

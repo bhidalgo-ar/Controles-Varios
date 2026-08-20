@@ -12,10 +12,21 @@ import { enhanceGrid, diffBadgeHtml } from './resultBlocks.js';
 
 const PAGE_SIZE_DEFAULT = 50;
 
+/** Qué opción de filtro es "lo que hay que ir a mirar": se pinta con el color
+ *  del error y, si arranca activa, la barra explica por qué. "Sin explicar" es
+ *  como lo dice el Control de Netos; el resto de los controles dice
+ *  "con diferencia". */
+const ES_DIFERENCIA = /diferencia|sin explicar/i;
+
 /** Un `<select>` de filtro con hasta tantas opciones se dibuja como chips; con
  *  más (el filtro por concepto de NR, 18 opciones) sigue siendo un desplegable:
- *  18 chips no son un filtro, son una pared. */
-const MAX_CHIP_OPTIONS = 4;
+ *  18 chips no son un filtro, son una pared.
+ *
+ *  Son 7 y no 4 desde el rediseño del Detalle de Netos, que separa los estados
+ *  de un legajo en siete (todos, sin explicar, dentro del margen, al centavo,
+ *  fuera de escala, topearon aportes, sin comparar). Con siete etiquetas cortas
+ *  siguen entrando en una fila; el control que tenga más los deja en el select. */
+const MAX_CHIP_OPTIONS = 7;
 
 /**
  * Monta la barra de arriba de la tabla Detalle (pantalla 7 del rediseño):
@@ -109,7 +120,7 @@ function chipifySelect(sel) {
     const m = o.textContent.trim().match(/^(.*?)\s*\((\d[\d.,\s]*)\)$/);
     return `
       <button type="button" tabindex="-1" data-chip-value="${esc(o.value)}"
-              class="results-chip${/diferencia/i.test(o.textContent) ? ' results-chip--dif' : ''}">
+              class="results-chip${ES_DIFERENCIA.test(o.textContent) ? ' results-chip--dif' : ''}">
         ${esc(m ? m[1] : o.textContent.trim())}
         ${m ? `<span class="results-chip__count">${esc(m[2])}</span>` : ''}
       </button>
@@ -140,7 +151,7 @@ function chipifySelect(sel) {
 
   const selected = options.find(o => o.value === sel.value);
   return {
-    startedFiltered: /diferencia/i.test(selected?.textContent || ''),
+    startedFiltered: ES_DIFERENCIA.test(selected?.textContent || ''),
     onUserChange: (fn) => listeners.push(fn),
   };
 }
