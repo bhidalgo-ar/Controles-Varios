@@ -120,6 +120,12 @@ decidir"). La batería de tests: **33 archivos, 0 fallas**.
 
 ## Pruebas pendientes de tu lado, por cliente (al 2026-08-17)
 
+> **Superada el 2026-08-20 por `docs/pruebas-pendientes.md`**, que agrupa por control o reporte
+> —no por cliente— y cubre los 15 PRs que entraron después del 2026-08-17 (Control de Netos,
+> Contabilidad Desglosada, monto de diferencia, la familia de Novedades entera). La tabla de abajo se
+> conserva porque el corte por cliente sigue siendo útil para saber a quién pedirle qué archivo.
+
+
 Repaso hecho después de cerrar el rediseño visual (PRs #139-#150). Separado por cliente porque cada
 ítem se destraba con **un archivo distinto**, y ninguno se destraba programando. El rediseño visual no
 dejó ninguna prueba pendiente de tu lado: las 10 pantallas se recorrieron en los tres temas en un
