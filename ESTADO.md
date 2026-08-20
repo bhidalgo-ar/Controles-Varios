@@ -4,6 +4,12 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## Familia de Novedades (Axton) — relevada y decidida, lista para construir
+- Qué es: el circuito planilla del cliente → planilla depurada → importador `F2_Consolidada` → liquidación, para los 7 clientes Axton. Dos controles: **N1** genera el importador desde la planilla del cliente (el analista valida en pantalla y descarga), **N2** cruza el importador contra el Tabulado + Totales de Concepto. Dos cimientos antes: **N0a** lector de la familia ExpNov y **N0b** parser Axton del Tabulado (extiende la pieza T).
+- Punto: el 2026-08-20 se relevó el formato real de julio 2026 en los 7 clientes (14 barridos de SharePoint, nada entró al repo) y Willy cerró las tres decisiones de diseño (D-069): la app genera el importador, el cruce compara cantidad e importe y lo no comparable informa sin bloquear, y las columnas sin código se listan siempre. B0 del catálogo quedó contestado: el template común de Axton es el propio importador. Ya hay un caso real esperando al control: SIASA Aguas y Gaseosas 07/2026, 12 empleados en la planilla del cliente y 11 en el importador.
+- Próximo paso: construir en 4 chats, en orden — N0a, N0b (paralelizable con N1), N1, N2 — con los prompts, modelo y esfuerzo ya escritos en `docs/prompts-familia-novedades.md`. De Willy: abrir en el navegador las planillas bloqueadas por etiqueta de confidencialidad (Epiroc, Red Bull, POP templates) y preguntar a la analista de SIASA por el legajo 12→11.
+- Detalle: `specs/familia-novedades-axton.md`, D-069.
+
 ## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
 - Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
 - Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.

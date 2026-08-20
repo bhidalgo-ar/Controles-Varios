@@ -2120,3 +2120,58 @@ Control de Netos.
 mismo tipo de bug de layout que D-060 —se mide en un navegador real, no con un assert de DOM— y no se
 sumó un e2e dedicado en este cambio.
 
+
+---
+
+## D-069 — Familia de Novedades (Axton): la app genera el importador, el cruce informa lo no comparable sin bloquear, y las columnas sin código se listan siempre
+
+**Fecha:** 2026-08-20. **Instrucción de:** Willy, tras el relevamiento del formato de novedades y de
+liquidación de julio 2026 en los 7 clientes Axton (POP, Merz, Epiroc, SIASA, Geopagos, Red Bull, Coelsa)
+— 14 barridos de SharePoint con agentes de recolección; ningún archivo de cliente entró al repo. El
+detalle completo del relevamiento, cliente por cliente, está en `specs/familia-novedades-axton.md`.
+
+**Contexto.** La novedad viaja en tres pasos: la planilla del cliente, la planilla depurada por el
+analista, y el importador `F2_Consolidada` que se sube a Axton. Los dos saltos se controlan a mano o no
+se controlan: hay BUSCARV manuales contra exports de Liquidaciones adentro de las planillas (POP 09/2025),
+VLOOKUP contra el borrador del mes anterior que devuelven `#N/D` (Coelsa), y un mes real donde el cliente
+mandó 12 empleados y al importador llegaron 11 sin registro de por qué (SIASA Aguas y Gaseosas 07/2026).
+El relevamiento confirmó además que el importador `F2_Consolidada` es el formato común de Axton en toda la
+cartera — con lo cual el ítem B0 del catálogo maestro ("¿template único o negociado por cliente?") queda
+contestado sin negociar nada: el template es el importador.
+
+**Qué se decidió.**
+
+1. **La app genera el importador, no controla la transcripción a posteriori.** El analista sube la
+   planilla del cliente, la app arma el `F2` por unidad organizativa, el analista lo valida en pantalla y
+   lo descarga. El error de transcripción (B2a del catálogo) desaparece por diseño en vez de detectarse
+   después. Con el importador validado, el cruce contra la liquidación (B2b) compara ese archivo contra
+   el Tabulado y el reporte "Totales de Concepto" del período.
+2. **El cruce compara cantidad E importe cuando los dos lados los tienen.** Cuando no son comparables
+   —una novedad en días u horas contra un Tabulado que sólo trae importes, o la cantidad ausente de la
+   variante sólo-Imp— el control **no bloquea ni aprueba: informa claramente** el motivo. Todo lo extraño
+   se marca. Consistente con D-065 (nada se convierte ni se infiere).
+3. **Las columnas sin código se listan aparte, siempre.** Existen con datos cargados adentro (Coelsa trae
+   una columna "Revisar que se aplique descuento por ayuda especial" con importes). Nada se ignora en
+   silencio — es la misma regla del default silencioso de `CLAUDE.md`, aplicada a columnas enteras.
+
+**Hallazgos que condicionan el diseño** (verificados contra archivos reales, detalle en la spec): el
+bloque de identificación mide 3, 6, 8, 9 o 31 columnas según cliente y variante, así que el primer
+concepto puede caer en D, E, F, G, I, J o AF — nunca asumir "columna J" ni "fila 2"; en SIASA y Coelsa el
+bloque está corrido una fila; la fila de nombres en criollo puede no existir; la fecha de la fila 1 puede
+ser la de la plantilla original y no la del período (POP: 09/08/2024 en archivos de 2026); hay códigos
+duplicados en dos columnas (605705, 1530, 1600), códigos no numéricos (`SAL BAS`) y 17 códigos con rótulo
+distinto entre dos archivos del mismo cliente y mes (Coelsa) — refuerza D-039: matchear siempre por
+código; el valor del importador viene como `cantidad$importe` pegados en una celda y es formato normal,
+no error; y el Tabulado **no trae todos los conceptos liquidados** (Red Bull: un concepto sumado en la
+columna Exento sin columna propia, verificado por suma), por lo que N2 necesita también el totalizador.
+
+**Alternativas descartadas:** controlar la transcripción planilla→importador como control aparte (B2a) —
+lo disuelve el generador; negociar un template de novedades con cada cliente (B0) — el importador ya es
+el template común; convertir unidades para comparar horas contra importes — D-065; bloquear la corrida
+cuando algo no es comparable — esconde el resto del cruce que sí funciona.
+
+**Motivo:** decisión explícita de Willy en la sesión del 2026-08-20, sobre las tres preguntas que dejó el
+relevamiento. El roadmap por fases (N0a lector ExpNov, N0b parser Axton de Tabulado, N1 generador, N2
+cruce), los pilotos (SIASA y Merz; POP para volumen) y lo que queda afuera están en
+`specs/familia-novedades-axton.md`; los prompts de arranque de cada frente, en
+`docs/prompts-familia-novedades.md`.
