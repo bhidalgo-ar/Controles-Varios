@@ -7,6 +7,14 @@ Los bloques ya existen: `js/ui/resultBlocks.js`. No armes el hero a mano.
 coherencia). Dentro de `detalle`: toolbar + tabla + paginación. `nr.js` es el ejemplo completo de los
 dos modos.
 
+## Antes de implementar: mockeá contra estas reglas
+
+Estas reglas —bloques de `resultBlocks.js`, toolbar y tabla de `tableTools.js`, convención de
+export— no son sólo para el código final: son también el criterio contra el que se arma el mockup
+que Willy confirma antes del PR (ver "Antes de escribir el punto 3 y el punto 4" en
+`nuevo-control/SKILL.md`). Un mockup que no las respeta no sirve como mockup: corregilo antes de
+mostrárselo, no dejes que la corrección aparezca recién en el código real.
+
 Criterio del proyecto: mostrar sólo lo que tiene valor real. No es forma, es lo que hace usable una
 tabla de 900 legajos.
 

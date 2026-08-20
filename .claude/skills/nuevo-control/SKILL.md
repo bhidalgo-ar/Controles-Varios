@@ -49,6 +49,26 @@ Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va
 `if (fileType === '…')` en alguno de los dos, algo falta en la ficha —
 `tests/fileTypes.test.js` afirma que `fileUpload.js` no menciona ningún tipo de archivo por nombre.
 
+## Antes de escribir el punto 3 y el punto 4: mockup para Willy
+
+El wizard, la pantalla de resultados y el exportador son las tres partes que más veces salieron
+desalineadas — un paso que no encaja con el resto del flujo, un tile que pisa a otro, un exportador
+que no sigue la convención de nombre o de columnas. Verlo recién en el PR es tarde: para entonces ya
+está escrito.
+
+Antes de tocar `renderResults` (punto 3), el editor de config si tu control tiene uno, y el
+exportador, armá un mockup HTML interactivo con datos inventados (legajos y nombres de la lista de
+Banfield de `CLAUDE.md`) que muestre cómo va a quedar el paso del wizard, la pantalla de resultados y
+el menú de export. El mockup tiene que respetar las convenciones de `ui-resultados.md`, en esta misma
+carpeta — los bloques de `resultBlocks.js`, la toolbar de `tableTools.js`, la convención de export —
+no inventar layout propio: si el mockup no entra en esas convenciones, el problema es el mockup, no
+el criterio.
+
+Usá el mecanismo de la skill `spec-html` (capa de revisión con `data-rev`, botón "Copiar revisión")
+para que Willy lo marque bloque por bloque y te devuelva la revisión anclada. Esperá su confirmación
+antes de escribir el código real de los puntos 3 y 4 — es un gate, no un paso opcional: no se abre PR
+con un mockup sin confirmar.
+
 ### 1 — el parser
 
 Seguí la forma de `nrParser.js`. Dos cosas que no se deducen del archivo:
@@ -249,6 +269,8 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 ## Checklist
 
 ```
+[ ] mockup interactivo (wizard + resultados + export) armado y confirmado por Willy antes de
+    escribir el módulo real (ver "Antes de escribir el punto 3 y el punto 4" más arriba)
 [ ] parser · ficha en fileTypes.js · módulo · registry · test
 [ ] "es diferencia" resuelto con isDiff()/diffStats(), sin 0,01 sueltos (D-069)
 [ ] columnas nuevas del Tabulado → su entrada en TAB_FIELD_LABELS (js/ui/fieldHelp.js)
