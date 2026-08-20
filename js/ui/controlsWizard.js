@@ -20,6 +20,7 @@ import {
   getGroupers,
   getGrouperConcepts,
   getControlConfigsForClient,
+  updateClient,
 } from '../db.js';
 import { CATALOGO_SEED } from '../data/catalogoSeed.js';
 import { necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
@@ -32,6 +33,11 @@ import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
 import { controlAppliesToClient, controlOrigin } from '../controls/scope.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import {
+  resolveClientTolerance, resolveControlTolerance, normalizeTolerance,
+  formatTolerance, withTolerance, stampTolerance, summarizeWithTolerance,
+  renderResultsWithTolerance,
+} from '../controls/tolerance.js';
 import { buildParserMapping }           from '../parsers/conceptMatcher.js';
 import { TAB_CODE_SEEDS, buildColByCode } from '../controls/tabCodes.js';
 import { DEFAULT_LEGAJO_KEY_MODE, makeLegajoKey } from '../utils/legajo.js';
@@ -982,60 +988,126 @@ function buildWizardSidebarHtml(state) {
       <span class="wizard-section-label">${todoListo ? 'Todo listo para ejecutar' : 'Para ejecutar te falta'}</span>
       ${checklistHtml}
     </div>
-    ${thresholdsSectionHtml(state.selectedControls)}
+    ${thresholdsSectionHtml(state)}
   `;
 }
 
 /**
- * La sección "Umbrales" del panel lateral. La comparten el paso de archivos y
- * la pantalla de la corrida: con qué números se está midiendo tiene que decir
- * lo mismo antes y durante la ejecución.
+ * La sección "Umbrales" del panel lateral: **el monto de diferencia** con el
+ * que se mide toda la corrida. La comparten el paso de archivos (editable) y la
+ * pantalla de la corrida (sólo lectura, que ya está midiendo con ese número).
  *
- * **Los valores de acá son una vista previa: ningún control los lee todavía.**
- * Cada control trae su propia tolerancia cableada (los 0,01 repartidos por
- * `js/controls/`), así que este bloque promete algo que no cumple.
+ * Hasta el 2026-08-19 este bloque mostraba "$ 1,00 / 0,1 %" escritos a mano que
+ * ningún control leía. Ahora el monto se edita acá, se guarda en el cliente y
+ * lo leen los 19 controles a través de `js/controls/tolerance.js` (D-069).
  *
- * Mientras eso siga así, un control que declare `ownThresholdNote` en el
- * registry apaga el bloque y dice de dónde sale de verdad su tolerancia — el
- * caso del Control de Netos, que la tiene editable en su panel del Paso 2. Sin
- * esto, la pantalla mostraría "$ 1,00" al lado de un control configurado en
- * "$ 2,00" y no habría forma de saber cuál se usó (Willy, 2026-08-19).
+ * El porcentaje y el "marcar legajos presentes en un archivo y ausentes en el
+ * otro" salieron de este panel: sólo funcionan en Cruce por Agrupadores —el
+ * único control con un "sobre cuánto" claro para sacar el porcentaje— y ahí se
+ * editan, en su propio panel. Prometerlos para los 19 era volver al problema
+ * que este cambio vino a cerrar.
  *
- * La nota se declara en el registry y no con un `if` por id de control: el día
- * que los umbrales sean de verdad globales, se borra este parámetro y las notas,
- * y ningún control queda con una rama especial escondida acá. Está anotado en el
- * ROADMAP (3.10).
+ * Un control que no mide con este monto lo declara en el registry
+ * (`ownTolerance`) y el panel lo dice —con su número si lo tiene— en vez de
+ * dejar dos cifras en pantalla sin saber cuál mandó. Son dos casos: el que
+ * tiene el suyo editable (Netos, Agrupadores) y el que directamente no compara
+ * importes contra un umbral (los que cuadran un asiento, los que comparan
+ * campos de texto, los que verifican que la app leyó bien un archivo).
  *
- * @param {string[]} [selectedControls] ids elegidos para esta corrida
+ * @param {object} state state del wizard (necesita `client` y `selectedControls`)
+ * @param {{ editable?: boolean }} [opts]
  */
-function thresholdsSectionHtml(selectedControls = []) {
-  const notas = selectedControls
-    .map(id => CONTROL_REGISTRY[id]?.ownThresholdNote)
-    .filter(Boolean);
-  const apagado = notas.length > 0;
+function thresholdsSectionHtml(state, { editable = true } = {}) {
+  const tol = resolveClientTolerance(state.client);
+  const propias = (state.selectedControls || [])
+    .map(id => CONTROL_REGISTRY[id])
+    .filter(ctrl => ctrl?.ownTolerance)
+    .map(ctrl => ({
+      label: ctrl.label || ctrl.id,
+      monto: ctrl.ownTolerance.from
+        ? ctrl.ownTolerance.from(mappingParaTolerancia(state, ctrl))
+        : null,
+      note: ctrl.ownTolerance.note || '',
+    }));
+
+  const campoHtml = editable
+    ? `<div class="threshold-field__input">
+         <span aria-hidden="true">$</span>
+         <input type="text" class="form-input" id="js-diff-tolerance"
+                inputmode="decimal" autocomplete="off"
+                aria-label="Monto de diferencia"
+                value="${esc(tol.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}">
+       </div>`
+    : `<div class="threshold-field__value">${esc(formatTolerance(tol))}</div>`;
 
   return `
-    <div${apagado ? ' class="is-disabled" aria-disabled="true"' : ''}>
+    <div>
       <span class="wizard-section-label">Umbrales</span>
-      <div class="threshold-grid"${apagado ? ' style="opacity:.45;"' : ''}>
-        <div>
-          <span class="threshold-field__label">Dif. absoluta &gt;</span>
-          <div class="threshold-field__value">$ 1,00</div>
-        </div>
-        <div>
-          <span class="threshold-field__label">Dif. porcentual &gt;</span>
-          <div class="threshold-field__value">0,1 %</div>
-        </div>
+      <div>
+        <span class="threshold-field__label">Diferencia a partir de</span>
+        ${campoHtml}
       </div>
-      <div class="threshold-checkbox-static"${apagado ? ' style="opacity:.45;"' : ''}>
-        <span class="threshold-checkbox-static__box">✓</span>
-        Marcar legajos presentes en un archivo y ausentes en el otro
-      </div>
-      ${apagado
-        ? notas.map(n => `<p class="threshold-note"><strong>No se usan en esta corrida.</strong> ${esc(n)}</p>`).join('')
-        : '<p class="threshold-note">Vista previa — todavía no se pueden editar estos valores desde acá.</p>'}
+      <p class="threshold-note">
+        Una diferencia menor a este monto no se marca ni se cuenta, en ninguno de los
+        controles de la corrida. ${editable
+          ? `Se guarda para <strong>${esc(state.client?.name || 'este cliente')}</strong> y queda para las próximas corridas.`
+          : 'Es el monto con el que se está midiendo esta corrida.'}
+      </p>
+      ${propias.map(p => `
+        <p class="threshold-note">
+          <strong>${esc(p.label)}</strong> ${p.monto != null
+            ? `mide con el suyo (${esc(formatTolerance(p.monto))}).`
+            : 'no usa este monto.'}
+          ${esc(p.note)}
+        </p>`).join('')}
     </div>
   `;
+}
+
+/**
+ * Lo que `ownTolerance.from()` necesita para leer la tolerancia propia de un
+ * control **antes** de ejecutar: el mismo mapping que se arma en la corrida,
+ * pero sólo con las configs que el control declaró. No se re-arma el mapping
+ * completo (pide archivos y la base) porque acá alcanza con la config.
+ */
+function mappingParaTolerancia(state, ctrl) {
+  const mapping = {};
+  for (const cfg of (ctrl.config || [])) {
+    if (!cfg.mappingKey) continue;
+    mapping[cfg.mappingKey] = cfg.mappingValue ? cfg.mappingValue(state) : state[cfg.stateKey];
+  }
+  return mapping;
+}
+
+/**
+ * Engancha el campo del monto de diferencia: se guarda en el cliente al salir
+ * del campo, y el state del wizard se actualiza en el acto para que la corrida
+ * que arranque después use el número que quedó en pantalla.
+ *
+ * Lo que se escribe se normaliza (`normalizeTolerance`) antes de guardarse: un
+ * campo vacío, un texto o un cero vuelven al mínimo de $ 0,01 y el campo lo
+ * muestra corregido, en vez de guardar un umbral que apagaría todos los avisos.
+ */
+function wireThresholdsSection(container, state) {
+  const input = container.querySelector('#js-diff-tolerance');
+  if (!input) return;
+
+  const guardar = async () => {
+    const nuevo = normalizeTolerance(input.value);
+    const previo = resolveClientTolerance(state.client);
+    input.value = nuevo.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (nuevo === previo) return;
+    state.client.diffTolerance = nuevo;
+    try {
+      await updateClient(state.client.id, { diffTolerance: nuevo });
+      showToast(`Diferencia a partir de ${formatTolerance(nuevo)}`, 'success');
+    } catch (err) {
+      showToast(`No se pudo guardar el monto: ${err.message}`, 'danger');
+    }
+  };
+
+  input.addEventListener('change', guardar);
+  input.addEventListener('blur', guardar);
 }
 
 /**
@@ -1167,6 +1239,10 @@ function renderStepFiles(container, state, root) {
       </div>
     </div>
   `;
+
+  // El monto de diferencia del panel lateral: se guarda en el cliente y manda
+  // en la corrida que arranque después (D-069).
+  wireThresholdsSection(container, state);
 
   // ── Tabulado + catálogo ──────────────────────────────────────────────────────
   if (anyTabRequired) {
@@ -1932,7 +2008,10 @@ function renderInlineResults(container, state, root) {
       wrapper.style.animationDelay = `${Math.min(i, 5) * 0.13}s`;
     }
     resultsContainer.appendChild(wrapper);
-    ctrl.renderResults(state.lastRunResults[controlId], wrapper);
+    // El detalle se dibuja con el monto que midió ese control (D-069): la
+    // celda Δ pinta como hallazgo lo que está por encima, y como "sin
+    // diferencia" lo que quedó adentro del margen.
+    renderResultsWithTolerance(ctrl, state.lastRunResults[controlId], wrapper);
   });
 }
 
@@ -2003,6 +2082,12 @@ async function executeControls(state, container, root) {
     ui.thresholdPct = (await getConfig('semaforoThresholdPct')) ?? DEFAULT_SEMAFORO_THRESHOLD_PCT;
     const thresholdPct = ui.thresholdPct;
 
+    // El monto de diferencia del cliente, resuelto UNA vez por corrida (D-069).
+    // Los 19 controles miden con éste, salvo los que declaran el suyo en el
+    // registry. Viaja con el run para que reabrir esta corrida mañana muestre
+    // los mismos números aunque el monto del cliente haya cambiado.
+    const clientTolerance = resolveClientTolerance(state.client);
+
     // ── Preparación · configs y archivos de la corrida ───────────────────────
     // Las preferencias del usuario (mapeos de columnas) se guardan siempre,
     // sean borrador o quick — son configuración que el usuario reusa.
@@ -2029,6 +2114,7 @@ async function executeControls(state, container, root) {
     if (!quickRun) {
       runId = await createControlRun(
         state.client.code, state.period, state.selectedControls, state.notes, runWarnings,
+        clientTolerance,
       );
       if (tab) {
         await saveControlRunFile(
@@ -2140,12 +2226,20 @@ async function executeControls(state, container, root) {
       const primaryKey  = ctrl.additionalFiles[0]?.key;
       const primaryRows = state.controlFiles[controlId]?.[primaryKey]?.parsedRows || [];
 
-      runResults[controlId] = ctrl.run(primaryRows, tabRows, mapping);
+      // Con qué monto mide ESTE control: el suyo si lo declara en el registry,
+      // si no el del cliente (D-069). Se fija para todo lo que el control haga
+      // —calcular, resumir y después dibujar— y se estampa en los resultados,
+      // que es lo que van a leer las otras tres pantallas y la corrida de
+      // mañana. Un control nuevo no escribe nada de esto: lo hereda.
+      const controlTolerance = resolveControlTolerance(ctrl, mapping, clientTolerance);
+      runResults[controlId] = withTolerance(controlTolerance, () =>
+        ctrl.run(primaryRows, tabRows, mapping));
+      stampTolerance(runResults[controlId], controlTolerance);
 
       // El semáforo de la tarjeta sale del MISMO cálculo que ordena la cascada
       // de resultados (computeSemaforoStatus sobre la unidad declarada) — no de
       // `summary.status`, que marca amarillo con una sola diferencia.
-      u.summary = ctrl.summarize ? ctrl.summarize(runResults[controlId]) : null;
+      u.summary = summarizeWithTolerance(ctrl, runResults[controlId]);
       u.tier = !u.summary ? 'info'
         : u.summary.status === 'error' ? 'error'
         : u.summary.unitsTotal == null ? 'info'
@@ -2360,7 +2454,7 @@ function renderRunScreen(container, state, ui, root) {
                 </p>`).join('')
             : '<p class="run-side__line run-side__line--muted">Estos controles no piden archivos.</p>'}
         </div>
-        ${thresholdsSectionHtml(state.selectedControls)}
+        ${thresholdsSectionHtml(state, { editable: false })}
       </div>
     </div>
   `;

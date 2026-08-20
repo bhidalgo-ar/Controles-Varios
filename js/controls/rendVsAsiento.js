@@ -1,5 +1,6 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
@@ -147,9 +148,14 @@ function normCCName(v) {
     || null;
 }
 
-const THRESHOLD = 0.01;
-const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
+// Qué cuenta como diferencia sale del monto del cliente (D-069). El chequeo de
+// que el desglose sume el valor de la celda NO usa ese monto: eso no es una
+// diferencia a revisar, es el control leyendo mal el archivo (ver más abajo).
+const hasDiff = d => isDiff(d);
 const diffStyle = d => hasDiff(d) ? 'color:var(--color-danger);font-weight:600;' : '';
+
+/** El desglose contra el valor de la celda: cuadre interno, siempre al centavo. */
+const CUADRE_EPS = 0.01;
 
 // ── Drill-down (zoom de celdas CONTA) ────────────────────────────────────────
 
@@ -286,8 +292,10 @@ function openDrillModal({ detalle, ccKey, catKey, ccLabel, cellValue }) {
     return header + conceptos.map(conceptBlockHtml).join('');
   }).join('');
 
-  // Aviso defensivo: la suma del desglose debería coincidir con el valor de la celda
-  const mismatch = (cellValue !== null && cellValue !== undefined && Math.abs(grandTotal - cellValue) > THRESHOLD)
+  // Aviso defensivo: la suma del desglose debería coincidir con el valor de la
+  // celda. Es un cuadre del propio control, no un hallazgo del analista: mide
+  // siempre con el centavo, no con el monto de diferencia del cliente.
+  const mismatch = (cellValue !== null && cellValue !== undefined && Math.abs(grandTotal - cellValue) > CUADRE_EPS)
     ? `<div class="alert alert--warning" style="margin:0 0 var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
          ⚠ La suma del desglose (${fmt(grandTotal)}) no coincide con el valor de la celda (${fmt(cellValue)}).
        </div>`

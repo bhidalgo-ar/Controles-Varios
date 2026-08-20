@@ -1438,19 +1438,21 @@ table.rb-grid.rb-grid--stick2 tfoot > tr > [colspan]:not([colspan="1"]):first-ch
   border-radius: var(--radius-full); padding: 5px 12px; font-size: 12px; font-weight: 700;
 }
 
-.threshold-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 .threshold-field__label { font-size: 12px; font-weight: 600; color: var(--t1); display: block; margin-bottom: 4px; }
 .threshold-field__value {
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
   font-size: 13px; color: var(--t1); font-variant-numeric: tabular-nums; background: var(--color-bg);
 }
-.threshold-checkbox-static {
-  display: flex; align-items: center; gap: var(--sp-2); font-size: 12px; color: var(--t1); margin-top: var(--sp-3);
+/* El monto de diferencia, editable en el panel lateral (D-069). El $ va afuera
+   del input para que el analista escriba sólo el número. */
+.threshold-field__input {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: 13px; color: var(--t2);
 }
-.threshold-checkbox-static__box {
-  width: 14px; height: 14px; border-radius: 4px; background: var(--celeste); color: var(--on-celeste);
-  display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0;
+.threshold-field__input .form-input {
+  flex: 1; min-width: 0; text-align: right; font-variant-numeric: tabular-nums;
 }
+
 .threshold-note { font-size: 11px; color: var(--t3); margin: var(--sp-2) 0 0; }
 
 /* ── Wizard — filtro de origen + buscador + lista de controles (Paso 1) ── */

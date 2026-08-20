@@ -22,7 +22,7 @@
 ## Chat 1 — N0a: Lector de la familia ExpNov
 
 ```
-Leé specs/familia-novedades-axton.md y DECISIONS.md D-069 antes de escribir nada.
+Leé specs/familia-novedades-axton.md y DECISIONS.md D-070 antes de escribir nada.
 
 Quiero el cimiento N0a: un parser en js/parsers/ para la familia de archivos de
 novedades/importador de Axton (hoja "d  axFiles ...ExpNov..."). Reconoce por
@@ -57,7 +57,7 @@ No toques ningún control existente. Terminá en PR con la doc al día
 
 ```
 Leé specs/familia-novedades-axton.md (sección "El lado liquidación"),
-specs/lector-tabulado-formatos.md y DECISIONS.md D-065 y D-069 antes de empezar.
+specs/lector-tabulado-formatos.md y DECISIONS.md D-065 y D-070 antes de empezar.
 
 Quiero el cimiento N0b: que el repo pueda leer los Tabulados Axton reales de los
 7 clientes relevados, extendiendo la pieza T (js/parsers/tabFormatDetector.js ya
@@ -86,7 +86,7 @@ listo para que N2 lo consuma. PR con doc al día.
 ## Chat 3 — N1: Generador de importador de novedades
 
 ```
-Leé specs/familia-novedades-axton.md y D-069, y usá la skill nuevo-control para
+Leé specs/familia-novedades-axton.md y D-070, y usá la skill nuevo-control para
 cablear los 5 puntos de integración. Depende del PR del lector ExpNov (N0a):
 arrancá de main con eso mergeado.
 
@@ -106,7 +106,7 @@ Reglas:
 - La pantalla de validación es parte del control: el analista ve QUÉ va a entrar
   al F2 (por UO: legajos, conceptos, totales por concepto) y QUÉ quedó afuera y
   por qué (columna sin código, fila sin legajo, valor no parseable) ANTES de
-  descargar. Nada se ignora en silencio (D-069).
+  descargar. Nada se ignora en silencio (D-070).
 - Consolidación por legajo si la planilla trae un legajo repetido, con
   makeLegajoKey. Celda vacía no viaja al F2 (no es cero).
 - El archivo generado lo recibe el propio analista (no Finanzas): puede llevar
@@ -124,7 +124,7 @@ Tests en la cadena. PR con doc al día.
 ## Chat 4 — N2: Control Novedades vs Liquidación
 
 ```
-Leé specs/familia-novedades-axton.md y D-069, y usá la skill nuevo-control.
+Leé specs/familia-novedades-axton.md y D-070, y usá la skill nuevo-control.
 Depende de N0a, N0b y N1 mergeados: arrancá de main.
 
 Control nuevo, scope sistema Axton: cruza el importador de novedades del período
@@ -134,7 +134,7 @@ legajo LOS DOS lados (makeLegajoKey resuelto una vez en mapping.legajoKeyMode �
 es el bug más caro del repo). Piloto: SIASA y Merz; prueba de volumen: POP (fila
 por liquidación, un legajo hasta 3 veces).
 
-Comparación (D-069): cantidad E importe cuando ambos lados los tienen. Cuando no
+Comparación (D-070): cantidad E importe cuando ambos lados los tienen. Cuando no
 son comparables (novedad en días u horas contra un Tabulado sólo-importes, o
 cantidad ausente en la variante sólo-Imp), NO bloquea ni aprueba: informa
 claramente el motivo. Nada de convertir unidades (D-065). Diferencia = ambos

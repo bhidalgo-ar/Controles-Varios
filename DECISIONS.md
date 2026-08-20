@@ -2123,7 +2123,74 @@ sumó un e2e dedicado en este cambio.
 
 ---
 
-## D-069 — Familia de Novedades (Axton): la app genera el importador, el cruce informa lo no comparable sin bloquear, y las columnas sin código se listan siempre
+## D-069 — El monto de diferencia lo pone el analista, se guarda por cliente y lo leen todos los controles
+
+**Fecha:** 2026-08-19. **Instrucción de:** Willy — *"los montos de diferencia de cada control hoy se ven
+pero no funcionan realmente para filtrar diferencias en ningún control. Tenés que corregirlo en la base y
+que se pueda aplicar para cada control nuevo también"*.
+
+**El problema.** El panel "Umbrales" del wizard mostraba `$ 1,00` y `0,1 %` **escritos a mano en el HTML**.
+Ningún control los leía: cada uno traía su propio `0,01` cableado —unos 47 repartidos por
+`js/controls/`— así que la pantalla prometía un filtro que no existía. Un analista que quería ignorar las
+diferencias de menos de $ 100 no tenía forma de hacerlo, y lo que leía en pantalla no era lo que la app
+estaba midiendo. El arreglo mínimo del 2026-08-19 (`ownThresholdNote`, que apagaba el bloque para el
+Control de Netos) tapaba la contradicción visible sin resolverla.
+
+**La decisión.** El monto de diferencia es **un atributo del cliente** (`clients.diffTolerance`), editable
+desde el panel "Umbrales" del wizard y desde `#/admin`, y viaja en el seed junto con el resto de la
+configuración del cliente. Lo leen los 19 controles.
+
+Cómo se resuelve, en orden: (1) la tolerancia propia del control, si el registry declara `ownTolerance`;
+(2) el monto del cliente; (3) `$ 0,01`, el redondeo de Excel, que además es el **piso**: por debajo del
+centavo el filtro deja de significar algo, así que un `0` o un valor inválido suben al piso en vez de
+apagar todos los avisos.
+
+**Por qué un valor de corrida en un módulo y no un parámetro más.** Decidir "esto es una diferencia" pasa
+en ~50 lugares de `js/controls/`: contadores del resumen, celdas pintadas, filtros de la tabla. Pasarlo por
+parámetro obliga a cada control **nuevo** a acordarse de enchufarlo, y el que se olvida no falla: mide con
+otro número y nadie se entera — que es exactamente cómo nació este bug. Con el monto en
+`js/controls/tolerance.js`, los helpers que los controles ya usan (`diffStats` del semáforo, `diffCellHtml`
+de la celda Δ, `isDiff`) salen midiendo bien solos, y un control nuevo lo hereda sin escribir una línea.
+Lo fija **el borde de la app** y nunca un control: la corrida (`controlsWizard`) y el re-render de una
+corrida guardada, siempre con `withTolerance()`, que restaura el valor anterior aunque el control explote
+a mitad de camino.
+
+**Una corrida guardada se relee con el monto con el que se corrió.** El wizard lo estampa en los
+resultados de cada control (`results.diffTolerance`) y en el run. Cambiar el monto del cliente hoy no
+reescribe lo que ya se revisó y se cerró; una corrida vieja, sin el campo, se lee al centavo — que es
+exactamente con lo que se midió entonces. Las cuatro pantallas que pintan el semáforo del mismo control
+(corrida, resultados, checklist y lista de clientes) pasan por `summarizeWithTolerance`: con una sola que
+llamara a `summarize()` pelado, el mismo control saldría de distinto color según dónde se lo mire.
+
+**Lo que el monto NO toca.** Sólo decide qué es diferencia **de cara al analista**. Quedan midiendo al
+centavo, con constante propia y comentario:
+- **"¿este concepto se liquidó?"**, que es otra pregunta que "¿difiere?" (`VALOR_REAL_EPS` en `nr.js`,
+  `brutos.js`, `gsPers.js`, `acumuladoresGanancias.js`). Con el monto en $ 100, tratarlas igual haría
+  desaparecer de la comparación al legajo con una cochera de $ 50 en vez de marcarlo.
+- **Las tolerancias estructurales**: que un asiento cuadre DEBE contra HABER, que una suma calculada dé la
+  fila `TOTAL GENERAL`, que el reporte de acreditaciones cierre contra su archivo de origen, o que un
+  valor hora coincida con el que Axton informa redondeado. No son preferencia de nadie —son la forma del
+  archivo— y subirlas a $ 100 taparía un archivo mal leído.
+
+**El porcentaje y "los que están de un lado y no del otro" salieron del panel** (Willy, 2026-08-19). Sólo
+funcionan en Cruce por Agrupadores, el único control que tiene los dos lados del cruce fila a fila y por
+lo tanto un "sobre cuánto" claro para sacar el porcentaje; ahí se editan, en su propio panel, junto con su
+monto. Ofrecerlos para los 19 era volver al problema que este cambio vino a cerrar.
+
+**Los controles que no miden con este monto lo dicen en pantalla.** `ownTolerance: { note, from? }` en el
+registry, en dos variantes: el que tiene el suyo editable (Control de Netos, Cruce por Agrupadores) declara
+`from` y el panel muestra ese número; el que directamente no compara importes contra un umbral —Cat. x
+Empleados compara campos de texto, Acreditaciones y los dos asientos cuadran al centavo, POP Variaciones
+verifica una reconstrucción contra el redondeo de Axton, Acumuladores Ganancias son chequeos sobre un solo
+lado— declara sólo `note`. Reemplaza a `ownThresholdNote`, que se borró.
+
+**Detalle.** `js/controls/tolerance.js` (el módulo), `tests/tolerance.test.js` (la regla como assert,
+incluido el barrido que falla si alguien vuelve a cablear un `0,01` suelto en `js/controls/`),
+`tests/e2e/umbralDiferencia.spec.js` (el panel y la persistencia en el navegador). Cierra ROADMAP 3.10.
+
+---
+
+## D-070 — Familia de Novedades (Axton): la app genera el importador, el cruce informa lo no comparable sin bloquear, y las columnas sin código se listan siempre
 
 **Fecha:** 2026-08-20. **Instrucción de:** Willy, tras el relevamiento del formato de novedades y de
 liquidación de julio 2026 en los 7 clientes Axton (POP, Merz, Epiroc, SIASA, Geopagos, Red Bull, Coelsa)

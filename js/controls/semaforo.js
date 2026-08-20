@@ -10,6 +10,8 @@
 // su propio unitsTotal/unitsWithDiff — este módulo sólo aplica la regla y
 // ofrece un helper común para recorrer filas y sacar unitsWithDiff/diffTotalAmount/worstCase.
 
+import { currentTolerance } from './tolerance.js';
+
 export const DEFAULT_SEMAFORO_THRESHOLD_PCT = 2;
 
 /**
@@ -46,7 +48,10 @@ export function diffStats(rows, fields, labelFn) {
       const v = f.get(row);
       if (v === null || v === undefined) continue;
       const abs = Math.abs(v);
-      if (abs <= (f.threshold ?? 0.01)) continue;
+      // Sin `threshold` explícito manda el monto de diferencia de la corrida
+      // (D-069): lo pone el cliente en el panel "Umbrales" y así un control
+      // nuevo que use este helper ya sale midiendo con el número correcto.
+      if (abs <= (f.threshold ?? currentTolerance())) continue;
       rowHasDiff = true;
       diffTotalAmount += abs;
       if (!worstCase || abs > Math.abs(worstCase.amount)) {

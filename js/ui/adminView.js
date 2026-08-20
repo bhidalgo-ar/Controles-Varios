@@ -15,6 +15,7 @@ import {
   getClients, getClient, updateClient, getControlConfigsForClient, saveControlConfig,
   getConfig, setConfig,
 } from '../db.js';
+import { resolveClientTolerance, normalizeTolerance } from '../controls/tolerance.js';
 import {
   LEGAJO_KEY_MODES, LEGAJO_KEY_MODE_LABELS, DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode,
 } from '../utils/legajo.js';
@@ -314,6 +315,16 @@ async function renderClientDetail(root, state) {
         <label class="form-label">Dotación</label>
         <input type="number" class="form-input" id="js-admin-pays" min="0" value="${client.pays ?? ''}">
       </div>
+      <div class="form-group">
+        <label class="form-label">Diferencia a partir de ($)</label>
+        <input type="text" class="form-input" id="js-admin-diff-tolerance"
+               inputmode="decimal" autocomplete="off"
+               value="${esc(String(resolveClientTolerance(client)))}">
+        <p class="text-sm text-muted" style="margin:var(--sp-1) 0 0;">
+          Debajo de este monto no se marca diferencia en ningún control de este
+          cliente. También se edita en el panel "Umbrales" del wizard.
+        </p>
+      </div>
       <div class="form-group" style="grid-column:1/-1;">
         <label class="form-label">Cómo se compara el legajo</label>
         <select class="form-input" id="js-admin-legajo-key">
@@ -408,6 +419,7 @@ async function renderClientDetail(root, state) {
       await updateClient(client.id, {
         sourceSystem: container.querySelector('#js-admin-source-system').value,
         legajoKeyMode: container.querySelector('#js-admin-legajo-key').value,
+        diffTolerance: normalizeTolerance(container.querySelector('#js-admin-diff-tolerance').value),
         team:         container.querySelector('#js-admin-team').value,
         consultant:   container.querySelector('#js-admin-consultant').value,
         ccts,

@@ -1,5 +1,6 @@
 // brutos.js — Controles del Reporte de Brutos
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -139,8 +140,8 @@ export function runBrutos(brutosRows, tabRows, mapping) {
     };
   });
 
-  const conDifSalario     = rows.filter(r => r.ctrlSalBase !== null     && Math.abs(r.ctrlSalBase)     > 0.01).length;
-  const conDifACuFutAumen = rows.filter(r => r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01).length;
+  const conDifSalario     = rows.filter(r => isDiff(r.ctrlSalBase)).length;
+  const conDifACuFutAumen = rows.filter(r => isDiff(r.ctrlACuFutAumen)).length;
   const sinTabData        = rows.filter(r => r.tabValSal === null && r.tabValAcu === null).length;
 
   return {
@@ -157,12 +158,17 @@ const LILAC_HDR = 'rgba(130,80,200,0.20)';
 
 // Un legajo es "evaluable" si hay algún valor real de alguno de los dos
 // conceptos, en cualquiera de las dos fuentes (Brutos o Tabulado).
+//
+// Acá NO entra el monto de diferencia del cliente (D-069): esto no pregunta si
+// algo difiere, pregunta si el concepto se liquidó. Con el monto en $ 100, un
+// sueldo de $ 50 dejaría de existir para el control y el legajo desaparecería
+// de la comparación en vez de salir como diferencia.
+const VALOR_REAL_EPS = 0.01;
 function brutosHasAnyValue(r) {
-  return [r.salBase, r.aCuFutAumen, r.tabValSal, r.tabValAcu].some(v => v !== null && Math.abs(v) > 0.01);
+  return [r.salBase, r.aCuFutAumen, r.tabValSal, r.tabValAcu].some(v => v !== null && Math.abs(v) > VALOR_REAL_EPS);
 }
 function brutosRowHasDiff(r) {
-  return (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01)
-    || (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01);
+  return isDiff(r.ctrlSalBase) || isDiff(r.ctrlACuFutAumen);
 }
 function brutosDiffAmount(r) {
   return Math.abs(r.ctrlSalBase ?? 0) + Math.abs(r.ctrlACuFutAumen ?? 0);
@@ -238,10 +244,10 @@ export function renderBrutosResults(results, container) {
         { label: 'Con diferencia', value: diffRows.length, tone: diffRows.length > 0 ? 'error' : 'ok' },
         evalSalBase === 0
           ? { label: 'SAL_BASE', value: 'sin datos para comparar', tone: 'error' }
-          : { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: Math.abs(diffSal) > 0.01 ? 'error' : 'ok' },
+          : { label: 'Dif. SAL_BASE', value: fmt(diffSal), tone: isDiff(diffSal) ? 'error' : 'ok' },
         evalACuFutAumen === 0
           ? { label: 'A_CTA_FUT_AUMEN', value: 'sin datos para comparar', tone: 'error' }
-          : { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: Math.abs(diffAcu) > 0.01 ? 'error' : 'ok' },
+          : { label: 'Dif. A_CTA_FUT_AUMEN', value: fmt(diffAcu), tone: isDiff(diffAcu) ? 'error' : 'ok' },
       ]);
 
       if (diffRows.length > 0) {
@@ -250,8 +256,8 @@ export function renderBrutosResults(results, container) {
           heading: `Casos para revisar · ${top.length} de ${diffRows.length}`,
           items: top.map(r => {
             const bits = [];
-            if (r.ctrlSalBase !== null && Math.abs(r.ctrlSalBase) > 0.01) bits.push(`SAL_BASE ${fmt(r.ctrlSalBase)}`);
-            if (r.ctrlACuFutAumen !== null && Math.abs(r.ctrlACuFutAumen) > 0.01) bits.push(`A_CTA_FUT_AUMEN ${fmt(r.ctrlACuFutAumen)}`);
+            if (isDiff(r.ctrlSalBase)) bits.push(`SAL_BASE ${fmt(r.ctrlSalBase)}`);
+            if (isDiff(r.ctrlACuFutAumen)) bits.push(`A_CTA_FUT_AUMEN ${fmt(r.ctrlACuFutAumen)}`);
             const worst = Math.abs(r.ctrlSalBase ?? 0) >= Math.abs(r.ctrlACuFutAumen ?? 0) ? r.ctrlSalBase : r.ctrlACuFutAumen;
             return {
               sev: bits.length > 1 ? 'hi' : 'lo',

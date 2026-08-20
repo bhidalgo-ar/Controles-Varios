@@ -9,6 +9,7 @@
 
 import { DEFAULT_CONCEPT_CONFIG } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -50,8 +51,8 @@ function esc(str) {
 }
 
 
-const THRESHOLD = 0.01;
-const hasDiff   = d => d !== null && Math.abs(d) > THRESHOLD;
+// Qué cuenta como diferencia sale del monto del cliente (D-069).
+const hasDiff = d => isDiff(d);
 
 
 // ── summarizeRendXEe ──────────────────────────────────────────────────────────

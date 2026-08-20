@@ -62,6 +62,12 @@ import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadCsv, downloadBlob } from '../utils/exportData.js';
 
+// El redondeo de Meta4: el piso de todo el repo. No es "el monto de diferencia"
+// del cliente (D-069) —ese lo tiene este control aparte, editable en su panel—
+// sino el centavo con el que se decide si un básico coincide con la escala, si
+// un concepto se liquidó, y si un legajo cerró exacto o quedó en la zona gris.
+const REDONDEO_EPS = 0.01;
+
 // ── Configuración por defecto ────────────────────────────────────────────────
 //
 // Semilla, no identidad. Confirmada contra el Tabulado real de IFSA de 05/2026
@@ -444,7 +450,7 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
       let escalaMatch = null;
       if (escala) {
         for (const [col, valor] of Object.entries(escala.basicos)) {
-          if (Math.abs(valor - sueldoLiq) <= 0.01) { escalaMatch = col; break; }
+          if (Math.abs(valor - sueldoLiq) <= REDONDEO_EPS) { escalaMatch = col; break; }
         }
       }
 
@@ -514,7 +520,7 @@ function detalleDeExtras(group, colByCode, codigos) {
       const col = colByCode[code];
       if (!col) continue;
       const v = sumColumn(group, col);
-      if (v === null || Math.abs(v) <= 0.01) continue;
+      if (v === null || Math.abs(v) <= REDONDEO_EPS) continue;
       out.push({
         code,
         label: CODE_LABELS[code] || String(col).replace(/^\d+[-_]/, ''),
@@ -614,7 +620,7 @@ function renderResumen(results, host) {
   const rows = results.rows;
   const conDif = rows.filter(r => r.residuo !== null && Math.abs(r.residuo) > tol);
   const fueraEscala = rows.filter(r => r.escalaOk === false);
-  const topearon = rows.filter(r => r.excedenteTope > 0.01);
+  const topearon = rows.filter(r => r.excedenteTope > REDONDEO_EPS);
   const movidos = rows.filter(r => r.variacionMes !== null && Math.abs(r.variacionMes) > tol);
 
   renderVerdict(host, {
@@ -744,7 +750,7 @@ const COLUMNS = [
 function categoriaDe(residuo, tol) {
   if (residuo === null) return null;
   const abs = Math.abs(residuo);
-  if (abs <= 0.01) return 'exacto';
+  if (abs <= REDONDEO_EPS) return 'exacto';
   if (abs <= tol) return 'margen';
   return 'diferencia';
 }

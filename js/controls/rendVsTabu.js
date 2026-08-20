@@ -1,5 +1,6 @@
 // rendVsTabu.js — Control 5: Rendimiento vs Tabulado (RendvsTabu)
 import { diffStats } from './semaforo.js';
+import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
@@ -99,8 +100,9 @@ function normCCName(v) {
     || null;
 }
 
-const THRESHOLD = 0.01;
-const hasDiff   = d => Number.isFinite(d) && Math.abs(d) > THRESHOLD;
+// Qué cuenta como diferencia sale del monto del cliente (D-069): lo pone el
+// analista en el panel "Umbrales" y vale para los 19 controles.
+const hasDiff = d => Number.isFinite(d) && isDiff(d);
 
 
 // ── summarize ─────────────────────────────────────────────────────────────────

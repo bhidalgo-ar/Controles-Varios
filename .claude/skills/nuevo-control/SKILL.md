@@ -138,8 +138,25 @@ Excepción conocida: `acreditaciones.js`, donde la unidad del reporte es la acre
 empleado-mes (D-021). Si creés estar en ese caso, confirmalo con Willy.
 
 **`null` no es `0`.** `null` = la columna no está mapeada o ninguna liquidación trajo dato; `0` = hay
-dato y vale cero. La diferencia se calcula sólo si los dos lados son distintos de `null`, y se compara
-con `Math.abs(diff) > 0.01` — los floats de Excel no dan igualdad exacta.
+dato y vale cero. La diferencia se calcula sólo si los dos lados son distintos de `null`.
+
+**Nunca escribas `Math.abs(diff) > 0.01`. Usá `isDiff(diff)` de `./tolerance.js`** (D-069). De cuánto
+para arriba una diferencia es una diferencia lo pone el analista por cliente, en el panel "Umbrales"
+del wizard, y tu control lo hereda sin cablear nada: `isDiff()`, `diffStats()` y `diffCellHtml()` ya
+miden con ese monto. Un `0,01` suelto en tu módulo mide con otro número que el que la pantalla
+promete, y `tests/tolerance.test.js` falla si lo dejás.
+
+Dos casos en que **no** corresponde ese monto, y ahí el `0,01` va con nombre y comentario:
+- **"¿este concepto se liquidó?"** no es "¿difiere?". Con el monto en $ 100, un `Math.abs(v) > tol`
+  haría desaparecer de la comparación al legajo con una cochera de $ 50. Constante propia
+  (`VALOR_REAL_EPS`, como en `nr.js`/`brutos.js`).
+- **Tolerancias estructurales**: cuadrar un asiento DEBE contra HABER, validar una suma contra
+  `TOTAL GENERAL`, o comparar contra un archivo que viene redondeado. No son preferencia del
+  analista, son la forma del archivo, y subirlas taparía un archivo mal leído.
+
+Si tu control **no** mide con ese monto —tiene el suyo editable en su propio panel, o directamente no
+compara importes— declaralo en el registry con `ownTolerance: { note, from? }`: el panel lateral se lo
+dice al analista en vez de mostrarle una cifra que no manda.
 
 **Nada del cliente cableado, ningún default silencioso.** Los códigos de concepto de un cliente van a
 `controlConfigs` (`[clientCode+controlId]`, ver `js/db.js`), no como constantes del módulo; en el
@@ -223,8 +240,8 @@ presente de un solo lado; y cada rama de `{ error }`.
 - **Ningún color cableado en `js/`, y ningún módulo pregunta por el tema.** `css/tokens.css` es el
   único lugar donde un tema cambia algo; `tests/themeSourceOfTruth.test.js` falla con un `#hex` en
   cualquier módulo de `js/` (D-059). Detalle en `ui-resultados.md`.
-- **Consolidación por legajo, `null ≠ 0` y tolerancia 0,01.** Producen números incorrectos que el
-  analista se lleva al cliente.
+- **Consolidación por legajo, `null ≠ 0` y el monto de diferencia (`isDiff`, nunca un `0,01` suelto).**
+  Producen números incorrectos que el analista se lleva al cliente.
 
 Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, decilo y seguí.
 
@@ -232,6 +249,7 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 
 ```
 [ ] parser · ficha en fileTypes.js · módulo · registry · test
+[ ] "es diferencia" resuelto con isDiff()/diffStats(), sin 0,01 sueltos (D-069)
 [ ] columnas nuevas del Tabulado → su entrada en TAB_FIELD_LABELS (js/ui/fieldHelp.js)
 [ ] test agregado a la cadena test:unit de package.json, y `npm run test:unit` pasa
 [ ] probado en el navegador con un archivo real, en los tres temas (para servir la app, ver README.md)

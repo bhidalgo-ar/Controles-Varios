@@ -17,6 +17,7 @@
 import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { summarizeWithTolerance, renderResultsWithTolerance } from '../controls/tolerance.js';
 import { countUniqueLegajos }  from '../controls/consolidate.js';
 import { makeLegajoKey }       from '../utils/legajo.js';
 import { periodToLabel }    from '../utils/dates.js';
@@ -140,8 +141,12 @@ export async function renderControlsResults(root, runId) {
     .map(row => {
       const ctrl = CONTROL_REGISTRY[row.controlId];
       if (!ctrl) return null;
+      // Con el monto de diferencia con el que se corrió, no con el que el
+      // cliente tenga hoy (D-069): una corrida ya revisada no cambia de
+      // resultado sola. `summarizeWithTolerance` lo saca de los propios
+      // resultados guardados.
       const summary = ctrl.summarize
-        ? ctrl.summarize(row.results)
+        ? summarizeWithTolerance(ctrl, row.results)
         : { status: 'info', headline: '', insights: [] };
       const tier = summary.status === 'error'
         ? 'error'
@@ -256,7 +261,7 @@ export async function renderControlsResults(root, runId) {
     sectionsEl.appendChild(card);
 
     const detailEl = card.querySelector(`#js-ctrl-${CSS.escape(row.controlId)}`);
-    ctrl.renderResults(row.results, detailEl);
+    renderResultsWithTolerance(ctrl, row.results, detailEl);
 
     initCtrlToggle(card);
   }
@@ -324,7 +329,7 @@ async function getPrevTierByControlId(run, thresholdPct) {
   for (const row of prevResultsRows) {
     const ctrl = CONTROL_REGISTRY[row.controlId];
     if (!ctrl?.summarize) continue;
-    const summary = ctrl.summarize(row.results);
+    const summary = summarizeWithTolerance(ctrl, row.results);
     const tier = summary.status === 'error'
       ? 'error'
       : summary.unitsTotal == null

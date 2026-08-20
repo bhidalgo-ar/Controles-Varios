@@ -9,6 +9,7 @@ import { CONTROL_REGISTRY }              from '../controls/registry.js';
 import { filterControlsForClient }       from '../controls/scope.js';
 import { periodToLabel, periodOptions }  from '../utils/dates.js';
 import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { summarizeWithTolerance } from '../controls/tolerance.js';
 import { setHeader } from './appHeader.js';
 
 // Columnas del checklist: sólo "Controlar" (los de Generar Reporte no son
@@ -73,7 +74,9 @@ export async function renderChecklist(root, clientId) {
           status = 'error';
           headline = r.results.error;
         } else if (ctrl?.summarize) {
-          const s = ctrl.summarize(r.results);
+          // Con el monto de diferencia de esa corrida (D-069) — mismo criterio
+          // que la pantalla de resultados y la lista de clientes.
+          const s = summarizeWithTolerance(ctrl, r.results);
           headline = s.headline || '';
           // Mismo criterio que la pantalla de resultados, el wizard y la
           // lista de clientes: el % de legajos con diferencia contra el

@@ -25,7 +25,7 @@ el VLOOKUP de Coelsa contra el borrador del mes anterior que devuelve `#N/D`, y
 SIASA Aguas y Gaseosas 07/2026, donde la planilla del cliente trae un empleado
 que no llegó al importador (sin registro de por qué).
 
-## Decisiones de Guillermo (2026-08-20) — ver D-069
+## Decisiones de Guillermo (2026-08-20) — ver D-070
 
 1. **La app genera el importador** (no controla la transcripción a posteriori):
    el analista sube la planilla del cliente, la app arma el `F2` por unidad
