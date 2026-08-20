@@ -268,6 +268,9 @@ function renderNrDetalle(container, { relevantRows, diffRows, results }) {
   const scopeSel = document.createElement('select');
   scopeSel.className = 'form-select form-select--sm';
   scopeSel.dataset.nrScopeFilter = '';
+  // El filtro de estado es lo que se dibuja como chips (§3 de
+  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
+  scopeSel.dataset.chipRole = 'estado';
   scopeSel.innerHTML = `
     <option value="dif">Sólo con diferencia (${diffRows.length})</option>
     <option value="all">Todos los evaluados (${relevantRows.length})</option>

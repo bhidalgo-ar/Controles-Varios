@@ -942,7 +942,7 @@ function renderDetalle(results, panel) {
   const grupo = document.createElement('div');
   grupo.className = 'form-group';
   grupo.innerHTML = `
-    <select class="form-select form-select--sm" data-nl-vista aria-label="Banda del cruce">
+    <select class="form-select form-select--sm" data-nl-vista data-chip-role="estado" aria-label="Banda del cruce">
       ${VISTAS.map(v => `<option value="${v}">${BANDA_LABEL[v]} (${conteo[v]})</option>`).join('')}
     </select>
   `;

@@ -44,6 +44,27 @@ setViewPreference('gs_pers', { tab: 'detalle' });
 assert('setViewPreference hace merge — no pisa otras claves ya guardadas para el mismo control',
   getViewPreference('gs_pers').otraCosa === 'x' && getViewPreference('gs_pers').tab === 'detalle');
 
+// ── Por control Y POR ESTADO (vista estándar, §2) ──────────────────────────
+// La regla es "con diferencias abre en Fichas, si cerró abre en Planilla". Con
+// una sola clave por control, la primera vez que el analista cambia de solapa
+// esa regla moría para siempre: quedaba 'planilla' guardado y el control que la
+// corrida siguiente SÍ tenía diferencias abría igual en Planilla.
+setViewPreference('acumuladores_ganancias', { tab: 'planilla' }, 'sinDif');
+assert('la preferencia se guarda por estado del control',
+  getViewPreference('acumuladores_ganancias', 'sinDif').tab === 'planilla');
+
+assert('y no se mezcla con la del otro estado del mismo control',
+  getViewPreference('acumuladores_ganancias', 'conDif').tab === undefined);
+
+setViewPreference('acumuladores_ganancias', { tab: 'fichas' }, 'conDif');
+assert('los dos estados conviven',
+  getViewPreference('acumuladores_ganancias', 'conDif').tab === 'fichas'
+  && getViewPreference('acumuladores_ganancias', 'sinDif').tab === 'planilla');
+
+assert('un control que no declara estado sigue usando la clave de siempre',
+  getViewPreference('acumuladores_ganancias').tab === undefined
+  && getViewPreference('brutos').tab === 'resumen');
+
 assert('sin controlId no rompe (no hay control todavía, ej. una pantalla que no declaró id)',
   JSON.stringify(getViewPreference(undefined)) === '{}');
 setViewPreference(undefined, { tab: 'detalle' }); // no debe tirar

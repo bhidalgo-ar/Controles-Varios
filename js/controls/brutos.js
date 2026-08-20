@@ -285,6 +285,9 @@ function renderBrutosDetalle(container, { relevantRows, diffRows, results }) {
   // Barra: filtro Sólo con diferencia/Todos (izquierda) + buscador + exportar (derecha)
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select form-select--sm';
+  // El filtro de estado es lo que se dibuja como chips (§3 de
+  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
+  filterSel.dataset.chipRole = 'estado';
   filterSel.innerHTML = `
     <option value="dif">Sólo con diferencia (${diffRows.length})</option>
     <option value="all">Todos los evaluados (${relevantRows.length})</option>

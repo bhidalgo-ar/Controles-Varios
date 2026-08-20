@@ -197,6 +197,14 @@
      por el tema: la regla escribe `var(--on-celeste)` y listo. */
   --on-celeste: var(--color-white);
 
+  /* Texto sobre el ámbar y el verde SÓLIDOS (el chip de estado activo). Mismo
+     caso que --on-celeste, con una diferencia: --warn y --ok valen igual en los
+     tres temas (lo que cambia por tema es su terna bg/bd/tx), así que su texto
+     también — se declara una sola vez y ningún bloque de tema lo pisa. Blanco
+     encima de #F59E0B da 2,2:1; este navy da más de 7:1. */
+  --on-warn: #15263D;
+  --on-ok:   #0B2E1C;
+
   /* Anillo de foco de inputs, selects y buscadores. Estaba cableado como
      rgba(0,172,212,…) en cuatro reglas de components.css, así que en Oscuro
      seguía siendo el celeste del tema claro. */
@@ -248,6 +256,22 @@
   --detalle-grp-a-head: rgba(0, 172, 212, 0.14);
   --detalle-grp-b:      rgba(21, 38, 61, 0.045);
   --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
+
+  /* ── Tintes de la vista estándar de resultados ─────────────────
+     Los grises de la planilla (cierre de banda, celda de cierre, divisor entre
+     bandas), la tira de conciliación de la ficha, la fila resaltada y las dos
+     partes de la barra de scroll. Van translúcidos por la misma razón que los
+     `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la grid y sobre
+     la superficie de la card, y así valen para los tres temas sin repintarse.
+     En Oscuro la tinta se cambia por luz (ver los bloques de abajo). */
+  --band-close-bg:         rgba(21, 38, 61, 0.14);
+  --band-close-cell-bg:    rgba(21, 38, 61, 0.07);
+  --band-divider:          rgba(21, 38, 61, 0.22);
+  --ficha-strip-bg:        rgba(21, 38, 61, 0.045);
+  --row-highlight-bg:      rgba(0, 172, 212, 0.09);
+  --scroll-track-bg:       rgba(21, 38, 61, 0.06);
+  --scroll-thumb-bg:       rgba(21, 38, 61, 0.28);
+  --scroll-thumb-hover-bg: rgba(21, 38, 61, 0.45);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -320,6 +344,17 @@
     --detalle-grp-a-head: rgba(31, 190, 224, 0.18);
     --detalle-grp-b:      rgba(234, 241, 248, 0.045);
     --detalle-grp-b-head: rgba(234, 241, 248, 0.10);
+
+  /* Tintes de la vista estándar: en Oscuro el navy ES el fondo, así que el
+     tinte se hace con luz en vez de con tinta (mismo criterio que --detalle-grp-b). */
+  --band-close-bg:         rgba(234, 241, 248, 0.14);
+  --band-close-cell-bg:    rgba(234, 241, 248, 0.07);
+  --band-divider:          rgba(234, 241, 248, 0.24);
+  --ficha-strip-bg:        rgba(234, 241, 248, 0.05);
+  --row-highlight-bg:      rgba(31, 190, 224, 0.16);
+  --scroll-track-bg:       rgba(234, 241, 248, 0.07);
+  --scroll-thumb-bg:       rgba(234, 241, 248, 0.26);
+  --scroll-thumb-hover-bg: rgba(234, 241, 248, 0.42);
   }
 }
 
@@ -395,6 +430,17 @@
   --detalle-grp-a-head: rgba(31, 190, 224, 0.18);
   --detalle-grp-b:      rgba(234, 241, 248, 0.045);
   --detalle-grp-b-head: rgba(234, 241, 248, 0.10);
+
+  /* Tintes de la vista estándar: en Oscuro el navy ES el fondo, así que el
+     tinte se hace con luz en vez de con tinta (mismo criterio que --detalle-grp-b). */
+  --band-close-bg:         rgba(234, 241, 248, 0.14);
+  --band-close-cell-bg:    rgba(234, 241, 248, 0.07);
+  --band-divider:          rgba(234, 241, 248, 0.24);
+  --ficha-strip-bg:        rgba(234, 241, 248, 0.05);
+  --row-highlight-bg:      rgba(31, 190, 224, 0.16);
+  --scroll-track-bg:       rgba(234, 241, 248, 0.07);
+  --scroll-thumb-bg:       rgba(234, 241, 248, 0.26);
+  --scroll-thumb-hover-bg: rgba(234, 241, 248, 0.42);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -471,6 +517,22 @@
   --detalle-grp-a-head: rgba(0, 172, 212, 0.14);
   --detalle-grp-b:      rgba(21, 38, 61, 0.045);
   --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
+
+  /* ── Tintes de la vista estándar de resultados ─────────────────
+     Los grises de la planilla (cierre de banda, celda de cierre, divisor entre
+     bandas), la tira de conciliación de la ficha, la fila resaltada y las dos
+     partes de la barra de scroll. Van translúcidos por la misma razón que los
+     `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la grid y sobre
+     la superficie de la card, y así valen para los tres temas sin repintarse.
+     En Oscuro la tinta se cambia por luz (ver los bloques de abajo). */
+  --band-close-bg:         rgba(21, 38, 61, 0.14);
+  --band-close-cell-bg:    rgba(21, 38, 61, 0.07);
+  --band-divider:          rgba(21, 38, 61, 0.22);
+  --ficha-strip-bg:        rgba(21, 38, 61, 0.045);
+  --row-highlight-bg:      rgba(0, 172, 212, 0.09);
+  --scroll-track-bg:       rgba(21, 38, 61, 0.06);
+  --scroll-thumb-bg:       rgba(21, 38, 61, 0.28);
+  --scroll-thumb-hover-bg: rgba(21, 38, 61, 0.45);
 }
 
 /* ══════════════════════════════════════════════════════════════

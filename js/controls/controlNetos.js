@@ -765,6 +765,9 @@ function renderDetalle(results, host) {
 
   const filterSel = document.createElement('select');
   filterSel.className = 'form-select';
+  // El filtro de estado es lo que se dibuja como chips (§3 de
+  // specs/vista-estandar-resultados.md) — se declara, no se adivina.
+  filterSel.dataset.chipRole = 'estado';
   filterSel.innerHTML = `
     <option value="todos">Todos los legajos</option>
     <option value="exacto">Coinciden al centavo</option>
