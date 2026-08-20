@@ -171,8 +171,13 @@ for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
 // El de `novedades_importador` se sumó con el generador de importador de
 // novedades (D-070): las columnas de la planilla cargada son lo que el panel de
 // conceptos del Paso 2 ofrece resolver, así que cargarla cambia ese panel.
-assert(`redibujan el paso o tienen hueco propio exactamente los 6 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
+// Los 2 de `novedades_liquidacion` se sumaron con el cruce contra la liquidación:
+// su panel lista los conceptos del importador cargado y marca cuáles tienen
+// columna propia en el Tabulado cargado, así que cargar cualquiera de los dos
+// cambia lo que ese panel puede mostrar.
+assert(`redibujan el paso o tienen hueco propio exactamente los 8 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
   specsDeclarados.sort().join(', ') === 'novedades_importador.novedades, '
+    + 'novedades_liquidacion.importador, novedades_liquidacion.tabAxton, '
     + 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
     + 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
 

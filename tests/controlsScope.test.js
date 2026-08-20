@@ -42,13 +42,16 @@ assert('un cliente Meta4 nuevo no ve ningún control ("agrupadores" es el único
 // `hidden`, no por scope.
 // D-070: el generador de importador de novedades es el tercero con scope
 // 'sistema' para Axton (ver specs/familia-novedades-axton.md).
-assert('un cliente Axton ve Acreditaciones + Acumuladores Ganancias + el generador de importador (no agrupadores, está `hidden`)',
+// D-070: y el cruce de Novedades vs Liquidación es el cuarto, el que cierra ese
+// circuito contra la liquidación del período.
+assert('un cliente Axton ve Acreditaciones + Acumuladores Ganancias + el generador de importador + Novedades vs Liquidación (no agrupadores, está `hidden`)',
   filterControlsForClient(allControls, nuevoAx).map(c => c.id).sort().join(',')
-    === 'acreditaciones_reporte,acumuladores_ganancias,novedades_importador');
+    === 'acreditaciones_reporte,acumuladores_ganancias,novedades_importador,novedades_liquidacion');
 
 assert('los 10 controles de Marval son scope "cliente"',
   allControls
-    .filter(c => !['agrupadores', 'acreditaciones_reporte', 'acumuladores_ganancias', 'novedades_importador'].includes(c.id))
+    .filter(c => !['agrupadores', 'acreditaciones_reporte', 'acumuladores_ganancias',
+      'novedades_importador', 'novedades_liquidacion'].includes(c.id))
     .every(c => c.scope === 'cliente'));
 
 assert('acreditaciones_reporte es scope "sistema" de Axton',

@@ -47,8 +47,10 @@ const controls = Object.values(CONTROL_REGISTRY);
 // D-070: se agregó "novedades_importador" (20º), el generador del importador de
 // novedades de Axton — el primero que arma un archivo para SUBIR a un sistema en
 // vez de un entregable para leer. Ver specs/familia-novedades-axton.md.
-assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP + la contabilidad desglosada de COTY + el Control de Netos + el generador de importador de novedades',
-  controls.length === 20);
+// D-070: y "novedades_liquidacion" (21º), el que cierra ese circuito cruzando el
+// importador contra el Tabulado de Axton y el reporte de Totales de Concepto.
+assert('el registry tiene los 10 de siempre + agrupadores (T9) + acreditaciones (D-021) + las 2 de variaciones (D-023) + acumuladores ganancias + el asiento de FINADIET + la variación entre quincenas de POP + la contabilidad desglosada de COTY + el Control de Netos + el generador de importador de novedades + Novedades vs Liquidación',
+  controls.length === 21);
 
 for (const c of controls) {
   assert(`${c.id}: tiene scope`, typeof c.scope === 'string');

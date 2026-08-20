@@ -108,6 +108,15 @@ import {
 import { renderNovedadesImportadorConfigEditor } from '../ui/novedadesImportadorConfigEditor.js';
 
 import {
+  runNovedadesLiquidacion,
+  renderNovedadesLiquidacionResults,
+  summarizeNovedadesLiquidacion,
+  DEFAULT_NOV_LIQ_CONFIG,
+} from './novedadesLiquidacion.js';
+
+import { renderNovedadesLiquidacionConfigEditor } from '../ui/novedadesLiquidacionConfigEditor.js';
+
+import {
   runControlNetos,
   renderControlNetosResults,
   summarizeControlNetos,
@@ -839,6 +848,81 @@ export const CONTROL_REGISTRY = {
     run:           runNovedadesImportador,
     summarize:     summarizeNovedadesImportador,
     renderResults: renderNovedadesImportadorResults,
+  },
+
+  // Cuarto control Axton, y el segundo de la familia de Novedades (N2 de
+  // specs/familia-novedades-axton.md, D-070): el que cierra el circuito. Toma el
+  // importador que se subió a Axton —idealmente el que generó y validó N1— y lo
+  // cruza contra lo que efectivamente se liquidó.
+  //
+  // Grupo propio y NO el de `novedades_importador`: ése es un grupo cuyo modo es
+  // "Generar Reporte"; N2 no es otra forma del mismo cruce sino otro control, con
+  // otros archivos. Con el grupo compartido, el checklist los mostraría como dos
+  // modos alternativos del mismo ítem y correr uno taparía al otro.
+  novedades_liquidacion: {
+    id:          'novedades_liquidacion',
+    label:       'Novedades vs Liquidación',
+    scope:       'sistema',
+    scopeMeta:   { sourceSystems: ['axton'] },
+    appliesWhen: () => true,
+    description: 'Cruza el importador de novedades del período contra el Tabulado de Axton y el '
+      + 'reporte de Totales de Concepto, legajo por legajo y concepto por concepto, comparando '
+      + 'cantidad e importe cuando los dos lados los traen.',
+    help: {
+      what: 'Compara lo que se pidió liquidar —el importador de novedades del mes— contra lo que '
+        + 'efectivamente se liquidó. Cada legajo y concepto cae en una de cuatro bandas: coincide, '
+        + 'difiere, no comparable (por ejemplo, la novedad vino en horas y el Tabulado no trae '
+        + 'cantidades) o sin contraparte. En «sin contraparte», el reporte de Totales de Concepto es '
+        + 'lo que permite distinguir «no se liquidó» de «se liquidó y el Tabulado no lo muestra en '
+        + 'columna propia». Lo que no se puede comparar no bloquea el control, pero tampoco lo '
+        + 'aprueba: sale listado con el motivo.',
+      how: [
+        'Cargá el importador de novedades del período: el mismo que se subió a Axton.',
+        'Cargá el Tabulado de Axton del mismo período. Si el export trae los pares Cant/Imp, también se comparan las cantidades.',
+        'Cargá el reporte de Totales de Concepto del mismo período (Axton, el mismo que usa la Contabilidad Desglosada).',
+        'En «Conceptos que no se comparan» marcá los que liquidan en otra unidad y los informativos que no llegan a la liquidación.',
+        'Ejecutá y revisá las cuatro bandas del Detalle, empezando por «Con diferencia».',
+      ],
+    },
+    group:       { id: 'novedades_liquidacion', label: 'Novedades vs Liquidación', mode: 'Controlar', primary: true },
+    // El Tabulado de Axton NO entra por el casillero del Tabulado: ése cablea el
+    // lector de Meta4, y además el parseMetadata del Tabulado principal no llega
+    // a run() — y este control lo necesita entero (qué conceptos tienen columna,
+    // si el export trae cantidades). Como archivo adicional, el wizard le pasa
+    // las filas Y la metadata sin ningún caso especial.
+    tabRequired: false,
+    additionalFiles: [
+      // additionalFiles[0] es además el `primaryRows` que recibe run().
+      // rerenderOnLoad: los conceptos del importador cargado son lo que ofrece
+      // el panel del Paso 2, así que cargarlo cambia ese panel.
+      { key: 'importador', label: 'Importador de novedades del período', fileType: 'f2_cruce_file',
+        rerenderOnLoad: true },
+      // rerenderOnLoad: el panel marca qué concepto tiene columna propia en el
+      // Tabulado y qué se compara contra el totalizador.
+      { key: 'tabAxton', label: 'Tabulado de Axton del período', fileType: 'tab_axton_cruce_file',
+        rerenderOnLoad: true },
+      // Obligatorio a propósito: sin el totalizador, "sin contraparte" no puede
+      // distinguir "no se liquidó" de "el Tabulado no lo muestra", que es la
+      // pregunta que el analista se hace justo en la banda que más le importa
+      // (hay conceptos liquidados sin columna propia — verificado en Red Bull,
+      // Epiroc y SIASA). Es el mismo export que ya baja la Contabilidad
+      // Desglosada. El control corre igual si algún día se declara opcional: las
+      // filas salen con el motivo "no se puede determinar sin el totalizador".
+      { key: 'totalizador', label: 'Totales de Concepto del período', fileType: 'totales_concepto_cruce_file' },
+    ],
+    config: [{ key: 'novedades_liquidacion_config', stateKey: 'novedadesLiquidacionConfig',
+               mappingKey: 'novLiqConfig',
+               default: () => DEFAULT_NOV_LIQ_CONFIG(),
+               mappingValue: (state) => state.novedadesLiquidacionConfig || DEFAULT_NOV_LIQ_CONFIG(),
+               editor: renderNovedadesLiquidacionConfigEditor,
+               editorProps: (state) => ({
+                 importadorMeta: state.controlFiles?.novedades_liquidacion?.importador?.parseMetadata || null,
+                 tabMeta:        state.controlFiles?.novedades_liquidacion?.tabAxton?.parseMetadata || null,
+               }),
+               openByDefault: false }],
+    run:           runNovedadesLiquidacion,
+    summarize:     summarizeNovedadesLiquidacion,
+    renderResults: renderNovedadesLiquidacionResults,
   },
 
   variaciones_sueldos: {

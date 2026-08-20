@@ -75,6 +75,7 @@ import {
 import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { parseTabAxton, detectHeaders as detectHeadersTabAxton } from '../parsers/tabAxtonParser.js';
+import { readTabAxton } from '../parsers/tabAxtonReader.js';
 import { parseVariacAxton, detectHeaders as detectHeadersVariacAxton } from '../parsers/popVariacParser.js';
 import {
   parseExpNov,
@@ -82,6 +83,7 @@ import {
 } from '../parsers/expNovParser.js';
 import {
   parseTotalesConcepto,
+  readTotalesConcepto,
   detectHeaders as detectHeadersTotalesConcepto,
 } from '../parsers/totalesConceptoParser.js';
 import {
@@ -122,6 +124,16 @@ const metaTabAxton = (m) =>
   `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos`
   + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`;
 
+// El Tabulado leído con el lector tolerante (D-072) informa además cuántos
+// conceptos reconoció y, sobre todo, **si trae cantidades**: sin ellas, la mitad
+// del cruce de Novedades vs Liquidación sale "no comparable", y eso se tiene que
+// ver antes de ejecutar y no después.
+const metaTabAxtonCruce = (m) =>
+  `${m?.totalRows ?? 0} liquidaciones · ${m?.uniqueLegajos ?? 0} legajos · ${m?.conceptos?.length ?? 0} conceptos`
+  + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`
+  + (m?.cantidadesDisponibles === false
+    ? ' &nbsp;·&nbsp; <span class="badge badge--warning">sólo importes, sin cantidades</span>' : '');
+
 // La escala informa cuántas categorías leyó y de qué pestaña — con un libro de
 // varias hojas, saber cuál se usó es lo que confirma que no se leyó la equivocada.
 // La planilla de novedades informa legajos y conceptos, y además las columnas
@@ -152,6 +164,15 @@ const metaConceptCatalog = (m) =>
 const metaTotalesConcepto = (m) =>
   `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos`
   + ` &nbsp;·&nbsp; ${m?.periodoTexto ? esc(m.periodoTexto) : '<span class="badge badge--warning">período no detectado</span>'}`;
+
+// El mismo reporte leído para el cruce trae otra metadata: `periodo` ya en
+// 'AAAA-MM' (no `periodoTexto`) y el aviso de si trae columna Cantidad. Con
+// `metaTotalesConcepto` la línea diría "período no detectado" siempre.
+const metaTotalesConceptoCruce = (m) =>
+  `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos · ${m?.conceptos?.length ?? 0} conceptos`
+  + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`
+  + (m?.cantidadDisponible === false
+    ? ' &nbsp;·&nbsp; <span class="badge badge--warning">sin columna Cantidad</span>' : '');
 
 const metaCuentasRedefinicion = (m) =>
   `${m?.cuentas ?? 0} cuentas · ${m?.nombresDistintos ?? 0} nombres distintos`;
@@ -623,6 +644,43 @@ export const FILE_TYPES = {
     fields: [],
   },
 
+  // Tabulado de Axton para el cruce de Novedades vs Liquidación (N2, D-070).
+  // Existe además de `tab_axton_file` porque usa el lector **tolerante**
+  // (`readTabAxton`, D-072) y no el estricto: cinco de los siete clientes Axton
+  // exportan sin ninguna columna Cant, cuatro traen preámbulo y dos traen el
+  // TOTAL GENERAL duplicado, y el estricto los rechaza. Ampliar el estricto
+  // cambiaría, de paso, el resultado del control de Variación entre quincenas de
+  // POP, que ya corre en producción — por eso son dos.
+  //
+  // Comparte el `detectHeaders` de la vista previa con el estricto (lee la fila 1
+  // de la primera hoja): con preámbulo se ve el preámbulo, que es exactamente lo
+  // que el analista ya ve hoy en el control de POP.
+  tab_axton_cruce_file: {
+    label: 'Tabulado de Axton del período (para cruzar novedades)',
+    siglas: ['TABULADO', 'TAB'],
+    parse: readTabAxton,
+    detectHeaders: detectHeadersTabAxton,
+    autoDetect: null,
+    meta: metaTabAxtonCruce,
+    fields: [],
+  },
+
+  // "Totales de Concepto" para el cruce de Novedades vs Liquidación (N2, D-070).
+  // Existe además de `totales_concepto_file` porque usa `readTotalesConcepto` y
+  // no `parseTotalesConcepto`: el del cruce devuelve importes y cantidades ya
+  // numéricos y **no exige las cuentas contables** (el export que se baja para
+  // comparar novedades puede venir sin ellas y sirve igual), mientras el de la
+  // Contabilidad Desglosada las necesita y devuelve strings crudos.
+  totales_concepto_cruce_file: {
+    label: 'Totales de Concepto del período (para cruzar novedades)',
+    siglas: ['TOTALESCONCEPTO', 'TOTALES DE CONCEPTO', 'TOTALESDECONCEPTO'],
+    parse: readTotalesConcepto,
+    detectHeaders: detectHeadersTotalesConcepto,
+    autoDetect: null,
+    meta: metaTotalesConceptoCruce,
+    fields: [],
+  },
+
   escala_comercio_file: {
     label: 'Escala salarial del convenio de Comercio',
     // La zona de drop arma su título como "Arrastrá el <label>", así que un
@@ -691,6 +749,20 @@ FILE_TYPES.tab_empresa3_file = {
 FILE_TYPES.f2_armado_file = {
   ...FILE_TYPES.novedades_axton_file,
   label: 'Importador F2 ya armado (para controlar lo generado)',
+  aliasOf: 'novedades_axton_file',
+};
+
+// Importador de novedades del período, entrada del cruce contra la liquidación
+// (N2, D-070). El MISMO formato que los dos de arriba —los tres son de la familia
+// ExpNov— pero es otro papel en el circuito: acá el importador es el punto de
+// partida y no la salida. Tipo aparte y no un tercer casillero del mismo tipo,
+// por el mismo motivo que `f2_armado_file`: la zona de drop se rotula con la
+// etiqueta del TIPO, y un run guarda un archivo por tipo, así que compartirlo con
+// N1 haría que el segundo control pise el archivo del primero en la corrida
+// guardada.
+FILE_TYPES.f2_cruce_file = {
+  ...FILE_TYPES.novedades_axton_file,
+  label: 'Importador de novedades del período (el que se subió a Axton)',
   aliasOf: 'novedades_axton_file',
 };
 
