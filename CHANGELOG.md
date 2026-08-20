@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs: los datos de prueba ahora son jugadores de Banfield — 2026-08-20
+
+- **Qué cambia para el que mira un test o un mockup:** donde antes decía `PEREZ JUAN` o `GOMEZ ANA` ahora dice `SANGUINETTI JAVIER` o `FALCIONI JULIO`. Todo lo que se prueba —tests, fixtures de e2e, mockups, capturas y ejemplos en una spec— usa nombres de jugadores de Banfield, con legajos y montos inventados como hasta ahora. Ningún control cambia de comportamiento: son los nombres de los empleados de mentira.
+- **Por qué:** que el dato de prueba se distinga de un dato real de un solo vistazo. Un `PEREZ JUAN` puede ser un empleado de verdad; `SANGUINETTI JAVIER` no.
+- **La lista está cerrada y verificada** (récord de partidos, máximos goleadores, campeones del Apertura 2009 y los que llegaron a la Selección) y quedó escrita en `CLAUDE.md`, con el motivo al lado de cada nombre. Si hace falta uno que no está, hay que verificar que el jugador haya jugado en Banfield antes de escribirlo — no vale de memoria.
+- Migrados los 30 archivos de `tests/` (incluidos los fixtures HTML de los e2e) y el ejemplo de un comentario en `js/controls/brutos.js`; actualizadas la skill `nuevo-control`, el agente `inspector-archivo` y la spec del control de tasa de provisiones, que citaban los nombres viejos. `npm run test:unit` en verde y los e2e de los specs tocados también.
+
 ### feat: la app ya sabe leer la planilla de novedades de Axton (N0a, cimiento de la familia de Novedades) — 2026-08-20
 
 - **Qué hace:** dado el archivo de novedades / importador de Axton (la hoja `…ExpNov…`), la app lo lee y devuelve, novedad por novedad, **qué legajo, qué código de concepto, qué cantidad y qué importe**. Es el cimiento del generador de importador (N1) y del cruce contra la liquidación (N2): todavía no hay pantalla, todavía no hay control — es la pieza que los dos van a usar para leer el archivo.

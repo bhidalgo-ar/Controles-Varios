@@ -83,7 +83,7 @@ const QUINC1   = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) (C
 const PROVIS   = 'z PLASTIC - Provisiones (ene-abril-julio-Oct) Julio 2026 (C)';
 
 const row = (o) => ({
-  legajo: '1', apellido_nombre: 'PEREZ JUAN', cuit: '20-11111111-1',
+  legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cuit: '20-11111111-1',
   cliente: 'CLIENTE DEMO SA', uo_cliente: 'Mensualizados',
   liquidacion: ANTICIPO, neto: null, listado: '', descripcion: '',
   fecha_acreditacion: null, banco: 'BANCO DEMO', cbu: CBU1, empresa: 'CLIENTE DEMO SA',
@@ -92,23 +92,23 @@ const row = (o) => ({
 
 const acredRows = [
   // Lista 1 — anticipos del 02-07, dos listados del mismo pago
-  row({ legajo: '1', apellido_nombre: 'PEREZ JUAN',  cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02' }),
   // Lista 2 — vacaciones, mismo listado 900 pero otra liquidación
-  row({ legajo: '3', apellido_nombre: 'LOPEZ LUCAS', cbu: CBU3, neto: 500, listado: '900', fecha_acreditacion: '2026-07-02', liquidacion: VACAC }),
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN', cbu: CBU3, neto: 500, listado: '900', fecha_acreditacion: '2026-07-02', liquidacion: VACAC }),
   // Lista 3 — 1era quincena del 16-07: una fila con listado y otra sin nada más que el importe
-  row({ legajo: '1', apellido_nombre: 'PEREZ JUAN',  cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 4000, listado: '',    fecha_acreditacion: null,         liquidacion: QUINC1 }),
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 4000, listado: '',    fecha_acreditacion: null,         liquidacion: QUINC1 }),
   // En el listado de pago sin importe → entra a la lista, con alerta
-  row({ legajo: '3', apellido_nombre: 'LOPEZ LUCAS', cbu: CBU3, neto: null, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN', cbu: CBU3, neto: null, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
   // Caso A: anticipo sin listado ni fecha, con OTRA fecha de anticipos en el mes → SIN ASIGNAR
-  row({ legajo: '3', apellido_nombre: 'LOPEZ LUCAS', cbu: CBU3, neto: 700, listado: '', fecha_acreditacion: null }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 1500, listado: '902', fecha_acreditacion: '2026-07-21' }),
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN', cbu: CBU3, neto: 700, listado: '', fecha_acreditacion: null }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 1500, listado: '902', fecha_acreditacion: '2026-07-21' }),
   // Caso B: Listado 950 completo (2 filas) sin ninguna fecha conocida
-  row({ legajo: '4', apellido_nombre: 'DIAZ SOL',    cbu: CBU4, neto: 800,  listado: '950', fecha_acreditacion: null }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 900,  listado: '950', fecha_acreditacion: null }),
+  row({ legajo: '4', apellido_nombre: 'DATOLO SOL',    cbu: CBU4, neto: 800,  listado: '950', fecha_acreditacion: null }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 900,  listado: '950', fecha_acreditacion: null }),
   // Provisiones: sin importe y sin listado → se descarta
-  row({ legajo: '1', apellido_nombre: 'PEREZ JUAN',  cbu: CBU1, liquidacion: PROVIS }),
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, liquidacion: PROVIS }),
 ];
 
 const results = ctrl.run(acredRows, [], { period: '2026-07' });
@@ -225,21 +225,21 @@ assert('no inventa alertas de CBU sobre datos válidos',
   !alertTypes.has('cbu_invalido') && !alertTypes.has('cbu_compartido'));
 
 const conCbuMalo = ctrl.run(
-  [...acredRows, row({ legajo: '5', apellido_nombre: 'RUIZ MARA', cbu: '123', neto: 100, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 })],
+  [...acredRows, row({ legajo: '5', apellido_nombre: 'SILVA SANTIAGO', cbu: '123', neto: 100, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 })],
   [], { period: '2026-07' }
 );
 assert('detecta CBU con largo distinto de 22',
   conCbuMalo.alerts.some(a => a.tipo === 'cbu_invalido' && a.legajo === '5'));
 
 const conCbuCompartido = ctrl.run(
-  [...acredRows, row({ legajo: '6', apellido_nombre: 'RUIZ MARA', cbu: CBU1, neto: 100, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 })],
+  [...acredRows, row({ legajo: '6', apellido_nombre: 'SILVA SANTIAGO', cbu: CBU1, neto: 100, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 })],
   [], { period: '2026-07' }
 );
 assert('detecta CBU compartido entre dos legajos',
   conCbuCompartido.alerts.some(a => a.tipo === 'cbu_compartido' && a.legajo === '6'));
 
 const conDuplicado = ctrl.run(
-  [...acredRows, row({ legajo: '1', apellido_nombre: 'PEREZ JUAN', cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' })],
+  [...acredRows, row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' })],
   [], { period: '2026-07' }
 );
 assert('detecta la acreditación duplicada (mismo legajo, importe, fecha y liquidación)',
@@ -263,7 +263,7 @@ assert('el estado es warning porque hay grupos pendientes', summary.status === '
 const limpio = ctrl.run(
   [
     row({ legajo: '1', neto: 1000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
-    row({ legajo: '2', apellido_nombre: 'GOMEZ ANA', cbu: CBU2, neto: 2000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+    row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO', cbu: CBU2, neto: 2000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
   ],
   [], { period: '2026-07' }
 );
@@ -275,7 +275,7 @@ assert('un mes sin alertas no marca ninguna unidad', summaryLimpio.unitsWithDiff
 
 const dosEmpresas = [
   row({ legajo: '1', neto: 1000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1, empresa: 'EMPRESA UNO' }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA', cbu: CBU2, neto: 2000, listado: '911', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1, empresa: 'EMPRESA DOS' }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO', cbu: CBU2, neto: 2000, listado: '911', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1, empresa: 'EMPRESA DOS' }),
 ];
 
 const partido = ctrl.run(dosEmpresas, [], { period: '2026-07', acreditacionesConfig: { splitByEmpresa: true } });

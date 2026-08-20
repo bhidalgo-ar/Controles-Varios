@@ -7,7 +7,7 @@
 // NR (ver groupTabRowsByLegajo/sumColumn), que GS Pers no tenía: sin esto, la
 // última liquidación pisaba a las anteriores y daba una diferencia falsa.
 //
-// Datos 100% inventados (legajos '1'/'2', apellidos Perez/Gomez).
+// Datos 100% inventados (legajos '1'/'2', apellidos Sanguinetti/Falcioni).
 
 globalThis.document = { addEventListener: () => {} };
 
@@ -116,9 +116,9 @@ const mappingReporte = {
 };
 
 const tabReporte = [
-  { Legajo: '1', Nombre: 'Perez',  GTOS_PERS_TAB: '600', DTO_COCHERA_TAB: '100' }, // mensual
-  { Legajo: '1', Nombre: 'Perez',  GTOS_PERS_TAB: '400', DTO_COCHERA_TAB:  '50' }, // baja
-  { Legajo: '2', Nombre: 'Gomez',  GTOS_PERS_TAB: '300', DTO_COCHERA_TAB:   '0' }, // una sola
+  { Legajo: '1', Nombre: 'Sanguinetti',  GTOS_PERS_TAB: '600', DTO_COCHERA_TAB: '100' }, // mensual
+  { Legajo: '1', Nombre: 'Sanguinetti',  GTOS_PERS_TAB: '400', DTO_COCHERA_TAB:  '50' }, // baja
+  { Legajo: '2', Nombre: 'Falcioni',  GTOS_PERS_TAB: '300', DTO_COCHERA_TAB:   '0' }, // una sola
 ];
 const rRep = runGsPersReporte(null, tabReporte, mappingReporte);
 
@@ -141,7 +141,7 @@ assert('NO reproduce el bug viejo: rows.length !== 3 y gtos !== 400',
 const repLeg2 = rRep.rows.find(r => r.legajo === '2');
 assert('Reporte: el legajo con una sola liquidación no cambia',
   Math.abs(repLeg2.gtos - 300) < 0.01 && Math.abs(repLeg2.dto) < 0.01);
-assert('Reporte: los datos de referencia se conservan', repLeg1.nombre === 'Perez');
+assert('Reporte: los datos de referencia se conservan', repLeg1.nombre === 'Sanguinetti');
 
 // ── Paso 5 de specs/contrato-export.md (D-041): el falso verde ──────────────
 //

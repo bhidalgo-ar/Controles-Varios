@@ -47,8 +47,8 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   ['Unidad Organizativa', '1132', 'PLANTA NORTE', '09/08/2024'],
   [null, null, null, null, null, null, 'Sueldo Basico', 'Horas Extras 50%', 'Premio'],
   ['Legajo', 'Apellido y Nombres', 'CUIL', 'Sector', 'Categoria', 'Ingreso', '1000', '1100', '2500'],
-  ['1', 'Perez', '(cuil inventado)', 'A', 'B', '2020-01-01', '1$159811,7958', 8, null],
-  ['2', 'Gomez', '(cuil inventado)', 'A', 'B', '2021-01-01', null, null, 0],
+  ['1', 'Sanguinetti', '(cuil inventado)', 'A', 'B', '2020-01-01', '1$159811,7958', 8, null],
+  ['2', 'Falcioni', '(cuil inventado)', 'A', 'B', '2021-01-01', null, null, 0],
 ]);
 
 {
@@ -98,7 +98,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
     ['Empresa', 'MERZ SA', '31/07/2026'],
     [...relleno(9), 'Spot Bonus'],
     ['Legajo', 'Apellido y Nombres', 'CUIL', 'Sector', 'Cargo', 'Convenio', 'Categoria', 'Ingreso', 'CBU', '2500'],
-    ['7', 'Perez', null, null, null, null, null, null, null, '1$50000'],
+    ['7', 'Sanguinetti', null, null, null, null, null, null, null, '1$50000'],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(enJ);
   assert('bloque de 9 columnas → primer concepto en J', m.columnas[0].letra === 'J');
@@ -116,7 +116,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
     [...idFila.map(() => null)],
     [...relleno(31), 'Presentismo'],
     [...idFila, '605705'],
-    ['10', 'Perez', ...relleno(29), 3],
+    ['10', 'Sanguinetti', ...relleno(29), 3],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(enAF);
   assert('bloque de 31 columnas → primer concepto en AF', m.columnas[0].letra === 'AF');
@@ -132,8 +132,8 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
     [null, null, null, null, 900, 12],
     [null, null, null, null, 'Sueldo Basico', 'Dias Trabajados'],
     ['Legajo', 'Apellido y Nombres', 'CUIL', 'Sector', '1000', '401'],
-    ['1', 'Perez', null, null, '1$500', 12],
-    ['2', 'Gomez', null, null, '1$400', null],
+    ['1', 'Sanguinetti', null, null, '1$500', 12],
+    ['2', 'Falcioni', null, null, '1$400', null],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(corrido);
   assert('bloque corrido → encabezados en la fila 3, datos desde la 4',
@@ -150,7 +150,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
 {
   const sinCriollo = xlsxDe('HidalgoExpNov_2', [
     ['Legajo', 'Apellido y Nombres', '1000', '1100'],
-    ['1', 'Perez', '1$500', 4],
+    ['1', 'Sanguinetti', '1$500', 4],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(sinCriollo);
   assert('sin fila de criollo → no inventa una', m.filaCriollo === null);
@@ -165,7 +165,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const codigosAbajo = xlsxDe('HidalgoExpNov_3', [
     ['Legajo', 'Apellido y Nombres', 'Sueldo Basico', 'Premio'],
     [null, null, '1000', '2500'],
-    ['1', 'Perez', '1$500', null],
+    ['1', 'Sanguinetti', '1$500', null],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(codigosAbajo);
   assert('códigos en la fila de abajo → los encuentra igual',
@@ -182,8 +182,8 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const sinCodigo = xlsxDe('HidalgoExpNov_4', [
     [null, null, 'Sueldo Basico', 'Lic. Paternidad', 'Observaciones'],
     ['Legajo', 'Apellido y Nombres', '1000', null, null],
-    ['1', 'Perez', '1$500', 2, 'revisar'],
-    ['2', 'Gomez', '1$400', null, null],
+    ['1', 'Sanguinetti', '1$500', 2, 'revisar'],
+    ['2', 'Falcioni', '1$400', null, null],
   ]);
   const { parseMetadata: m } = parseExpNov(sinCodigo);
   assert('la columna sin código se lista aparte', m.columnasSinCodigo.length === 2);
@@ -206,7 +206,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const aLaIzquierda = xlsxDe('HidalgoExpNov_4b', [
     [null, null, 'Licencia por ART', 'Sueldo Basico'],
     ['Legajo', 'Apellido y Nombres', null, '1000'],
-    ['1', 'Perez', 5, '1$500'],
+    ['1', 'Sanguinetti', 5, '1$500'],
   ]);
   const { parseMetadata: m } = parseExpNov(aLaIzquierda);
   assert('la columna sin código a la izquierda del primer código no se pierde en la ficha',
@@ -220,7 +220,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
 {
   const etiquetas = xlsxDe('HidalgoExpNov_5', [
     ['Legajo', 'Apellido y Nombres', '1000', 'Informar Cantidad', 'Suma total'],
-    ['1', 'Perez', '1$500', 3, 500],
+    ['1', 'Sanguinetti', '1$500', 3, 500],
   ]);
   const { parseMetadata: m } = parseExpNov(etiquetas);
   assert('"Informar Cantidad" y "Suma total" no se leen como códigos',
@@ -235,7 +235,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const salBas = xlsxDe('HidalgoExpNov_6', [
     [null, null, 'Sueldo Basico', 'Horas Extras'],
     ['Legajo', 'Apellido y Nombres', 'SAL BAS', '1100'],
-    ['1', 'Perez', '1$500', 4],
+    ['1', 'Sanguinetti', '1$500', 4],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(salBas);
   assert('SAL BAS se lee como código, tal cual viene',
@@ -252,7 +252,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const duplicado = xlsxDe('HidalgoExpNov_7', [
     [null, null, 'Premio', 'Premio (SOLO PLASTIC)'],
     ['Legajo', 'Apellido y Nombres', '605705', '605705'],
-    ['1', 'Perez', '1$500', '1$300'],
+    ['1', 'Sanguinetti', '1$500', '1$300'],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(duplicado);
   assert('el código duplicado sale como aviso con las dos columnas',
@@ -271,8 +271,8 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
   const basura = xlsxDe('HidalgoExpNov_8', [
     [null, null, 'Sueldo Basico'],
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
-    ['2', 'Gomez', 'revisar con RRHH'],
+    ['1', 'Sanguinetti', '1$500'],
+    ['2', 'Falcioni', 'revisar con RRHH'],
     [null, 'TOTAL', 500],
   ]);
   const { parsedRows, parseMetadata: m } = parseExpNov(basura);
@@ -291,7 +291,7 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
 {
   const varias = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
     ['Legajo', 'Apellido y Nombres', '1000'],
-    ['1', 'Perez', '1$500'],
+    ['1', 'Sanguinetti', '1$500'],
   ], [['OS', [['nada']]], ['Tcs', [[null]]]]);
   const { parseMetadata: m } = parseExpNov(varias);
   assert('avisa qué hojas no se leyeron',
@@ -302,12 +302,12 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
 // ── Errores: qué se esperaba y qué se encontró ───────────────────────────────
 
 {
-  const sinAncla = xlsxDe('Hoja1', [['Nombre', 'Importe'], ['Perez', 100]]);
+  const sinAncla = xlsxDe('Hoja1', [['Nombre', 'Importe'], ['Sanguinetti', 100]]);
   assertThrows('sin fila de Legajo/Apellido corta', () => parseExpNov(sinAncla), 'Apellido y Nombres');
 
   const sinCodigos = xlsxDe('HidalgoExpNov_9', [
     ['Legajo', 'Apellido y Nombres', 'Observaciones'],
-    ['1', 'Perez', 'nada'],
+    ['1', 'Sanguinetti', 'nada'],
   ]);
   assertThrows('sin fila de códigos corta y dice qué encontró',
     () => parseExpNov(sinCodigos), 'fila de códigos');

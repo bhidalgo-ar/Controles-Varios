@@ -85,7 +85,7 @@ const esc = s => String(s ?? '')
     formatSampleValue('ADMINISTRACION Y FINANZAS CORPORATIVO').endsWith('…') &&
     formatSampleValue('ADMINISTRACION Y FINANZAS CORPORATIVO').length === 22);
   assert('los espacios de más se colapsan',
-    formatSampleValue('  PEREZ    JUAN  ') === 'PEREZ JUAN');
+    formatSampleValue('  SANGUINETTI    JAVIER  ') === 'SANGUINETTI JAVIER');
   assert('un número pasa tal cual', formatSampleValue(1234.56) === '1234.56');
 }
 
@@ -94,7 +94,7 @@ const esc = s => String(s ?? '')
 {
   assert("'num': un importe es-AR se reconoce", looksLikeType('1.234,56', 'num'));
   assert("'num': un número ya parseado se reconoce", looksLikeType(1234.56, 'num'));
-  assert("'num': un nombre no", !looksLikeType('PEREZ JUAN', 'num'));
+  assert("'num': un nombre no", !looksLikeType('SANGUINETTI JAVIER', 'num'));
   assert("'date': dd/mm/aaaa se reconoce", looksLikeType('15/03/2026', 'date'));
   assert("'date': aaaa-mm-dd se reconoce", looksLikeType('2026-03-15', 'date'));
   assert("'date': un serial de Excel dentro del rango se reconoce", looksLikeType(46142, 'date'));
@@ -112,7 +112,7 @@ const esc = s => String(s ?? '')
   assert("'num' con importes: no avisa",
     checkColumnType(['1.234,56', '890,00'], 'num') === null);
 
-  const avisoNum = checkColumnType(['PEREZ JUAN', 'GOMEZ ANA'], 'num');
+  const avisoNum = checkColumnType(['SANGUINETTI JAVIER', 'FALCIONI JULIO'], 'num');
   assert("'num' con nombres: avisa", avisoNum !== null);
   assert('…y el mensaje habla de importes, no de tipos de dato',
     avisoNum.mensaje.includes('importes') && !avisoNum.mensaje.includes('num'));
@@ -125,15 +125,15 @@ const esc = s => String(s ?? '')
     checkColumnType(['15/03/2026', '28/03/2026'], 'date') === null);
 
   assert('conservador: con UN valor que sí parece, no avisa',
-    checkColumnType(['PEREZ', 'GOMEZ', '1.234,56'], 'num') === null);
+    checkColumnType(['SANGUINETTI', 'FALCIONI', '1.234,56'], 'num') === null);
 
   assert("'txt' nunca avisa",
     checkColumnType(['1.234,56', '890,00'], 'txt') === null);
   assert('sin tipo declarado nunca avisa',
-    checkColumnType(['PEREZ', 'GOMEZ'], null) === null);
+    checkColumnType(['SANGUINETTI', 'FALCIONI'], null) === null);
 
   assert('con UN SOLO valor con dato no se afirma nada (poca evidencia)',
-    checkColumnType(['PEREZ JUAN'], 'num') === null);
+    checkColumnType(['SANGUINETTI JAVIER'], 'num') === null);
   assert('sin ningún valor con dato no se afirma nada',
     checkColumnType([], 'num') === null);
   assert('valores que no son array: no avisa',
@@ -160,7 +160,7 @@ const esc = s => String(s ?? '')
   assert('valores que no son array: no dibuja nada',
     columnHintHtml(null, 'num', { esc }) === '');
 
-  const peligroso = columnHintHtml(['PEREZ & <b>GOMEZ</b>', 'A "B"'], 'txt', { esc });
+  const peligroso = columnHintHtml(['SANGUINETTI & <b>FALCIONI</b>', 'A "B"'], 'txt', { esc });
   assert('escapa & y las etiquetas HTML',
     peligroso.includes('&amp;') && peligroso.includes('&lt;b&gt;') && !peligroso.includes('<b>'));
   assert('escapa la comilla doble', peligroso.includes('&quot;'));

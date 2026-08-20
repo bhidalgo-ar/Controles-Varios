@@ -99,7 +99,7 @@ const ANTICIPO = 'Anticipo de sueldo (De carga) Julio 2026 (Anticipos 07-2026) (
 const QUINC1   = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) (C)';
 
 const row = (o) => ({
-  legajo: '1', apellido_nombre: 'PEREZ JUAN', cuit: '20-11111111-1',
+  legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cuit: '20-11111111-1',
   cliente: 'CLIENTE DEMO SA', uo_cliente: 'Mensualizados',
   liquidacion: ANTICIPO, neto: null, listado: '', descripcion: '',
   fecha_acreditacion: null, banco: 'BANCO DEMO', cbu: CBU1, empresa: 'CLIENTE DEMO SA',
@@ -107,12 +107,12 @@ const row = (o) => ({
 });
 
 const acredRows = [
-  row({ legajo: '1', apellido_nombre: 'PEREZ JUAN',  cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02' }),
-  row({ legajo: '1', apellido_nombre: 'PEREZ JUAN',  cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER',  cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
   // Sin listado ni fecha, con otra fecha de anticipos en el mes → SIN ASIGNAR
-  row({ legajo: '3', apellido_nombre: 'LOPEZ LUCAS', cbu: CBU3, neto: 700,  listado: '',    fecha_acreditacion: null }),
-  row({ legajo: '2', apellido_nombre: 'GOMEZ ANA',   cbu: CBU2, neto: 1500, listado: '902', fecha_acreditacion: '2026-07-21' }),
+  row({ legajo: '3', apellido_nombre: 'LUCCHETTI CRISTIAN', cbu: CBU3, neto: 700,  listado: '',    fecha_acreditacion: null }),
+  row({ legajo: '2', apellido_nombre: 'FALCIONI JULIO',   cbu: CBU2, neto: 1500, listado: '902', fecha_acreditacion: '2026-07-21' }),
 ];
 
 const acredResults = CONTROL_REGISTRY.acreditaciones_reporte.run(acredRows, [], { period: '2026-07' });

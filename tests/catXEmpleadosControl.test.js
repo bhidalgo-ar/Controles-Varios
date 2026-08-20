@@ -7,7 +7,7 @@
 // contaba dos veces (tabRows.length) en vez de una (tabByEmp.size), dando un
 // "−1" permanente aunque el control diga que todo coincide.
 //
-// Datos 100% inventados (legajos '1'/'2', apellidos Perez/Gomez).
+// Datos 100% inventados (legajos '1'/'2', apellidos Sanguinetti/Falcioni).
 
 globalThis.document = { addEventListener: () => {} };
 
@@ -27,12 +27,12 @@ const mapping = {
 // ── Caso base: 1 fila del Tabulado por empleado, todo coincide ──────────────
 
 const catBase = [
-  { Legajo: '1', Apellido: 'Perez', Nombre: 'Juan' },
-  { Legajo: '2', Apellido: 'Gomez', Nombre: 'Ana' },
+  { Legajo: '1', Apellido: 'Sanguinetti', Nombre: 'Javier' },
+  { Legajo: '2', Apellido: 'Falcioni', Nombre: 'Julio' },
 ];
 const tabBase = [
-  { Legajo: '1', 'Apellido y Nombre': 'Perez Juan' },
-  { Legajo: '2', 'Apellido y Nombre': 'Gomez Ana' },
+  { Legajo: '1', 'Apellido y Nombre': 'Sanguinetti Javier' },
+  { Legajo: '2', 'Apellido y Nombre': 'Falcioni Julio' },
 ];
 const rBase = runCatXEmpleados(catBase, tabBase, mapping);
 assert('caso base: tabTotal cuenta 2 empleados', rBase.summary.tabTotal === 2);
@@ -47,9 +47,9 @@ assert('caso base: summarize da status success', summarizeCatXEmpleados(rBase).s
 // archivos coincidan en cantidad de EMPLEADOS.
 
 const tabDoble = [
-  { Legajo: '1', 'Apellido y Nombre': 'Perez Juan' },
-  { Legajo: '1', 'Apellido y Nombre': 'Perez Juan' },   // segunda liquidación del mismo legajo
-  { Legajo: '2', 'Apellido y Nombre': 'Gomez Ana' },
+  { Legajo: '1', 'Apellido y Nombre': 'Sanguinetti Javier' },
+  { Legajo: '1', 'Apellido y Nombre': 'Sanguinetti Javier' },   // segunda liquidación del mismo legajo
+  { Legajo: '2', 'Apellido y Nombre': 'Falcioni Julio' },
 ];
 const rDoble = runCatXEmpleados(catBase, tabDoble, mapping);
 assert('con doble liquidación del mismo legajo, tabTotal sigue contando 2 empleados (no 3 filas)',
@@ -62,7 +62,7 @@ assert('summarize() da success, no un headline con diferencia neta falsa',
 // ── Diferencia real: falta un empleado de verdad en el Tabulado ─────────────
 
 const tabFaltante = [
-  { Legajo: '1', 'Apellido y Nombre': 'Perez Juan' },
+  { Legajo: '1', 'Apellido y Nombre': 'Sanguinetti Javier' },
 ];
 const rFaltante = runCatXEmpleados(catBase, tabFaltante, mapping);
 assert('diferencia real (falta legajo 2 en el Tabulado): diff es +1',

@@ -13,7 +13,7 @@
 //   3. Que el modo "Generar Reporte" usa el contrato compartido (Paso 4a):
 //      las 11 columnas salen siempre, layout:'fijo'.
 //
-// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Perez/Gomez).
+// Datos 100% inventados (legajos '1'/'2'/'3', apellidos Sanguinetti/Falcioni).
 
 globalThis.document = { addEventListener: () => {} };
 

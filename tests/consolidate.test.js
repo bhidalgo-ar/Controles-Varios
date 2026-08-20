@@ -9,7 +9,7 @@
 //   2. `legajoKey` — si `'007'` y `'7'` son el mismo empleado (D-038).
 //   3. `groupRowsByLegajo`/`sumColumn` — consolidar liquidaciones múltiples.
 //
-// Datos 100% inventados (legajos '1'/'2', apellidos Perez/Gomez).
+// Datos 100% inventados (legajos '1'/'2', apellidos Sanguinetti/Falcioni).
 
 const { toNum, diffOrNull } = await import('./js/utils/currency.js');
 const { legajoKey, makeLegajoKey, LEGAJO_KEY_MODES, DEFAULT_LEGAJO_KEY_MODE, isValidLegajoKeyMode } =
@@ -83,9 +83,9 @@ assert('isValidLegajoKeyMode filtra basura',
 // ── 3. groupRowsByLegajo / sumColumn ─────────────────────────────────────────
 
 const tabRows = [
-  { Legajo: '1', SUELDO: '1.000,50', NOMBRE: 'Perez' },   // liquidación mensual
-  { Legajo: '1', SUELDO: '500,25',   NOMBRE: 'Perez' },   // liquidación de baja
-  { Legajo: '2', SUELDO: '0',        NOMBRE: 'Gomez' },
+  { Legajo: '1', SUELDO: '1.000,50', NOMBRE: 'Sanguinetti' },   // liquidación mensual
+  { Legajo: '1', SUELDO: '500,25',   NOMBRE: 'Sanguinetti' },   // liquidación de baja
+  { Legajo: '2', SUELDO: '0',        NOMBRE: 'Falcioni' },
   { Legajo: '',  SUELDO: '999',      NOMBRE: 'sin legajo' },
 ];
 

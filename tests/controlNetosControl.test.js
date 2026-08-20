@@ -83,7 +83,7 @@ const mapping = {
 function fila(legajo, extra = {}) {
   return {
     ID_EMPLEADO: legajo,
-    'APELLIDO Y NOMBRE': 'Perez Juan',
+    'APELLIDO Y NOMBRE': 'Sanguinetti Javier',
     CATEGORIA: 'Vendedor B',
     OBRA_SOCIAL: '3009',
     '1003-SUELDO': 1000000,
@@ -326,7 +326,7 @@ assert('categoría ausente de la escala: no se marca como fuera de escala',
 // mapea el Paso 1 — el control sólo tenía que usarla.
 
 assert('el nombre sale de la columna que el analista mapeó',
-  rOk.rows[0].nombre === 'Perez Juan');
+  rOk.rows[0].nombre === 'Sanguinetti Javier');
 
 const rSinMapeoNombre = runControlNetos(escalaRows, [fila('1', { NETO: NETO_TEO })],
   { tab: { empleadoColumn: 'ID_EMPLEADO' }, netosConfig: CFG });

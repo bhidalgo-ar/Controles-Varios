@@ -56,54 +56,54 @@ function mkRow(period, legajo, nombre, nro, operacion, valor) {
 
 const rows = [
   // ── Legajo 1 ─────────────────────────────────────────────────────────────
-  mkRow('2026-07', '1', 'PEREZ JUAN', 1100, '', 100000),
-  mkRow('2026-07', '1', 'PEREZ JUAN', 1109, '', 5000),
-  mkRow('2026-07', '1', 'PEREZ JUAN', 1120, '', 10000),
-  mkRow('2026-07', '1', 'PEREZ JUAN', 1122, '', 3000),
-  mkRow('2026-07', '1', 'PEREZ JUAN', 1121, '', 2000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1100, '', 110000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1120, '', 11000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1122, '', 3300),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1121, '', 2200),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1100, 'SUMA', 600000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1108, 'SUMA', 50000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1109, 'SUMA', 20000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1101, 'SUMA', 1000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1107, 'SUMA', 500),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1120, 'SUMA', 60000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1122, 'SUMA', 18000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1121, 'SUMA', 12000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1150, 'SUMA', 25000),
-  mkRow('2026-08', '1', 'PEREZ JUAN', 1137, 'SUMA', 5000),
+  mkRow('2026-07', '1', 'SANGUINETTI JAVIER', 1100, '', 100000),
+  mkRow('2026-07', '1', 'SANGUINETTI JAVIER', 1109, '', 5000),
+  mkRow('2026-07', '1', 'SANGUINETTI JAVIER', 1120, '', 10000),
+  mkRow('2026-07', '1', 'SANGUINETTI JAVIER', 1122, '', 3000),
+  mkRow('2026-07', '1', 'SANGUINETTI JAVIER', 1121, '', 2000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1100, '', 110000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1120, '', 11000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1122, '', 3300),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1121, '', 2200),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1100, 'SUMA', 600000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1108, 'SUMA', 50000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1109, 'SUMA', 20000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1101, 'SUMA', 1000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1107, 'SUMA', 500),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1120, 'SUMA', 60000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1122, 'SUMA', 18000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1121, 'SUMA', 12000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1150, 'SUMA', 25000),
+  mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1137, 'SUMA', 5000),
 
   // ── Legajo 2 — regresión de consolidación (dos liquidaciones, mismo nro) ──
-  mkRow('2026-07', '2', 'GOMEZ ANA', 1100, '', 50000),
-  mkRow('2026-07', '2', 'GOMEZ ANA', 1109, '', 2000),
-  mkRow('2026-07', '2', 'GOMEZ ANA', 1120, '', 5000),
-  mkRow('2026-07', '2', 'GOMEZ ANA', 1122, '', 1500),
-  mkRow('2026-07', '2', 'GOMEZ ANA', 1121, '', 1000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1100, '', 30000),   // liquidación 1
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1100, '', 20000),   // liquidación 2 — debe sumarse
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1120, '', 6000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1122, '', 1800),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1121, '', 1200),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1100, 'SUMA', 300000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1108, 'SUMA', 25000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1109, 'SUMA', 10000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1120, 'SUMA', 30000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1122, 'SUMA', 9000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1121, 'SUMA', 6000),
-  mkRow('2026-08', '2', 'GOMEZ ANA', 1150, 'SUMA', 12000),
+  mkRow('2026-07', '2', 'FALCIONI JULIO', 1100, '', 50000),
+  mkRow('2026-07', '2', 'FALCIONI JULIO', 1109, '', 2000),
+  mkRow('2026-07', '2', 'FALCIONI JULIO', 1120, '', 5000),
+  mkRow('2026-07', '2', 'FALCIONI JULIO', 1122, '', 1500),
+  mkRow('2026-07', '2', 'FALCIONI JULIO', 1121, '', 1000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1100, '', 30000),   // liquidación 1
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1100, '', 20000),   // liquidación 2 — debe sumarse
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1120, '', 6000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1122, '', 1800),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1121, '', 1200),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1100, 'SUMA', 300000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1108, 'SUMA', 25000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1109, 'SUMA', 10000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1120, 'SUMA', 30000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1122, 'SUMA', 9000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1121, 'SUMA', 6000),
+  mkRow('2026-08', '2', 'FALCIONI JULIO', 1150, 'SUMA', 12000),
 
   // ── Legajo 3 — sin movimiento en agosto (sólo SUMA ese mes) ───────────────
-  mkRow('2026-07', '3', 'LOPEZ LUCAS', 1100, '', 80000),
-  mkRow('2026-07', '3', 'LOPEZ LUCAS', 1120, '', 8000),
-  mkRow('2026-07', '3', 'LOPEZ LUCAS', 1122, '', 2400),
-  mkRow('2026-07', '3', 'LOPEZ LUCAS', 1121, '', 1600),
-  mkRow('2026-08', '3', 'LOPEZ LUCAS', 1100, 'SUMA', 200000),
-  mkRow('2026-08', '3', 'LOPEZ LUCAS', 1120, 'SUMA', 20000),
-  mkRow('2026-08', '3', 'LOPEZ LUCAS', 1122, 'SUMA', 6000),
-  mkRow('2026-08', '3', 'LOPEZ LUCAS', 1121, 'SUMA', 4000),
+  mkRow('2026-07', '3', 'LUCCHETTI CRISTIAN', 1100, '', 80000),
+  mkRow('2026-07', '3', 'LUCCHETTI CRISTIAN', 1120, '', 8000),
+  mkRow('2026-07', '3', 'LUCCHETTI CRISTIAN', 1122, '', 2400),
+  mkRow('2026-07', '3', 'LUCCHETTI CRISTIAN', 1121, '', 1600),
+  mkRow('2026-08', '3', 'LUCCHETTI CRISTIAN', 1100, 'SUMA', 200000),
+  mkRow('2026-08', '3', 'LUCCHETTI CRISTIAN', 1120, 'SUMA', 20000),
+  mkRow('2026-08', '3', 'LUCCHETTI CRISTIAN', 1122, 'SUMA', 6000),
+  mkRow('2026-08', '3', 'LUCCHETTI CRISTIAN', 1121, 'SUMA', 4000),
 ];
 
 const results = ctrl.run(rows, [], { period: '2026-08' });
@@ -176,7 +176,7 @@ assert('con RG 4030 y sólo agosto subido, falta julio: hay alerta',
   soloAgosto.alerts.some(a => /Faltan crudos/.test(a.text)));
 
 const conExtra = ctrl.run(
-  [...rows, mkRow('2026-01', '1', 'PEREZ JUAN', 1100, '', 1000)],
+  [...rows, mkRow('2026-01', '1', 'SANGUINETTI JAVIER', 1100, '', 1000)],
   [], { period: '2026-08' }
 );
 assert('un archivo de enero fuera de la ventana RG 4030 (jul-ago) genera alerta de "fuera de la ventana"',
@@ -185,7 +185,7 @@ assert('un archivo de enero fuera de la ventana RG 4030 (jul-ago) genera alerta 
 // ── Override de códigos de acumulador ─────────────────────────────────────────
 
 const rowsCodigoCustom = [
-  mkRow('2026-08', '9', 'RUIZ MARA', 9999, 'SUMA', 12345),
+  mkRow('2026-08', '9', 'SILVA SANTIAGO', 9999, 'SUMA', 12345),
 ];
 const conOverride = ctrl.run(rowsCodigoCustom, [], {
   period: '2026-08',
@@ -198,7 +198,7 @@ assert('con un código de Bruto para ganancias sobrescrito (9999), lo toma para 
 
 assert('run() sin filas devuelve error', typeof ctrl.run([], [], { period: '2026-08' }).error === 'string');
 
-const sinPeriodo = [{ ...mkRow('2026-08', '1', 'PEREZ JUAN', 1100, '', 1000), _period: null }];
+const sinPeriodo = [{ ...mkRow('2026-08', '1', 'SANGUINETTI JAVIER', 1100, '', 1000), _period: null }];
 assert('una fila sin período asignado devuelve error pidiendo completarlo',
   /per.odo/.test(ctrl.run(sinPeriodo, [], { period: '2026-08' }).error));
 

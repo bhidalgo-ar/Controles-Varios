@@ -135,7 +135,7 @@ test('el rótulo de la fila de TOTAL sí queda fijo, y dice la unidad al filtrar
 
   // Filtrado a un legajo: el TOTAL pasa a ser el de la selección y nombra la
   // unidad ("1 legajo"), no un genérico "1 fila".
-  await page.fill('.table-search__input', '1 — PEREZ');
+  await page.fill('.table-search__input', '1 — SANGUINETTI');
   await page.locator('.table-search__option').first().click();
   await expect(rotulo).toHaveText(/TOTAL de la selección — 1 legajo/);
 });

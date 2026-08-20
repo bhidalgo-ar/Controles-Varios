@@ -3,7 +3,7 @@
 // Correr desde la raíz del proyecto:
 //   node --input-type=module < tests/legajosCruzados.test.js
 //
-// Datos 100% inventados: legajos '1'/'2'/'3' y apellidos Perez/Gomez.
+// Datos 100% inventados: legajos '1'/'2'/'3' y apellidos Sanguinetti/Falcioni.
 //
 // Lo que este test fija, en orden de qué cuesta más caro si se rompe:
 //   1. El legajo con mensual + baja en el mismo mes cuenta UNA vez. Es el bug
@@ -37,11 +37,11 @@ function assert(desc, val) {
 // Un Tabulado de 5 filas y 4 empleados: el legajo '2' tuvo la mensual y la baja
 // en el mismo mes, así que aparece dos veces. Es el archivo del caso reportado.
 const TAB_ROWS = [
-  { LEGAJO: '1', APELLIDO: 'Perez', LIQUIDACION: 'Mensual' },
-  { LEGAJO: '2', APELLIDO: 'Gomez', LIQUIDACION: 'Mensual' },
-  { LEGAJO: '2', APELLIDO: 'Gomez', LIQUIDACION: 'Baja'    },
-  { LEGAJO: '3', APELLIDO: 'Lopez', LIQUIDACION: 'Mensual' },
-  { LEGAJO: '4', APELLIDO: 'Diaz',  LIQUIDACION: 'Mensual' },
+  { LEGAJO: '1', APELLIDO: 'Sanguinetti', LIQUIDACION: 'Mensual' },
+  { LEGAJO: '2', APELLIDO: 'Falcioni', LIQUIDACION: 'Mensual' },
+  { LEGAJO: '2', APELLIDO: 'Falcioni', LIQUIDACION: 'Baja'    },
+  { LEGAJO: '3', APELLIDO: 'Lucchetti', LIQUIDACION: 'Mensual' },
+  { LEGAJO: '4', APELLIDO: 'Datolo',  LIQUIDACION: 'Mensual' },
 ];
 
 const tabFile = {

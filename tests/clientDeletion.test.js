@@ -35,7 +35,7 @@ const client = await getClient(clientId);
 const code = client.code;
 
 const runId = await createControlRun(code, '2026-06', ['brutos'], 'corrida real');
-await saveControlRunFile(runId, 'tab_control', 'tabulado.xlsx', [{ Legajo: '1', Nombre: 'Perez Juan' }], {}, {});
+await saveControlRunFile(runId, 'tab_control', 'tabulado.xlsx', [{ Legajo: '1', Nombre: 'Sanguinetti Javier' }], {}, {});
 await saveControlRunResults(runId, 'brutos', { ok: true, rows: [{ legajo: '1' }] });
 await saveControlConfig(code, 'brutos', { params: { salBaseCode: '1003' } });
 await createGrouper(code, 'Sueldos');
