@@ -99,6 +99,15 @@
 // agrupadores configurables por cliente).
 
 import {
+  runNovedadesImportador,
+  renderNovedadesImportadorResults,
+  summarizeNovedadesImportador,
+  DEFAULT_NOVEDADES_CONFIG,
+} from './novedadesImportador.js';
+
+import { renderNovedadesImportadorConfigEditor } from '../ui/novedadesImportadorConfigEditor.js';
+
+import {
   runControlNetos,
   renderControlNetosResults,
   summarizeControlNetos,
@@ -757,6 +766,79 @@ export const CONTROL_REGISTRY = {
     run:           runAcumuladoresGanancias,
     summarize:     summarizeAcumuladoresGanancias,
     renderResults: renderAcumuladoresResults,
+  },
+
+  // Tercer control Axton de generación, y el primero de la familia de Novedades
+  // (N1 de specs/familia-novedades-axton.md, D-070): arma el importador
+  // `F2_Consolidada` desde la planilla de novedades del cliente, en vez de
+  // controlar a posteriori que la transcripción a mano haya salido bien.
+  novedades_importador: {
+    id:          'novedades_importador',
+    // No cruza dos archivos de dos sistemas: arma uno y lo cuadra contra el dato
+    // del que salió (la planilla, y el importador ya armado si el analista lo
+    // carga). Los dos lados son el mismo dato del mismo mes, así que eso cierra
+    // al centavo — no es una diferencia de criterio del analista (D-069).
+    ownTolerance: {
+      note: 'Cierra al centavo contra la planilla y contra el importador ya armado: son chequeos de armado, no diferencias de criterio.',
+    },
+    label:       'Importador de Novedades — Generar Reporte',
+    scope:       'sistema',
+    scopeMeta:   { sourceSystems: ['axton'] },
+    appliesWhen: () => true,
+    description: 'Arma el importador F2_Consolidada de Axton desde la planilla de novedades del '
+      + 'cliente, con el formato de celda cantidad$importe, y muestra qué entra y qué quedó afuera '
+      + 'antes de descargarlo.',
+    help: {
+      what: 'Toma la planilla de novedades del cliente (la familia ExpNov de Axton), consolida por '
+        + 'legajo y arma el importador F2_Consolidada listo para subir. Antes de descargarlo muestra qué '
+        + 'va a entrar —legajos, conceptos y totales por concepto— y qué quedó afuera y por qué: columnas '
+        + 'sin código de concepto, filas sin legajo, valores que no son un número. El período lo declarás '
+        + 'vos en el selector de la app: la fecha del archivo puede ser la de la plantilla original.',
+      how: [
+        'Cargá la planilla de novedades del cliente en el Paso 2.',
+        'En «Conceptos y unidad organizativa» resolvé las columnas que no traen código y confirmá la unidad organizativa.',
+        '(Opcional) Si el importador ya se armó a mano, cargalo también: el control te dice qué difiere contra el que arma la app.',
+        'Ejecutá y revisá en el resultado qué entra al importador y qué quedó afuera.',
+        'Descargá el .xlsx del importador desde el resultado.',
+      ],
+    },
+    group:       { id: 'novedades_importador', label: 'Importador de Novedades', mode: 'Generar Reporte', primary: true },
+    tabRequired: false,
+    additionalFiles: [
+      // rerenderOnLoad: las columnas de la planilla son lo que ofrece el panel
+      // de conceptos de abajo, así que el paso se redibuja al cargarla.
+      { key: 'novedades', label: 'Planilla de novedades del cliente', fileType: 'novedades_axton_file',
+        rerenderOnLoad: true },
+      // Opcional: el importador que ya se armó a mano. Sin él, el control genera
+      // el F2 y no compara nada; con él, dice qué difiere entre lo que arma la
+      // app y lo que se subió — incluido el legajo que está en la planilla del
+      // cliente y no llegó al importador, que es el caso que originó el frente
+      // (SIASA Aguas y Gaseosas 07/2026). Mismo criterio que el reporte de
+      // variaciones de Axton en pop_variaciones.
+      { key: 'f2Armado', label: 'Importador F2 ya armado (opcional)', fileType: 'f2_armado_file',
+        optional: true },
+    ],
+    config: [{ key: 'novedades_importador_config', stateKey: 'novedadesImportadorConfig',
+               mappingKey: 'novedadesConfig',
+               default: () => DEFAULT_NOVEDADES_CONFIG(),
+               mappingValue: (state) => state.novedadesImportadorConfig || DEFAULT_NOVEDADES_CONFIG(),
+               editor: renderNovedadesImportadorConfigEditor,
+               editorProps: (state) => ({
+                 meta: state.controlFiles?.novedades_importador?.novedades?.parseMetadata || null,
+                 // El catálogo de conceptos del cliente, si lo cargó: es lo que
+                 // le permite al panel SUGERIR el código de una columna que sólo
+                 // trae nombre en criollo. Sugerir, no decidir (D-039).
+                 catalogRows: state.catalog?.rows || [],
+               }),
+               // Se abre solo cuando hay algo que resolver: una columna con
+               // datos y sin código no puede pasar desapercibida (D-070).
+               openByDefault: (state) => {
+                 const meta = state.controlFiles?.novedades_importador?.novedades?.parseMetadata;
+                 return (meta?.columnasSinCodigo || []).some(c => (c.celdasCargadas || 0) > 0);
+               } }],
+    run:           runNovedadesImportador,
+    summarize:     summarizeNovedadesImportador,
+    renderResults: renderNovedadesImportadorResults,
   },
 
   variaciones_sueldos: {

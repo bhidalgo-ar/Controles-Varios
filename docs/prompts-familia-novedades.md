@@ -14,12 +14,12 @@
 > | 4 | Novedades vs Liquidación (N2) | **Opus 5** | **alto** | El cruce con las 4 bandas; depende de 1 y 2 |
 >
 > El 2 puede correr en paralelo con el 3 (no se pisan). El 4 recién cuando 1, 2
-> y 3 estén mergeados. Sonnet 5 alcanza para retoques posteriores de UI o de
+> y 3 estén mergeados (1 y 3 ya están). Sonnet 5 alcanza para retoques posteriores de UI o de
 > textos sobre estos módulos, no para construirlos.
 
 ---
 
-## Chat 1 — N0a: Lector de la familia ExpNov
+## Chat 1 — N0a: Lector de la familia ExpNov — **hecho (2026-08-20)**
 
 ```
 Leé specs/familia-novedades-axton.md y DECISIONS.md D-070 antes de escribir nada.
@@ -83,7 +83,12 @@ comportamiento de ningún control existente en este PR — sólo dejá el lector
 listo para que N2 lo consuma. PR con doc al día.
 ```
 
-## Chat 3 — N1: Generador de importador de novedades
+## Chat 3 — N1: Generador de importador de novedades — **hecho (2026-08-20)**
+
+> Construido: control `novedades_importador`. Lo que quedó pendiente y por qué
+> está en `specs/familia-novedades-axton.md` § "Lo que N1 espera de un archivo
+> real" — el layout del F2 y el caso completo de SIASA 07/2026 necesitan un
+> archivo real, que no entró al repo.
 
 ```
 Leé specs/familia-novedades-axton.md y D-070, y usá la skill nuevo-control para

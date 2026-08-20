@@ -13,7 +13,7 @@
 import * as XLSXmod from 'xlsx';
 globalThis.XLSX = XLSXmod;
 
-const { parseExpNov, parseValorCelda } = await import('./js/parsers/expNovParser.js');
+const { parseExpNov, parseValorCelda, detectHeaders } = await import('./js/parsers/expNovParser.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -195,6 +195,29 @@ const base = xlsxDe('d  axFiles HidalgoExpNov_1132_2', [
     m.avisos.some(a => a.includes('columnas sin código') && a.includes('Lic. Paternidad')));
   assert('la columna sin código no se cuela como concepto',
     m.columnas.length === 1 && m.columnas[0].codigo === '1000');
+
+  // El contenido de esas columnas también viaja (lo consume el generador de
+  // importador: es lo que le permite ofrecer resolver el código contra el
+  // catálogo del cliente y decir QUIÉN quedó afuera).
+  assert('las celdas de las columnas sin código viajan con legajo y rótulo',
+    m.celdasSinCodigo.length === 2
+    && m.celdasSinCodigo[0].legajo === '1' && m.celdasSinCodigo[0].rotulo === 'Lic. Paternidad'
+    && m.celdasSinCodigo[0].cantidad === 2 && m.celdasSinCodigo[0].letraCol === 'D');
+  assert('una celda sin código que no es número viaja con su motivo, no como cero',
+    m.celdasSinCodigo[1].rotulo === 'Observaciones'
+    && m.celdasSinCodigo[1].cantidad === null
+    && m.celdasSinCodigo[1].noParseable !== null);
+  assert('las celdas de las columnas sin código NO se cuelan en parsedRows',
+    parseExpNov(sinCodigo).parsedRows.every(r => r.codigo === '1000'));
+
+  // Vista previa de la carga: la hoja y la fila correctas, no la fila 1 de la
+  // primera hoja del libro.
+  const { headers, preview } = detectHeaders(sinCodigo);
+  assert('la vista previa nombra las columnas con el código y el rótulo del concepto',
+    headers[0] === 'Legajo' && headers[2] === '1000 — Sueldo Basico'
+    && headers[3] === 'Lic. Paternidad (sin código)');
+  assert('la vista previa arranca en la primera fila de datos',
+    preview.length === 2 && preview[0][0] === '1');
 }
 
 // ── Columna sin código a la IZQUIERDA del primer concepto con código ─────────
