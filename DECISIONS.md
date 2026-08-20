@@ -2505,3 +2505,49 @@ sobre lo que puede llevar el archivo que va a Finanzas).
 `unitsTotal`/`unitsWithDiff` se siguen contando en la unidad que declara `unit` y el color sigue saliendo de
 `computeSemaforoStatus()`. Cada tanda de migración anota los números que el control muestra antes y los
 comprueba después; si uno se movió, es un bug de esa tanda, no un efecto de la vista nueva.
+
+---
+
+## D-075 — Tanda 1 de la vista estándar: qué significa cada chip en un control de generación, y las bandas no llevan el fondo oscuro del mockup (por ahora)
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 1 de `specs/vista-estandar-resultados.md` (D-074) — las piezas
+compartidas más Acumuladores Ganancias como piloto (§9, punto 1). Willy no estaba disponible para las tres
+decisiones de abajo: quedan tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. Qué significa cada chip en un control que no cruza dos archivos.** Acumuladores Ganancias es de
+generación (D-026), no de cruce: no hay un archivo de origen contra el que medir una diferencia. Los cinco
+chips del estándar (D-074) se redefinen sobre lo único que el control sí verifica — la reconciliación del
+TOTAL del crudo contra sus componentes, y el SAC teórico:
+
+- **Con diferencia** = la reconciliación no cierra, o el SAC teórico dio negativo.
+- **Al centavo** = cierra, y el SAC teórico salió con todos los meses de la ventana.
+- **Sin comparar** = no hay ninguna doceava en la ventana, o el SAC teórico quedó armado con menos meses de
+  los que la ventana pide.
+- **Dentro del margen no aplica**: el control no usa el monto de diferencia del cliente (D-069) — la
+  reconciliación cierra al centavo o no cierra, no hay una zona intermedia que tolerar. Sale en gris, con su
+  0 y el `title` que lo explica, igual que un chip sin casos (D-074 §3).
+
+Lo que no es un grado de cierre —sin movimiento en el mes, doceava atípica, no trae CUIL— pasa a
+`Marcas ▾`, no al chip de estado.
+
+**2. Un tipo de issue que nadie mapeó a un estado se lee como "Con diferencia".** Es el default de
+`estadoDeFicha()`: un tipo de issue nuevo que todavía no se clasificó cuenta como que no cierra, no como que
+está bien. Con el default al revés, un caso que nadie previó se leería en verde sin que nadie lo note — el
+problema que la vista estándar vino a evitar.
+
+**3. Las bandas quedan con el tinte alternado del sistema (celeste/navy), no con el fondo oscuro que pide el
+mockup del §5.** El pedido de la tanda 1 fue reusar `paintColumnGroups()` tal cual está, no reescribirla.
+**Alternativa descartada:** repintar la pieza para que la fila de bandas salga oscura como en el mockup —se
+descartó por alcance de la tanda, no porque esté mal; si Willy la quiere, es un token nuevo y una regla más
+sobre la misma pieza.
+
+**De paso.** `renderResumenDetalle()` deja de asumir exactamente 2 solapas — la razón por la que D-027
+armaba Acumuladores con `initTabs()` aparte, al margen de la pieza compartida. Ahora soporta las tres
+nativamente (`resumen`/`fichas`/`planilla`) y decide cuál abre según `conDiferencias`, así que Acumuladores
+pasa a usarla como el resto de los controles.
+
+**Pendiente.** Las tres decisiones de los puntos 1 a 3 esperan que Willy las vea en pantalla; si el chip
+"Dentro del margen" o el fondo de banda no le sirven así, se ajustan sin tocar el resto del estándar.
+
+**Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`,
+`estadoDeFicha`), `js/ui/resultBlocks.js` (`paintColumnGroups`, `renderResumenDetalle`), D-026, D-069, D-074.
