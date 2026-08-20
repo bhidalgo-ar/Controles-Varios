@@ -50,7 +50,7 @@ assert('"Sin comparar" va en ámbar: no es un grado de cierre, es el resto (D-07
 
 assert('"Al centavo" en verde y "Con diferencia" en rojo',
   ESTADOS.find(e => e.value === 'centavo').tone === 'ok'
-  && ESTADOS.find(e => e.value === 'conDif').tone === 'error');
+  && ESTADOS.find(e => e.value === 'conDif').tone === 'dif');
 
 const opciones = estadoOptionsHtml({
   counts: { conDif: 3, margen: 0, centavo: 12, sinComparar: 2 },

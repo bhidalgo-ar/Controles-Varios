@@ -37,9 +37,7 @@ test('el filtro arranca en "con diferencia" y lo explica', async ({ page }) => {
 
   const activo = page.locator('.results-chip--active');
   await expect(activo).toHaveText(/Sólo con diferencia/);
-  // El tono del chip sale de su <option> (`data-tone`); sin declararlo, un
-  // filtro de diferencias se pinta igual con el color de error.
-  await expect(activo).toHaveClass(/results-chip--error/);
+  await expect(activo).toHaveClass(/results-chip--dif/);
   await expect(page.locator('.results-toolbar__hint')).toContainText('arrancó activo');
 
   await expect(page.locator('table.rb-grid tbody tr')).toHaveCount(2);

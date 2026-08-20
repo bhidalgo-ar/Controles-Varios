@@ -1,7 +1,7 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-075). Tandas 2 a 8 —el resto
+del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). Tandas 2 a 8 —el resto
 de los 21 controles— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de
 Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
 cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
@@ -187,7 +187,7 @@ Esto es lo que hace que el trabajo sea abordable. **Ya está, compartido y andan
 - La barra con chips, el buscador accesible, la paginación, el TOTAL de la selección y el
   `⬇ Exportar ▾`: `createResultsToolbar()`, `wireTableTools()`, `renderExportMenu()`.
 
-**Construido en la tanda 1 (2026-08-20 — D-075), verificado de punta a punta con Acumuladores
+**Construido en la tanda 1 (2026-08-20 — D-077), verificado de punta a punta con Acumuladores
 Ganancias como piloto:**
 
 | Pieza | Dónde | Por qué |
@@ -201,11 +201,10 @@ Ganancias como piloto:**
 | Descriptor de columnas `{ key, label, sub, num, band }` + `renderRubroGrid()` | `js/ui/resultBlocks.js` | §5, para no repetir el HTML en 13 controles |
 | Tercera solapa en `renderResumenDetalle()` + preferencia por estado | `js/ui/resultBlocks.js` | §2 |
 
-Dos cosas que quedaron distintas de lo escrito arriba, a confirmar con Willy (D-075): las bandas de
-la planilla (§5) quedan con el tinte alternado que ya usa `paintColumnGroups()` y no con el fondo
-oscuro del mockup —se reusó la pieza tal cual, no se reescribió—; y el ancho de 14 px del scroll (§6)
-no se pudo verificar en este entorno, porque el Chromium headless de acá fuerza su propia barra de
-2 px e ignora `::-webkit-scrollbar`.
+Una cosa quedó sin verificar (D-077): el ancho de 14 px del scroll (§6). El Chromium headless de
+este entorno fuerza su propia barra de 2 px e ignora `::-webkit-scrollbar`, así que hay que mirarlo
+en una pantalla de verdad. De paso quedó a la vista por qué nunca se había visto: declarar
+`scrollbar-width` o `scrollbar-color` en el mismo elemento apaga esos pseudo-elementos en Chromium.
 
 **Y una deuda que se sigue pagando en las próximas tandas (2 y 3):** Brutos, GS Pers y Rendimiento vs
 Asiento pintan las bandas con colores escritos a mano (`CYAN_HDR`, `LILAC_HDR`) en vez de usar el
@@ -250,7 +249,7 @@ Aprobado por Willy el 2026-08-20.
 El detalle de cada tanda, con su prompt listo para copiar, está en
 `docs/prompts-vista-estandar.md`. El esqueleto:
 
-1. **Cimientos + un control piloto (Acumuladores Ganancias). Hecho el 2026-08-20 (D-075).** Las
+1. **Cimientos + un control piloto (Acumuladores Ganancias). Hecho el 2026-08-20 (D-077).** Las
    piezas de §7 más el primer control migrado de punta a punta, verificado en el navegador en los
    tres temas. **Todo lo demás depende de esta tanda, incluido el chat de Netos — que ya puede
    arrancar.**

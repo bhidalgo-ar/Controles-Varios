@@ -21,10 +21,19 @@ const PAGE_SIZE_DEFAULT = 50;
  *  cualquier `<select>` de la izquierda con 2 a 4 opciones — o sea, por
  *  accidente: la "Vista" de un control y la "Solapa" de otro terminaron de
  *  chips sin que nadie lo decidiera, y la fila de chips decía algo distinto en
- *  cada pantalla. Pasa a chipificarse SÓLO el select de estado, y sólo si lo
- *  pide con `data-chip-role="estado"`; cualquier otro filtro queda desplegable
- *  por diseño (los 18 conceptos de NR no son un filtro, son una pared). */
-const CHIP_ROLE_ESTADO = 'estado';
+ *  cada pantalla. Se chipifica SÓLO el select de estado, y sólo si lo pide con
+ *  `data-chips="1"`; cualquier otro filtro queda desplegable por diseño (los 18
+ *  conceptos de NR no son un filtro, son una pared). El límite por cantidad de
+ *  opciones ya no existe: lo dejó escrito el Detalle de Netos cuando declaró el
+ *  suyo — "cuando las 21 pantallas declaren su select de estado, el límite se
+ *  va". Esta es esa tanda. */
+const CHIPS_DECLARADOS = '1';
+
+/** Qué opción de filtro es "lo que hay que ir a mirar": se pinta con el color
+ *  del error y, si arranca activa, la barra explica por qué. "Sin explicar" es
+ *  como lo dice el Control de Netos; el resto de los controles dice
+ *  "con diferencia". */
+const ES_DIFERENCIA = /diferencia|sin explicar/i;
 
 // ── Los cinco estados, iguales en los 21 controles ──────────────────────────
 //
@@ -37,7 +46,7 @@ const CHIP_ROLE_ESTADO = 'estado';
 /** @type {{ value: string, label: string, tone: string, help: string }[]} */
 export const ESTADOS = [
   { value: 'todos',       label: 'Todos',              tone: 'neutral', help: 'la vista completa' },
-  { value: 'conDif',      label: 'Con diferencia',     tone: 'error',   help: 'arriba del monto de diferencia del cliente' },
+  { value: 'conDif',      label: 'Con diferencia',     tone: 'dif',     help: 'arriba del monto de diferencia del cliente' },
   { value: 'margen',      label: 'Dentro del margen',  tone: 'info',    help: 'arriba de $ 0,01 y hasta ese monto' },
   { value: 'centavo',     label: 'Al centavo',         tone: 'ok',      help: 'hasta $ 0,01 — el redondeo de Meta4' },
   { value: 'sinComparar', label: 'Sin comparar',       tone: 'warn',    help: 'falta un lado: no está en el otro archivo, la columna no está mapeada, o el período no trae el dato' },
@@ -86,7 +95,7 @@ export function estadoDeDiferencia(diff, tol = currentTolerance()) {
 export function createEstadoFilter({ counts = {}, noAplica = {}, ariaLabel = 'Estado del caso' } = {}) {
   const sel = document.createElement('select');
   sel.className = 'form-select form-select--sm';
-  sel.dataset.chipRole = CHIP_ROLE_ESTADO;
+  sel.dataset.chips = CHIPS_DECLARADOS;
   sel.setAttribute('aria-label', ariaLabel);
   sel.innerHTML = estadoOptionsHtml({ counts, noAplica });
   sel.value = estadoInicial(counts);
@@ -164,7 +173,7 @@ export function createResultsToolbar(container, { left } = {}) {
   // cada control, que ya lo hacía— se dice por qué: el analista tiene que saber
   // que está mirando un recorte y no toda la tabla (regla "errores primero" +
   // regla 5 de textos que orientan).
-  const chipped = [...leftGroup.querySelectorAll(`select[data-chip-role="${CHIP_ROLE_ESTADO}"]`)]
+  const chipped = [...leftGroup.querySelectorAll(`select[data-chips="${CHIPS_DECLARADOS}"]`)]
     .map(chipifySelect).filter(Boolean);
   if (chipped.some(c => c.startedFiltered)) {
     const hint = document.createElement('span');
@@ -203,7 +212,9 @@ export function createResultsToolbar(container, { left } = {}) {
  */
 function chipifySelect(sel) {
   const options = [...sel.options];
-  if (options.length < 2) return null;
+  // La marca explícita y nada más: sin `data-chips="1"` este select se queda
+  // desplegable, tenga las opciones que tenga.
+  if (sel.dataset.chips !== CHIPS_DECLARADOS || options.length < 2) return null;
   if (sel.dataset.chipped === '1') return null;
   sel.dataset.chipped = '1';
   sel.classList.add('results-filter-sr');
@@ -214,15 +225,17 @@ function chipifySelect(sel) {
   group.innerHTML = options.map(o => {
     // "Con diferencia (23)" → el texto y el número, que se leen distinto.
     const m = o.textContent.trim().match(/^(.*?)\s*\((\d[\d.,\s]*)\)$/);
+    // Un estado sin casos se muestra igual, apagado y con su 0: sacarlo movería
+    // los demás de lugar, que es justo lo que la fila de chips viene a evitar.
     const tone = o.dataset.tone
-      // Los controles que todavía no declaran el tono: el filtro de diferencias
-      // se pinta con el color de lo que hay que ir a mirar, como hasta ahora.
-      || (/diferencia/i.test(o.textContent) ? 'error' : '');
+      // El control que todavía no declara el tono: el filtro de diferencias se
+      // pinta con el color de lo que hay que ir a mirar, como hasta ahora.
+      || (ES_DIFERENCIA.test(o.textContent) ? 'dif' : '');
     return `
       <button type="button" tabindex="-1" data-chip-value="${esc(o.value)}"
               ${o.disabled ? 'disabled' : ''}
               ${o.title ? `title="${esc(o.title)}"` : ''}
-              class="results-chip${tone ? ` results-chip--${esc(tone)}` : ''}${o.disabled ? ' results-chip--off' : ''}">
+              class="results-chip${tone ? ` results-chip--${esc(tone)}` : ''}${o.disabled ? ' results-chip--vacio' : ''}">
         ${esc(m ? m[1] : o.textContent.trim())}
         ${m ? `<span class="results-chip__count">${esc(m[2])}</span>` : ''}
       </button>
@@ -253,7 +266,7 @@ function chipifySelect(sel) {
 
   const selected = options.find(o => o.value === sel.value);
   return {
-    startedFiltered: /diferencia/i.test(selected?.textContent || ''),
+    startedFiltered: ES_DIFERENCIA.test(selected?.textContent || ''),
     onUserChange: (fn) => listeners.push(fn),
   };
 }

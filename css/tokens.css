@@ -126,6 +126,18 @@
   --celeste-border: rgba(0, 172, 212, 0.30);
 
   --ink: #15263D;
+  /* Superficie invertida: el fondo que hace que un renglón sea EL renglón (el
+     pie de una tabla, la fila de bandas de una planilla). No alcanza con
+     `--ink` de fondo y blanco de texto: en los temas oscuros `--ink` es un
+     color CLARO —lo usan como texto fuerte— y el renglón quedaba blanco sobre
+     blanco. Cada tema declara el par, y las pantallas no preguntan cuál está
+     activo. */
+  --invert-bg:     #15263D;
+  --invert-fg:     #FFFFFF;
+  --invert-accent: #7FE0F4;
+  /* Lo mismo para el renglón que cierra en rojo (el "sin explicar" de un pie). */
+  --solid-error-bg: #C0420F;
+  --solid-error-fg: #FFFFFF;
   --t1:  #1E3A5F;
   --t2:  #4A6080;
   --t3:  #8FA3BA;
@@ -135,6 +147,9 @@
   --line-soft: #EFEEEC;
   /* Sombra que avisa que una planilla sigue para el costado (ver .rb-grid-wrap). */
   --scroll-shadow: rgba(21, 38, 61, 0.22);
+  /* Pista de la barra de scroll de las planillas: tiene que verse. Con la
+     pista transparente, la barra no avisaba que la tabla seguía a la derecha. */
+  --scroll-track: #E4E9EE;
 
   --ok:      #22C55E;  --ok-bg:      rgba(34,197,94,0.10);   --ok-bd:      rgba(34,197,94,0.30);   --ok-tx:      #177A50;
   --warn:    #F59E0B;  --warn-bg:    rgba(245,158,11,0.12);  --warn-bd:    rgba(245,158,11,0.32);  --warn-tx:    #9A5A0B;
@@ -142,6 +157,13 @@
   --neutral: #8C837B;  --neutral-bg: rgba(140,131,123,0.12); --neutral-bd: rgba(140,131,123,0.30); --neutral-tx: #6B635C;
 
   --sh-tool: 0 6px 24px rgba(30,58,95,0.09);
+  /* Las dos sombras de una tarjeta de la lista de fichas: en reposo y con el
+     mouse encima. La tarjeta no se mueve al pasar el mouse (movería la lista
+     entera): lo único que cambia es el borde y esta sombra. */
+  --sh-ficha:       0 1px 4px rgba(30,58,95,0.07);
+  --sh-ficha-hover: 0 4px 16px rgba(30,58,95,0.10);
+  /* Separador entre bandas del encabezado de una planilla, sobre `--ink`. */
+  --band-divider: rgba(255,255,255,0.22);
 
   --font-tool: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif;
   --serif:     'DM Serif Display', Georgia, 'Times New Roman', serif;
@@ -258,20 +280,17 @@
   --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
 
   /* ── Tintes de la vista estándar de resultados ─────────────────
-     Los grises de la planilla (cierre de banda, celda de cierre, divisor entre
-     bandas), la tira de conciliación de la ficha, la fila resaltada y las dos
-     partes de la barra de scroll. Van translúcidos por la misma razón que los
-     `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la grid y sobre
-     la superficie de la card, y así valen para los tres temas sin repintarse.
-     En Oscuro la tinta se cambia por luz (ver los bloques de abajo). */
-  --band-close-bg:         rgba(21, 38, 61, 0.14);
-  --band-close-cell-bg:    rgba(21, 38, 61, 0.07);
-  --band-divider:          rgba(21, 38, 61, 0.22);
-  --ficha-strip-bg:        rgba(21, 38, 61, 0.045);
-  --row-highlight-bg:      rgba(0, 172, 212, 0.09);
-  --scroll-track-bg:       rgba(21, 38, 61, 0.06);
-  --scroll-thumb-bg:       rgba(21, 38, 61, 0.28);
-  --scroll-thumb-hover-bg: rgba(21, 38, 61, 0.45);
+     Los grises de la planilla (el cierre de banda y su celda), la tira de
+     conciliación de la ficha y la fila resaltada. Van translúcidos por la misma
+     razón que los `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la
+     grid y sobre la superficie de la card, y así valen para los tres temas sin
+     repintarse. En Oscuro la tinta se cambia por luz (ver los bloques de
+     abajo). El divisor entre bandas y la pista del scroll ya los declaró el
+     Detalle de Netos: `--band-divider` y `--scroll-track`. */
+  --band-close-bg:      rgba(21, 38, 61, 0.14);
+  --band-close-cell-bg: rgba(21, 38, 61, 0.07);
+  --ficha-strip-bg:     rgba(21, 38, 61, 0.045);
+  --row-highlight-bg:   rgba(0, 172, 212, 0.09);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -310,6 +329,11 @@
     --celeste-border: rgba(31,190,224,0.34);
 
     --ink: #EAF1F8;
+    --invert-bg:     #EAF1F8;
+    --invert-fg:     #15263D;
+    --invert-accent: #0E5F76;
+    --solid-error-bg: #FB8254;
+    --solid-error-fg: #1B1206;
     --t1:  #DCE6F0;
     --t2:  #92A6BC;
     --t3:  #5F758D;
@@ -318,6 +342,7 @@
     --line:      #23364A;
     --line-soft: #1A2837;
     --scroll-shadow: rgba(0, 0, 0, 0.60);
+    --scroll-track: #2A3138;
 
     --ok-bg:      rgba(34,197,94,0.15);   --ok-bd:      rgba(34,197,94,0.36);   --ok-tx:      #4ADE80;
     --warn-bg:    rgba(245,158,11,0.15);  --warn-bd:    rgba(245,158,11,0.36);  --warn-tx:    #FBBF24;
@@ -325,6 +350,12 @@
     --neutral-bg: rgba(140,131,123,0.18); --neutral-bd: rgba(140,131,123,0.34); --neutral-tx: #B6ABA0;
 
     --sh-tool: 0 8px 28px rgba(0,0,0,0.50);
+  --sh-ficha:       0 1px 4px rgba(0,0,0,0.45);
+  --sh-ficha-hover: 0 4px 16px rgba(0,0,0,0.55);
+  --band-divider: rgba(255,255,255,0.16);
+    --sh-ficha:       0 1px 4px rgba(0,0,0,0.45);
+    --sh-ficha-hover: 0 4px 16px rgba(0,0,0,0.55);
+    --band-divider: rgba(255,255,255,0.16);
 
     --primary-disabled: rgba(31,190,224,0.32);
     --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
@@ -347,14 +378,10 @@
 
   /* Tintes de la vista estándar: en Oscuro el navy ES el fondo, así que el
      tinte se hace con luz en vez de con tinta (mismo criterio que --detalle-grp-b). */
-  --band-close-bg:         rgba(234, 241, 248, 0.14);
-  --band-close-cell-bg:    rgba(234, 241, 248, 0.07);
-  --band-divider:          rgba(234, 241, 248, 0.24);
-  --ficha-strip-bg:        rgba(234, 241, 248, 0.05);
-  --row-highlight-bg:      rgba(31, 190, 224, 0.16);
-  --scroll-track-bg:       rgba(234, 241, 248, 0.07);
-  --scroll-thumb-bg:       rgba(234, 241, 248, 0.26);
-  --scroll-thumb-hover-bg: rgba(234, 241, 248, 0.42);
+  --band-close-bg:      rgba(234, 241, 248, 0.14);
+  --band-close-cell-bg: rgba(234, 241, 248, 0.07);
+  --ficha-strip-bg:     rgba(234, 241, 248, 0.05);
+  --row-highlight-bg:   rgba(31, 190, 224, 0.16);
   }
 }
 
@@ -395,6 +422,11 @@
   --celeste-border: rgba(31,190,224,0.34);
 
   --ink: #EAF1F8;
+  --invert-bg:     #EAF1F8;
+  --invert-fg:     #15263D;
+  --invert-accent: #0E5F76;
+  --solid-error-bg: #FB8254;
+  --solid-error-fg: #1B1206;
   --t1:  #DCE6F0;
   --t2:  #92A6BC;
   --t3:  #5F758D;
@@ -403,6 +435,7 @@
   --line:      #23364A;
   --line-soft: #1A2837;
   --scroll-shadow: rgba(0, 0, 0, 0.60);
+  --scroll-track: #23364A;
 
   --ok-bg:      rgba(34,197,94,0.15);   --ok-bd:      rgba(34,197,94,0.36);   --ok-tx:      #4ADE80;
   --warn-bg:    rgba(245,158,11,0.15);  --warn-bd:    rgba(245,158,11,0.36);  --warn-tx:    #FBBF24;
@@ -410,6 +443,9 @@
   --neutral-bg: rgba(140,131,123,0.18); --neutral-bd: rgba(140,131,123,0.34); --neutral-tx: #B6ABA0;
 
   --sh-tool: 0 8px 28px rgba(0,0,0,0.50);
+  --sh-ficha:       0 1px 4px rgba(0,0,0,0.45);
+  --sh-ficha-hover: 0 4px 16px rgba(0,0,0,0.55);
+  --band-divider: rgba(255,255,255,0.16);
 
   --primary-disabled: rgba(31,190,224,0.32);
   --popover-shadow:   0 12px 32px rgba(0,0,0,0.55);
@@ -433,14 +469,10 @@
 
   /* Tintes de la vista estándar: en Oscuro el navy ES el fondo, así que el
      tinte se hace con luz en vez de con tinta (mismo criterio que --detalle-grp-b). */
-  --band-close-bg:         rgba(234, 241, 248, 0.14);
-  --band-close-cell-bg:    rgba(234, 241, 248, 0.07);
-  --band-divider:          rgba(234, 241, 248, 0.24);
-  --ficha-strip-bg:        rgba(234, 241, 248, 0.05);
-  --row-highlight-bg:      rgba(31, 190, 224, 0.16);
-  --scroll-track-bg:       rgba(234, 241, 248, 0.07);
-  --scroll-thumb-bg:       rgba(234, 241, 248, 0.26);
-  --scroll-thumb-hover-bg: rgba(234, 241, 248, 0.42);
+  --band-close-bg:      rgba(234, 241, 248, 0.14);
+  --band-close-cell-bg: rgba(234, 241, 248, 0.07);
+  --ficha-strip-bg:     rgba(234, 241, 248, 0.05);
+  --row-highlight-bg:   rgba(31, 190, 224, 0.16);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -482,6 +514,18 @@
   --celeste-border: rgba(0, 172, 212, 0.30);
 
   --ink: #15263D;
+  /* Superficie invertida: el fondo que hace que un renglón sea EL renglón (el
+     pie de una tabla, la fila de bandas de una planilla). No alcanza con
+     `--ink` de fondo y blanco de texto: en los temas oscuros `--ink` es un
+     color CLARO —lo usan como texto fuerte— y el renglón quedaba blanco sobre
+     blanco. Cada tema declara el par, y las pantallas no preguntan cuál está
+     activo. */
+  --invert-bg:     #15263D;
+  --invert-fg:     #FFFFFF;
+  --invert-accent: #7FE0F4;
+  /* Lo mismo para el renglón que cierra en rojo (el "sin explicar" de un pie). */
+  --solid-error-bg: #C0420F;
+  --solid-error-fg: #FFFFFF;
   --t1:  #1E3A5F;
   --t2:  #4A6080;
   --t3:  #8FA3BA;
@@ -491,6 +535,9 @@
   --line-soft: #EFEEEC;
   /* Sombra que avisa que una planilla sigue para el costado (ver .rb-grid-wrap). */
   --scroll-shadow: rgba(21, 38, 61, 0.22);
+  /* Pista de la barra de scroll de las planillas: tiene que verse. Con la
+     pista transparente, la barra no avisaba que la tabla seguía a la derecha. */
+  --scroll-track: #E4E9EE;
 
   --ok-bg:      rgba(34,197,94,0.10);   --ok-bd:      rgba(34,197,94,0.30);   --ok-tx:      #177A50;
   --warn-bg:    rgba(245,158,11,0.12);  --warn-bd:    rgba(245,158,11,0.32);  --warn-tx:    #9A5A0B;
@@ -498,6 +545,13 @@
   --neutral-bg: rgba(140,131,123,0.12); --neutral-bd: rgba(140,131,123,0.30); --neutral-tx: #6B635C;
 
   --sh-tool: 0 6px 24px rgba(30,58,95,0.09);
+  /* Las dos sombras de una tarjeta de la lista de fichas: en reposo y con el
+     mouse encima. La tarjeta no se mueve al pasar el mouse (movería la lista
+     entera): lo único que cambia es el borde y esta sombra. */
+  --sh-ficha:       0 1px 4px rgba(30,58,95,0.07);
+  --sh-ficha-hover: 0 4px 16px rgba(30,58,95,0.10);
+  /* Separador entre bandas del encabezado de una planilla, sobre `--ink`. */
+  --band-divider: rgba(255,255,255,0.22);
 
   --primary-disabled: #A9DFEE;
   --popover-shadow:   0 12px 32px rgba(30, 58, 95, 0.16);
@@ -519,20 +573,17 @@
   --detalle-grp-b-head: rgba(21, 38, 61, 0.10);
 
   /* ── Tintes de la vista estándar de resultados ─────────────────
-     Los grises de la planilla (cierre de banda, celda de cierre, divisor entre
-     bandas), la tira de conciliación de la ficha, la fila resaltada y las dos
-     partes de la barra de scroll. Van translúcidos por la misma razón que los
-     `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la grid y sobre
-     la superficie de la card, y así valen para los tres temas sin repintarse.
-     En Oscuro la tinta se cambia por luz (ver los bloques de abajo). */
-  --band-close-bg:         rgba(21, 38, 61, 0.14);
-  --band-close-cell-bg:    rgba(21, 38, 61, 0.07);
-  --band-divider:          rgba(21, 38, 61, 0.22);
-  --ficha-strip-bg:        rgba(21, 38, 61, 0.045);
-  --row-highlight-bg:      rgba(0, 172, 212, 0.09);
-  --scroll-track-bg:       rgba(21, 38, 61, 0.06);
-  --scroll-thumb-bg:       rgba(21, 38, 61, 0.28);
-  --scroll-thumb-hover-bg: rgba(21, 38, 61, 0.45);
+     Los grises de la planilla (el cierre de banda y su celda), la tira de
+     conciliación de la ficha y la fila resaltada. Van translúcidos por la misma
+     razón que los `--detalle-grp-*`: se apoyan sobre el encabezado neutro de la
+     grid y sobre la superficie de la card, y así valen para los tres temas sin
+     repintarse. En Oscuro la tinta se cambia por luz (ver los bloques de
+     abajo). El divisor entre bandas y la pista del scroll ya los declaró el
+     Detalle de Netos: `--band-divider` y `--scroll-track`. */
+  --band-close-bg:      rgba(21, 38, 61, 0.14);
+  --band-close-cell-bg: rgba(21, 38, 61, 0.07);
+  --ficha-strip-bg:     rgba(21, 38, 61, 0.045);
+  --row-highlight-bg:   rgba(0, 172, 212, 0.09);
 }
 
 /* ══════════════════════════════════════════════════════════════

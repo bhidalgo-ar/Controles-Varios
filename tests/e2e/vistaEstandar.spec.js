@@ -66,7 +66,7 @@ test('el chip filtra la lista y el KPI dice qué se está mirando', async ({ pag
   await expect(page.locator('.ficha:visible')).toHaveCount(2);
   await expect(page.locator('.results-toolbar__kpis')).toContainText('2 de 5 legajos');
   // Los chips son la piel de un <select> real, que es lo que sigue leyendo el control.
-  await expect(page.locator('.results-toolbar select[data-chip-role="estado"]')).toHaveValue('sinComparar');
+  await expect(page.locator('.results-toolbar select[data-chips="1"]')).toHaveValue('sinComparar');
 });
 
 test('la ficha dibuja su cuerpo al abrirla, no al pintar la lista', async ({ page }) => {
