@@ -284,7 +284,10 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
-8. **Ficha por lista de acreditación** — Acreditaciones.
+8. **Ficha por lista de acreditación — Acreditaciones. Hecho el 2026-08-21 (D-081), rama
+   `feat/vista-estandar-acreditaciones`, todavía sin mergear.** Corrió en paralelo con las 3 a 7,
+   apoyada en la barra y la planilla de la tanda 3. La unidad es la lista, no el legajo (D-021), y
+   lo de HR se queda en la pantalla (D-020, ahora escrito como assert contra el contrato de export).
 
 **Netos** va en su propio chat, después de la tanda 1.
 

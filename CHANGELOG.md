@@ -37,6 +37,12 @@
   `<div>` que envuelve al `<select>` del "Orden ▾" en vez de al `<select>`, así que el desplegable se veía
   pero nunca ordenaba nada — en ninguna pantalla que ya usara la pieza. Afectaba también a Acumuladores
   Ganancias (el control piloto de la tanda 1).
+- **Y el buscador de la solapa Fichas ahora puede decir qué se busca en cada control.** Antes dejaba
+  siempre "Buscá por legajo o nombre…", que es el texto correcto en los 7 controles cuya unidad es el
+  legajo y engaña en los 3 donde es el centro de costo, la cuenta contable o la lista: pedía un dato que
+  la ficha no tiene. `renderFichasPanel()` acepta `searchLabel` y `searchPlaceholder` —el mismo
+  pass-through que ya tenía la Planilla—, y en Acreditaciones las dos solapas buscan por número de lista,
+  liquidación, fecha o listado.
 - `js/controls/acreditaciones.js`, `js/ui/fichaList.js`, `scripts/check-datos-sensibles.mjs` (allowlist del
   fixture nuevo). `tests/acreditacionesControl.test.js` gana 35 asserts para la función pura
   `buildAcreditacionesFichas(res)`. `tests/e2e/acreditacionesFicha.spec.js` (nuevo, 12 pruebas) sobre el

@@ -224,7 +224,8 @@ Cada grupo pendiente tiene, en la misma pantalla, un campo de fecha y un botón
 aplicada. Las asignaciones del run quedan listadas con un botón "Deshacer".
 
 En el archivo de julio de POP no salta ninguna alerta salvo las 4 filas sin
-importe y el grupo pendiente del anticipo de NEIRA — el resto sale limpio. En el
+importe y el grupo pendiente del anticipo suelto sin listado ni fecha — el resto
+sale limpio. En el
 archivo de agosto, el Listado 18336 (13 empleados, ninguno con fecha) aparece
 como un solo grupo pendiente, no como 13 alertas sueltas.
 
