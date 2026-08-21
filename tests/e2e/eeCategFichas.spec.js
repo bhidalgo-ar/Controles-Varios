@@ -126,6 +126,22 @@ test('los dos estados que no aplican salen igual, apagados y diciendo por qué',
   await expect(centavo).toHaveAttribute('title', /No aplica a este control/);
 });
 
+test('el buscador y el chip son dos criterios sobre la misma selección', async ({ page }) => {
+  await abrir(page, 'fichas');
+  await panel(page).locator('.results-chip', { hasText: 'Todos' }).click();
+  await expect(panel(page).locator('.ficha:visible')).toHaveCount(5);
+
+  await panel(page).locator('.table-search__input').fill('ERVITI');
+  await panel(page).locator('.table-search__option').first().click();
+  await expect(panel(page).locator('.ficha:visible')).toHaveCount(1);
+
+  // Limpiar la búsqueda devuelve el filtro del chip, no la lista entera.
+  await panel(page).locator('.results-chip', { hasText: 'Sin comparar' }).click();
+  await panel(page).locator('.table-search__clear').click();
+  await expect(panel(page).locator('.ficha:visible')).toHaveCount(1);
+  await expect(panel(page).locator('.ficha:visible')).toContainText('SILVA SANTIAGO');
+});
+
 test('el ⬇ Exportar ▾ también es lo último de la barra de Fichas', async ({ page }) => {
   await abrir(page, 'fichas');
   const ultimo = panel(page).locator('.results-toolbar .results-toolbar__right > *').last();

@@ -39,7 +39,7 @@
   reconoce por nombre a un control en el mapa del §8.
 - `js/controls/catXEmpleados.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`, `js/ui/tableTools.js`.
   `tests/catXEmpleadosControl.test.js` pasa de 8 a 35 asserts; `tests/vistaEstandar.test.js` suma 2;
-  nuevo e2e `tests/e2e/eeCategFichas.spec.js` (11 tests); se adapta `tests/e2e/loteMeta4.spec.js` (de la
+  nuevo e2e `tests/e2e/eeCategFichas.spec.js` (12 tests); se adapta `tests/e2e/loteMeta4.spec.js` (de la
   tanda 2) para buscar la solapa Planilla por nombre y no por posición, y para mirar sólo el panel de la
   solapa activa; el fixture `tests/e2e/fixtures/loteMeta4.js` suma un campo con carga masiva (el puesto no
   coincide en 3 de 5 legajos) para que las cuatro lecturas se vean en pantalla. `test:unit` verde entero,
