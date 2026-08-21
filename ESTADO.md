@@ -1,5 +1,8 @@
 # ESTADO.md — dónde estamos hoy
 
+> **Qué falta probar del lado de Willy, agrupado por control: `docs/pruebas-pendientes.md`** (al
+> 2026-08-20). Este archivo dice dónde estamos; ése dice qué hay que abrir y con qué archivo.
+
 > Un bloque por frente abierto. Se pisa, no se acumula: el que avanza se reescribe, el que cierra se saca.
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
@@ -37,7 +40,7 @@
 ## Control de Netos (Sportline) — verificado contra los 3 Tabulados reales de Comercio: cierra completo; Detalle rediseñado en Fichas (mergeado)
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
 - Punto: la lógica del control cierra **completa: 0 legajos con diferencia sobre 619** (D-075). Y ya está mergeado (PR #176): la solapa Detalle pasó de planilla plana a las tres solapas de la vista estándar (Resumen · Fichas · Planilla), abre en Fichas si hay diferencias y en Planilla si cerró, con los cinco chips y el `Marcas ▾` del D-074; una tarjeta por legajo con la cascada del residuo, concepto por concepto; y se corrigió un bug de dos códigos de UNIDADES sumados como pesos (263 legajos de 05/2026 afectados). 113 asserts + 7 e2e nuevos, en verde. **Es la primera implementación de la vista estándar y se hizo antes de la tanda 1**: la ficha no sale de `js/ui/fichaList.js`, sino de markup propio en el módulo con estilos `.netos-*`. **La tanda 1 ya construyó esa pieza (D-077)**, así que esta pantalla tiene una migración pendiente: la fila de bandas, el chip apagado y la marca `data-chips` de este control ya son los de la pieza compartida, pero la ficha y la planilla siguen siendo las propias. Ver **D-076**.
-- Próximo paso: migrar la ficha y la planilla de este control a `js/ui/fichaList.js` y `renderRubroGrid()` (el chat de Netos, después de la tanda 1). Además, sin resolver: que Willy pruebe el tilde de jubilado en el navegador; el acuerdo no remunerativo variable por categoría (pedido el 2026-08-19); el KPI "Legajos cruzados" del hero cuenta 380 mientras la tarjeta informa 619; el export por solapa que pidió el handoff de Detalle (hoy comparten el export general); y el **calculador de AFA** pendiente.
+- Próximo paso (lo que espera Willy, en `docs/pruebas-pendientes.md` §1): migrar la ficha y la planilla de este control a `js/ui/fichaList.js` y `renderRubroGrid()` (el chat de Netos, después de la tanda 1). Además, sin resolver: que Willy pruebe el tilde de jubilado en el navegador; el acuerdo no remunerativo variable por categoría (pedido el 2026-08-19); el KPI "Legajos cruzados" del hero cuenta 380 mientras la tarjeta informa 619; el export por solapa que pidió el handoff de Detalle (hoy comparten el export general); y el **calculador de AFA** pendiente.
 - Detalle: `specs/spec-control-netos.md`, D-067, D-068, D-075, **D-076**.
 
 ## Lector de Tabulado (pieza T) — detector + lector robusto del lado Axton
