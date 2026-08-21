@@ -2767,8 +2767,9 @@ D-069, D-074, D-076.
 **Fecha:** 2026-08-20. **Contexto:** tanda 2 de `specs/vista-estandar-resultados.md` (D-074, §9 punto 2):
 Brutos, GS Pers y Control NR (Controlar y Generar Reporte de los tres), Rendimiento vs Tabulado,
 Rendimiento x EE, Rendimiento vs Asiento y EE x CATEG — diez entradas del §8 — pasan a la barra y la
-planilla del estándar. Ninguna lleva ficha todavía (eso es tanda 5/6). El PR queda **en borrador**: falta
-que Willy mire las diez pantallas en el navegador antes de mergear.
+planilla del estándar. Cuando se escribió esta entrada ninguna llevaba ficha: se las dieron después las
+tandas 4 (NR, D-086), 5 (Rendimiento vs Tabulado, D-087) y 6 (EE x CATEG, D-082). Integrada a `main` el
+2026-08-21 (D-088); **sigue pendiente que Willy mire las diez pantallas en el navegador.**
 
 **Se creó una pieza compartida nueva, `js/ui/planillaPanel.js` (`renderPlanillaPanel()`), en vez de
 repetir el armado en cada uno de los diez controles.** Es el gemelo de `renderFichasPanel()` para la

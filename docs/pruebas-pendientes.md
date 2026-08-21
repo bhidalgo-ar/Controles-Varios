@@ -28,10 +28,10 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
    **no vieron un solo archivo real**. El layout del importador está deducido de un relevamiento, no
    confirmado. §4 y §5
 
-Y una cuarta que no necesita ningún archivo y se destraba en diez minutos: **las pantallas de la vista
-estándar están en dos PR en borrador esperando que las mires** — las diez de la tanda 2 (§6 ter) y la
-de EE x CATEG de la tanda 6 (§6 quater, que sale de la rama de la tanda 2). Ninguno de los dos se
-mergea hasta entonces, y en ese orden.
+Y una cuarta que no necesita ningún archivo y se destraba con sólo mirar la pantalla: **las 21
+pantallas de la vista estándar de resultados ya están integradas a `main`**, las ocho tandas completas
+(D-088). Lo único que falta es que las mires una por una — §6 bis a §6 novies, en el orden en que se
+construyeron.
 
 ---
 
@@ -306,11 +306,11 @@ Están escritas en D-077 y la pantalla ya funciona con ellas, pero es tu criteri
 
 **Detalle:** `specs/vista-estandar-resultados.md`, D-074, D-076, D-077.
 
-## 6 ter · Vista estándar — tanda 2: las diez pantallas del lote Meta4/Marval
+## 6 ter · Vista estándar — las diez pantallas del lote Meta4/Marval (tanda 2)
 
-> **Ojo: esto NO está mergeado.** Está en un PR **en borrador** (#181) justamente porque son diez
-> pantallas que los analistas abren todos los días y lo que falta es tu mirada. Es el ítem de esta
-> lista que más rápido se destraba: no necesita ningún archivo, sólo que abras las pantallas.
+**Ya integrada a `main`.** Son diez pantallas que los analistas abren todos los días y lo que falta es
+tu mirada: no necesita ningún archivo, sólo que abras las pantallas. Es el ítem de esta lista que más
+rápido se destraba.
 
 **Qué es.** Brutos, GS Pers y Control NR (los tres en sus dos modos: Controlar y Generar Reporte),
 Rendimiento vs Tabulado, Rendimiento x EE, Rendimiento vs Asiento y EE x CATEG pasan a la misma barra
@@ -355,15 +355,130 @@ Están en D-078 y la pantalla ya funciona con ellas, pero es tu criterio el que 
 4. **Qué solapa abre.** Estas diez siguen abriendo en Resumen, no en Planilla, porque el veredicto vive
    adentro de esa solapa. Se cambia cuando cada control tenga su ficha.
 
-**Detalle:** `specs/vista-estandar-resultados.md` (§3, §5, §7, §8 y §9), **D-078**, PR #181.
+**Detalle:** `specs/vista-estandar-resultados.md` (§3, §5, §7, §8 y §9), **D-078**.
 
 ---
 
-## 6 quater · Vista estándar — tanda 6: la ficha y la matriz "Por campo" de EE x CATEG
+## 6 quater · Vista estándar — las nueve pantallas del lote Axton/general (tanda 3)
 
-> **Ojo: esto NO está mergeado, y encima va segundo.** Está en un PR **en borrador** (#184) que sale
-> de la rama de la tanda 2, así que primero entra el #181 y después éste. Como la tanda 2, no necesita
-> ningún archivo: sólo que abras la pantalla.
+**Qué es.** Cruce por Agrupadores, Variación Sueldos, Variación Conceptos, Variación entre quincenas
+(POP), Acreditaciones — Generar Reporte, Importador de Novedades, Novedades vs Liquidación, Asiento de
+Remuneraciones (FINADIET) y Contabilidad Desglosada + Asiento (COTY) pasan a la misma barra y la misma
+planilla que ya tiene el lote Meta4 (§6 ter). Se jubilan las tres barras propias que tenían Agrupadores,
+Variación Sueldos y Variación Conceptos, y el botón suelto "Imprimir / PDF" de Variaciones.
+
+**Cómo llegó hasta acá.** Ningún cálculo ni conteo cambió en ninguna de las nueve: se compararon filas
+y totales antes y después de migrar. Verificado en navegador, en los tres temas, **con datos
+inventados** — no hay archivos de cliente en el repo para llegar a estas pantallas por el camino del
+analista. Ya integrada a `main`.
+
+### Qué mirar
+
+| Qué | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| Los totales de cada planilla | Los mismos números que antes de migrar | Un total que se movió es una fila o una columna que se perdió |
+| **Cruce por Agrupadores** | Una sola planilla, una fila por legajo con una banda por agrupador, en vez de una tabla por agrupador (~1000 filas para ~100 empleados) | El estado de cada fila sigue midiendo con el monto y el % del panel propio de Agrupadores, no con el de "Umbrales" — todavía no se unificaron |
+| **Novedades vs Liquidación** | Las cuatro bandas del cruce (coincide, difiere, no comparable, sin contraparte) se leen ahora en los cinco chips de estado | |
+| **Importador de Novedades, Asiento FINADIET, Contabilidad Desglosada** | El desplegable de "Vista"/"Solapa"/"Archivo" que tenían pasó a sub-solapas dentro de Planilla, cada una con su propia barra completa | |
+| **Los dos asientos** (FINADIET y Desglosada) | El chip "Dentro del margen" sale gris con el motivo en su `title` — cuadran al centavo contra sí mismos, no contra tu monto de diferencia | |
+| **Variación entre quincenas (POP)** | El valor hora es la única columna de importe sin fila de TOTAL, a propósito: sumar el valor hora de legajos distintos no da un número que signifique algo | Si esperabas un TOTAL ahí, es el desvío de D-081 |
+
+### Lo que espera un criterio tuyo
+
+1. **`Marcas ▾` quedó a la izquierda del buscador** en las nueve pantallas, copiando la posición del
+   piloto de Acumuladores en vez del lugar que pide la spec (a la derecha). Es a propósito, para que
+   las 21 pantallas se vean iguales entre sí (D-081); si preferís el orden de la spec, se cambia en un
+   solo lugar.
+2. **El buscador ahora sobrevive a un click en un chip.** Antes, en estas nueve pantallas, clickear un
+   chip de estado te borraba lo que habías tipeado en el buscador. Al integrar esta tanda con la del
+   lote Meta4 (que no tenía ese problema) quedó el comportamiento del lote Meta4 para las 19 planillas
+   por igual — es una elección tomada sin vos, escrita en **D-088**. Si preferís que el chip vuelva a
+   limpiar la búsqueda, se cambia en un solo lugar.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§7, §8 y §9), D-079, D-080, **D-081**, **D-088**.
+
+---
+
+## 6 quinquies · Vista estándar — ficha de legajo × concepto en Control NR, Novedades vs Liquidación y Variación Conceptos (tanda 4)
+
+**Qué es.** Los tres controles donde la unidad es el legajo y adentro hay varios conceptos suman la
+solapa Fichas, reusando la misma pieza que ya tiene Acumuladores Ganancias — no se escribió ninguna
+ficha nueva, sólo el contenido que cada control le pasa.
+
+- **Control NR:** la tarjeta muestra el total del Reporte NR contra el del Tabulado, la diferencia de
+  lo que sí se pudo comparar y cuántos de los conceptos liquidados por ese legajo quedaron a revisar;
+  adentro, un renglón por concepto con su código, los dos lados y la diferencia. Antes la fila decía
+  sólo "# Difs: 3" y había que bajar el `.xlsx` para saber cuáles.
+- **Novedades vs Liquidación:** la tarjeta separa la diferencia de importe de la de cantidad; adentro,
+  una sola tabla junta las cuatro bandas del cruce por legajo, en vez de tenerlas repartidas en cuatro
+  tablas donde un legajo con varias novedades se repetía una vez por cada una.
+- **Variación Conceptos:** la tarjeta muestra el período anterior, el actual y la variación, en ese
+  orden, y adentro el escalón de la escala cuando el control lo detecta (por ejemplo `100 % → 70 %`).
+- **Un bug de criterio corregido al mirar la pantalla:** en Control NR la diferencia de un legajo se
+  calculaba como la resta de los dos totales, lo que cuenta el lado que falta como si valiera cero.
+  Ahora se suma sólo sobre los conceptos que tienen los dos lados, y lo que quedó sin comparar se dice
+  en la conclusión, con el importe y de qué lado está.
+
+**Cómo llegó hasta acá.** Verificado en navegador, tres temas, con datos inventados. No se llegó a
+ninguna de las tres pantallas con un archivo real de cliente.
+
+### Qué mirar
+
+| Qué | Cómo se ve si está bien |
+|---|---|
+| Las fichas de NR | Un legajo por tarjeta, con sus conceptos liquidados adentro y el código de cada uno |
+| Las fichas de Novedades vs Liquidación | Un legajo por tarjeta con las cuatro bandas juntas, no cuatro tablas separadas |
+| Las fichas de Variación Conceptos | El orden anterior → actual → variación, y el escalón cuando aplica |
+| El total de NR | Da lo mismo que antes de este cambio — sólo el criterio de la diferencia por legajo cambió, y puede **bajar**, nunca subir |
+
+### Lo que espera un criterio tuyo (D-086)
+
+1. Qué número es el importe grande de la tarjeta, en cada uno de los tres controles.
+2. Que el rojo del importe lo pinte el monto y no la severidad.
+3. El orden anterior → actual → variación en Variación Conceptos.
+4. Que el legajo cuyas novedades "no llegan a la liquidación" caiga en el chip ámbar y no en rojo.
+5. Que la ficha de Novedades muestre el bruto y la unidad organizativa.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§4, §8 y §9), **D-086**.
+
+---
+
+## 6 sexies · Vista estándar — ficha por legajo × agrupador y por centro de costo (tanda 5)
+
+**Qué es.** Cruce por Agrupadores y Rendimiento vs Tabulado suman su solapa Fichas. Son los dos
+controles cuya unidad no es "un legajo con sus conceptos", así que la ficha no se parece a la de NR.
+
+- **Agrupadores — una ficha por legajo, con sus agrupadores adentro.** Es el que más gana: el cruce
+  evalúa al mismo legajo una vez por agrupador, así que la planilla tenía una fila por legajo ×
+  agrupador (~1000 filas para ~100 empleados) y no se podía ver a un empleado entero. La tarjeta
+  muestra la diferencia **neta** (Nómina − Resumen, que puede compensar un agrupador con otro y dar 0)
+  y la **total** (la suma en valor absoluto de los que pasan el umbral, la que aporta al semáforo) por
+  separado — el número grande es la total.
+- **Rendimiento vs Tabulado — una ficha por centro de costo**, la unidad que declara el control: a la
+  izquierda el Tabulado abierto concepto por concepto con su código, a la derecha el Reporte de
+  Rendimiento por categoría — son distintas a propósito, no un error.
+- Hay un assert que fija que la suma de la diferencia de todas las fichas da exactamente el total que
+  ya publicaba el semáforo antes de esta tanda — es el error que este control ya pagó una vez.
+
+**Cómo llegó hasta acá.** Verificado en navegador, tres temas, con datos inventados. No se llegó a
+ninguna de las dos pantallas con un archivo real de cliente.
+
+### Lo que espera un criterio tuyo (D-087)
+
+1. Que el número grande de la ficha de Agrupadores sea la diferencia **total** y no la neta.
+2. Que esa ficha no lleve las dos tablas de "cómo debería ser / cómo salió" — no aplican: acá no hay un
+   recibo teórico que armar, hay dos archivos que comparar.
+3. Que en Rendimiento vs Tabulado las dos tablas (el Tabulado y el Reporte de Rendimiento) sean
+   distintas a propósito y no un error de copiado.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§4, §8 y §9), D-073, **D-087**.
+
+---
+
+## 6 septies · Vista estándar — la ficha y la matriz "Por campo" de EE x CATEG (tanda 6)
+
+**Ya integrada a `main`**, después de la tanda 2 y la tanda 3. Como esas dos, no necesita ningún
+archivo: sólo que abras la pantalla.
 
 **Qué es.** EE x CATEG suma dos solapas. **Fichas**: una tarjeta por legajo en vez de una fila por
 campo que no coincide — hasta ahora un legajo con tres campos mal aparecía tres veces y no lo podías
@@ -410,7 +525,85 @@ Están en D-082 y la pantalla ya funciona con ellas:
 3. **Los campos ahora se llaman en criollo** en toda la pantalla: Puesto, Centro de costo,
    Departamento — antes decía PUESTO, CENTRO_COSTO, DEPTO.
 
-**Detalle:** `specs/vista-estandar-resultados.md` (§2, §7, §8 y §9), **D-082**, PR #184.
+**Detalle:** `specs/vista-estandar-resultados.md` (§2, §7, §8 y §9), **D-082**.
+
+---
+
+## 6 octies · Vista estándar — ficha por cuenta contable en el Asiento de Remuneraciones y la Contabilidad Desglosada (tanda 7)
+
+**Qué es.** Los dos controles cuya unidad es la cuenta contable —no el legajo— suman su solapa Fichas:
+el Asiento de Remuneraciones (FINADIET) y la Contabilidad Desglosada + Asiento (COTY). Antes, ver qué
+conceptos de liquidación componen el saldo de una cuenta exigía bajar el `.xlsx` y filtrar a mano.
+
+- **Ficha cerrada:** número y nombre de la cuenta, DEBE, HABER y si cuadra. **Ficha abierta:** la tira
+  de cuántos conceptos suman al DEBE y al HABER hasta el saldo, y la tabla concepto por concepto con su
+  código. El saldo se llama distinto en cada archivo y la ficha respeta esa palabra: "SALDO" en
+  FINADIET, "NETO" en la Desglosada — la cuenta detrás es la misma (DEBE − HABER).
+- **En FINADIET, las cuentas y centros de costo sin clasificar entran como ficha propia**, en "Sin
+  comparar" y con saldo "—" (nunca "0,00"), con una conclusión de qué cargar en el Paso 2 — antes sólo
+  se veían en el Resumen.
+- **Se corrigió un criterio que había quedado mal en la tanda 3 (D-085):** en la Contabilidad
+  Desglosada, una cuenta sin código pasa de leerse "Con diferencia" a leerse "Sin comparar", en las dos
+  solapas del control — no hay ninguna diferencia de importe, lo que falta es el Reporte de Cuentas de
+  Redefinición del cliente.
+- **Una corrida vieja del asiento** (guardada antes de que existiera este desglose) ya no se lee como
+  "los conceptos no suman al saldo": la ficha distingue "el desglose no suma" de "la corrida no lo
+  guardó" (`null` no es `0` ni `false`).
+
+**Cómo llegó hasta acá.** Se corrió el módulo de la tanda 3 y el de esta tanda sobre la misma entrada y
+los balances, las líneas del asiento, las cuentas patrimoniales y el semáforo dieron idénticos.
+Verificado en navegador, tres temas, con datos inventados.
+
+### Lo que hay que probar
+
+Sigue esperando lo mismo que ya estaba pendiente para la Contabilidad Desglosada (§2 de este
+documento): **abrir los tres `.xlsx` que descarga la app**, algo que el entorno de desarrollo no puede
+ejercitar porque la librería de Excel viene por CDN y la red la bloquea.
+
+### Decisión tuya pendiente
+
+- Que una cuenta sin código de la Contabilidad Desglosada se lea "Sin comparar" en vez de "Con
+  diferencia": cambia sólo la etiqueta, no el cálculo, y se revierte en una línea si preferís que siga
+  como estaba (D-085).
+- Sigue abierta, de antes, si la Contabilidad Desglosada sale del estudio (D-066, §2 de este documento).
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§8 y §9), `specs/finadiet-asiento-remuneraciones.md`,
+`specs/conta-desglosada-asiento.md`, D-066, **D-084, D-085**.
+
+---
+
+## 6 novies · Vista estándar — ficha por lista de acreditación en Acreditaciones (tanda 8)
+
+**Qué es.** "Acreditaciones — Generar Reporte" suma la solapa Fichas. La tarjeta es por **lista** de
+acreditación, no por legajo — la unidad de este control es la acreditación y no el empleado-mes
+(D-021): un legajo con anticipo + quincena + mensual está en tres listas, y sumarlo por legajo sería
+exactamente el bug que este control evita a propósito.
+
+- **Cerrada:** el número de lista, `código — liquidación` (por ejemplo "1Q — 1era Quincena"), la
+  empresa, la fecha de acreditación, cuántas acreditaciones tiene la lista y qué hoja del `.xlsx` es.
+  Si el reporte no cierra contra el archivo de Axton, la lista entera sale marcada, no sólo la
+  acreditación puntual con la alerta.
+- **Abierta:** la tira que va del listado de pago a lo que sale por el banco, el desglose por banco, las
+  alertas por tipo con el detalle fila por fila, y una conclusión que dice qué resolver antes de mandar
+  la lista al banco.
+- **Nada de esto entra al archivo que recibe Finanzas** (D-020, ahora escrito como assert contra el
+  contrato de exportación): el `.xlsx` sigue con sus 7 columnas de pago y ninguna más.
+- **El aviso de "grupo sin fecha de acreditación" se movió arriba de las tres solapas** — antes vivía
+  adentro de Planilla y, como ahora el control abre en Fichas cuando hay un grupo pendiente, quedaba
+  invisible justo en el momento en que más importa.
+- De paso se corrigió el `Orden ▾` de la solapa Fichas, que se veía pero nunca ordenaba nada (afectaba
+  también a Acumuladores Ganancias), y el buscador de Fichas ahora dice qué se busca en cada control —
+  antes decía siempre "por legajo o nombre", que no vale para una pantalla por lista, por cuenta o por
+  centro de costo.
+
+**Cómo llegó hasta acá.** Verificado en navegador, tres temas, con datos inventados.
+
+### Decisión tuya pendiente (D-083)
+
+Que el aviso de grupo pendiente se vea arriba de las tres solapas, y no adentro de Planilla como antes.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§8 y §9), `specs/control-acreditaciones-axton.md`,
+D-020, D-021, **D-083**.
 
 ---
 
@@ -500,9 +693,8 @@ app**, así que no hay nada que abrir:
 - **Los datos de prueba pasaron a ser jugadores de Banfield** — cambia sólo lo que dicen los tests y
   los dos ejemplos de nombre de la app. Si ves "SANGUINETTI JAVIER" en un placeholder, es esto.
 - **El gate de mockup antes de construir un control** — regla de proceso para las próximas veces.
-- **La vista estándar de resultados** — la **tanda 1 ya salió** (§6 bis) y la **tanda 2 está en un PR
-  en borrador** esperando tu mirada (§6 ter). Lo que queda sin código son las tandas 3 a 8, o sea los
-  otros nueve controles y las fichas.
+- **La vista estándar de resultados** — las ocho tandas ya están integradas a `main` (§6 bis a §6
+  novies). No queda ninguna sin código: lo único pendiente es que la mires pantalla por pantalla.
 - **El runbook del orquestador y los prompts por tanda** — cómo se van a repartir los ocho chats.
 - **Los agentes nuevos** (documentalista, inspector-archivo) y el chequeo de datos sensibles antes de
   commitear — herramientas de trabajo, no app.

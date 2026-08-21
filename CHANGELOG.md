@@ -10,8 +10,8 @@
 ### feat(ee-categ): ficha por legajo y matriz campo × legajo ("Por campo") — 2026-08-21
 
 - **Es la tanda 6 de `specs/vista-estandar-resultados.md`** (D-082, §9 punto 6), en la rama
-  `feat/vista-estandar-ee-categ` (PR #184), sobre la tanda 2 (D-078) — **todavía sin mergear**: esta rama sale de
-  esa, así que no se puede mergear antes que ella. **El PR de esta tanda también queda en borrador.**
+  `feat/vista-estandar-ee-categ` (PR #184), construida sobre la tanda 2 (D-078). Integrada a `main` el
+  2026-08-21 junto con las otras siete tandas paralelas (D-088).
 - **EE x CATEG suma la solapa Fichas.** Hasta ahora el detalle era una fila por campo que no coincidía,
   así que un legajo con tres campos mal aparecía tres veces y no se lo podía ver entero. Ahora es una
   tarjeta por legajo: cerrada muestra legajo, nombre y cuántos campos no coinciden; abierta trae la tira
@@ -99,8 +99,9 @@
   archivos de cliente en el repo con los cuales llegar a una pantalla de resultados por el camino del
   analista. Los tres e2e que apuntaban a la solapa "Detalle" vieja se actualizaron
   (`detalleTabla.spec.js`, `gridHeaderContrast.spec.js`, `resultsResumen.spec.js`).
-- **El PR queda en borrador**: falta que Willy mire las diez pantallas en el navegador antes de
-  mergear. Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), **D-078**.
+- Integrada a `main` el 2026-08-21 junto con las otras siete tandas paralelas (D-088); sigue pendiente
+  que Willy mire las diez pantallas en el navegador. Ver `specs/vista-estandar-resultados.md` (§8 y §9
+  al día), **D-078**.
 
 ### feat(acreditaciones): solapa Fichas, una tarjeta por lista de acreditación — 2026-08-21
 
@@ -345,8 +346,9 @@
   quedó la "Planilla" de esas dos tandas, y las funciones que esta tanda había copiado de la tanda 3
   (`buildPlanillaRows`, `estadoDeLegajo`) o reescrito por su cuenta (`estadoDeCentroDeCosto`, que es
   el `estadoDeFila()` compartido) quedaron en una sola cada una (D-088).
-- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), D-073, **D-087**. PR en borrador: falta
-  que Willy mire las dos pantallas en el navegador.
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), D-073, **D-087**. Integrada a `main` el
+  2026-08-21 junto con las otras siete tandas paralelas (D-088); sigue pendiente que Willy mire las dos
+  pantallas en el navegador.
 
 
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
