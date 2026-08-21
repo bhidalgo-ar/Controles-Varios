@@ -15,6 +15,18 @@ export function periodToLabel(period) {
   return `${MESES[parseInt(month, 10) - 1]} ${year}`;
 }
 
+/**
+ * Convierte '2026-05' en 'may' — el rótulo de una barra del gráfico de
+ * evolución del Resumen, donde el año no entra y no hace falta: las 6 barras
+ * son meses consecutivos y el año completo está en la barra superior.
+ */
+export function periodToShortLabel(period) {
+  if (!period) return '';
+  const [, month] = period.split('-');
+  const nombre = MESES[parseInt(month, 10) - 1];
+  return nombre ? nombre.slice(0, 3).toLowerCase() : '';
+}
+
 /** Devuelve el período del mes actual, ej: '2026-05' */
 export function currentPeriod() {
   const now = new Date();

@@ -1,17 +1,17 @@
 ---
 name: nuevo-control
-description: Agregar un control nuevo a Controles Nómina, o una variante ("Generar Reporte") de uno existente. Cablea los 5 puntos de integración (parser, ficha del tipo de archivo, módulo, registry, test) y las reglas que hacen que el resultado sea correcto — consolidación por legajo, null vs 0, semáforo por unidad declarada. Usar cuando el pedido sea "agregar el control X", "controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control a la batería.
+description: Agregar un control nuevo a Controles Nómina, o una variante ("Generar Reporte") de uno existente. Cablea los 6 puntos de integración (parser, ficha del tipo de archivo, módulo, registry, test, resumen del tablero) y las reglas que hacen que el resultado sea correcto — consolidación por legajo, null vs 0, semáforo por unidad declarada. Usar cuando el pedido sea "agregar el control X", "controlar el reporte Y contra el Tabulado", "generar el reporte Z desde el Tabulado", o cualquier variante de sumar un control a la batería.
 ---
 
 # Agregar un control nuevo
 
 Un control cruza un reporte de Meta4 (o de Axton) contra el Tabulado, o dos reportes entre sí.
-Agregarlo **no es escribir un archivo**: son 5 puntos de integración.
+Agregarlo **no es escribir un archivo**: son 6 puntos de integración.
 
 Hasta la Fase 4 eran 6, y el que se olvidaba siempre era `fileUpload.js` — porque un tipo de archivo
 vivía repartido en ~12 lugares entre `fileUpload.js` y `controlsWizard.js`, sin ningún guard entre
 ellos. Hoy el tipo de archivo se declara **una vez** en `js/ui/fileTypes.js` y `tests/fileTypes.test.js`
-falla si la ficha queda a medias. Los otros 5 puntos siguen siendo tuyos.
+falla si la ficha queda a medias. Los otros puntos siguen siendo tuyos.
 
 Referencias, todas código y todas vigentes: `js/controls/nr.js` (control de referencia, los dos
 modos), `js/parsers/nrParser.js` (parser de referencia), los encabezados de `js/ui/fileTypes.js` y
@@ -35,7 +35,7 @@ Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va
 5. A qué clientes se ofrece. El default es el cliente que lo pidió (D-015); `scope: 'general'` sólo
    si Willy lo confirma.
 
-## Los 5 puntos
+## Los 6 puntos
 
 | # | Archivo | Qué |
 |---|---|---|
@@ -44,6 +44,7 @@ Willy prefiere que preguntes a que supongas. Cinco cosas que el código no te va
 | 3 | `js/controls/<x>.js` | `run` / `summarize` / `renderResults` |
 | 4 | `js/controls/registry.js` | imports + entrada (los campos, en el encabezado del archivo) |
 | 5 | `tests/<x>Control.test.js` | + agregarlo a la cadena `test:unit` |
+| 6 | el `summarize` del punto 3 | `resumen: resumenStats({…})` — el tablero del Resumen |
 
 `js/ui/fileUpload.js` y `js/ui/controlsWizard.js` **no se tocan**. Si te encontrás escribiendo un
 `if (fileType === '…')` en alguno de los dos, algo falta en la ficha —
@@ -247,6 +248,64 @@ y el `additionalFiles[0].key` esperados; coincidencia total → `status === 'suc
 conocida → `unitsWithDiff > 0`; **un legajo con dos liquidaciones** → suma, no pisa; un legajo
 presente de un solo lado; y cada rama de `{ error }`.
 
+### 6 — el resumen del tablero
+
+El **Resumen del run** (la primera solapa de la pantalla de resultados) no es una lista de tarjetas:
+es un tablero que contesta "¿se libera?", "¿cuánta plata es?" y "¿qué reviso primero?". Está escrito
+UNA vez, en `js/ui/controlsResults.js`, y tu control entra **gratis** a la banda de veredicto, a la
+escala de severidad y a la grilla — con `unitsTotal`/`unitsWithDiff` alcanza.
+
+Lo que no entra gratis son los bloques ricos: el puente, los dos lados, los tres cortes y la tabla de
+"por dónde empezar". Ésos salen de `summary.resumen`, y lo arma
+`js/controls/resumenStats.js` — **no escribas otro**:
+
+```js
+import { resumenStats } from './resumenStats.js';
+
+// en tu summarize(), después de decidir con tu tolerancia quién tiene diferencia:
+resumen: resumenStats({
+  unit: 'legajo',
+  tolerance: tol,          // el corte más chico de magnitud arranca acá, no en 0,01
+  rows: conDiferencia,     // las filas que YA elegiste — el helper no vuelve a decidir
+  allRows: todas,          // sólo para el denominador de cada grupo
+  diff:      (r) => r.diferencia,     // CON SIGNO. Verificalo en tu módulo antes de cablearlo:
+                                      // si guardás sólo el valor absoluto, omitilo y anotalo
+  key:       (r) => legajoKey(r.legajo),  // makeLegajoKey, nunca String().trim()
+  unitLabel: (r) => r.nombre,
+  group:     { empresa: (r) => r.empresa },
+  cause:     (r) => rubroCausante(r),     // `null` = va a "Sin identificar", con su banda rayada
+  top:       (r) => ({ legajo: r.legajo, nombre: r.nombre, empresa: r.empresa, rubro: null }),
+  bridge:    results.bridge,              // lo agrega tu run(), no el tablero
+  sideLabels: { over: { label: 'Pagamos de más' }, under: { label: 'Pagamos de menos' } },
+}),
+```
+
+**Si tu control no cruza nada** (los modos "Generar Reporte", Acumuladores), igual publicá `resumen`
+con la declaración explícita de qué no aplica — así se distingue "este control no tiene lados" de
+"alguien se olvidó de cablearlos":
+
+```js
+resumen: resumenStats({
+  unit: null,
+  rows: [],
+  notApplicable: ['signed', 'buckets', 'group', 'cause', 'top', 'keys'],
+  bridge: { kind: 'counts', steps: [{ label: 'Registros del archivo', amount: n }] },
+}),
+```
+
+**El candado:** `tests/resumenContract.test.js` recorre el `CONTROL_REGISTRY` y **falla si un
+`summarize` no publica `resumen`**. Si tu control es nuevo, no está en la lista de excepciones y el
+PR sale en rojo hasta que lo declares. La forma del puente y qué cortes aplican por control están en
+el §4 de `specs/vista-estandar-resumen.md`.
+
+Tres cosas que el tablero no perdona, y que ya mordieron:
+
+- **La unidad la nombra `unitNames()`**, no vos: un control por centro de costo no dice "legajos".
+- **El signo con signo.** Si tu diferencia por fila es `Math.abs(...)`, `diffSigned` y `diffBuckets`
+  se omiten para tu control y se anota en el §4 de la spec — el tablero no recalcula la resta.
+- **El puente no resta dos totales cuando un lado puede faltar** (D-086): lo que quedó sin comparar
+  va en `bridge.uncompared`, con su importe y su lado, y no se mete en la diferencia.
+
 ## Reglas que no admiten criterio
 
 - **Datos de empleados.** Ni un `console.log` con ellos, ni un export de cliente en el repo. En los
@@ -271,10 +330,11 @@ Todo lo demás de acá es criterio con su porqué: si en tu caso no aplica, deci
 ```
 [ ] mockup interactivo (wizard + resultados + export) armado y confirmado por Willy antes de
     escribir el módulo real (ver "Antes de escribir el punto 3 y el punto 4" más arriba)
-[ ] parser · ficha en fileTypes.js · módulo · registry · test
+[ ] parser · ficha en fileTypes.js · módulo · registry · test · summary.resumen (resumenStats)
 [ ] "es diferencia" resuelto con isDiff()/diffStats(), sin 0,01 sueltos (D-069)
 [ ] columnas nuevas del Tabulado → su entrada en TAB_FIELD_LABELS (js/ui/fieldHelp.js)
 [ ] test agregado a la cadena test:unit de package.json, y `npm run test:unit` pasa
+[ ] tests/resumenContract.test.js en verde (el candado del tablero del Resumen)
 [ ] probado en el navegador con un archivo real, en los tres temas (para servir la app, ver README.md)
 [ ] CHANGELOG.md
 [ ] ARCHITECTURE.md / DECISIONS.md sólo si cambió un contrato o hubo una decisión no obvia

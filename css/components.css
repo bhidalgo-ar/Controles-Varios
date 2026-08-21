@@ -1075,9 +1075,10 @@
    en toda la app; estas 3 pantallas rediseñadas piden pill siempre). */
 .btn--pill { border-radius: var(--radius-full); }
 
-/* El hero de resultados (gauge + filas por control) se rediseñó como card
-   centrada con icono de estado + KPIs y tarjetas por control: vive en
-   css/results.css (.results-hero / .results-ctrl-card). */
+/* El hero de resultados (gauge, y después card centrada con icono de estado +
+   KPIs) es hoy el tablero del Resumen del run: veredicto en palabras + escala
+   de severidad + puente + cortes. Vive en css/results.css (.rsm-* y
+   .results-ctrl-card). */
 
 /* ── Home — tabla de clientes (pantalla 1d) ───────────────────── */
 .month-selector {

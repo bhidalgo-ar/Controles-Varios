@@ -1,9 +1,10 @@
 <!doctype html>
-<!-- Fixture de la pantalla de Resultados — solapa Resumen (rediseño, pantalla 6).
-     NO es una pantalla de la app: monta el hero, las tarjetas por control, la
-     barra superior y las solapas con datos inventados, sin IndexedDB ni los CDN
-     de index.html, para poder verlo en un navegador real.
-     ?caso=verde (default) | rojo -->
+<!-- Fixture de la pantalla de Resultados — solapa Resumen: el TABLERO del run
+     (docs/handoff-resumen-netos.md, pantallas 3a y 3b).
+     NO es una pantalla de la app: monta el tablero real, la barra superior y las
+     solapas con datos inventados (jugadores de Banfield), sin IndexedDB ni los
+     CDN de index.html, para poder verlo en un navegador real.
+     ?caso=verde (default) | rojo | 3a | 3b -->
 <html lang="es" data-theme="sobrio"><head><meta charset="utf-8">
 <title>Resultados — Resumen</title>
 <script src="/node_modules/dexie/dist/dexie.js"></script>
@@ -29,8 +30,8 @@
   <div id="js-results-tabs"></div>
   <div class="page-content">
     <div id="js-tab-resumen" class="results-column">
+      <div id="js-column-warnings"></div>
       <div id="js-hero"></div>
-      <div id="js-ctrl-cards" class="results-ctrl-cards"></div>
     </div>
     <div id="js-tab-detalle" hidden>
       <div id="js-control-sections">
@@ -54,12 +55,15 @@
 </main>
 
 <script type="module">
-import { buildHeroHtml, buildCtrlCardsHtml } from '../../../js/ui/controlsResults.js';
+import { buildHeroHtml, applyDetailPrefilter } from '../../../js/ui/controlsResults.js';
+import { resumenStats } from '../../../js/controls/resumenStats.js';
 import { mountResultsHeader, renderResultsTabs, runMetaLabel } from '../../../js/ui/resultsHeader.js';
 import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from '../../../js/ui/runExport.js';
 import { renderBrutosResults } from '../../../js/controls/brutos.js';
 
 const caso = new URLSearchParams(location.search).get('caso') || 'verde';
+const tema = new URLSearchParams(location.search).get('tema');
+if (tema) document.documentElement.setAttribute('data-theme', tema);
 
 const mk = (controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra = {}) => ({
   row:  { controlId, results: { rows: [] } },
@@ -71,32 +75,181 @@ const mk = (controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra = {})
   },
 });
 
-// Los mismos dos casos del prototipo: 1 de 1 en verde / 1 de 2 en rojo.
-const summaries = caso === 'rojo'
-  ? [
-      mk('brutos', 'Brutos — Controlar', 'legajo', 514, 23, 'error', {
-        diffTotalAmount: 184230.5,
-        contextNote: '2 legajos solo en un archivo',
-      }),
-      mk('gsPers', 'GS Pers — Controlar', 'legajo', 512, 0, 'ok', {
-        headline: 'Reporte de GS Pers vs Tabulado',
-      }),
-    ]
-  : [mk('brutos', 'Brutos — Controlar', 'legajo', 514, 0, 'ok', { headline: 'Reporte de Brutos vs Tabulado' })];
+// ── Datos inventados: jugadores de Banfield, legajos y montos que no existen ──
+// El corte por causa, el corte por empresa y el top de legajos salen del helper
+// REAL (js/controls/resumenStats.js): así el fixture muestra lo mismo que va a
+// mostrar un run de verdad, y no una maqueta que puede divergir.
+const EMPRESAS = ['BNF', 'TAL', 'LDZ'];
+const RUBROS = [
+  { key: 'antiguedad',  label: 'Antigüedad',           base: '1 % por año' },
+  { key: 'presentismo', label: 'Presentismo',          base: '8,33 %' },
+  { key: 'noRemu',      label: 'No remunerativo',      base: 'acuerdo, c/ antig.' },
+  null, null,   // los que el motor no puede atribuir: van a "Sin identificar"
+];
+const NOMBRES = [
+  'SANGUINETTI JAVIER', 'ALBELLA GUSTAVO', 'ERVITI WALTER', 'SILVA SANTIAGO',
+  'LUCCHETTI CRISTIAN', 'PALACIO RODRIGO', 'CVITANICH DARIO', 'DATOLO JESUS',
+  'URZI AGUSTIN', 'CARRANZA JULIAN', 'RODRIGUEZ JAMES', 'FALCIONI JULIO CESAR',
+];
 
+/** 380 legajos, 116 con diferencia repartida en los cuatro tramos de magnitud. */
+function filasNetos() {
+  const rows = [];
+  for (let i = 0; i < 380; i++) {
+    const conDif = i < 116;
+    // Unos pocos grandes y muchos chicos: es la forma que tiene una nómina real
+    // y la que hace que la conclusión de concentración diga algo.
+    const magnitud = i < 6 ? 900000 + i * 40000
+                   : i < 25 ? 140000 + i * 3000
+                   : i < 70 ? 20000 + i * 400
+                   : 300 + i * 20;
+    const signo = i % 4 === 3 ? -1 : 1;
+    rows.push({
+      legajo: String(1000 + i),
+      nombre: NOMBRES[i % NOMBRES.length],
+      empresa: EMPRESAS[i % 3],
+      rubro: RUBROS[i % RUBROS.length],
+      dif: conDif ? signo * magnitud : 0,
+    });
+  }
+  return rows;
+}
+
+function resumenNetos() {
+  const todas = filasNetos();
+  const conDif = todas.filter(r => r.dif !== 0);
+  const teorico = 402_147_802.15;
+  const explicado = 12_003_411.4;
+  const residuo = conDif.reduce((s, r) => s + r.dif, 0);
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: 100,
+    rows: conDif,
+    allRows: todas,
+    diff: (r) => r.dif,
+    key: (r) => r.legajo,
+    unitLabel: (r) => r.nombre,
+    group: { empresa: (r) => r.empresa },
+    cause: (r) => r.rubro,
+    top: (r) => ({ legajo: r.legajo, nombre: r.nombre, empresa: r.empresa, rubro: r.rubro?.label ?? null }),
+    sideLabels: {
+      over:  { label: 'Pagamos de más',   note: 'plata que hay que recuperar' },
+      under: { label: 'Pagamos de menos', note: 'reclamo del empleado si no se corrige' },
+    },
+    bridge: {
+      steps: [
+        { label: 'Neto teórico',           amount: teorico,   note: 'remun + no rem − ret',              tone: 'ink' },
+        { label: '+ Explicado por el mes', amount: explicado, note: 'licencias, altas, ajustes del mes', tone: 'accent' },
+        { label: '+ Sin explicar',         amount: residuo,   note: 'neto de los dos signos',            tone: 'error' },
+        { label: 'Neto liquidado',         amount: teorico + explicado + residuo, note: 'lo que se pagó', tone: 'ink' },
+      ],
+      proportion: {
+        parts: [
+          { tone: 'neutral', amount: teorico,          label: 'Neto teórico' },
+          { tone: 'accent',  amount: explicado,        label: 'Explicado por el mes' },
+          { tone: 'error',   amount: Math.abs(residuo), label: 'Sin explicar' },
+        ],
+        note: `Lo sin explicar es el ${((Math.abs(residuo) / teorico) * 100).toLocaleString('es-AR', {
+          minimumFractionDigits: 2, maximumFractionDigits: 2 })} % del neto teórico del mes.`,
+      },
+      uncompared: { label: '4 legajos sin neto liquidado, por', amount: 5_120_400.8 },
+    },
+  });
+}
+
+// La historia mes a mes: la que arma la pantalla desde las corridas guardadas.
+const HISTORIA_NETOS = [
+  { period: '2026-03', pctDiff: 3.1, tier: 'error' },
+  { period: '2026-04', pctDiff: 2.8, tier: 'error' },
+  { period: '2026-05', pctDiff: 1.4, tier: 'warn' },
+  { period: '2026-06', pctDiff: 4.2, tier: 'error' },
+  { period: '2026-07', pctDiff: 3.9, tier: 'error' },
+];
+
+const RESUMEN_NETOS = resumenNetos();
+const netos = mk('control_netos', 'Control de Netos', 'legajo', 380, 116, 'error', {
+  diffTotalAmount: (RESUMEN_NETOS.diffSigned.over?.amount || 0) + (RESUMEN_NETOS.diffSigned.under?.amount || 0),
+  unitsUncompared: 4,
+  contextNote: 'Tolerancia $ 100,00',
+  resumen: RESUMEN_NETOS,
+});
+
+/** Un control más de la grilla de 3b, con sus claves de unidad para los cortes cruzados. */
+function otro(id, label, total, nDiff, tier, monto) {
+  const rows = Array.from({ length: nDiff }, (_, i) => ({
+    legajo: String(1000 + i * 2),
+    nombre: NOMBRES[i % NOMBRES.length],
+    empresa: EMPRESAS[i % 3],
+    dif: (i % 3 === 2 ? -1 : 1) * (monto / Math.max(nDiff, 1)) * (1 + (i % 5) / 4),
+  }));
+  return mk(id, label, 'legajo', total, nDiff, tier, {
+    diffTotalAmount: monto,
+    resumen: resumenStats({
+      unit: 'legajo', tolerance: 100, rows,
+      allRows: Array.from({ length: total }, (_, i) => ({
+        legajo: String(1000 + i), empresa: EMPRESAS[i % 3], dif: 0,
+      })),
+      diff: (r) => r.dif,
+      key: (r) => r.legajo,
+      unitLabel: (r) => r.nombre,
+      group: { empresa: (r) => r.empresa },
+    }),
+  });
+}
+
+const SUMMARIES = {
+  // Los dos casos del fixture original, que fijan que ningún conteo se movió.
+  rojo: [
+    mk('brutos', 'Brutos — Controlar', 'legajo', 514, 23, 'error', {
+      diffTotalAmount: 184230.5,
+      contextNote: '2 legajos solo en un archivo',
+    }),
+    mk('gsPers', 'GS Pers — Controlar', 'legajo', 512, 0, 'ok', {
+      headline: 'Reporte de GS Pers vs Tabulado',
+    }),
+  ],
+  verde: [mk('brutos', 'Brutos — Controlar', 'legajo', 514, 0, 'ok', { headline: 'Reporte de Brutos vs Tabulado' })],
+  // 3a — el run de un control, con el tablero completo.
+  '3a': [netos],
+  // 3b — nueve controles: 3 en rojo, 2 en amarillo, 4 en verde.
+  '3b': [
+    netos,
+    otro('brutos', 'Brutos — Controlar', 380, 44, 'error', 1840230.5),
+    otro('agrupadores', 'Cruce por Agrupadores', 380, 31, 'error', 940120.15),
+    otro('gs_pers', 'GS Pers — Controlar', 380, 5, 'warn', 84230.5),
+    otro('nr', 'Control NR — Controlar', 380, 3, 'warn', 21440.2),
+    mk('rend_vs_tabu', 'Rendimiento vs Tabulado', 'cc', 24, 0, 'ok', { headline: 'Los 24 centros de costo cierran.' }),
+    mk('variaciones_sueldos', 'Variación Sueldos', 'legajo', 380, 0, 'ok', { headline: 'Sin variaciones fuera de rango.' }),
+    mk('cat_x_empleados', 'EE x CATEG', 'legajo', 380, 0, 'ok', { headline: 'Los campos coinciden.' }),
+    mk('novedades_liquidacion', 'Novedades vs Liquidación', 'legajo', 380, 0, 'ok', { headline: 'Todo lo pedido se liquidó.' }),
+  ],
+};
+
+const summaries = SUMMARIES[caso] || SUMMARIES.verde;
+
+const nEmpleados = caso === '3a' || caso === '3b' ? 380 : 514;
 const tabFile = {
   fileType: 'tab_control',
   mapping: { empleadoColumn: 'LEGAJO' },
-  parsedRows: Array.from({ length: 514 }, (_, i) => ({ LEGAJO: String(i + 1) })),
+  parsedRows: Array.from({ length: nEmpleados }, (_, i) => ({ LEGAJO: String(i + 1) })),
 };
 
-const { html, overallTier } = buildHeroHtml(summaries, [tabFile], 2);
+const { html, overallTier } = buildHeroHtml(summaries, [tabFile], 2, undefined, {
+  prevTierByControlId: {},
+  historyByControlId: caso === '3a' || caso === '3b' ? { control_netos: HISTORIA_NETOS } : {},
+  reduceMotion: true,
+  period: '2026-08',
+  isDefinitive: false,
+});
 document.getElementById('js-hero').innerHTML = html;
-document.getElementById('js-ctrl-cards').innerHTML = buildCtrlCardsHtml(summaries, {}, true);
 
-const verdict = caso === 'rojo'
-  ? '1 de 2 controles en rojo — 23 de 514 legajos con diferencia (4,5%).'
-  : '1 de 1 control en verde — sin diferencias.';
+const VERDICTS = {
+  rojo:  '1 de 2 controles en rojo — 23 de 514 legajos con diferencia (4,5%).',
+  verde: '1 de 1 control en verde — sin diferencias.',
+  '3a':  '1 de 1 control en rojo — 116 de 380 legajos con diferencia (30,5%).',
+  '3b':  '3 de 9 controles en rojo · 2 en amarillo · 4 en verde.',
+};
+const verdict = VERDICTS[caso] || VERDICTS.verde;
 
 mountResultsHeader({
   tier: overallTier,
@@ -127,12 +280,25 @@ mountResultsHeader({
   exportNote: EXPORT_PRIVACY_NOTE,
 });
 
-renderResultsTabs(document.getElementById('js-results-tabs'), {
+const tabsCtl = renderResultsTabs(document.getElementById('js-results-tabs'), {
   tabs: [
     { id: 'resumen', label: 'Resumen', panel: document.getElementById('js-tab-resumen') },
     { id: 'detalle', label: 'Detalle', panel: document.getElementById('js-tab-detalle') },
   ],
   meta: runMetaLabel({ createdAtLabel: '13 ago 2026, 14:02', isQuickRun: false, isDefinitive: false }),
+});
+
+document.getElementById('js-hero').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-hero-detail]');
+  if (!btn) return;
+  const card = document.querySelector(`[data-control-id="${CSS.escape(btn.dataset.heroDetail)}"]`);
+  if (!card) return;
+  tabsCtl.setActive('detalle');
+  applyDetailPrefilter(card, {
+    tab:       btn.dataset.heroTab || null,
+    prefilter: btn.dataset.heroPrefilter || null,
+    search:    btn.dataset.heroSearch || null,
+  });
 });
 
 // La tabla real del control adentro de su ficha: 60 legajos para que la

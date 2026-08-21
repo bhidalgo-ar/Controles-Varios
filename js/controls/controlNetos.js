@@ -72,6 +72,7 @@ import { makeLegajoKey } from '../utils/legajo.js';
 import { toNum } from '../utils/currency.js';
 import { categoriaKey } from '../parsers/escalaComercioParser.js';
 import { diffStats } from './semaforo.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderChecks,
   diffCellHtml, diffBadgeHtml,
@@ -797,6 +798,72 @@ export function runControlNetos(escalaRows, tabRows, mapping) {
     topeDetectado,
     tolerancia: toNum(cfg.tolerancia) ?? 1,
     period: mapping?.period || null,
+    // El modo de clave de legajo del cliente (D-038), guardado con los
+    // resultados: el `summarize` publica las claves de las unidades con
+    // diferencia para los cortes cruzados del Resumen, y ahí la clave tiene
+    // que ser la MISMA que usan los otros controles del run.
+    legajoKeyMode: mapping?.legajoKeyMode ?? null,
+    // El puente del Resumen: Neto teórico → + Explicado por el mes → + Sin
+    // explicar → Neto liquidado. Se agrega ACÁ, en el run(), desde los mismos
+    // `netoTeorico` / `explicado` / `residuo` por legajo que ya se calcularon —
+    // el tablero no recalcula nada.
+    bridge: bridgeDelRun(rows),
+  };
+}
+
+/**
+ * El puente del Resumen, agregado sobre las filas del run.
+ *
+ * **Sólo entran los legajos comparables** (los que tienen neto liquidado). El
+ * legajo sin neto no se resta contra nada: se informa aparte, con su importe y
+ * su lado, que es la regla de D-086 aplicada acá. Con esos legajos adentro, los
+ * cuatro pasos no cerrarían y el analista descarta la pantalla entera.
+ *
+ * Los cuatro pasos cierran al centavo porque por legajo vale, por construcción:
+ *   netoAjustado = netoTeorico + explicado + residuo
+ * El tercer paso va con el **signo** (la suma de los residuos, no de sus valores
+ * absolutos): es lo que hace que el puente cierre contra la fila TOTAL de la
+ * Planilla. El bruto —los dos signos sumados— lo dice el bloque "Para qué lado",
+ * que es donde significa algo.
+ */
+function bridgeDelRun(rows) {
+  const comparables = rows.filter(r => r.residuo !== null);
+  if (comparables.length === 0) return null;
+
+  const suma = (get) => comparables.reduce((s, r) => s + (get(r) || 0), 0);
+  const teorico   = suma(r => r.netoTeorico);
+  const explicado = suma(r => r.explicado);
+  const residuo   = suma(r => r.residuo);
+  const liquidado = suma(r => r.netoAjustado);
+
+  const sinComparar = rows.filter(r => r.residuo === null);
+  const pctSinExplicar = teorico !== 0 ? (Math.abs(residuo) / Math.abs(teorico)) * 100 : null;
+
+  return {
+    steps: [
+      { label: 'Neto teórico',            amount: teorico,   note: 'remun + no rem − ret',              tone: 'ink' },
+      { label: '+ Explicado por el mes',  amount: explicado, note: 'licencias, altas, ajustes del mes', tone: 'accent' },
+      { label: '+ Sin explicar',          amount: residuo,   note: 'neto de los dos signos',            tone: 'error' },
+      { label: 'Neto liquidado',          amount: liquidado, note: 'lo que se pagó',                    tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(teorico),   label: 'Neto teórico' },
+        { tone: 'accent',  amount: Math.abs(explicado), label: 'Explicado por el mes' },
+        { tone: 'error',   amount: Math.abs(residuo),   label: 'Sin explicar' },
+      ],
+      note: pctSinExplicar === null
+        ? null
+        : `Lo sin explicar es el ${pctSinExplicar.toLocaleString('es-AR', {
+            minimumFractionDigits: 2, maximumFractionDigits: 2,
+          })} % del neto teórico del mes.`,
+    },
+    uncompared: sinComparar.length === 0 ? null : {
+      label: sinComparar.length === 1
+        ? '1 legajo sin neto liquidado, por'
+        : `${sinComparar.length} legajos sin neto liquidado, por`,
+      amount: sinComparar.reduce((s, r) => s + (r.netoTeorico || 0), 0),
+    },
   };
 }
 
@@ -950,10 +1017,86 @@ export function summarizeControlNetos(results) {
     unit: 'legajo',
     unitsTotal: rows.length,
     unitsWithDiff,
+    unitsUncompared: sinComparar,
     diffTotalAmount,
     worstCase,
     contextNote: `Tolerancia ${fmt(tol)}`,
+    resumen: resumenDelControl(results, tol),
   };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// `resumenStats` agrupa y suma; **quién tiene diferencia ya lo decidió acá**, con
+// la tolerancia de este control: las filas que le pasamos son las que
+// `diffStats` cuenta en `unitsWithDiff`, ni una más.
+
+/**
+ * El rubro causante de un legajo con diferencia.
+ *
+ * **Sólo lo que el control PUEDE afirmar.** El residuo es, por definición, lo
+ * que los conceptos del mes no explican: no se puede descomponer en rubros a
+ * partir de la cascada —la cascada es justamente lo EXPLICADO, y atribuirle la
+ * diferencia diría lo contrario de lo que pasó—. Lo que sí es una causa son las
+ * marcas que el propio control detecta y que mueven el neto teórico: un básico
+ * que no es el de la escala, un tope de aportes que la liquidación aplicó y el
+ * control no, un perfil de jubilado sin confirmar. El resto va entero a "Sin
+ * identificar", con su banda rayada, y se abre a mano en Fichas.
+ *
+ * El orden es de más determinante a menos: un legajo con el básico fuera de
+ * escala tiene ahí su causa, aunque además haya topeado.
+ */
+function rubroCausante(r, results) {
+  if (r.escalaOk === false) {
+    return { key: 'escala', label: 'Básico fuera de escala', base: 'escala del convenio' };
+  }
+  if (results.topeUsado === null && r.excedenteTope > REDONDEO_EPS) {
+    return { key: 'tope', label: 'Tope de aportes sin declarar', base: 'base imponible' };
+  }
+  if (r.perfilJubilado && !r.jubilado) {
+    return { key: 'jubilado', label: 'Perfil de jubilado sin confirmar', base: 'tasas de aportes' };
+  }
+  return null;
+}
+
+function resumenDelControl(results, tol) {
+  const rows = results.rows;
+  const conDif = rows.filter(r => r.residuo !== null && Math.abs(r.residuo) > tol);
+
+  // La clave de unidad para los cortes cruzados de 3b. Con más de un Tabulado, el
+  // número de legajo NO alcanza: cada razón social los numera por su cuenta y el
+  // mismo número puede ser dos empleados distintos (el mismo cuidado que ya toma
+  // el cruce dentro de `runControlNetos`). Con un solo Tabulado la clave es la
+  // del cliente, pelada, así los otros controles del run la reconocen.
+  const legajoKey = makeLegajoKey(results.legajoKeyMode);
+  const variasEmpresas = (results.empresas || []).length > 1;
+  const keyOf = (r) => (variasEmpresas ? `${r.empresa}|${legajoKey(r.legajo)}` : legajoKey(r.legajo));
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: tol,
+    rows: conDif,
+    allRows: rows,
+    diff: (r) => r.residuo,
+    key: keyOf,
+    unitLabel: (r) => r.nombre,
+    // Una empresa por Tabulado (1 a 3). Con una sola, `resumenStats` devuelve el
+    // corte igual y el tablero muestra una barra al 100 %: es cierto y no
+    // estorba, pero el bloque sólo aporta cuando hay más de una.
+    group: variasEmpresas ? { empresa: (r) => r.empresa } : null,
+    cause: (r) => rubroCausante(r, results),
+    top: (r) => ({
+      legajo: r.legajo,
+      nombre: r.nombre,
+      empresa: variasEmpresas ? r.empresa : null,
+      rubro: rubroCausante(r, results)?.label ?? null,
+    }),
+    bridge: results.bridge || null,
+    sideLabels: {
+      over:  { label: 'Pagamos de más',  note: 'plata que hay que recuperar' },
+      under: { label: 'Pagamos de menos', note: 'reclamo del empleado si no se corrige' },
+    },
+  });
 }
 
 // ── Pantalla de resultados ───────────────────────────────────────────────────

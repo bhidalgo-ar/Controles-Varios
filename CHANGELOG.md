@@ -7,6 +7,57 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): el hero del Resumen del run pasa a ser un tablero — 2026-08-21
+
+- **Es la tanda 1 de `specs/vista-estandar-resumen.md`** (D-089), sobre el handoff hi-fi de
+  `docs/handoff-resumen-netos.md` (pantallas 3a y 3b). Control de Netos es el piloto; las tandas 2 a 6
+  cablean los otros 20 controles y no vuelven a tocar el tablero.
+- **Lo que el analista ve en lugar del hero.** Antes: un círculo con `!`, "116 legajos con
+  diferencias", una bajada y cuatro KPIs que repetían el mismo dato — y el único texto sobre gravedad
+  ("verde 0 % · amarillo ≤2 % · rojo >2 %") como nota al pie en 11 px. Ahora la pantalla contesta tres
+  preguntas en orden:
+  1. **¿Se libera?** El veredicto es una acción en palabras —"No liberar la liquidación" / "Liberar con
+     reparos" / "Listo para liberar"—, con la escala de severidad dibujada contra el umbral REAL del
+     semáforo y el múltiplo ("el corte de rojo es 2 % de los legajos: este run está 15 veces arriba").
+     Los cuatro KPIs ahora suman **Sin comparar** y **Tolerancia**, que eran la primera pregunta del
+     analista y no estaban.
+  2. **¿Cuánta plata es?** El puente Neto teórico → + Explicado por el mes → + Sin explicar → Neto
+     liquidado, con la barra que pone la cifra en escala ("lo sin explicar es el 1,63 % del neto
+     teórico del mes"), y "Para qué lado" con el neto y el bruto al pie.
+  3. **¿Qué reviso primero?** Tres cortes —por tamaño de la diferencia, por empresa y por rubro
+     causante—, la evolución mes a mes del control con el umbral punteado, y los 5 legajos que
+     concentran la plata, cada uno con su link a la ficha.
+- **Un run de varios controles se ve distinto (3b).** El veredicto se comprime, aparece la tira de
+  semáforos, una tarjeta por control con su % y su sparkline, **los verdes agrupados en una sola card**
+  ("4 controles en verde · no hay nada que revisar acá" — con 9 controles son 6 cards en vez de 9), y
+  dos cortes que sólo existen cruzando controles: dónde se concentra por empresa y los legajos que
+  aparecen en varios controles ("un legajo en 4 controles suele ser un dato mal cargado, no cuatro
+  errores distintos").
+- **"Ver los N →" ahora llega al Detalle con el filtro puesto**, y "ficha →" abre la ficha de ese
+  legajo. Antes el link llevaba a una tabla de 380 filas y había que volver a buscar los 19 que uno
+  venía a ver. Un cartel dice por qué el filtro arrancó activo.
+- **El corte por causa nunca se muestra completo sin serlo.** Lo que el motor no puede atribuir sale
+  con su banda rayada de "Sin identificar" y su conteo ("el motor le pone rubro a 70 de 116 legajos"),
+  y si no puede atribuir ninguno la card no se dibuja.
+- **Ningún cálculo ni conteo se movió.** Los números del semáforo se cuentan igual, en la unidad que
+  declara cada control, y el color sigue saliendo de `computeSemaforoStatus()` — no hay ningún 2 %
+  escrito en el tablero. Lo que cambió entero es el copy, así que `tests/heroUnitNaming.test.js` se
+  reescribió: las siete reglas son las mismas (un run por centro de costo no dice "legajos", dos
+  controles sobre la misma nómina no son 760 legajos), las frases son otras.
+- **Para que salga por defecto en todo control nuevo:** la receta de `.claude/skills/nuevo-control/`
+  ganó el 6º punto de integración (declarar `summary.resumen` vía `resumenStats`), y
+  `tests/resumenContract.test.js` recorre el registry y **deja el PR en rojo** si un `summarize` no lo
+  publica. La lista de 20 excepciones se achica sola: el test también falla si una excepción ya no
+  hace falta.
+- 101 asserts nuevos (`tests/resumenStats.test.js` + `tests/resumenContract.test.js`, en la cadena) y
+  5 e2e nuevos, con datos inventados y jugadores de Banfield. Verificado en navegador en los tres
+  temas contra el handoff, bloque por bloque.
+- **Dos decisiones que esperan a Willy en pantalla:** el ancho (arrancó respetando el tope de 1280 px
+  de D-060, con las tres columnas de cortes a 1fr; el diseño está armado a 1352) y si la historia
+  compara contra la corrida definitiva de cada período (arrancó con definitiva, como asume el
+  handoff). Y una tercera, de criterio: de dónde sale el rubro causante de Netos (hoy, las marcas que
+  el propio control detecta). Todo en D-089.
+
 ### fix(paso2): el reporte de cuentas dejaba de parecer necesario y el asiento salía sin armar — 2026-08-21
 
 - **El síntoma:** se corre Contabilidad Desglosada + Asiento, y la pantalla termina en la desglosada — el asiento no aparece por ningún lado. No estaba roto: **el asiento no se arma si no se carga el "Reporte de Cuentas de Redefinición" del cliente**, que es de donde sale el código de cada cuenta.

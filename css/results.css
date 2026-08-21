@@ -16,11 +16,15 @@
    ══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Locales de esta pantalla — no son tokens del sistema. */
-  --results-col-max:    880px;  /* ancho de lectura del Resumen (prototipo) */
-  --results-title-size: 25px;
-  --results-kpi-size:   30px;
-  --results-icon-size:  58px;
+  /* Locales de esta pantalla — no son tokens del sistema.
+
+     El Resumen era una columna de lectura de 880 px porque el hero era un
+     título centrado con cuatro KPIs. El tablero es un tablero: usa el ancho
+     completo que le deja `page-content` (el tope de 1280 px de D-060). El
+     diseño está armado a 1352 px de contenido y aguanta el tope con las tres
+     columnas del bloque de cortes a 1fr cada una — es la pendiente 4 del §7 de
+     specs/vista-estandar-resumen.md, que arranca respetando D-060. */
+  --results-col-max: var(--max-width);
 }
 
 /* ── Veredicto en la barra superior ──────────────────────────────
@@ -158,156 +162,620 @@
   margin: 0 auto;
 }
 
-/* ── Hero de veredicto ───────────────────────────────────────────
-   Icono circular de estado + título + subtítulo en prosa + KPIs. */
-.results-hero {
-  background: var(--color-surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-8);
-  margin-bottom: var(--sp-4);
-  text-align: center;
-  font-family: var(--font-tool);
-}
-.results-hero--error { border-color: var(--error-bd); }
-.results-hero--warn  { border-color: var(--warn-bd); }
+/* ══════════════════════════════════════════════════════════════
+   EL TABLERO DEL RESUMEN DEL RUN
+   (docs/handoff-resumen-netos.md, pantallas 3a y 3b)
 
-.results-hero__icon {
-  width: var(--results-icon-size);
-  height: var(--results-icon-size);
-  border-radius: 50%;
-  margin: 0 auto var(--sp-3);
+   Reemplaza al hero centrado (círculo con `!` + título + 4 KPIs que
+   repetían el mismo dato). El markup lo genera
+   js/ui/controlsResults.js; acá sólo vive el aspecto, y todo color
+   sale de un token de css/tokens.css.
+
+   Todas las barras son `div`s con `width:%` — no hay SVG, ni canvas,
+   ni librería de gráficos, igual que en el resto del repo.
+   ══════════════════════════════════════════════════════════════ */
+
+.rsm-board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--font-tool);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── La banda de veredicto ────────────────────────────────────── */
+
+.rsm-verdict {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  border-radius: 14px;
+  padding: var(--sp-6) 28px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: var(--fw-bold);
-  line-height: 1;
+  gap: 36px;
 }
-.results-hero__icon--ok      { background: var(--ok-bg);      color: var(--ok-tx); }
-.results-hero__icon--warn    { background: var(--warn-bg);    color: var(--warn-tx); }
-.results-hero__icon--error   { background: var(--error-bg);   color: var(--error-tx); }
-.results-hero__icon--neutral { background: var(--neutral-bg); color: var(--neutral-tx); }
+.rsm-verdict--compact { padding: var(--sp-5) var(--sp-6); gap: var(--sp-6); }
 
-/* El título y los KPIs son "display": en Intenso salen en el serif H&A y en
-   Sobrio en la tipografía operativa — el tema lo resuelve la variable. */
-.results-hero__title {
-  font-family: var(--font-display);
-  font-size: var(--results-title-size);
-  font-weight: 800;
-  color: var(--ink);
-  margin: 0 0 4px;
-  line-height: 1.2;
-}
-.results-hero__subline {
-  font-size: 13px;
-  color: var(--t2);
-  line-height: 1.5;
-  margin: 0 0 var(--sp-5);
-}
-.results-hero__subline strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.rsm-verdict__main  { flex: 1; min-width: 0; }
+.rsm-verdict--compact .rsm-verdict__main { flex: 1 1 320px; }
+.rsm-verdict__aside { flex: 0 0 480px; }
+.rsm-verdict__aside--compact { flex: 0 0 300px; }
+.rsm-verdict__strip { flex: 1 1 260px; min-width: 0; }
 
-.results-hero__kpis {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: var(--sp-4) 44px;
-}
-.results-hero__kpi-value {
-  display: block;
-  font-family: var(--font-display);
-  font-size: var(--results-kpi-size);
-  font-weight: var(--fw-bold);
-  color: var(--celeste);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-/* Lo que hay que ir a revisar sale en rojo: diferencias y Δ acumulada. */
-.results-hero__kpi-value--diff { color: var(--error-tx); }
-.results-hero__kpi-label {
-  display: block;
-  font-size: 10px;
+/* El eyebrow lleva el color del estado: es lo único de la banda que lo dice
+   antes de leer, y el título ya es una acción y no un color. */
+.rsm-verdict__eyebrow {
+  margin: 0 0 var(--sp-2);
+  font-size: 10.5px;
   font-weight: var(--fw-bold);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--t3);
-  margin-top: 3px;
+  letter-spacing: 0.12em;
+  color: var(--invert-accent);
 }
-.results-hero__legend {
-  margin: var(--sp-5) 0 0;
-  font-size: 10.5px;
-  color: var(--t3);
-}
+.rsm-verdict--error .rsm-verdict__eyebrow { color: var(--invert-error); }
+.rsm-verdict--warn  .rsm-verdict__eyebrow { color: var(--invert-warn); }
+.rsm-verdict--ok    .rsm-verdict__eyebrow { color: var(--invert-accent); }
 
-/* ── Tarjeta de resumen por control ──────────────────────────────
-   Una por control, en el orden que ya trae la pantalla: errores primero. */
-.results-ctrl-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
-
-.results-ctrl-card {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  background: var(--color-surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-4) var(--sp-5);
-  font-family: var(--font-tool);
-  transition: all var(--transition);
+/* El veredicto es una ACCIÓN, no un número: "No liberar la liquidación". */
+.rsm-verdict__title {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.8px;
+  color: var(--invert-fg);
 }
-.results-ctrl-card:hover {
-  border-color: var(--celeste);
-  box-shadow: var(--sh-tool);
-  transform: translateY(-1px);
-}
-.results-ctrl-card--error { border-color: var(--error-bd); }
-.results-ctrl-card--error:hover { border-color: var(--error-bd); }
-.results-ctrl-card--warn  { border-color: var(--warn-bd); }
-.results-ctrl-card--warn:hover  { border-color: var(--warn-bd); }
-.results-ctrl-card--neutral { opacity: 0.9; }
+.rsm-verdict__title--compact { font-size: 30px; letter-spacing: -0.6px; }
 
-.results-ctrl-card__body { flex: 1; min-width: 0; }
-.results-ctrl-card__name {
+.rsm-verdict__subline {
+  margin: 0 0 var(--sp-5);
+  max-width: 560px;
   font-size: 14px;
-  font-weight: var(--fw-bold);
-  color: var(--t1);
-  margin-bottom: 1px;
+  font-weight: var(--fw-regular);
+  line-height: 1.5;
+  color: var(--invert-t2);
 }
-.results-ctrl-card__meta {
-  font-size: 11.5px;
-  color: var(--t3);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.45;
-}
-.results-ctrl-card__meta strong { color: var(--error-tx); }
+.rsm-verdict__subline strong { color: var(--invert-fg); }
 
-/* Secundaria outline: la acción de la tarjeta, no la de la pantalla. */
-.results-ctrl-card__link {
-  flex-shrink: 0;
-  background: none;
-  border: 2px solid var(--celeste);
-  color: var(--celeste);
+.rsm-verdict__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.rsm-btn {
   border-radius: var(--radius-full);
-  padding: 6px 16px;
+  padding: 9px 18px;
   font-family: var(--font-tool);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: var(--fw-semibold);
   cursor: pointer;
   white-space: nowrap;
   transition: all var(--transition);
 }
-.results-ctrl-card__link:hover { background: var(--celeste-dim); }
-.results-ctrl-card--error .results-ctrl-card__link {
-  border-color: var(--error);
-  color: var(--error-tx);
+.rsm-btn--primary { background: var(--celeste); border: 1px solid var(--celeste); color: var(--on-celeste); }
+.rsm-btn--primary:hover { background: var(--celeste-dark); border-color: var(--celeste-dark); }
+.rsm-btn--ghost { background: none; border: 1px solid var(--invert-ghost-bd); color: var(--invert-fg); }
+.rsm-btn--ghost:hover { background: var(--invert-ghost-hover); }
+
+/* ── La escala de severidad ───────────────────────────────────────
+   El corte y el color salen de computeSemaforoStatus() + el umbral del
+   cliente: acá no hay ningún 2 % escrito. El verde es el punto 0 y como
+   zona no tiene ancho — se dibuja con el ancho de un paso del umbral
+   para que se vea, y el marcador descuenta ese corrimiento. */
+
+.rsm-scale__label {
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--invert-t3);
+  margin-bottom: var(--sp-2);
 }
-.results-ctrl-card--error .results-ctrl-card__link:hover { background: var(--error-bg); }
+.rsm-scale__bar {
+  position: relative;
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: visible;
+  margin-bottom: 26px;
+}
+.rsm-scale__zone { height: 14px; }
+.rsm-scale__zone:first-child { border-radius: 7px 0 0 7px; }
+.rsm-scale__zone:last-child  { border-radius: 0 7px 7px 0; }
+.rsm-scale__zone--ok    { background: var(--ok); }
+.rsm-scale__zone--warn  { background: var(--warn); }
+.rsm-scale__zone--error { background: linear-gradient(90deg, var(--error-bd), var(--error)); }
+
+.rsm-scale__marker {
+  position: absolute;
+  top: -6px;
+  width: 3px;
+  height: 26px;
+  transform: translateX(-1.5px);
+  background: var(--invert-fg);
+  box-shadow: 0 0 0 3px var(--invert-bg);
+  border-radius: 2px;
+}
+.rsm-scale__marker-value {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--invert-fg);
+  white-space: nowrap;
+}
+
+.rsm-scale__legend {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--invert-line);
+}
+.rsm-scale__key { font-size: 11px; font-weight: var(--fw-semibold); }
+.rsm-scale__key--ok    { color: var(--invert-ok); }
+.rsm-scale__key--warn  { color: var(--invert-warn); }
+.rsm-scale__key--error { color: var(--invert-error); }
+
+/* ── Los KPIs del veredicto ───────────────────────────────────── */
+
+.rsm-kpis { display: flex; flex-wrap: wrap; gap: var(--sp-4) 28px; }
+.rsm-kpi__value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+  color: var(--invert-fg);
+}
+.rsm-kpi__value--diff { color: var(--invert-error); }
+.rsm-kpi__label {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--invert-t3);
+}
+
+/* ── La tira de semáforos (3b) ─────────────────────────────────── */
+
+.rsm-strip { display: flex; gap: var(--sp-1); }
+.rsm-strip__block {
+  flex: 1;
+  min-width: 6px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--neutral);
+}
+.rsm-strip__block--error   { background: var(--error); }
+.rsm-strip__block--warn    { background: var(--warn); }
+.rsm-strip__block--ok      { background: var(--ok); }
+.rsm-strip__block--neutral { background: var(--invert-track); }
+.rsm-strip__legend {
+  margin: var(--sp-2) 0 0;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  color: var(--invert-t2);
+}
+
+/* ── Las filas de cards del tablero ───────────────────────────── */
+
+.rsm-row { display: grid; gap: 12px; align-items: start; }
+/* 62 / 38: el puente pide ancho (cuatro importes en fila), los lados no. */
+.rsm-row--money { grid-template-columns: 62fr 38fr; }
+.rsm-row--money > :only-child { grid-column: 1 / -1; }
+/* Los tres cortes, a 1fr cada uno: el Resumen mantiene el tope de 1280px de
+   D-060, y el diseño está armado a 1352 — las tres columnas entran igual. */
+.rsm-row--cuts-1 { grid-template-columns: 1fr; }
+.rsm-row--cuts-2 { grid-template-columns: 1fr 1fr; }
+.rsm-row--cuts-3 { grid-template-columns: 1fr 1fr 1fr; }
+.rsm-row--tail  { grid-template-columns: 420px 1fr; }
+.rsm-row--tail > :only-child { grid-column: 1 / -1; }
+.rsm-row--cross { grid-template-columns: 1fr 1fr; }
+.rsm-row--cross > :only-child { grid-column: 1 / -1; }
+
+.rsm-card {
+  background: var(--color-surface);
+  border: var(--card-border);
+  border-radius: 14px;
+  padding: var(--sp-5) 22px;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+.rsm-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.rsm-card__title {
+  margin: 0 0 var(--sp-4);
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--t2);
+}
+.rsm-card__head .rsm-card__title { margin-bottom: var(--sp-4); }
+
+/* El link de cada card y de cada fila: la acción secundaria, sin caja. */
+.rsm-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-tool);
+  font-size: 11.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--celeste-deeper);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rsm-link:hover { text-decoration: underline; }
+
+/* ── El puente ────────────────────────────────────────────────── */
+
+.rsm-bridge { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.rsm-bridge__step {
+  flex: 1 1 0;
+  min-width: 150px;
+  padding: 0 var(--sp-2);
+  border-left: 1px solid var(--line);
+}
+.rsm-bridge__step:first-child { border-left: none; padding-left: 0; }
+.rsm-bridge__label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--t2);
+  margin-bottom: 3px;
+}
+.rsm-bridge__amount {
+  display: block;
+  font-size: 17px;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.rsm-bridge__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--t3);
+  line-height: 1.35;
+}
+.rsm-bridge__step--accent  .rsm-bridge__amount { color: var(--celeste-deeper); }
+.rsm-bridge__step--warn    .rsm-bridge__amount { color: var(--warn-tx); }
+.rsm-bridge__step--neutral .rsm-bridge__amount { color: var(--t3); }
+/* El paso que hay que ir a mirar, con su propio fondo: es el que el analista
+   busca cuando entra a la pantalla. */
+.rsm-bridge__step--error {
+  background: var(--error-bg-soft);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2);
+}
+.rsm-bridge__step--error .rsm-bridge__amount { color: var(--error-tx); }
+
+.rsm-bridge__uncompared {
+  margin: var(--sp-3) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+/* La barra de proporción: lo que pone la cifra en escala. */
+.rsm-prop { margin-top: var(--sp-4); }
+.rsm-prop__bar {
+  display: flex;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.rsm-prop__seg--ink,
+.rsm-prop__seg--neutral { background: var(--color-bg-subtle); }
+.rsm-prop__seg--accent  { background: var(--celeste); }
+.rsm-prop__seg--warn    { background: var(--warn); }
+.rsm-prop__seg--error   { background: var(--error); }
+.rsm-prop__note {
+  margin: var(--sp-2) 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+/* ── Para qué lado ────────────────────────────────────────────── */
+
+.rsm-side { margin-bottom: var(--sp-4); }
+.rsm-side__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.rsm-side__label { font-size: 12px; font-weight: var(--fw-semibold); color: var(--t1); }
+.rsm-side__amount { font-size: 12px; font-weight: var(--fw-bold); color: var(--t1); white-space: nowrap; }
+.rsm-side__track {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--track-warm);
+  margin: var(--sp-2) 0 var(--sp-1);
+  overflow: hidden;
+}
+.rsm-side__fill { height: 12px; border-radius: 6px; }
+.rsm-side__fill--error { background: var(--error); }
+.rsm-side__fill--warn  { background: var(--warn); }
+.rsm-side__note { font-size: 10.5px; color: var(--t3); line-height: 1.4; }
+.rsm-side__foot {
+  display: flex;
+  gap: var(--sp-6);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+}
+.rsm-side__foot-label {
+  display: block;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--t3);
+}
+.rsm-side__foot-value { display: block; font-size: 14px; font-weight: var(--fw-bold); color: var(--t1); }
+
+/* ── Los tres cortes ─────────────────────────────────────────────
+   Las barras se escalan POR PLATA, no por cantidad de unidades: la
+   pregunta que contestan es "dónde está el importe". */
+
+.rsm-cut__row { margin-bottom: var(--sp-3); }
+.rsm-cut__row[role="button"] { cursor: pointer; }
+.rsm-cut__row[role="button"]:hover .rsm-cut__label { color: var(--celeste-deeper); }
+.rsm-cut__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.rsm-cut__label { font-size: 12px; font-weight: var(--fw-semibold); color: var(--t1); min-width: 0; }
+.rsm-cut__label--strong { font-size: 12.5px; font-weight: var(--fw-bold); }
+.rsm-cut__base { font-weight: var(--fw-regular); color: var(--t3); }
+.rsm-cut__value { font-size: 12px; font-weight: var(--fw-semibold); color: var(--t2); white-space: nowrap; }
+.rsm-cut__value--error { color: var(--error-tx); font-weight: var(--fw-bold); }
+.rsm-cut__value--warn  { color: var(--warn-tx); font-weight: var(--fw-bold); }
+.rsm-cut__value--ok    { color: var(--ok-tx); }
+.rsm-cut__track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--track);
+  margin-top: var(--sp-1);
+  overflow: hidden;
+}
+.rsm-cut__fill { height: 10px; border-radius: 5px; background: var(--error); }
+/* "Sin identificar" va rayado, y no es opcional: un corte que se muestra
+   como si fuera completo sin serlo es el default silencioso de CLAUDE.md. */
+.rsm-cut__fill--unident {
+  background: repeating-linear-gradient(45deg,
+    var(--unident-a) 0 5px, var(--unident-b) 5px 10px);
+}
+.rsm-cut__row--unident .rsm-cut__label,
+.rsm-cut__row--unident .rsm-cut__value { color: var(--neutral-tx); }
+.rsm-cut__sub { margin-top: 3px; font-size: 10.5px; color: var(--t3); }
+
+/* La conclusión en caja. No es decoración: es la mitad del valor de la card. */
+.rsm-cut__conclusion {
+  margin: var(--sp-4) 0 0;
+  padding: var(--sp-3);
+  background: var(--conclusion-bg);
+  border-radius: var(--radius-md);
+  font-size: 11.5px;
+  font-weight: var(--fw-regular);
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+/* ── Cómo venía este control ──────────────────────────────────── */
+
+.rsm-history__plot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  height: 92px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rsm-history__months {
+  display: flex;
+  gap: var(--sp-2);
+  padding-top: var(--sp-1);
+}
+.rsm-history__months span {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--t3);
+}
+.rsm-history__threshold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--warn);
+  pointer-events: none;
+}
+.rsm-history__threshold-label {
+  position: absolute;
+  left: 0;
+  top: -13px;
+  padding: 0 2px;
+  background: var(--color-surface);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--warn-tx);
+}
+.rsm-history__col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+.rsm-history__value { font-size: 10px; font-weight: var(--fw-semibold); color: var(--t3); margin-bottom: 2px; }
+.rsm-history__value--now { font-size: 12px; font-weight: 800; color: var(--error-tx); }
+.rsm-history__bar { width: 100%; max-width: 34px; border-radius: 3px 3px 0 0; background: var(--neutral); }
+.rsm-history__bar--ok    { background: var(--ok); }
+.rsm-history__bar--warn  { background: var(--warn); }
+.rsm-history__bar--error { background: var(--error); }
+.rsm-history__col { position: relative; }
+.rsm-history__reading {
+  margin: var(--sp-3) 0 0;
+  padding: var(--sp-3);
+  background: var(--error-bg-soft);
+  border-radius: var(--radius-md);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+/* ── Por dónde empezar / las unidades repetidas ───────────────── */
+
+.rsm-top__table { width: 100%; border-collapse: collapse; }
+.rsm-top__table td {
+  padding: var(--sp-2) var(--sp-1);
+  border-top: 1px solid var(--line-soft);
+  font-size: 12.5px;
+  vertical-align: baseline;
+}
+.rsm-top__table tr:first-child td { border-top: none; }
+.rsm-top__legajo { width: 60px; color: var(--neutral); }
+.rsm-top__name { font-weight: var(--fw-semibold); color: var(--t1); }
+.rsm-top__tag {
+  margin-left: var(--sp-1);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-subtle);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--t3);
+}
+.rsm-top__rubro { color: var(--t2); }
+.rsm-top__rubro--none { font-style: italic; color: var(--neutral); }
+.rsm-top__amount { text-align: right; font-weight: var(--fw-bold); white-space: nowrap; }
+.rsm-top__amount--over  { color: var(--error-tx); }
+.rsm-top__amount--under { color: var(--warn-tx); }
+.rsm-top__go { text-align: right; width: 56px; }
+
+.rsm-repeated__badge-cell { text-align: right; width: 74px; }
+.rsm-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+}
+.rsm-badge--error { background: var(--error-bg); border: 1px solid var(--error-bd); color: var(--error-tx); }
+.rsm-badge--warn  { background: var(--warn-bg);  border: 1px solid var(--warn-bd);  color: var(--warn-tx); }
+
+/* ── La grilla de 3b: una tarjeta por control ─────────────────── */
+
+.rsm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+
+/* ── Tarjeta de resumen por control ──────────────────────────────
+   Una por control, en el orden que ya trae la pantalla: errores
+   primero. En 3b entra a la grilla; los verdes van agrupados en una
+   sola card, así el ojo va sólo a lo que falla. */
+.results-ctrl-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.results-ctrl-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--color-surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--neutral);
+  border-radius: 12px;
+  padding: var(--sp-4) 18px;
+  font-family: var(--font-tool);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  transition: all var(--transition);
+}
+.results-ctrl-card:hover { box-shadow: var(--sh-tool); }
+.results-ctrl-card--error   { border-left-color: var(--error); }
+.results-ctrl-card--warn    { border-left-color: var(--warn); }
+.results-ctrl-card--ok      { border-left-color: var(--ok); }
+.results-ctrl-card--neutral { border-left-color: var(--neutral); }
+.results-ctrl-card--group {
+  background: var(--conclusion-bg);
+  border-left-color: var(--ok);
+}
+
+.results-ctrl-card__row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.results-ctrl-card__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+}
+.results-ctrl-card__pct {
+  font-size: 16px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.results-ctrl-card__pct--error { color: var(--error-tx); }
+.results-ctrl-card__pct--warn  { color: var(--warn-tx); }
+.results-ctrl-card__pct--ok    { color: var(--ok-tx); }
+.results-ctrl-card__meta {
+  font-size: 12px;
+  color: var(--t2);
+  line-height: 1.45;
+}
+.results-ctrl-card__meta strong { color: var(--error-tx); }
+
+.results-ctrl-card__spark { display: flex; align-items: flex-end; gap: var(--sp-1); height: 26px; }
+.results-ctrl-card__spark-bar { flex: 1; background: var(--spark-past); border-radius: 2px 2px 0 0; }
+.results-ctrl-card__spark-bar--error { background: var(--error); }
+.results-ctrl-card__spark-bar--warn  { background: var(--warn); }
+.results-ctrl-card__spark-bar--ok    { background: var(--ok); }
+
+.results-ctrl-card__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.results-ctrl-card__trend { font-size: 11px; color: var(--neutral); }
+
+.results-ctrl-card__list { list-style: none; margin: 0; padding: 0; }
+.results-ctrl-card__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+}
+.results-ctrl-card__list-name { flex: 1; min-width: 0; font-size: 12.5px; color: var(--t1); }
+.results-ctrl-card__list-count { font-size: 11.5px; color: var(--t3); white-space: nowrap; }
+.results-ctrl-card__group-note {
+  margin: var(--sp-2) 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+/* Herramienta de escritorio: abajo de ~1200px los tres cortes pasan a dos
+   columnas y la grilla de 3b también; el veredicto apila la escala. */
+@media (max-width: 1200px) {
+  .rsm-row--cuts-3,
+  .rsm-row--tail { grid-template-columns: 1fr 1fr; }
+  .rsm-grid { grid-template-columns: repeat(2, 1fr); }
+  .rsm-verdict { flex-wrap: wrap; }
+  .rsm-verdict__aside { flex: 1 1 100%; }
+}
 
 @media (max-width: 768px) {
   .results-tabsbar { padding: 0 var(--sp-4); }
   .results-tabsbar__meta { display: none; }
-  .results-hero { padding: var(--sp-5) var(--sp-4); }
-  .results-hero__kpis { gap: var(--sp-4) var(--sp-6); }
-  .results-ctrl-card { flex-wrap: wrap; }
+  .rsm-verdict { padding: var(--sp-5) var(--sp-4); }
+  .rsm-verdict__title { font-size: 28px; }
+  .rsm-row--money,
+  .rsm-row--cuts-2,
+  .rsm-row--cuts-3,
+  .rsm-row--tail,
+  .rsm-row--cross { grid-template-columns: 1fr; }
+  .rsm-grid { grid-template-columns: 1fr; }
+  .rsm-bridge__step { flex: 1 1 45%; border-left: none; padding-left: 0; }
 }
 
 /* ══════════════════════════════════════════════════════════════

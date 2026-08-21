@@ -5,9 +5,13 @@
 > aprobado, pixel por pixel, **`docs/handoff-resumen-netos.md`** (pantallas 3a y 3b) — leerlos es
 > lo primero que pide cada prompt.
 >
-> **Nada de esto está implementado al 2026-08-21.** La tanda 1 construye el tablero y el helper
-> que usan todas las demás; las tandas 2 a 6 cablean los campos del `summarize` por lote y corren
-> en paralelo entre sí, sin módulos compartidos.
+> **La tanda 1 está hecha** (2026-08-21, D-089): el tablero existe entero en
+> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. Las tandas 2 a 6 cablean
+> los campos del `summarize` por lote y corren en paralelo entre sí, sin módulos compartidos — su
+> prompt sigue valiendo tal cual. Dos cosas que cambiaron y conviene saber antes de arrancar
+> cualquiera de ellas: el valor del pre-filtro del Detalle se pide como intención
+> (`data-hero-prefilter="conDif"`) y lo resuelve el tablero contra las opciones de cada control, y
+> `unitKeys` son objetos `{ key, label, amount, group }`, no strings.
 
 ## Modelo y esfuerzo por chat
 
@@ -15,7 +19,7 @@ Elegilos con `/model` antes de mandar el prompt.
 
 | Orden | Chat | Modelo | Esfuerzo / thinking | Por qué |
 |---|---|---|---|---|
-| 1 | El tablero (3a + 3b) + helper + piloto Netos | **Opus 5** | **high** · thinking prendido | Reemplaza el hero para los 21 runs y define el contrato de `summary.resumen`: un error acá se multiplica por 21. Si se traba, subir a xhigh |
+| ~~1~~ | ~~El tablero (3a + 3b) + helper + piloto Netos~~ — **hecha** (D-089) | **Opus 5** | **high** · thinking prendido | Reemplaza el hero para los 21 runs y define el contrato de `summary.resumen`: un error acá se multiplica por 21. Si se traba, subir a xhigh |
 | 2 | Campos del summarize — cruce Meta4/Marval (6) | **Sonnet 5** | **high** · thinking prendido | Mecánico, pero no puede mover un conteo y el puente de NR arrastra D-086 |
 | 3 | Campos del summarize — Axton/temporales (5) | **Opus 5** | **high** · thinking prendido | Agrupadores trae D-087 (neta vs total, denominador) y Novedades D-073: criterio fino |
 | 4 | Los que generan archivo (4) | **Sonnet 5** | **high** · thinking prendido | Semántica ya decidida en D-077/D-078; es aplicar |
