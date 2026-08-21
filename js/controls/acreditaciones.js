@@ -842,6 +842,10 @@ export function renderAcreditacionesReporteResults(results, container) {
         { value: 'fecha',   label: 'Fecha de acreditación', compare: (a, b) => a.lista.fecha.localeCompare(b.lista.fecha) || a.lista.n - b.lista.n },
       ],
       getLabel: f => f.searchLabel,
+      // La unidad acá es la lista, no el legajo: el buscador tiene que pedir lo
+      // que la ficha efectivamente tiene. Mismo texto que la Planilla.
+      searchLabel: 'Buscar lista',
+      searchPlaceholder: 'Número de lista, liquidación, fecha o listado…',
       getAmount: f => f.lista.total,
       amountLabel: 'Σ acreditado',
       onExport: (exportEl) => mountExportMenu(exportEl, res),

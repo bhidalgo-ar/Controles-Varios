@@ -143,6 +143,19 @@ test('ordenar por total pone la lista más grande arriba, sin cambiar cuántas h
   await expect(page.locator('.ficha:visible').first().locator('.ficha__amount')).toHaveText('11.000,00');
 });
 
+test('el buscador pide lo que la ficha tiene —lista, liquidación, fecha o listado— y no un legajo', async ({ page }) => {
+  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+  await expect(page.locator('.table-search__label').first()).toHaveText('Buscar lista');
+  await expect(page.locator('.table-search__input').first())
+    .toHaveAttribute('placeholder', /Número de lista/);
+
+  // El número de Listado del banco también encuentra su lista.
+  await page.locator('.table-search__input').first().fill('920');
+  await page.locator('.table-search__option').first().click();
+  await expect(page.locator('.ficha:visible')).toHaveCount(1);
+  await expect(page.locator('.ficha:visible .ficha__name')).toHaveText('2Q — 2da Quincena');
+});
+
 test('el semáforo cuenta en listas y no lo movió la vista nueva', async ({ page }) => {
   const summary = await page.evaluate(() => window.__summary);
   expect(summary.unit).toBe('lista');

@@ -2837,3 +2837,30 @@ en el código (`js/controls/popVariaciones.js`) como la excepción a la regla de
 
 **Detalle:** `specs/vista-estandar-resultados.md` §3 y §5, `js/ui/fichaList.js`, `js/ui/planillaPanel.js`,
 `js/controls/popVariaciones.js`, D-074, D-077.
+
+---
+
+## D-081 — Acreditaciones: el aviso de grupo pendiente se ve arriba de las tres solapas, no dentro de Planilla
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 8 de `specs/vista-estandar-resultados.md` (ficha por lista de
+acreditación). Decisión tomada sin Willy presente (no estaba disponible), a confirmar.
+
+**Qué se cambió:** el aviso de "grupo sin fecha de acreditación" (con el campo y el botón "Asignar") y la
+lista de fechas ya asignadas a mano en la corrida (con "Deshacer") pasaron a vivir arriba de las tres
+solapas — `Resumen · Fichas · Planilla` —, antes de `renderResumenDetalle()`. Antes vivían adentro de la
+solapa Planilla.
+
+**Por qué:** un grupo pendiente bloquea el export del `.xlsx`, así que resolverlo no puede depender de en
+qué solapa esté parado el analista. Con la vista estándar la pantalla abre en Fichas cuando hay
+diferencias — que es justo cuando suele haber un grupo pendiente sin resolver —, así que el aviso quedaba
+adentro de una solapa que el analista no tenía por qué visitar.
+
+**Alternativa descartada:** dejar el aviso donde estaba y replicarlo (o un resumen de él) también en
+Fichas. Se descartó por duplicar la misma información en dos lugares con el riesgo de que se
+desincronicen; un único aviso arriba de las solapas evita eso.
+
+**Pendiente:** que Willy vea el nuevo lugar del aviso en pantalla y confirme que no molesta arriba de
+Resumen, donde antes no aparecía nada de esto.
+
+**Detalle:** `js/controls/acreditaciones.js`, `specs/control-acreditaciones-axton.md` ("Salida — la
+app"), `tests/e2e/acreditacionesFicha.spec.js`, D-020, D-021.

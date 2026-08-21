@@ -4,10 +4,12 @@
 del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 3 hecha
 (2026-08-20, rama `feat/vista-estandar-barra-axton`):** barra + planilla en las 9 pantallas del lote
 Axton/general (D-078, D-079, D-080). **Tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en
-paralelo, todavía sin mergear — no está hecha.** Tandas 4 a 8 —las fichas por lote— siguen pendientes,
-en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los
-21 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
-`docs/prompts-vista-estandar.md`.
+paralelo, todavía sin mergear — no está hecha.** **Tanda 8 hecha (2026-08-21, rama
+`feat/vista-estandar-acreditaciones`, todavía sin mergear):** ficha por lista de acreditación en
+"Acreditaciones — Generar Reporte" (D-081). Tandas 4 a 7 —el resto de las fichas por lote— siguen
+pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se
+generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo
+están en `docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -253,7 +255,7 @@ Aprobado por Willy el 2026-08-20.
 | Variación entre quincenas (POP) | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-080 |
 | **Asiento de Remuneraciones** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen. Ficha pendiente (tanda 7) |
 | **Contabilidad Desglosada + Asiento** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | ídem. Ficha pendiente (tanda 7) |
-| **Acreditaciones** | **sí (tanda 3)** | **sí (tanda 3)** | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`). Ficha pendiente (tanda 8) |
+| **Acreditaciones** | **sí (tanda 3)** | **sí (tanda 3)** | **sí (tanda 8), por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no lleva atributos del empleado** (`D-020`, escrito como assert). El aviso de grupo sin fecha se movió arriba de las tres solapas (`D-081`) |
 | Importador de Novedades | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
 
 **Además de la ficha, dónde conviene otra cosa:**

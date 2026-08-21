@@ -270,6 +270,13 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {{ value: string, label: string, match: (f: object) => boolean }[]} [opts.marcas]
  * @param {{ value: string, label: string, compare: (a: object, b: object) => number }[]} [opts.ordenes]
  * @param {(ficha: object) => string} [opts.getLabel] - texto buscable
+ * @param {string} [opts.searchLabel] - rótulo del buscador
+ * @param {string} [opts.searchPlaceholder] - qué se puede buscar. Los dos van
+ *   con el default de `initSearchCombobox()` ("Buscá por legajo o nombre…"), que
+ *   es el correcto en los 7 controles cuya unidad es el legajo — y no en los 3
+ *   donde es el centro de costo, la cuenta contable o la lista de acreditación:
+ *   ahí el buscador estaría pidiendo un dato que la ficha no tiene. Mismo
+ *   pass-through que ya tiene la Planilla (`renderPlanillaPanel()`).
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
  * @param {string} [opts.unitLabel='fichas']
@@ -282,6 +289,7 @@ export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
   getAmount, amountLabel, unitLabel = 'fichas',
+  searchLabel, searchPlaceholder,
   onExport, onOpen, pageSize,
 } = {}) {
   if (fichas.length === 0) {
@@ -335,6 +343,8 @@ export function renderFichasPanel(panel, {
 
   initSearchCombobox(searchEl, {
     rows: fichas, trEls: els, getLabel,
+    ...(searchLabel !== undefined ? { label: searchLabel } : {}),
+    ...(searchPlaceholder !== undefined ? { placeholder: searchPlaceholder } : {}),
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 

@@ -197,6 +197,18 @@ empleados por lista, excepciones, bancos y alertas de integridad. Patrones de UI
 obligatorios de `CLAUDE.md` §11 y del skill `nuevo-control`: hero, semáforo,
 ocultar filas/columnas sin valor real, paginación, buscador y menú de export.
 
+La pantalla sigue la vista estándar (`specs/vista-estandar-resultados.md`): tres
+solapas `Resumen · Fichas · Planilla`. **Fichas** (tanda 8) es una tarjeta por
+**lista** de acreditación, no por legajo — la unidad de este control es la
+acreditación y no el empleado-mes (D-021), la única excepción conocida a
+consolidar por legajo. Cerrada: número de lista, `código — liquidación`,
+empresa, fecha de acreditación, cuántas acreditaciones tiene y qué hoja del
+`.xlsx` es. Abierta: la tira del listado de pago al total que va al banco, el
+desglose por banco, las alertas de esa lista por tipo con el detalle fila por
+fila, y una conclusión que dice qué resolver antes de mandarla. El aviso de
+grupo pendiente y las fechas asignadas a mano se ven arriba de las tres
+solapas, no sólo dentro de Planilla (D-081).
+
 Alertas que calcula la app:
 
 - fila en listado de pago **sin importe**;
