@@ -3,10 +3,13 @@
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
 del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 2 hecha
 (2026-08-20):** las diez entradas del lote Meta4/Marval del §8 pasan a la barra y la planilla estándar
-(D-078) — **PR en borrador, falta que Willy mire las diez pantallas.** Tanda 3 (lote Axton/general) y
-tandas 4 a 8 (las fichas, por lote) siguen pendientes, en el orden del §9. Sale del handoff de diseño del
-Control de Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
-cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
+(D-078) — **PR #181 en borrador, todavía sin mergear, falta que Willy mire las diez pantallas. Tanda 6
+hecha (2026-08-21), sobre la tanda 2 y también en borrador:** EE x CATEG suma la ficha por legajo y la
+matriz campo × legajo "Por campo" (D-079) — **depende de que la tanda 2 entre primero.** Tanda 3 (lote
+Axton/general) y tandas 4, 5, 7 y 8 (el resto de las fichas, por lote) siguen pendientes, en el orden del
+§9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21 controles. El
+mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
+`docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -31,6 +34,12 @@ volver a averiguar dónde está exportar en cada control desconfía del número 
 
 **`Resumen` · `Fichas` · `Planilla`**, en ese orden, con esos nombres, en todos los controles. Un
 control sin fichas muestra dos (`Resumen · Planilla`) — nunca un tercer nombre para lo mismo.
+
+> **Única excepción, tanda 6 (D-079): EE x CATEG lleva una cuarta solapa, "Por campo"** (la matriz
+> campo × legajo), después de Planilla. No reemplaza a ninguna de las tres — la planilla de la tanda 2
+> sigue listando los casos uno por uno — y no abre la puerta a que otro control sume la suya: la solapa
+> extra sólo entra si la spec se la reconoce por nombre a un control puntual en el mapa del §8
+> (`extraTabs` en `renderResumenDetalle()`, con ese contrato en su propio JSDoc).
 
 - **Resumen** — lo que ya hay: tiles, casos, chequeos. Willy va a rehacerlo aparte; ese trabajo no
   depende de este documento.
@@ -234,6 +243,17 @@ Deuda pagada de paso, para los 21 controles: Brutos, GS Pers y Control NR dejan 
 con `CYAN_HDR`/`LILAC_HDR` y los tres de Rendimiento con `rgba(...)` escritos a mano — el violeta que
 no era de la marca desaparece.
 
+**Construido en la tanda 6 (2026-08-21 — D-079), sobre EE x CATEG, PR en borrador, sobre la tanda 2
+todavía sin mergear:**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| Solapa **Fichas** (una tarjeta por legajo, con la tira de conteo de campos en vez de una cascada de importes) | `js/controls/catXEmpleados.js` (`buildFichasCatXEmpleados`, `renderCatXEmpleadosFichas`) | §4: acá no hay plata que cascadear, hay campos que comparar |
+| Cuarta solapa **"Por campo"**, la matriz campo × legajo, sin fila de TOTAL | `js/controls/catXEmpleados.js` (`renderPorCampo`) | contesta si un campo falla en un legajo o en toda la nómina, sin exportar y contar a mano |
+| `extraTabs` en `renderResumenDetalle()` — una solapa más, reservada a la que la spec reconoce por nombre en el §8 | `js/ui/resultBlocks.js` | §2 |
+| El número grande de la ficha acepta un conteo, no sólo un importe (`fmtCell` ya existía; ahora se usa desde `amount`) | `js/ui/fichaList.js` | una ficha que cuenta campos, no pesos |
+| El KPI de la selección acepta `amountDecimals: 0` | `js/ui/tableTools.js` | "Σ campos que no coinciden: 3", no "3,00" |
+
 **Y una deuda que se sigue pagando en la tanda 3:** Agrupadores, Variación Sueldos y Variación
 Conceptos siguen con barra propia.
 
@@ -248,7 +268,7 @@ Aprobado por Willy el 2026-08-20.
 | **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **sí** | 18 conceptos, ahora en `Marcas ▾` ("el legajo liquidó ese concepto"); falta la ficha (tanda 4) |
 | **Novedades vs Liquidación** | sí | sí | **sí** | legajo × concepto en cuatro bandas — mismo caso que NR |
 | **Acumuladores Ganancias** | sí *(hoy tiene barra propia)* | sí | **sí — reemplaza la ficha vieja** | es el que fija el estándar: ya tiene fichas de primera generación para jubilar |
-| **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **sí** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La tercera solapa útil sigue siendo la **matriz campo × legajo** de una tanda futura |
+| **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **hecho (tanda 6, D-079)** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La ficha es una tarjeta por legajo con la tira de conteo de campos (no una cascada de importes) y una conclusión que dice si el problema es del empleado o de una carga masiva. Suma una **cuarta** solapa, "Por campo" — la matriz campo × legajo, única excepción a las tres solapas del §2 |
 | **Variación Conceptos** | sí *(hoy tiene barra propia)* | sí | **sí** | un legajo con varios conceptos que se movieron |
 | **Rendimiento vs Tabulado** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **sí, por centro de costo** | la unidad es el CC, no el legajo; la lista de conceptos por columna pasó del `<th>` a una leyenda desplegable arriba de la planilla |
 | **Rendimiento vs Asiento** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | ya tiene algo parecido → migrar | pierde el orden por columna de la planilla principal (era la única que ordenaba por su cuenta; vuelve con la ficha) y el desglose que colgaba de la fila de TOTAL (el desglose por celda sigue igual); el rótulo pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo" |
@@ -266,7 +286,7 @@ Aprobado por Willy el 2026-08-20.
 **Además de la ficha, dónde conviene otra cosa:**
 - **Variaciones y Variación entre quincenas** ya tienen el escalón/histograma, que es lo que sirve
   ahí. No se les fuerzan bandas donde el eje es el tiempo.
-- **EE x CATEG**: ver la nota de la matriz campo × legajo.
+- **EE x CATEG**: hecho (tanda 6, D-079) — ver §2 y §7.
 
 **El total, para tener la escala clara: la barra estándar va a los 21. La planilla con bandas, a
 19. La ficha con cascada la justifican 10** (9 más Netos).
@@ -287,7 +307,8 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    cualquiera de las dos (D-078).
 4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
-6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
+6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
+   (D-079), en `feat/vista-estandar-ee-categ`, PR en borrador sobre la tanda 2 todavía sin mergear.**
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
 8. **Ficha por lista de acreditación** — Acreditaciones.
 

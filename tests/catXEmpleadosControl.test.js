@@ -231,6 +231,22 @@ assert('sus tres campos quedan sin comparar, con el valor del lado que sí lo ti
   fAusente.body.detail.rows.every(r => r.estado === 'Sin comparar')
   && fAusente.body.detail.rows.find(r => r.campo === 'Puesto').tab === '—');
 
+// ── Una corrida vieja, guardada en la base antes de esta versión ───────────
+//
+// Las corridas se guardan y se vuelven a dibujar tal cual. Una guardada antes
+// sólo tiene los campos que NO coincidían: con eso no se puede armar la ficha
+// sin inventar los que sí coincidían, así que no se arma ninguna (y la pantalla
+// no ofrece esas dos solapas).
+
+const corridaVieja = {
+  summary: { catActivos: 2, tabTotal: 2, missingInTabCount: 0, missingInCatCount: 0, fieldDiscrepancyCount: 1 },
+  missingInTab: [], missingInCat: [],
+  fieldDiscrepancies: [{ id: '1', apellido: 'Sanguinetti', nombre: 'Javier',
+    diffs: [{ field: 'PUESTO', cat: 'ANALISTA', tab: 'ANALISTA SR' }] }],
+};
+assert('una corrida guardada antes de esta versión no rompe la pantalla: no arma fichas',
+  buildFichasCatXEmpleados(corridaVieja).length === 0);
+
 // ── El semáforo no lo toca nada de esto ────────────────────────────────────
 
 const sCampos = summarizeCatXEmpleados(rCampos);

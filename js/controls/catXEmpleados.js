@@ -313,6 +313,7 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
 export function renderCatXEmpleadosResults(results, container) {
   const { summary } = results;
   const totalDiffs = summary.missingInTabCount + summary.missingInCatCount + summary.fieldDiscrepancyCount;
+  const conDetalle = tieneDetalleDeCampos(results);
   const fichas = buildFichasCatXEmpleados(results);
 
   container.innerHTML = '';
@@ -322,7 +323,7 @@ export function renderCatXEmpleadosResults(results, container) {
     // Con diferencias abre en Fichas (lo primero que se ve es por qué falla);
     // si cerró, en la Planilla. La preferencia del analista pisa el default,
     // pero se guarda por control Y por estado del control (§2).
-    conDiferencias: totalDiffs > 0,
+    conDiferencias: conDetalle ? totalDiffs > 0 : undefined,
     resumen(panel) {
       const tone = totalDiffs === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -341,14 +342,25 @@ export function renderCatXEmpleadosResults(results, container) {
         { label: 'Sin Rep. Categ.', value: summary.missingInCatCount, tone: summary.missingInCatCount > 0 ? 'error' : 'ok' },
         { label: 'Discrepancias de campo', value: summary.fieldDiscrepancyCount, tone: summary.fieldDiscrepancyCount > 0 ? 'error' : 'ok' },
       ]);
+      if (!conDetalle) {
+        const aviso = document.createElement('p');
+        aviso.className = 'text-muted';
+        aviso.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) 0;';
+        aviso.textContent = 'Esta corrida se guardó con una versión anterior y no trae el detalle campo '
+          + 'por campo, así que no están las solapas "Fichas" ni "Por campo". Volvé a correr el control '
+          + 'con los mismos archivos para verlas.';
+        panel.appendChild(aviso);
+      }
     },
-    fichas(panel) { renderCatXEmpleadosFichas(panel, { fichas, results }); },
+    ...(conDetalle ? {
+      fichas(panel) { renderCatXEmpleadosFichas(panel, { fichas, results }); },
+    } : {}),
     planilla(panel) { renderCatXEmpleadosPlanilla(panel, results); },
     // La cuarta solapa. Ver el comentario de `renderPorCampo()`: no es una
     // planilla de totales y no reemplaza a la Planilla — contesta otra pregunta.
-    extraTabs: [
-      { id: 'porCampo', label: 'Por campo', render: (panel) => renderPorCampo(panel, results) },
-    ],
+    extraTabs: conDetalle
+      ? [{ id: 'porCampo', label: 'Por campo', render: (panel) => renderPorCampo(panel, results) }]
+      : [],
   });
 }
 
@@ -374,6 +386,21 @@ export function renderCatXEmpleadosResults(results, container) {
 // hay nada que abrir—, y por eso los chips "Al centavo" y "Dentro del margen"
 // salen apagados con el porqué en el `title`.
 
+/**
+ * ¿Esta corrida trae el detalle campo por campo?
+ *
+ * Las corridas se guardan en la base y se vuelven a dibujar tal cual (ver
+ * `js/ui/controlsResults.js`). Una guardada antes de esta versión sólo tiene los
+ * campos que NO coincidían: los que sí coincidían no se guardaban. Con eso no se
+ * puede armar ni la ficha ni la matriz, y armarlas igual daría números
+ * equivocados —dirían que se comparó un campo solo—, así que esas dos solapas no
+ * se ofrecen y la pantalla dice por qué. Se arregla volviendo a correr el
+ * control con los mismos archivos.
+ */
+function tieneDetalleDeCampos(results) {
+  return Array.isArray(results.byField);
+}
+
 /** 'Coincide' / 'No coincide' / 'Sin comparar', para el renglón de la ficha. */
 const ESTADO_CAMPO = {
   coincide:    'Coincide',
@@ -394,6 +421,9 @@ function valorDeCampo(v) {
  * (arma descriptores, no toca el DOM), así que se testea sin navegador.
  */
 export function buildFichasCatXEmpleados(results) {
+  // Una corrida guardada antes de esta versión no trae el detalle campo por
+  // campo (ver `tieneDetalleDeCampos`): sin él no hay ficha que armar.
+  if (!tieneDetalleDeCampos(results)) return [];
   const porCampo = new Map(results.byField.map(f => [f.key, f]));
   return [
     ...results.fieldDiscrepancies.map(e => fichaDeCampos(e, porCampo)),
@@ -705,7 +735,8 @@ function casosDeCruce({ missingInTab, missingInCat, fieldDiscrepancies }) {
       caso: CASO.campo,
       id: e.id,
       empleado: [e.apellido, e.nombre].filter(Boolean).join(' '),
-      campo: d.label, valorCat: d.cat, valorTab: d.tab, fAlta: null,
+      // `d.label` es de esta versión; una corrida vieja sólo tiene el código.
+      campo: d.label ?? d.field, valorCat: d.cat, valorTab: d.tab, fAlta: null,
       estado: 'conDif',
     }))),
   ];
