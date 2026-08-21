@@ -103,8 +103,8 @@ test('una corrida sin avisos lo dice (y una vieja, sin el campo, se lee igual)',
 test('la barra de herramientas del Detalle queda a la vista al scrollear', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=rojo`);
   await page.click('.results-tab:has-text("Detalle")');
-  // …y dentro de la ficha del control, su propia solapa Detalle (la tabla).
-  await page.click('.control-card .tabs__tab:has-text("Detalle")');
+  // …y dentro de la ficha del control, su propia solapa Planilla (la tabla).
+  await page.click('.control-card .tabs__tab:has-text("Planilla")');
 
   const toolbar = page.locator('.results-toolbar--sticky');
   await expect(toolbar).toBeVisible();

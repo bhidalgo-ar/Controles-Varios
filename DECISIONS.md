@@ -2759,3 +2759,129 @@ sirve así en un control de generación, se ajusta sin tocar el resto del están
 **Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
 `js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
 D-069, D-074, D-076.
+
+---
+
+## D-078 — Tanda 2 de la vista estándar: el lote Meta4/Marval pasa a la barra y la planilla estándar
+
+**Fecha:** 2026-08-20. **Contexto:** tanda 2 de `specs/vista-estandar-resultados.md` (D-074, §9 punto 2):
+Brutos, GS Pers y Control NR (Controlar y Generar Reporte de los tres), Rendimiento vs Tabulado,
+Rendimiento x EE, Rendimiento vs Asiento y EE x CATEG — diez entradas del §8 — pasan a la barra y la
+planilla del estándar. Ninguna lleva ficha todavía (eso es tanda 5/6). El PR queda **en borrador**: falta
+que Willy mire las diez pantallas en el navegador antes de mergear.
+
+**Se creó una pieza compartida nueva, `js/ui/planillaPanel.js` (`renderPlanillaPanel()`), en vez de
+repetir el armado en cada uno de los diez controles.** Es el gemelo de `renderFichasPanel()` para la
+solapa Planilla: el control declara sus columnas, en qué estado cerró cada fila y qué exporta, y hereda
+la barra, el TOTAL y el cruce de filtros. **La tanda 3 corre en paralelo sobre los otros nueve controles
+del lote Axton/general y puede haber llegado a la misma necesidad por su cuenta: si las dos ramas traen
+una pieza, hay que unificarlas antes de mergear cualquiera de las dos.**
+
+**Los tres controles que GENERAN un archivo** (Brutos, GS Pers y Control NR en su variante "Generar
+Reporte") **muestran los cinco chips igual, en gris, en cero, con un `title` que explica por qué no
+aplican** ("arma un archivo desde el Tabulado y no lo cruza contra nada"). La alternativa era no
+mostrarlos, pero la fila de chips tiene que ser idéntica en las 21 pantallas (D-074, §3) — esconderlos
+volvería a mover los demás elementos de la barra de lugar, que es lo que el estándar vino a evitar.
+
+**No se cambió qué solapa abre en estos diez controles.** La spec (§2) dice que un control que cerró
+abre en Planilla, pero en estos diez el veredicto (la tile que dice si hay diferencias) vive ADENTRO de
+la solapa Resumen — en Acumuladores Ganancias vive afuera, en la barra propia que se jubiló en la tanda
+1 —, así que abrir en Planilla dejaría ese veredicto escondido. Queda así hasta que cada control tenga su
+ficha (tandas 4 a 8), que es donde el "por qué no cierra" pasa a vivir en la solapa Fichas.
+
+**En un control que compara varias columnas a la vez (Brutos: 2; Control NR: 18; los tres de
+Rendimiento: hasta 6), el estado de la fila es el peor de todas las columnas, y "Sin comparar" pesa más
+que "Dentro del margen"**: una columna que no se pudo comparar preocupa más que una que cerró dentro del
+margen, y nunca se lee como aprobada (D-073). Implementado en `estadoDeFila()` (`js/ui/tableTools.js`).
+
+**En Control NR, la marca de cada uno de los 18 conceptos en `Marcas ▾` es "el legajo liquidó ese
+concepto"** (tiene algún valor real), no "tiene diferencia en ese concepto": así se combina bien con los
+cinco chips de estado, que ya dicen si hay diferencia.
+
+**Las columnas de la planilla ya no cambian al cambiar de chip.** Antes, en varios de estos controles,
+pasar del filtro "sólo con diferencia" al de "todos" hacía aparecer y desaparecer columnas completas; el
+analista perdía la referencia de dónde estaba mirando. Ahora el chip sólo oculta filas.
+
+**Rendimiento vs Asiento pierde el orden por columna** (clickear el encabezado de la planilla principal
+para ordenar). El "Orden ▾" del estándar es propio de la solapa Fichas y de ninguna otra (§3), y esta era
+la única de las diecinueve planillas que ordenaba por su cuenta. Vuelve cuando este control tenga su
+ficha por centro de costo (tanda 5). La tabla chica de "qué cuenta y qué concepto alimenta cada
+categoría" (el mapa de cuentas, aparte de la planilla) conserva su propio orden por columna: no es la
+planilla del estándar.
+
+**Rendimiento vs Asiento pierde el desglose que colgaba de la fila de TOTAL** (el desglose por celda,
+centro de costo por centro de costo, sigue igual — sigue siendo un botón que abre conceptos y
+empleados). La fila de TOTAL ahora la reescribe la pieza compartida cada vez que el analista filtra
+("TOTAL de la selección — N centros de costo"), así que un desglose anclado ahí mostraría el detalle de
+toda la corrida al lado de un total de, por ejemplo, tres centros de costo filtrados. Peor que no
+tenerlo.
+
+**En Rendimiento vs Tabulado y Rendimiento x EE, la lista de qué conceptos del Tabulado componen cada
+columna salió del `<th>` de la banda (un `<details>` por categoría, adentro del propio encabezado) y pasó
+a una leyenda desplegable arriba de la planilla.** El rótulo de banda del estándar es chico, en mayúsculas
+y sobre fondo oscuro (§5): quince conceptos no entran ahí sin romper el encabezado. Es la misma
+información, en un solo `<details>` en vez de uno por categoría.
+
+**EE x CATEG: las tres tablas de diferencias que tenía (activos en Rep. Categ. que no están en el
+Tabulado / en el Tabulado que no están en Rep. Categ. / campo que no coincide en un empleado que está en
+los dos) se fundieron en UNA planilla, con una fila por caso y una columna "Qué pasa" que dice de cuál de
+los tres se trata.** Era la única forma de tener una sola barra, un solo buscador y un solo
+`⬇ Exportar ▾` en la pantalla — antes cada tabla tenía la suya. Esta planilla **no lleva bandas ni fila de
+TOTAL**, a propósito: compara campos de texto (puesto, centro de costo) y presencia en cada archivo, no
+importes, y una fila de TOTAL ahí sería un número inventado. Sus chips: "Con diferencia" = el campo no
+coincide entre los dos archivos; "Sin comparar" = el empleado está en un solo archivo; "Al centavo" y
+"Dentro del margen" no aplican y salen en gris con su `title` (no hay importes que tolerar). Las dos
+distribuciones (por puesto y por centro de costo) siguen abajo de la planilla, sin cambios.
+
+**El rótulo de la fila de TOTAL pasó de "TOTAL GENERAL" a "TOTAL — N centros de costo"** en Rendimiento
+vs Tabulado y Rendimiento vs Asiento, los dos controles que decían lo primero: es el mismo texto que usan
+las otras diecisiete planillas del estándar (la pieza compartida lo arma solo a partir de `unitLabel`).
+
+**De paso, se corrigieron tres bugs en la pieza compartida que afectan a los 21 controles, no sólo a
+estos diez** (aparecieron al migrar, verificados con datos inventados):
+
+1. **Cada solapa se dibujaba con el monto de diferencia fijo de $ 0,01 y no con el monto del cliente.**
+   El borde de la app envuelve el render de la pantalla en `withTolerance()` (D-069), pero una solapa se
+   dibuja recién cuando el analista la clickea, ya fuera de ese envoltorio. Con un legajo de $ 40 de
+   diferencia y el monto del cliente configurado en $ 100, la tile del Resumen decía "sin diferencia" y
+   la celda de la Planilla, al lado, salía en rojo para el mismo legajo. Se arregló capturando el monto
+   una vez, en `renderResumenDetalle()`, y pasándolo a cada solapa al dibujarla.
+2. **Las dos primeras celdas de la fila de bandas no tomaban el fondo de banda** (venía de la tanda 1, así
+   que también corrige Acumuladores Ganancias): "IDENTIFICACIÓN" salía en blanco sobre gris claro —
+   invisible— y la banda de al lado en blanco sobre blanco. Las reglas CSS de las columnas congeladas
+   pintan por posición y ganaban por especificidad a las de la fila de bandas.
+3. **El rótulo de la fila de TOTAL se pisaba con una suma al filtrar**, en los controles con una sola
+   columna de identificación (GS Pers es el caso que lo hizo visible): "TOTAL — 5 legajos" tiene un
+   número adentro, y el heurístico que decide qué celda es un importe lo tomaba por uno y lo pisaba con
+   la suma de esa columna. Se arregló declarando el rótulo con una clase propia en vez de adivinarlo por
+   el texto.
+
+**También desaparecieron los colores de banda escritos a mano**: `CYAN_HDR`/`LILAC_HDR` de Brutos y GS
+Pers, y los `rgba(...)` de los tres controles de Rendimiento. El tinte de banda sale ahora de la pieza
+compartida — desaparece el violeta que no era de la marca.
+
+**Cómo se verificó.** 68 asserts en `tests/vistaEstandar.test.js` y 92 pruebas de navegador en
+`tests/e2e/loteMeta4.spec.js`, con un fixture nuevo (`tests/e2e/fixtures/loteMeta4.html`/`.js`) que monta
+el run y el render reales de los diez controles con datos inventados (jugadores de Banfield). Se
+capturaron, de cada una de las diez pantallas, la cantidad de filas y el total de cada columna ANTES y
+DESPUÉS de migrar, y ningún número se movió salvo tres, todos explicados: el "# Difs" de NR (por el bug
+1 de arriba, ahora coincide con el Resumen), la fila de TOTAL de Rendimiento vs Asiento (pasó de estar
+adentro del cuerpo de la tabla al pie, con los mismos importes verificados a mano) y EE x CATEG (tres
+tablas fundidas en una). Se miraron las diez pantallas en Chromium real, en los tres temas, con
+capturas. **Lo que NO se pudo hacer: correr un control de punta a punta en la app entera.** La app
+arranca en este entorno con un parche local que apunta las dos librerías del CDN a `node_modules` (no se
+commitea), pero no hay ningún archivo de cliente en el repo con el cual llegar a una pantalla de
+resultados por el camino del analista — Tabulado, reporte, mapeo de columnas y ejecución. Así que la
+verificación es con fixture: el mismo `run()` y el mismo `render()` de cada control, en un navegador de
+verdad, con datos inventados.
+
+**Pendiente.** Willy no vio ninguna de estas decisiones antes de tomarlas — el PR queda en borrador
+hasta que mire las diez pantallas en el navegador. Si alguna no le cierra (el rótulo de "Qué pasa" en
+EE x CATEG, que los chips de generación salgan en gris en vez de ocultarse, u otra), se ajusta sin tocar
+el resto del estándar.
+
+**Detalle:** `js/ui/planillaPanel.js` (nuevo), `js/ui/tableTools.js` (`estadoDeFila()`,
+`contarEstados()`, `createMarcasFilter()`), `js/ui/resultBlocks.js` (`renderResumenDetalle()`, el
+descriptor `diff`/`bands`), `js/controls/brutos.js`, `js/controls/gsPers.js`, `js/controls/nr.js`,
+`js/controls/rendVsTabu.js`, `js/controls/rendXEe.js`, `js/controls/rendVsAsiento.js`,
+`js/controls/catXEmpleados.js`, D-069, D-073, D-074, D-077.

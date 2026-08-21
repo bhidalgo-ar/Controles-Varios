@@ -645,8 +645,22 @@ table.rb-grid .rb-band--next { border-left: 1px solid var(--line); }
    compartida para que las dos pantallas se vean iguales. Los selectores son
    deliberadamente específicos: pisan el tinte por grupo de `paintColumnGroups`
    y el fondo neutro de las dos celdas congeladas, que ganan por especificidad. */
+/* Las dos primeras celdas van con `:first-child`/`:nth-child(2)` a propósito y
+   no por prolijidad: las reglas de las columnas congeladas de css/components.css
+   pintan por posición ("la 1ª y la 2ª celda del encabezado son las fijas") y en
+   la fila de BANDAS eso no es cierto —la 1ª celda es la banda de identificación,
+   que ocupa las dos, y la 2ª es la SEGUNDA BANDA—. Sin estos dos selectores esas
+   reglas ganaban por especificidad y dejaban "IDENTIFICACIÓN" en blanco sobre
+   gris claro (invisible) y a la banda de al lado en blanco sobre blanco. */
 table.rb-grid thead tr.rb-rubro__bands > th,
-table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th {
+table.rb-grid thead tr.rb-rubro__bands > th:first-child,
+table.rb-grid thead tr.rb-rubro__bands > th:nth-child(2),
+table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th,
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th,
+table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th:first-child,
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:first-child,
+table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th:nth-child(2),
+table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:nth-child(2) {
   background: var(--invert-bg);
   color: var(--invert-accent);
   font-size: 10.5px;
@@ -659,6 +673,7 @@ table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th {
 /* La banda que viaja con las columnas congeladas ("Identificación") es la que
    nombra al caso, no un rubro: va en el color pleno y no en el de acento. */
 table.rb-grid thead tr.rb-rubro__bands > th:first-child,
+table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th:first-child,
 table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:first-child {
   color: var(--invert-fg);
 }
@@ -1194,3 +1209,79 @@ table.netos-rubro th.netos-dif-h .netos-sub { color: var(--warn-tx); }
 }
 .results-chip--vacio:hover { border-color: var(--color-border); color: var(--t3); }
 .results-chip--vacio .results-chip__count { color: var(--t3); }
+
+/* ── La leyenda de conceptos de los controles de Rendimiento ─────
+   Qué columnas del Tabulado suman a cada categoría de costo. Vivía adentro del
+   `<th>` de la banda, en un <details> por categoría; con el rótulo de banda ya
+   chico, en mayúsculas y sobre fondo oscuro (§5), quince conceptos no entran
+   ahí. Sale a una sola leyenda arriba de la planilla: la misma información y de
+   una sola apertura. */
+.rvt-leyenda {
+  margin: 0 var(--sp-3) var(--sp-2);
+  font-size: 11.5px;
+}
+.rvt-leyenda > summary {
+  cursor: pointer;
+  color: var(--t2);
+  padding: var(--sp-1) 0;
+  user-select: none;
+}
+.rvt-leyenda__cuerpo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+.rvt-leyenda__cat {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.rvt-leyenda__titulo {
+  display: block;
+  font-weight: var(--fw-bold);
+  color: var(--t1);
+  margin-bottom: 2px;
+}
+.rvt-leyenda__concepto {
+  display: inline-block;
+  margin: 1px var(--sp-2) 1px 0;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.rvt-leyenda__vacio { color: var(--t3); font-style: italic; }
+.rvt-leyenda__falta { display: block; color: var(--warn-tx); margin-top: 2px; }
+
+/* ── La celda que abre el desglose (Rendimiento vs Asiento) ──────
+   La celda de CONTA es clickeable y abre los conceptos y empleados que la
+   componen. Es un <button> y no un <td> con onclick: así se llega con el
+   teclado, que es como se navega una planilla de 300 centros de costo. */
+button.rva-drill {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: zoom-in;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+button.rva-drill:hover,
+button.rva-drill:focus-visible { color: var(--celeste); text-decoration-style: solid; }
+
+/* El encabezado de cada categoría dentro del desglose. */
+.rva-drill__cat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-sm);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-sm);
+}
