@@ -29,19 +29,22 @@
 import { diffStats } from './semaforo.js';
 import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { wireTableTools } from '../ui/tableTools.js';
 import {
   renderVerdict,
   renderTiles,
   renderIssues,
   renderResumenDetalle,
+  mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn } from './consolidate.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
 import { clavesUnicas } from '../parsers/tabuladoHtml.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
+import { codeOfColumn } from './tabCodes.js';
 
 /** Tolerancia de comparación de importes: medio centavo. */
 const TOL = 0.01;
@@ -818,15 +821,35 @@ function renderVariacionesResults(results, container) {
     container.appendChild(box);
   }
 
-  // ── Toolbar (export + PDF, disponibles sin importar la solapa activa) ─────
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  toolbar.style.cssText = 'display:flex;justify-content:flex-end;';
-  const right = document.createElement('div');
-  right.style.cssText = 'display:flex;align-items:center;gap:var(--sp-2);';
-  toolbar.appendChild(right);
-  container.appendChild(toolbar);
+  // ── Solapas Resumen · Planilla ────────────────────────────────────────────
+  // El exportar ya no vive en una barra propia arriba de las solapas: va último
+  // a la derecha de la barra estándar de la Planilla, como en los otros 20
+  // controles (§3 de specs/vista-estandar-resultados.md). La salida a PDF es un
+  // ítem más de ese mismo menú — un segundo botón de exportar al lado sería
+  // justo lo que el estándar viene a sacar.
+  const tabsHost = document.createElement('div');
+  container.appendChild(tabsHost);
 
+  renderResumenDetalle(tabsHost, {
+    controlId: results.reporte.id,
+    conDiferencias: conDif.length > 0,
+    resumen: panelEl => renderPanel(panelEl, {
+      results, relevantes, conDif, grupos, casos, sinCausa, labelAnterior, labelActual,
+    }),
+    // La ficha la justifica Variación Conceptos, que es un legajo con VARIOS
+    // conceptos adentro. Variación Sueldos combina jornales + mensuales en un
+    // solo número: su fila ya dice todo y no hay nada que abrir (§8).
+    fichas: results.reporte.combinar ? undefined : panelEl => renderVariacionesFichas(panelEl, {
+      results, relevantes, grupos, labelAnterior, labelActual,
+    }),
+    planilla: panelEl => renderPlanilla(panelEl, {
+      results, relevantes, conDif, grupos, casos, labelAnterior, labelActual,
+    }),
+  });
+}
+
+/** Los tres del estándar más la salida a PDF, que es propia de este reporte. */
+function mountExportMenu(exportEl, { results, relevantes, grupos, labelAnterior, labelActual }) {
   const csvHeaders = ['Concepto', 'Legajo', 'Apellido y Nombre', labelAnterior, labelActual, 'Modificación', 'Variación $', 'Variación %'];
   const csvRows = () => grupos.flatMap(g =>
     relevantes.filter(r => isDif(r.valores[g.key].diff)).map(r => {
@@ -834,32 +857,19 @@ function renderVariacionesResults(results, container) {
       return [g.nombreReal || g.label, r.legajo, r.nombre, v.anterior, v.actual, isDif(v.diff) ? 'S' : 'N', v.diff, v.pct];
     })
   );
-  renderExportMenu(right, {
-    onExcel: () => exportVariacionesXlsx(results, relevantes),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `${nombreArchivo(results)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
-  });
-  const btnPdf = document.createElement('button');
-  btnPdf.type = 'button';
-  btnPdf.className = 'btn btn--sm';
-  btnPdf.textContent = '🖨 Imprimir / PDF';
-  btnPdf.addEventListener('click', () => imprimirVariaciones(results, relevantes));
-  right.insertBefore(btnPdf, right.firstChild);
+  renderExportMenu(exportEl, {
+    items: [
+      { key: 'excel', label: '📊 Exportar a Excel (.xlsx)',
+        action: () => exportVariacionesXlsx(results, relevantes) },
+      { key: 'csv', label: '📄 Exportar CSV',
+        action: () => downloadCsv(csvHeaders, csvRows(), `${nombreArchivo(results)}.csv`) },
+      { key: 'copy', label: '📋 Copiar tabla',
+        action: () => copyRowsToClipboard(csvHeaders, csvRows()) },
+      { key: 'pdf', label: '🖨 Imprimir / PDF',
+        desc: 'El reporte en A4 horizontal, para firmar o mandar.',
+        action: () => imprimirVariaciones(results, relevantes) },
+    ],
 
-  // ── Solapas Resumen / Detalle ─────────────────────────────────────────────
-  // Mismas dos solapas que los otros controles (js/ui/resultBlocks.js). Antes
-  // eran "Qué cambió y por qué" / "Detalle" con `initTabs` directo.
-  const tabsHost = document.createElement('div');
-  container.appendChild(tabsHost);
-
-  renderResumenDetalle(tabsHost, {
-    controlId: results.reporte.id,
-    resumen: panelEl => renderPanel(panelEl, {
-      results, relevantes, conDif, grupos, casos, sinCausa, labelAnterior, labelActual,
-    }),
-    detalle: panelEl => renderDetalle(panelEl, {
-      results, relevantes, conDif, grupos, labelAnterior, labelActual,
-    }),
   });
 }
 
@@ -980,222 +990,487 @@ function renderPanel(container, ctx) {
   }
 }
 
-// ── Solapa "Detalle" (Dirección C) ──────────────────────────────────────────
+// ── Solapa Fichas — sólo Variación Conceptos (§4 y §8) ───────────────────────
+//
+// Variación Sueldos no la lleva: su fila ya dice anterior / actual / variación y
+// no hay nada adentro que abrir. Variación Conceptos sí — es un legajo con
+// varios conceptos que se movieron, y hoy para saber CUÁLES hay que buscar el
+// mismo legajo en una tabla por concepto.
+//
+// La ficha no recalcula nada. `runVariaciones()` ya publica, por legajo y por
+// concepto, `{ anterior, actual, diff, pct }` más el escalón de los conceptos
+// que se pagan en escalones y las ausencias del período. Acá se suma el legajo,
+// se le pone el CÓDIGO a cada concepto y se escribe qué preguntar.
 
-// Columnas ordenables de la tabla de detalle. `get` devuelve el valor con el que
-// se compara; los nulls van siempre al final, en los dos sentidos, para que
-// ordenar no esconda a los empleados sin dato arriba de todo.
-const ORDEN_COLUMNAS = {
-  legajo:      { label: 'Legajo',    tipo: 'texto', get: (r) => r.legajo },
-  nombre:      { label: 'Nombre',    tipo: 'texto', get: (r) => r.nombre },
-  anterior:    { label: 'Anterior',  tipo: 'num',   get: (r, k) => r.valores[k].anterior },
-  actual:      { label: 'Actual',    tipo: 'num',   get: (r, k) => r.valores[k].actual },
-  diff:        { label: 'Variación', tipo: 'num',   get: (r, k) => r.valores[k].diff },
-  pct:         { label: 'Variación %', tipo: 'num', get: (r, k) => r.valores[k].pct },
-  modificacion:{ label: 'Modificación', tipo: 'texto', get: (r, k) => (isDif(r.valores[k].diff) ? 'S' : 'N') },
+/** El concepto nombrado por su CÓDIGO. Sin código, sólo el rótulo: un código
+ *  inventado por parecido manda a mirar la columna equivocada (D-039). */
+function etiquetaGrupo(g) {
+  const cod = g.entradas?.[0]?.codigo || codeOfColumn(g.nombreReal);
+  const nombre = g.entradas?.[0]?.label || g.label;
+  return cod ? `${cod} · ${nombre}` : nombre;
+}
+
+/**
+ * En qué estado cerró un legajo, para los cinco chips. "Con diferencia" acá se
+ * lee "con variación": es el mismo `isDif` con el que el control cuenta los
+ * empleados con variación y con el que mide el semáforo, así que el chip y los
+ * tiles nunca se contradicen.
+ *
+ * El alta y la baja NO son un estado —un legajo que no estaba el mes pasado sí
+ * tuvo variación, y el control ya la cuenta—: van a `Marcas ▾`.
+ */
+function estadoDeFichaVariacion(r, grupos) {
+  const difs = grupos.map(g => r.valores[g.key].diff);
+  if (difs.every(d => d === null || d === undefined)) return 'sinComparar';
+  if (difs.some(d => isDif(d))) return 'conDif';
+  const max = difs.reduce((m, d) => Math.max(m, Math.abs(d ?? 0)), 0);
+  return max <= TOL ? 'centavo' : 'margen';
+}
+
+const SEVERIDAD_VAR = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+const NO_APLICA_FICHA_VAR = {
+  sinComparar: 'los dos períodos salen de un Tabulado, así que siempre están los dos lados',
 };
 
-function compararPor(col, key, dir) {
-  const def = ORDEN_COLUMNAS[col];
-  const signo = dir === 'asc' ? 1 : -1;
-  return (a, b) => {
-    const va = def.get(a, key);
-    const vb = def.get(b, key);
-    const na = va === null || va === undefined;
-    const nb = vb === null || vb === undefined;
-    if (na && nb) return 0;
-    if (na) return 1;          // sin dato, siempre al final
-    if (nb) return -1;
-    if (def.tipo === 'num') return (va - vb) * signo;
-    const ia = parseInt(va, 10), ib = parseInt(vb, 10);
-    if (isFinite(ia) && isFinite(ib) && ia !== ib) return (ia - ib) * signo;
-    return String(va).localeCompare(String(vb), 'es') * signo;
+/**
+ * El segundo eje: qué MÁS le pasa al legajo. De acá salen las pills de cada
+ * tarjeta y el desplegable `Marcas ▾` — la misma lista y el mismo criterio.
+ *
+ * "Bajó de escalón sin causa visible" es la marca que importa: la variación en
+ * pesos de un concepto que se paga en escalones no dice nada sola ("bajó
+ * $16.805,40"), y lo que hay que preguntar es la caída que no tiene ninguna
+ * licencia, ausencia, franco ni permiso cargado ese período.
+ */
+const MARCAS_VARIACION = [
+  { value: 'bajoSinCausa', label: 'Bajó de escalón sin causa visible', tone: 'info',
+    match: f => f.bajoEscalon.length > 0 && !f.conAusencia },
+  { value: 'bajoConCausa', label: 'Bajó de escalón — hay licencia cargada', tone: 'neutral',
+    match: f => f.bajoEscalon.length > 0 && f.conAusencia },
+  { value: 'subioEscalon', label: 'Subió de escalón', tone: 'neutral',
+    match: f => f.subioEscalon.length > 0 },
+  { value: 'alta', label: 'Alta en el período', tone: 'info',
+    match: f => !f.row.presenteAnterior && f.row.presenteActual },
+  { value: 'baja', label: 'Baja en el período', tone: 'info',
+    match: f => f.row.presenteAnterior && !f.row.presenteActual },
+  { value: 'nuevo', label: 'Concepto que antes no liquidaba', tone: 'neutral',
+    match: f => f.nuevos.length > 0 },
+  { value: 'dejoDeLiquidar', label: 'Dejó de liquidar un concepto', tone: 'neutral',
+    match: f => f.dejados.length > 0 },
+  { value: 'ausencia', label: 'Con licencia o ausencia en el mes', tone: 'neutral',
+    match: f => f.conAusencia },
+];
+
+/** Los descriptores de ficha: uno por legajo con valor real en algún período.
+ *  Exportada para el test: es donde se decide qué dice cada tarjeta. */
+export function buildFichasConceptos(relevantes, grupos, ctx) {
+  const conEscala = grupos.filter(g => g.escala);
+  return relevantes.map(r => {
+    const movidos = grupos.filter(g => isDif(r.valores[g.key].diff));
+    const tieneVal = (v) => v !== null && Math.abs(v) > TOL;
+
+    const base = {
+      id: r.legajo,
+      name: r.nombre,
+      row: r,
+      grupos,
+      movidos,
+      bajoEscalon: conEscala.filter(g => {
+        const v = r.valores[g.key];
+        return v.escalonAnterior !== null && v.escalonActual !== null
+          && v.escalonActual < v.escalonAnterior;
+      }),
+      subioEscalon: conEscala.filter(g => {
+        const v = r.valores[g.key];
+        return v.escalonAnterior !== null && v.escalonActual !== null
+          && v.escalonActual > v.escalonAnterior;
+      }),
+      nuevos:  grupos.filter(g => !tieneVal(r.valores[g.key].anterior) && tieneVal(r.valores[g.key].actual)),
+      dejados: grupos.filter(g => tieneVal(r.valores[g.key].anterior) && !tieneVal(r.valores[g.key].actual)),
+      conAusencia: r.ausenciaActual > TOL,
+      sumAnterior: sumaGrupos(r, grupos, 'anterior'),
+      sumActual:   sumaGrupos(r, grupos, 'actual'),
+      hayEscala: conEscala.length > 0,
+    };
+    // La variación del legajo es la suma de las variaciones de sus conceptos, con
+    // la MISMA cuenta que hace el control por concepto: un lado que no está
+    // cuenta como cero. Acá eso es correcto y no es el `null` que no es `0` —un
+    // alta liquidó cero el mes anterior porque no existía, y el control ya cuenta
+    // esa variación completa—, a diferencia de un cruce entre dos archivos, donde
+    // un lado que falta significa "no se sabe" (ver la ficha de NR).
+    base.variacion = (base.sumAnterior === null && base.sumActual === null)
+      ? null : (base.sumActual ?? 0) - (base.sumAnterior ?? 0);
+    base.estado = estadoDeFichaVariacion(r, grupos);
+    return { ...base, ...presentacionVariacion(base, ctx) };
+  });
+}
+
+/** Suma de un lado de todos los conceptos, respetando `null`. */
+function sumaGrupos(r, grupos, lado) {
+  let total = null;
+  for (const g of grupos) {
+    const v = r.valores[g.key][lado];
+    if (v === null || v === undefined) continue;
+    total = (total ?? 0) + v;
+  }
+  return total;
+}
+
+function presentacionVariacion(f, { labelAnterior, labelActual }) {
+  const r = f.row;
+  const sev = SEVERIDAD_VAR[f.estado] || 'info';
+  const hayDif = f.movidos.length > 0;
+  const brutoAnt = r.bruto?.anterior ?? null;
+  const brutoAct = r.bruto?.actual ?? null;
+
+  return {
+    unit: r.legajo,
+    severity: sev,
+    tag: { text: `${labelAnterior} → ${labelActual}` },
+    badge: badgeVariacion(f, labelAnterior, labelActual),
+    context: [
+      hayDif
+        ? `${f.movidos.length} de ${f.grupos.length} concepto${f.grupos.length === 1 ? '' : 's'} `
+          + `${f.movidos.length === 1 ? 'se movió' : 'se movieron'}`
+        : f.grupos.length === 1 ? 'el único concepto no se movió' : `ninguno de los ${f.grupos.length} conceptos se movió`,
+      (brutoAnt !== null && brutoAct !== null)
+        ? `bruto ${fmtNum(brutoAnt)} → ${fmtNum(brutoAct)}`
+        : null,
+      f.conAusencia ? `${fmtNum(r.ausenciaActual)} en licencias o ausencias` : null,
+    ],
+    marks: MARCAS_VARIACION.filter(m => m.match(f)).map(m => ({ text: m.label, tone: m.tone })),
+    amountLabel: 'Variación',
+    amount: f.variacion,
+    amountTone: sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : undefined,
+    body: {
+      // 1. La tira: el período anterior, el actual y la variación. La variación
+      //    va última y en rojo porque es lo que hay que mirar — las dos primeras
+      //    son de dónde sale, y la resta cierra exacta.
+      strip: [
+        { label: labelAnterior, value: f.sumAnterior },
+        { label: labelActual, value: f.sumActual, invert: true },
+        { label: hayDif ? `Variación · ${f.movidos.length} concepto${f.movidos.length === 1 ? '' : 's'}` : 'Variación',
+          value: f.variacion, residuo: hayDif },
+      ],
+      // 2. El detalle: un renglón por concepto, con su CÓDIGO, los dos períodos
+      //    y la variación. Verde suave lo que subió, rojo suave lo que bajó.
+      detail: {
+        title: 'Concepto por concepto — los dos períodos y la variación',
+        columns: [
+          { key: 'concepto', label: 'Concepto' },
+          ...(f.hayEscala ? [{ key: 'escalon', label: 'Escalón' }] : []),
+          { key: 'anterior', label: labelAnterior, num: true },
+          { key: 'actual', label: labelActual, num: true },
+          { key: 'variacion', label: 'Variación', num: true },
+          { key: 'pct', label: '%' },
+        ],
+        rows: ordenarGrupos(f.grupos, r).map(g => {
+          const v = r.valores[g.key];
+          return {
+            concepto: etiquetaGrupo(g),
+            escalon: textoEscalon(g, v),
+            anterior: v.anterior, actual: v.actual, variacion: v.diff,
+            pct: fmtPct(v.pct),
+            tone: (v.diff === null || Math.abs(v.diff) <= TOL)
+              ? undefined : (v.diff > 0 ? 'pos' : 'neg'),
+          };
+        }),
+        foot: { label: 'Variación del legajo', value: f.variacion, key: 'variacion' },
+      },
+      // 3. La conclusión: qué preguntar, descontando lo que ya se explica solo.
+      conclusion: conclusionVariacion(f, labelAnterior, labelActual),
+    },
   };
 }
 
-function renderDetalle(container, ctx) {
-  const { results, relevantes, conDif, grupos, labelAnterior, labelActual } = ctx;
+/** `100 % → 70 %` para un concepto que se paga en escalones; `—` para el que no. */
+function textoEscalon(g, v) {
+  if (!g.escala || v.escalonAnterior === null || v.escalonActual === null) return '—';
+  return `${v.escalonAnterior} % → ${v.escalonActual} %`;
+}
 
-  const toolbar = document.createElement('div');
-  toolbar.className = 'results-toolbar';
-  toolbar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);';
+/** El que más se movió arriba, y lo que no se movió al final. */
+function ordenarGrupos(grupos, r) {
+  return [...grupos].sort((a, b) => {
+    const da = isDif(r.valores[a.key].diff) ? 0 : 1;
+    const db = isDif(r.valores[b.key].diff) ? 0 : 1;
+    if (da !== db) return da - db;
+    return Math.abs(r.valores[b.key].diff ?? 0) - Math.abs(r.valores[a.key].diff ?? 0);
+  });
+}
 
-  const sel = document.createElement('select');
-  sel.className = 'form-select form-select--sm';
-  sel.innerHTML = `
-    <option value="dif">Solo con variación (${conDif.length})</option>
-    <option value="all">Todos los empleados (${relevantes.length})</option>
-  `;
-  if (conDif.length === 0) sel.value = 'all';
-  toolbar.appendChild(sel);
+/** La causa principal, en una línea. */
+function badgeVariacion(f, labelAnterior, labelActual) {
+  const r = f.row;
+  if (f.bajoEscalon.length > 0) {
+    const g = f.bajoEscalon[0];
+    const v = r.valores[g.key];
+    return {
+      text: `${etiquetaGrupo(g)}: ${v.escalonAnterior} % → ${v.escalonActual} %`,
+      title: f.conAusencia
+        ? 'Bajó de escalón y tiene una licencia, ausencia, franco o permiso cargado ese período.'
+        : 'Bajó de escalón y no tiene nada cargado que lo explique.',
+      tone: f.conAusencia ? 'warn' : 'error',
+    };
+  }
+  if (!r.presenteAnterior) return { text: `No estaba en ${labelAnterior}`, tone: 'info' };
+  if (!r.presenteActual)  return { text: `No está en ${labelActual}`, tone: 'info' };
+  if (f.movidos.length > 0) {
+    const g = ordenarGrupos(f.movidos, r)[0];
+    const d = r.valores[g.key].diff;
+    return { text: `${etiquetaGrupo(g)} ${fmtSignedVar(d)}`, tone: 'error' };
+  }
+  if (f.estado === 'margen') return { text: 'Dentro del monto de diferencia', tone: 'info' };
+  return { text: 'Sin variación', tone: 'ok' };
+}
 
-  // Filtro por sentido de la variación: revisar "qué subió" y "qué bajó" por
-  // separado es la lectura más frecuente de este reporte.
-  const selDir = document.createElement('select');
-  selDir.className = 'form-select form-select--sm';
-  selDir.innerHTML = `
-    <option value="todos">Suba y baja</option>
-    <option value="up">Solo aumentos</option>
-    <option value="dn">Solo bajas</option>
-  `;
-  toolbar.appendChild(selDir);
+function fmtSignedVar(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
+  return (v > TOL ? '+' : '') + fmtNum(v);
+}
 
-  const hint = document.createElement('span');
-  hint.className = 'text-muted';
-  hint.style.cssText = 'font-size:var(--text-sm);';
-  hint.textContent = 'Clickeá un encabezado para ordenar.';
-  toolbar.appendChild(hint);
+/** No un resumen: una instrucción, y lo que se explica solo se descuenta. */
+function conclusionVariacion(f, labelAnterior, labelActual) {
+  const r = f.row;
+  const quietos = f.grupos.length - f.movidos.length;
+  const yaCierran = quietos === 0 ? ''
+    : quietos === 1
+      ? ' El otro concepto de este legajo no se movió: no hace falta mirarlo.'
+      : ` Los otros ${quietos} conceptos de este legajo no se movieron: no hace falta mirarlos.`;
 
-  container.appendChild(toolbar);
+  if (f.bajoEscalon.length > 0 && !f.conAusencia) {
+    const cuales = f.bajoEscalon.map(g => {
+      const v = r.valores[g.key];
+      return `${etiquetaGrupo(g)} (${v.escalonAnterior} % → ${v.escalonActual} %)`;
+    }).join(', ');
+    return {
+      tone: 'error',
+      title: 'Bajó de escalón y no hay nada cargado que lo explique',
+      text: `${cuales}. Este legajo no tiene ninguna licencia, ausencia, franco ni permiso cargado en `
+        + `${labelActual}, así que la baja no se explica sola: preguntale al cliente por qué le bajó el `
+        + 'escalón antes de cerrar el mes. El importe de la variación no alcanza para juzgarlo — lo que dice '
+        + 'algo es el escalón.' + yaCierran,
+    };
+  }
 
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
+  if (f.bajoEscalon.length > 0) {
+    const cuales = f.bajoEscalon.map(g => etiquetaGrupo(g)).join(', ');
+    return {
+      tone: 'info',
+      title: 'Bajó de escalón, y la licencia cargada lo explica',
+      text: `${cuales} bajó de escalón, y este legajo tiene ${fmtNum(r.ausenciaActual)} cargado en conceptos `
+        + `de licencia, ausencia, franco o permiso en ${labelActual}. La baja se explica sola: no hace falta `
+        + 'preguntar nada. Si igual querés confirmarlo, mirá esos conceptos en el Tabulado del período.',
+    };
+  }
 
-  // §11.1 — ocultar los grupos de concepto que no tienen ninguna variación.
+  if (!r.presenteAnterior) {
+    return {
+      tone: 'info',
+      title: `Este legajo no estaba en ${labelAnterior}`,
+      text: `Es un alta: la variación es todo lo que empezó a liquidar, no un cambio de concepto. Confirmá que `
+        + `la fecha de alta caiga en ${labelActual} y la variación queda explicada.`,
+    };
+  }
+
+  if (!r.presenteActual) {
+    return {
+      tone: 'info',
+      title: `Este legajo no está en ${labelActual}`,
+      text: `Es una baja: la variación es todo lo que dejó de liquidar. Confirmá que la baja esté cargada en `
+        + `${labelActual} y la variación queda explicada.`,
+    };
+  }
+
+  if (f.movidos.length > 0) {
+    const cuales = f.movidos.map(g => `${etiquetaGrupo(g)} ${fmtSignedVar(r.valores[g.key].diff)}`).join(', ');
+    const nuevos = f.nuevos.filter(g => f.movidos.includes(g));
+    const dejados = f.dejados.filter(g => f.movidos.includes(g));
+    const extra = [
+      nuevos.length > 0 ? `${nuevos.map(etiquetaGrupo).join(', ')} no se liquidaba en ${labelAnterior} y ahora sí` : null,
+      dejados.length > 0 ? `${dejados.map(etiquetaGrupo).join(', ')} se liquidaba en ${labelAnterior} y ahora no` : null,
+    ].filter(Boolean);
+    return {
+      tone: 'error',
+      title: `${f.movidos.length} concepto${f.movidos.length === 1 ? '' : 's'} `
+        + `${f.movidos.length === 1 ? 'se movió' : 'se movieron'} entre los dos períodos`,
+      text: `${cuales}. Mirá esas columnas del Tabulado en los dos períodos para este legajo`
+        + (extra.length > 0 ? `. Dato para arrancar: ${extra.join('; ')}` : '')
+        + '. Si la variación es un aumento, un retroactivo o un cambio de categoría del mes, está explicada; '
+        + 'si no, va al cliente.' + yaCierran,
+    };
+  }
+
+  if (f.estado === 'margen') {
+    return {
+      tone: 'info',
+      title: 'Todo queda dentro del monto de diferencia del cliente',
+      text: 'Los conceptos de este legajo cambiaron por menos que el monto configurado en «Umbrales». No hay '
+        + 'nada que preguntar; si querés ver esos movimientos, bajá el monto.',
+    };
+  }
+
+  return {
+    tone: 'ok',
+    title: 'No se movió nada',
+    text: (f.grupos.length === 1
+      ? `El único concepto de este legajo liquidó lo mismo en ${labelAnterior} y en ${labelActual}. `
+      : `Los ${f.grupos.length} conceptos de este legajo liquidaron lo mismo en ${labelAnterior} y en `
+        + `${labelActual}. `)
+      + 'No hay nada para revisar acá.',
+  };
+}
+
+function renderVariacionesFichas(container, ctx) {
+  const { results, relevantes, grupos, labelAnterior, labelActual } = ctx;
+  const fichas = buildFichasConceptos(relevantes, grupos, ctx);
+
+  renderFichasPanel(container, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_FICHA_VAR,
+    marcas: MARCAS_VARIACION,
+    ordenes: [
+      { value: 'variacion', label: 'Mayor variación', compare: (a, b) => Math.abs(b.variacion ?? 0) - Math.abs(a.variacion ?? 0) },
+      { value: 'caida', label: 'Mayor caída', compare: (a, b) => (a.variacion ?? 0) - (b.variacion ?? 0) },
+      { value: 'legajo', label: 'Legajo', compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+      { value: 'nombre', label: 'Nombre', compare: (a, b) => String(a.name).localeCompare(String(b.name)) },
+    ],
+    getLabel: f => `${f.id} — ${f.name}`,
+    getAmount: f => f.variacion,
+    amountLabel: 'Σ Variación',
+    // El mismo `⬇ Exportar ▾` que la Planilla, último a la derecha de la barra
+    // (§3). La tanda 4 lo había dejado afuera porque en ese momento este control
+    // todavía tenía su barra propia arriba de las solapas y habría quedado con
+    // dos botones de exportar en la misma pantalla; la tanda 3 jubiló esa barra,
+    // así que ahora va donde va en los otros veinte. Exporta la corrida entera:
+    // el filtro de pantalla recorta lo que se ve, no lo que se archiva.
+    onExport: (exportEl) => mountExportMenu(exportEl, { results, relevantes, grupos, labelAnterior, labelActual }),
+  });
+}
+
+// ── Solapa "Planilla" (Dirección C) ─────────────────────────────────────────
+//
+// Una sola tabla ancha con **una banda por concepto**, en vez de una tabla
+// apilada abajo de la otra por cada concepto. Es el §5 de la vista estándar y
+// además resuelve lo que la pila no podía: comparar el mismo legajo entre
+// conceptos sin scrollear de una tabla a la otra, y una fila de TOTAL que
+// totaliza cada columna.
+//
+// El escalón sigue donde sirve —la matriz de transición y los casos para
+// explicar, en el Resumen—; acá va sólo como una columna más de la banda
+// (`70% → 50%`), que es lo que la planilla puede mostrar sin volverse otra cosa.
+
+
+/** Una fila por legajo, con las columnas de todos los conceptos aplanadas. */
+function filaPlana(r, grupos) {
+  const o = { legajo: r.legajo, nombre: r.nombre, _row: r };
+  for (const g of grupos) {
+    const v = r.valores[g.key];
+    o[`ant_${g.key}`] = v.anterior;
+    o[`act_${g.key}`] = v.actual;
+    o[`dif_${g.key}`] = v.diff;
+    o[`pct_${g.key}`] = v.pct;
+    o[`esc_${g.key}`] = (v.escalonAnterior === null || v.escalonAnterior === undefined)
+      ? null
+      : `${v.escalonAnterior}% → ${v.escalonActual}%`;
+  }
+  return o;
+}
+
+/**
+ * En qué estado cerró un legajo. "Con diferencia" acá se lee "con variación": es
+ * el mismo `isDif` con el que el control cuenta los empleados con variación y
+ * con el que mide el semáforo, así que el chip y los tiles nunca se contradicen.
+ *
+ * El alta y la baja NO son un estado: un legajo que no estaba el mes pasado sí
+ * tiene variación, y el control ya la cuenta. Van a "Marcas ▾", que es donde va
+ * lo que le pasa al caso además de cómo cerró.
+ */
+function estadoDeVariacion(r, grupos) {
+  const difs = grupos.map(g => r.valores[g.key].diff);
+  if (difs.every(d => d === null || d === undefined)) return 'sinComparar';
+  if (difs.some(d => isDif(d))) return 'conDif';
+  const max = difs.reduce((m, d) => Math.max(m, Math.abs(d ?? 0)), 0);
+  return max <= TOL ? 'centavo' : 'margen';
+}
+
+const NO_APLICA_VARIACION = {
+  sinComparar: 'los dos períodos salen de un Tabulado, así que siempre hay los dos lados',
+};
+
+function renderPlanilla(container, ctx) {
+  const { results, relevantes, grupos, casos, labelAnterior, labelActual } = ctx;
+
+  // §11.1 — ocultar los conceptos que no tienen ninguna variación.
   const gruposConDif = grupos.filter(g => relevantes.some(r => isDif(r.valores[g.key].diff)));
   const gruposVisibles = gruposConDif.length > 0 ? gruposConDif : grupos;
   const ocultos = grupos.length - gruposVisibles.length;
 
-  // Orden por grupo: cada sección se ordena sola (Variación Conceptos son dos tablas).
-  const orden = new Map();   // key de grupo → { col, dir }
+  const rows = relevantes.map(r => filaPlana(r, gruposVisibles));
 
-  function filas() {
-    const base = sel.value === 'dif' ? conDif : relevantes;
-    if (selDir.value === 'todos') return base;
-    return base.filter(r => grupos.some(g => {
-      const d = r.valores[g.key].diff;
-      return isDif(d) && (selDir.value === 'up' ? d > 0 : d < 0);
-    }));
-  }
+  const columns = [
+    { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+    { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
+    ...gruposVisibles.flatMap(g => {
+      const banda = results.reporte.combinar ? results.reporte.titulo : (g.nombreReal || g.label);
+      return [
+        { key: `ant_${g.key}`, label: labelAnterior, sub: 'lo liquidado', num: true, band: banda },
+        { key: `act_${g.key}`, label: labelActual,   sub: 'lo liquidado', num: true, band: banda },
+        ...(g.escala ? [{ key: `esc_${g.key}`, label: 'Escalón', sub: 'anterior → actual', band: banda }] : []),
+        // La variación NO es una diferencia contra otra fuente: es lo que este
+        // reporte informa. Flecha + signo (nunca sólo color, D-daltonismo), no
+        // badge de error — el rojo se reserva para lo que no cuadra.
+        { key: `dif_${g.key}`, label: 'Variación', sub: 'actual − anterior',
+          num: true, band: banda,
+          cell: r => (r[`dif_${g.key}`] === null || r[`dif_${g.key}`] === undefined
+            ? '—'
+            : `<span class="${mvClass(r[`dif_${g.key}`])}">${mvArrow(r[`dif_${g.key}`])} ${esc(fmtSigned(r[`dif_${g.key}`]))}</span>`) },
+        { key: `pct_${g.key}`, label: 'Variación %', sub: 'sobre el período anterior',
+          num: true, band: banda, close: true, total: false,
+          cell: r => esc(fmtPct(r[`pct_${g.key}`])) },
+      ];
+    }),
+  ];
 
-  function renderTabla() {
-    const visibles = filas();
-    // Cada sección se queda con sus propias filas para poder inicializar su
-    // paginación y su buscador por separado (Variación Conceptos son dos tablas).
-    const filasPorGrupo = new Map();
+  // El segundo eje: hacia dónde se movió, y qué le pasó al legajo entre los dos
+  // períodos. Los dos selects sueltos de antes ("solo aumentos / solo bajas" y
+  // "solo con variación") viven ahora uno acá y el otro en los chips.
+  const bajaronEscalon = new Set(casos.map(c => c.row));
+  const sinCausaSet = new Set(casos.filter(c => !c.explicado).map(c => c.row));
+  const marcas = [
+    { value: 'up',   label: 'Sólo aumentos',
+      match: r => gruposVisibles.some(g => isDif(r[`dif_${g.key}`]) && r[`dif_${g.key}`] > 0) },
+    { value: 'dn',   label: 'Sólo bajas',
+      match: r => gruposVisibles.some(g => isDif(r[`dif_${g.key}`]) && r[`dif_${g.key}`] < 0) },
+    { value: 'alta', label: `No estaba en ${labelAnterior}`, match: r => !r._row.presenteAnterior },
+    { value: 'baja', label: `No está en ${labelActual}`,     match: r => !r._row.presenteActual },
+    ...(casos.length > 0 ? [
+      { value: 'escalon',  label: 'Bajaron de escalón',        match: r => bajaronEscalon.has(r._row) },
+      { value: 'sincausa', label: 'Bajaron sin causa cargada', match: r => sinCausaSet.has(r._row) },
+    ] : []),
+  ];
 
-    const secciones = gruposVisibles.map(g => {
-      const filasGrupo = visibles.filter(r =>
-        sel.value === 'all' || isDif(r.valores[g.key].diff)
-      );
-      const ord = orden.get(g.key);
-      if (ord) filasGrupo.sort(compararPor(ord.col, g.key, ord.dir));
-      filasPorGrupo.set(g.key, filasGrupo);
-      const totAnt = filasGrupo.reduce((s, r) => s + (r.valores[g.key].anterior ?? 0), 0);
-      const totAct = filasGrupo.reduce((s, r) => s + (r.valores[g.key].actual ?? 0), 0);
-      const totDif = totAct - totAnt;
-
-      const titulo = results.reporte.combinar
-        ? ''
-        : `<h4 style="margin:var(--sp-4) var(--sp-3) var(--sp-2);font-size:var(--text-md);">
-             Concepto ${esc(g.nombreReal || g.label)}
-           </h4>`;
-
-      const cuerpo = filasGrupo.map(r => {
-        const v = r.valores[g.key];
-        const color = isDif(v.diff)
-          ? (v.diff > 0 ? 'var(--color-success)' : 'var(--color-danger)')
-          : 'var(--color-text-muted)';
-        const escalonCol = g.escala
-          ? `<td style="text-align:center;white-space:nowrap;">${v.escalonAnterior === null ? '—' : `${v.escalonAnterior}% → ${v.escalonActual}%`}</td>`
-          : '';
-        const modif = isDif(v.diff) ? 'S' : 'N';
-        return `<tr>
-          <td>${esc(r.legajo)}</td>
-          <td>${esc(r.nombre)}</td>
-          ${escalonCol}
-          <td style="text-align:right;">${fmtNum(v.anterior)}</td>
-          <td style="text-align:right;">${fmtNum(v.actual)}</td>
-          <td style="text-align:center;color:${color};font-weight:600;">${modif}</td>
-          <td style="text-align:right;color:${color};">${fmtNum(v.diff)}</td>
-          <td style="text-align:right;color:${color};">${fmtPct(v.pct)}</td>
-        </tr>`;
-      }).join('');
-
-      // Encabezados clickeables. La flecha indica la columna y el sentido activos.
-      const th = (col, texto, align = 'left') => {
-        const act = ord && ord.col === col;
-        const flecha = act ? (ord.dir === 'asc' ? ' ▲' : ' ▼') : '';
-        return `<th style="text-align:${align};cursor:pointer;user-select:none;white-space:nowrap;"
-                    data-sort="${esc(col)}" data-grupo-sort="${esc(g.key)}"
-                    title="Ordenar por ${esc(ORDEN_COLUMNAS[col].label)}"
-                    aria-sort="${act ? (ord.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"
-                >${esc(texto)}${flecha}</th>`;
-      };
-
-      return `
-        ${titulo}
-        <div data-search-host="${esc(g.key)}" style="padding:0 var(--sp-3) var(--sp-2);"></div>
-        <table class="data-table data-table--compact" data-grupo="${esc(g.key)}">
-          <thead>
-            <tr>
-              ${th('legajo', 'Legajo')}
-              ${th('nombre', 'Apellido y Nombre')}
-              ${g.escala ? '<th style="text-align:center;">Escalón</th>' : ''}
-              ${th('anterior', labelAnterior, 'right')}
-              ${th('actual', labelActual, 'right')}
-              ${th('modificacion', 'Modificación', 'center')}
-              ${th('diff', 'Variación $', 'right')}
-              ${th('pct', 'Variación %', 'right')}
-            </tr>
-          </thead>
-          <tbody>${cuerpo}</tbody>
-          <tfoot>
-            <tr>
-              <!-- Con el filtro en "solo con variación" el pie suma las filas mostradas,
-                   no toda la dotación: se dice explícitamente para no confundirlo con el
-                   TOTAL GENERAL del reporte (que sí es sobre todos los empleados). -->
-              <td colspan="${g.escala ? 3 : 2}"><strong>${sel.value === 'dif' || selDir.value !== 'todos' ? 'TOTAL de las filas mostradas' : 'TOTAL GENERAL'}</strong> — ${filasGrupo.length} empleado${filasGrupo.length === 1 ? '' : 's'}</td>
-              <td style="text-align:right;"><strong>${fmtNum(totAnt)}</strong></td>
-              <td style="text-align:right;"><strong>${fmtNum(totAct)}</strong></td>
-              <td></td>
-              <td style="text-align:right;"><strong>${fmtNum(totDif)}</strong></td>
-              <td style="text-align:right;"><strong>${fmtPct(calcularPct(totAnt, totAct))}</strong></td>
-            </tr>
-          </tfoot>
-        </table>`;
-    }).join('');
-
-    tableHost.innerHTML = secciones
-      + (ocultos > 0
-        ? `<p class="text-muted" style="padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
-             ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin variación (no se muestran).
-           </p>`
-        : '');
-
-    // Paginación + buscador se re-inicializan en cada render del tbody. Sin
-    // sticky: estas tablas van una debajo de otra (una por grupo de conceptos),
-    // no en un panel de scroll acotado como las demás.
-    for (const g of gruposVisibles) {
-      const table = tableHost.querySelector(`table[data-grupo="${g.key}"]`);
-      const host  = tableHost.querySelector(`[data-search-host="${g.key}"]`);
-      if (!table || !host) continue;
-      wireTableTools(table, {
-        rows: filasPorGrupo.get(g.key) || [],
-        getLabel: r => (r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`),
-        searchEl: host,
-        sticky: false,
-      });
-    }
-  }
-
-  // Ordenar: primer click ascendente, segundo invierte. Se delega en el host
-  // porque el <thead> se reconstruye en cada render.
-  tableHost.addEventListener('click', (ev) => {
-    const th = ev.target.closest('[data-sort]');
-    if (!th) return;
-    const col = th.dataset.sort;
-    const key = th.dataset.grupoSort;
-    const actual = orden.get(key);
-    orden.set(key, (actual && actual.col === col)
-      ? { col, dir: actual.dir === 'asc' ? 'desc' : 'asc' }
-      : { col, dir: ORDEN_COLUMNAS[col].tipo === 'num' ? 'desc' : 'asc' });
-    renderTabla();
+  renderPlanillaPanel(container, {
+    rows,
+    columns,
+    unitLabel: 'legajos',
+    estadoDe: r => estadoDeVariacion(r._row, gruposVisibles),
+    noAplica: NO_APLICA_VARIACION,
+    marcas,
+    getLabel: r => (r.nombre ? `${r.legajo} — ${r.nombre}` : `${r.legajo}`),
+    searchLabel: 'Buscar legajo o nombre',
+    // Los encabezados de esta planilla ordenan porque las tablas que reemplaza
+    // ya ordenaban: "quién subió más" es la lectura más frecuente del reporte.
+    sortable: true,
+    onExport: (exportEl) => mountExportMenu(exportEl, { results, relevantes, grupos, labelAnterior, labelActual }),
+    emptyText: 'Ningún empleado quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${rows.length} empleado${rows.length === 1 ? '' : 's'} `
+      + `con valor en alguno de los dos períodos. Clickeá un encabezado para ordenar. `
+      + `«—» es que ese período no trae el concepto para ese legajo, no un cero.`
+      + (ocultos > 0 ? ` Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin variación.` : ''),
   });
-
-  sel.addEventListener('change', renderTabla);
-  selDir.addEventListener('change', renderTabla);
-  renderTabla();
 }
 
 export const renderVariacionesSueldosResults   = renderVariacionesResults;

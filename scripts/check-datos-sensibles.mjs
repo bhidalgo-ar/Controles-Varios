@@ -29,6 +29,11 @@ const ALLOWLIST = new Set([
   'tests/popVariacionesControl.test.js',
   'tests/runWarnings.test.js',
   'tests/e2e/fixtures/popVariaciones.html',
+  // Ídem: la ficha de acreditación cruza CBU, así que el fixture necesita un
+  // CBU de 22 dígitos para que la pantalla no salga toda en alerta. Los de acá
+  // son ceros y dígitos repetidos escritos a mano.
+  'tests/e2e/fixtures/acreditaciones.html',
+  'tests/e2e/fixtures/acreditacionesFicha.html',
 ]);
 
 // Archivos que no tiene sentido escanear por contenido (hashes, minificados).

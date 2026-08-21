@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasCuenta.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Contabilidad Desglosada + Asiento" para
+     mirar la solapa FICHAS: una ficha por cuenta contable, que abierta muestra
+     qué conceptos la componen y cómo suman hasta el saldo.
+
+     El asiento cierra, y una de las cuentas ("Cargas sociales a pagar") NO está
+     en el Reporte de Cuentas del cliente: sale en "Sin comparar" con su ficha,
+     así que en una sola pantalla se ven los dos estados que este control puede
+     tener. Con ?sincuentas=1 no se pasa el reporte de cuentas: el asiento no se
+     arma y la unidad pasa a ser la cuenta de la desglosada.
+     Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runContaDesglosada, renderContaDesglosadaResults, summarizeContaDesglosada }
+  from '../../../js/controls/contaDesglosada.js';
+
+const fila = ({ legajo, nro, concepto, importe, ceco = '10', debe = '', haber = '', liq = 'Mensual' }) => ({
+  legajo, centro_costo: ceco, ingreso: '01/03/2020',
+  nro_concepto: nro, concepto, importe,
+  cuenta_debe: debe, cuenta_haber: haber, liquidacion: liq,
+});
+
+// Cinco legajos en dos centros de costo, con varios conceptos por cuenta para
+// que la ficha abierta tenga algo que desglosar.
+const rows = [
+  fila({ legajo: '1', nro: '100', concepto: 'Sueldo',     importe: '150.000,00', ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '1', nro: '110', concepto: 'Antiguedad', importe: '15.000,00',  ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '1', nro: '120', concepto: 'Descuento',  importe: '12.000,00',  ceco: '10', debe: 'Sueldos a pagar', haber: 'Descuentos varios' }),
+  fila({ legajo: '2', nro: '100', concepto: 'Sueldo',     importe: '180.000,00', ceco: '20', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '2', nro: '130', concepto: 'Presentismo', importe: '9.000,00',  ceco: '20', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '3', nro: '100', concepto: 'Sueldo',     importe: '160.000,00', ceco: '20', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '4', nro: '140', concepto: 'Cargas',     importe: '48.000,00',  ceco: '10', debe: 'Cargas sociales', haber: 'Cargas sociales a pagar' }),
+  fila({ legajo: '5', nro: '100', concepto: 'Sueldo',     importe: '140.000,00', ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  fila({ legajo: '5', nro: '150', concepto: 'Devolucion', importe: '-2.500,00',  ceco: '10', debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+];
+
+const cuentasRef = [
+  { nombre: 'Sueldos Ventas',    codigo: '710100110', centro_costo: '10' },
+  { nombre: 'Sueldos Ventas',    codigo: '710100120', centro_costo: '20' },
+  { nombre: 'Cargas sociales',   codigo: '710100139', centro_costo: null },
+  { nombre: 'Descuentos varios', codigo: '115200100', centro_costo: null },
+  { nombre: 'Sueldos a pagar',   codigo: '215100100', centro_costo: null },
+  // "Cargas sociales a pagar" NO está: su ficha sale en "Sin comparar".
+];
+
+const sinCuentas = new URLSearchParams(location.search).get('sincuentas') === '1';
+
+const results = runContaDesglosada(rows, [], {
+  period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosadaConfig: null,
+  ...(sinCuentas ? {} : { cuentas_refRows: cuentasRef }),
+});
+window.__results = results;
+window.__summary = summarizeContaDesglosada(results);
+renderContaDesglosadaResults(results, document.getElementById('host'));
+</script></body></html>

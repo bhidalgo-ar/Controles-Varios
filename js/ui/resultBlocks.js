@@ -14,7 +14,7 @@
 
 import { initTabs } from './tabs.js';
 import { getViewPreference, setViewPreference } from './viewPreference.js';
-import { currentTolerance } from '../controls/tolerance.js';
+import { currentTolerance, withTolerance } from '../controls/tolerance.js';
 
 function esc(str) {
   return String(str ?? '')
@@ -240,6 +240,13 @@ function estadoKey(conDiferencias) {
  *   última solapa, para los controles que todavía no migraron.
  * @param {string} [opts.detalleLabel='Detalle'] - rótulo de `detalle` (con
  *   `planilla` el rótulo es siempre "Planilla": es la palabra del estándar).
+ * @param {{ id: string, label: string, render: (panel: HTMLElement) => void }[]} [opts.extraTabs]
+ *   Una solapa MÁS, después de la Planilla. **No es la puerta para que cada
+ *   control invente las suyas**: las tres del §2 son las mismas en los 21, y acá
+ *   sólo entra la vista que la spec le reconoce por nombre a un control en el
+ *   mapa del §8 — hoy la única es la matriz campo × legajo de EE x CATEG
+ *   ("Por campo"), que contesta algo que ni la ficha ni la planilla contestan:
+ *   si un campo falla en un legajo o en toda la nómina.
  * @param {boolean} [opts.conDiferencias] - cómo terminó el control en esta
  *   corrida. Decide qué solapa abre la primera vez (con diferencias, Fichas;
  *   si cerró, Planilla) y con qué clave se guarda la preferencia del analista.
@@ -251,13 +258,27 @@ function estadoKey(conDiferencias) {
  *   solapa activa entre sus propios re-renders dentro de la misma corrida).
  */
 export function renderResumenDetalle(container, {
-  resumen, fichas, planilla, detalle, detalleLabel = 'Detalle',
+  resumen, fichas, planilla, detalle, detalleLabel = 'Detalle', extraTabs = [],
   activeId, onChange, controlId, conDiferencias,
 }) {
-  const tabs = [{ id: 'resumen', label: 'Resumen', render: resumen }];
-  if (fichas) tabs.push({ id: 'fichas', label: 'Fichas', render: fichas });
-  if (planilla) tabs.push({ id: 'planilla', label: 'Planilla', render: planilla });
-  else if (detalle) tabs.push({ id: 'detalle', label: detalleLabel, render: detalle });
+  // **Con qué monto de diferencia se dibuja cada solapa.** El borde de la app
+  // envuelve el render en `withTolerance()` (D-069), pero una solapa se dibuja
+  // recién cuando el analista la clickea — o sea, ya fuera de ese envoltorio, con
+  // el monto de vuelta en el centavo del default. Resultado: el Resumen contaba
+  // las diferencias con el monto del cliente y la tabla de al lado las pintaba de
+  // rojo con $ 0,01, así que la misma pantalla decía dos cosas distintas del
+  // mismo legajo (verificado con un legajo de $ 40 de diferencia y el monto del
+  // cliente en $ 100: la tile decía "sin diferencia" y la celda salía en rojo).
+  // Se captura acá el monto de la corrida y se vuelve a poner al dibujar cada
+  // solapa, que es lo único que hace falta para que toda la pantalla mida igual.
+  const tol = currentTolerance();
+  const conMonto = (fn) => (panel) => withTolerance(tol, () => fn(panel));
+
+  const tabs = [{ id: 'resumen', label: 'Resumen', render: conMonto(resumen) }];
+  if (fichas) tabs.push({ id: 'fichas', label: 'Fichas', render: conMonto(fichas) });
+  if (planilla) tabs.push({ id: 'planilla', label: 'Planilla', render: conMonto(planilla) });
+  else if (detalle) tabs.push({ id: 'detalle', label: detalleLabel, render: conMonto(detalle) });
+  for (const t of extraTabs) tabs.push({ id: t.id, label: t.label, render: conMonto(t.render) });
 
   const estado = estadoKey(conDiferencias);
   // Con diferencias lo primero que se ve es por qué falla; si cerró, la planilla
@@ -700,11 +721,22 @@ export function diffCellHtml(value, { max = 0, decimals = 2, eps = currentTolera
 //   band   — a qué banda pertenece (la 1ª fila del encabezado). La primera es
 //            siempre 'Identificación' y viaja con las columnas congeladas.
 //   close  — cierra la banda: negrita sobre un gris más marcado
+//   diff   — la columna ES una diferencia. Implica `num`, y la celda se dibuja
+//            con el badge del estándar: rojo arriba del monto de diferencia del
+//            cliente, gris cuando cerró, y ámbar "sin comparar" cuando falta un
+//            lado (`null` no es `0`). La barra de magnitud se escala sola contra
+//            la diferencia más grande de la planilla — antes cada control
+//            calculaba ese máximo a mano y con su propio criterio.
+//   absentLabel — qué dice el badge ámbar de esa columna ("ausente en Tab")
 //   cell   — (row) => HTML de la celda, para lo que no es un importe pelado (un
-//            badge de diferencia, un pill de estado). Con esto el control sigue
-//            decidiendo cómo se ve su número; la pieza decide dónde va.
+//            pill de estado, un enlace). Con esto el control sigue decidiendo
+//            cómo se ve su número; la pieza decide dónde va.
 //   total  — `false` para no totalizar una columna numérica, o (rows) => número
-//            para un total que no es la suma (un promedio, un recuento).
+//            para un total que no es la suma. **Ojo con las columnas de
+//            diferencia**: varios controles muestran ahí la RESTA DE LOS TOTALES
+//            (Σ Tab − Σ Reporte), que no es lo mismo que la suma de la columna
+//            cuando algún legajo no se pudo comparar — ese es el número que la
+//            tile del Resumen también muestra, así que se declara con `total`.
 //
 // **Ausencia de dato es `—`, nunca `0,00`** (`null` no es `0`, CLAUDE.md).
 
@@ -723,8 +755,12 @@ function bandsOf(columns) {
 /** ` class="…"` de una celda, o nada si no le corresponde ninguna clase. */
 function colClass(col, extra = '') {
   const cls = [
-    col.num ? 'rb-col--num' : '',
+    (col.num || col.diff) ? 'rb-col--num' : '',
     col.close ? 'rb-col--close' : '',
+    // `rb-magcell` no es decorativa: posiciona la barra de magnitud, y es de
+    // donde `initSelectionTotals`/`initToolbarKpis` deducen que esta planilla
+    // compara algo (el KPI "N con diferencias" sale de ahí).
+    col.diff ? 'rb-magcell' : '',
     extra,
   ].filter(Boolean).join(' ');
   return cls ? ` class="${cls}"` : '';
@@ -733,7 +769,7 @@ function colClass(col, extra = '') {
 /** El total de una columna: la suma de lo que hay, `null` si no hay nada que sumar. */
 function columnTotal(col, rows) {
   if (typeof col.total === 'function') return col.total(rows);
-  if (col.total === false || !col.num) return null;
+  if (col.total === false || !(col.num || col.diff)) return null;
   let acc = null;
   for (const r of rows) {
     const v = r[col.key];
@@ -754,9 +790,12 @@ function columnTotal(col, rows) {
  *   TOTAL. Es la que declara el control en `unit` (legajo, centro de costo,
  *   cuenta, lista) — de acá sale "TOTAL de la selección — 1 legajo" al filtrar.
  * @param {boolean} [opts.totals=true]
+ * @param {boolean} [opts.bands=true] - `false` para una planilla sin bandas: la
+ *   que no agrupa nada porque no compara importes (EE x CATEG cruza campos de
+ *   texto). Sin esto saldría una franja oscura vacía arriba del encabezado.
  */
-export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = true, stickyCols = 2 }) {
-  const bands = bandsOf(columns);
+export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = true, stickyCols = 2, bands: conBandas = true }) {
+  const bands = conBandas ? bandsOf(columns) : [];
   const bandRow = bands.map((b, i) => `
     <th colspan="${b.cols.length}"${b.cols.length > 1 ? ' style="text-align:center;"' : ''}${i > 0 ? ' class="rb-band--next"' : ''}>${esc(b.band)}</th>
   `).join('');
@@ -775,13 +814,26 @@ export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = t
     `;
   }).join('');
 
+  // La barra de magnitud de TODAS las columnas de diferencia se escala contra la
+  // misma referencia: la diferencia más grande de la planilla. Con una escala por
+  // columna, una diferencia de $ 40 en una columna chica dibujaba la misma barra
+  // que una de $ 400.000 en otra.
+  const maxDiff = Math.max(0, ...columns.filter(c => c.diff).flatMap(
+    c => rows.map(r => Math.abs(Number.isFinite(r[c.key]) ? r[c.key] : 0))));
+
   const bodyRows = rows.map(r => `
     <tr>
       ${columns.map((c, i) => {
         const startsBand = bands.some(b => b.from === i && b.from > 0);
-        const cls = colClass(c, startsBand ? 'rb-band--next' : '');
+        const v = r[c.key];
+        const extra = [
+          startsBand ? 'rb-band--next' : '',
+          c.diff && v !== null && v !== undefined ? mvClass(v) : '',
+        ].filter(Boolean).join(' ');
+        const cls = colClass(c, extra);
         if (typeof c.cell === 'function') return `<td${cls}>${c.cell(r)}</td>`;
-        return `<td${cls}>${c.num ? esc(fmtAmountOrDash(r[c.key])) : esc(r[c.key] ?? '—')}</td>`;
+        if (c.diff) return `<td${cls}>${diffBadgeHtml(v, { max: maxDiff, ...(c.absentLabel ? { absentLabel: c.absentLabel } : {}) })}</td>`;
+        return `<td${cls}>${c.num ? esc(fmtAmountOrDash(v)) : esc(v ?? '—')}</td>`;
       }).join('')}
     </tr>
   `).join('');
@@ -789,13 +841,20 @@ export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = t
   // El rótulo del TOTAL ocupa la banda de identificación entera (las columnas
   // congeladas): es donde el analista lo busca, y es de donde sale la unidad
   // cuando pasa a ser el total de la selección (ver selectionLabelHtml).
-  const labelSpan = bands[0]?.cols.length || 1;
+  // Sin bandas no hay una "banda de identificación" que le preste su ancho al
+  // rótulo del TOTAL: lo ocupan las columnas congeladas, que es donde el
+  // analista lo busca igual.
+  const labelSpan = conBandas ? (bands[0]?.cols.length || 1) : Math.max(1, stickyCols);
   const totalCells = columns.slice(labelSpan).map((c, k) => {
     const i = labelSpan + k;
     const startsBand = bands.some(b => b.from === i && b.from > 0);
     const cls = colClass(c, startsBand ? 'rb-band--next' : '');
     const v = columnTotal(c, rows);
-    return `<td${cls}>${v === null ? '' : esc(fmtAmountOrDash(v))}</td>`;
+    if (v === null) return `<td${cls}></td>`;
+    // El total de una diferencia va con su signo: "−484.960,00" y "+15.040,00"
+    // dicen cosas distintas. (El badge sale sin cápsula en el pie — lo apaga el
+    // CSS: la fila entera ya está destacada.)
+    return `<td${cls}>${c.diff ? diffBadgeHtml(v) : esc(fmtAmountOrDash(v))}</td>`;
   }).join('');
 
   const unidad = rows.length === 1 ? singularUnit(unitLabel) : unitLabel;
@@ -803,13 +862,13 @@ export function rubroGridHtml({ columns, rows, unitLabel = 'legajos', totals = t
   return `
     <table class="data-table data-table--compact rb-rubro">
       <thead>
-        <tr class="rb-rubro__bands">${bandRow}</tr>
+        ${conBandas ? `<tr class="rb-rubro__bands">${bandRow}</tr>` : ''}
         <tr>${headRow}</tr>
       </thead>
       <tbody>${bodyRows}</tbody>
       ${totals ? `<tfoot>
         <tr>
-          <td colspan="${labelSpan}"><strong>TOTAL</strong> — ${rows.length} ${esc(unidad)}</td>
+          <td class="rb-total__label" colspan="${labelSpan}"><strong>TOTAL</strong> — ${rows.length} ${esc(unidad)}</td>
           ${totalCells}
         </tr>
       </tfoot>` : ''}
@@ -837,9 +896,9 @@ function singularUnit(unitLabel) {
  *
  * @returns {{ tableEl: HTMLTableElement, wrap: HTMLElement }}
  */
-export function renderRubroGrid(host, { columns, rows, unitLabel, totals = true, stickyCols = 2, col1Width } = {}) {
+export function renderRubroGrid(host, { columns, rows, unitLabel, totals = true, stickyCols = 2, col1Width, bands = true } = {}) {
   const holder = document.createElement('div');
-  holder.innerHTML = rubroGridHtml({ columns, rows, unitLabel, totals, stickyCols });
+  holder.innerHTML = rubroGridHtml({ columns, rows, unitLabel, totals, stickyCols, bands });
   const tableEl = holder.querySelector('table');
   host.appendChild(tableEl);
   const wrap = enhanceGrid(tableEl, { stickyCols, ...(col1Width !== undefined ? { col1Width } : {}) });

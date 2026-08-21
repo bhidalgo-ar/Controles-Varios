@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Una planilla LARGA (120 filas, más de una página) armada con las piezas
+     compartidas, para poder verificar en un navegador lo que ninguna pantalla
+     con datos de muestra alcanza a mostrar: que el buscador y los chips de
+     estado encuentren una fila que quedó fuera de la primera página.
+     Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { renderPlanillaPanel } from '../../../js/ui/planillaPanel.js';
+
+const APELLIDOS = ['SANGUINETTI', 'ALBELLA', 'FALCIONI', 'SILVA', 'LUCCHETTI', 'ERVITI',
+  'RODRIGUEZ', 'PALACIO', 'CVITANICH', 'DATOLO', 'URZI', 'CARRANZA'];
+
+// 120 filas. La única con diferencia es la anteúltima, bien lejos de la primera
+// página: es el caso que el buscador y el chip tienen que poder alcanzar.
+const rows = Array.from({ length: 120 }, (_, i) => ({
+  legajo: String(i + 1),
+  nombre: `${APELLIDOS[i % APELLIDOS.length]} ${i + 1}`,
+  esperado: 100000 + i,
+  liquidado: 100000 + i + (i === 118 ? 5000 : 0),
+  diff: i === 118 ? -5000 : 0,
+}));
+
+renderPlanillaPanel(document.getElementById('host'), {
+  rows,
+  columns: [
+    { key: 'legajo', label: 'Legajo',            band: 'Identificación' },
+    { key: 'nombre', label: 'Apellido y Nombre', band: 'Identificación' },
+    { key: 'esperado',  label: 'Esperado',  sub: 'lo teórico',   num: true, band: 'Comparación' },
+    { key: 'liquidado', label: 'Liquidado', sub: 'el Tabulado',  num: true, band: 'Comparación' },
+    { key: 'diff', label: 'Diferencia', sub: 'esperado − liquidado', num: true, band: 'Comparación', close: true },
+  ],
+  unitLabel: 'legajos',
+  estadoDe: r => (r.diff === 0 ? 'centavo' : 'conDif'),
+  getLabel: r => `${r.legajo} — ${r.nombre}`,
+  footnote: (shown) => `Mostrando ${shown.length} de ${rows.length} legajos.`,
+});
+window.__listo = true;
+</script></body></html>

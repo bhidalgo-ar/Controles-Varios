@@ -7,6 +7,350 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(ee-categ): ficha por legajo y matriz campo × legajo ("Por campo") — 2026-08-21
+
+- **Es la tanda 6 de `specs/vista-estandar-resultados.md`** (D-082, §9 punto 6), en la rama
+  `feat/vista-estandar-ee-categ` (PR #184), construida sobre la tanda 2 (D-078). Integrada a `main` el
+  2026-08-21 junto con las otras siete tandas paralelas (D-088).
+- **EE x CATEG suma la solapa Fichas.** Hasta ahora el detalle era una fila por campo que no coincidía,
+  así que un legajo con tres campos mal aparecía tres veces y no se lo podía ver entero. Ahora es una
+  tarjeta por legajo: cerrada muestra legajo, nombre y cuántos campos no coinciden; abierta trae la tira
+  de conciliación —acá no es una cascada de importes sino el conteo de campos del cruce: sin comparar →
+  comparados → coinciden → no coinciden—, un renglón por campo con el valor de cada lado marcando el que
+  difiere, y una conclusión que dice si el problema parece de ese empleado o de una carga masiva.
+- **Cuarta solapa "Por campo": la matriz campo × legajo.** Filas = Puesto, Centro de costo, Departamento,
+  con en cuántos legajos no coincide cada uno, el % sobre los comparados, cuántos coinciden, cuántos
+  quedaron sin comparar, y un badge ("Parece una carga masiva" / "Casos puntuales" / "Coincide en todos" /
+  "No se pudo comparar"). Ordenada de peor a mejor. Sin fila de TOTAL: sumar "legajos comparados" de tres
+  campos daría 300 sobre 100 empleados.
+- **El legajo que está en un archivo y no en el otro** sale como "sin comparar" en la ficha y en la
+  matriz, y su número grande es "—", nunca 0 (D-073). Ningún conteo del semáforo cambió: la unidad sigue
+  siendo el legajo.
+- **La planilla de la tanda 2 (las tres tablas de diferencias fundidas en una, con columna "Qué pasa") no
+  se tocó.** Cambio cosmético: la columna "Campo" dice "Centro de costo" en vez de "CENTRO_COSTO", porque
+  ahora ese rótulo se comparte con la ficha y la matriz.
+- **Una corrida guardada antes de este cambio no rompe la pantalla.** Las corridas se guardan en la base
+  y se vuelven a dibujar tal cual; las viejas sólo tienen los campos que NO coincidían, y con eso no se
+  puede armar la ficha ni la matriz sin inventar los que sí coincidían. Ahí esas dos solapas no se
+  ofrecen y el Resumen dice que hay que volver a correr el control con los mismos archivos.
+- Piezas compartidas, chicas y genéricas: el número grande de la ficha (`js/ui/fichaList.js`) acepta un
+  conteo además de un importe; el KPI de la selección (`js/ui/tableTools.js`) acepta `amountDecimals: 0`;
+  `renderResumenDetalle()` (`js/ui/resultBlocks.js`) acepta `extraTabs` para la solapa que la spec le
+  reconoce por nombre a un control en el mapa del §8.
+- `js/controls/catXEmpleados.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`, `js/ui/tableTools.js`.
+  `tests/catXEmpleadosControl.test.js` pasa de 8 a 35 asserts; `tests/vistaEstandar.test.js` suma 2;
+  nuevo e2e `tests/e2e/eeCategFichas.spec.js` (12 tests); se adapta `tests/e2e/loteMeta4.spec.js` (de la
+  tanda 2) para buscar la solapa Planilla por nombre y no por posición, y para mirar sólo el panel de la
+  solapa activa; el fixture `tests/e2e/fixtures/loteMeta4.js` suma un campo con carga masiva (el puesto no
+  coincide en 3 de 5 legajos) para que las cuatro lecturas se vean en pantalla. `test:unit` verde entero,
+  e2e completo verde (201 passed, 3 skipped), revisado en Chromium en los tres temas con el fixture del
+  lote Meta4. **No se pudo llegar a la pantalla del control dentro de la app entera**: hace falta un
+  archivo real de cliente.
+- **Tres decisiones tomadas sin Willy presente, a confirmar** (D-082): cuatro solapas y no tres para este
+  control; el corte de "carga masiva" (un tercio de los legajos comparados y al menos 3); y los rótulos de
+  campo en criollo (Puesto / Centro de costo / Departamento) reemplazando a PUESTO/CENTRO_COSTO/DEPTO en
+  toda la pantalla.
+- Ver `specs/vista-estandar-resultados.md` (§2, §7, §8 y §9 al día), **D-082**.
+
+### feat(ui): barra estándar y planilla con bandas en las diez pantallas del lote Meta4/Marval — 2026-08-20
+
+- **Es la tanda 2 de `specs/vista-estandar-resultados.md`** (D-078, §9 punto 2): Brutos, GS Pers y
+  Control NR (Controlar y Generar Reporte de los tres), Rendimiento vs Tabulado, Rendimiento x EE,
+  Rendimiento vs Asiento y EE x CATEG pasan a la barra y la planilla estándar. Ningún cálculo cambió: en
+  las diez pantallas se compararon los números de antes y después, fila por fila y columna por columna.
+- **La solapa que antes se llamaba "Detalle" pasa a llamarse "Planilla" en las diez.** Arriba lleva la
+  misma barra que Acumuladores Ganancias — los cinco chips de estado en el mismo orden, el buscador,
+  `Marcas ▾` donde el control tiene un segundo eje, los KPIs y el `⬇ Exportar ▾` siempre último a la
+  derecha — y la tabla se arma con rubros agrupados en bandas y la base de cálculo abajo de cada título,
+  para que la planilla se explique sola.
+- **En Brutos y GS Pers (Controlar y Generar Reporte) y en Control NR (Controlar y Generar Reporte)**, el
+  encabezado deja de pintarse con colores escritos a mano — desaparece un violeta que no era de la marca
+  — y pasa al tinte de banda compartido. En Control NR, los 18 conceptos siguen siendo un desplegable,
+  ahora `Marcas ▾`, y cada marca dice "el legajo liquidó ese concepto" (no "tiene diferencia ahí").
+- **Rendimiento vs Tabulado y Rendimiento x EE**: la lista de qué conceptos del Tabulado componen cada
+  columna sale del encabezado (donde con quince conceptos no entraba) y pasa a una leyenda desplegable
+  arriba de la planilla, con la misma información.
+- **Rendimiento vs Asiento** pierde el orden por columna de su planilla principal (clickear el
+  encabezado) — vuelve cuando el control tenga su ficha por centro de costo — y el desglose que colgaba
+  de la fila de TOTAL (el desglose por celda, centro de costo por centro de costo, sigue igual). El
+  rótulo de esa fila pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo", como en el resto de las
+  planillas.
+- **EE x CATEG**: las tres tablas de diferencias que tenía (falta en el Tabulado / falta en Rep. Categ. /
+  campo que no coincide) se fusionan en una sola planilla, con una fila por caso y una columna "Qué
+  pasa". Sin bandas y sin fila de TOTAL — compara campos de texto, no importes. Las dos distribuciones
+  (por puesto y por centro de costo) siguen abajo, sin cambios.
+- **Tres bugs que aparecieron al migrar, arreglados en la pieza compartida y que afectan a los 21
+  controles, no sólo a estos diez:** una solapa se dibujaba con el monto de diferencia fijo de $ 0,01 en
+  vez del monto que configuró el cliente, así que el mismo legajo podía figurar "sin diferencia" en el
+  Resumen y en rojo en la Planilla; las dos primeras celdas de la fila de bandas no tomaban el color de
+  fondo de la banda (se veían en blanco, invisibles); y en los controles con una sola columna de
+  identificación (GS Pers), el rótulo de la fila de TOTAL se pisaba con una suma apenas el analista
+  filtraba.
+- Pieza nueva: `js/ui/planillaPanel.js` (`renderPlanillaPanel()`), el gemelo de la ficha para la solapa
+  Planilla — un control declara sus columnas, en qué estado cerró cada fila y qué exporta, y hereda la
+  barra, el TOTAL y el cruce de filtros.
+- `js/ui/planillaPanel.js` (nuevo), `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `css/results.css`,
+  `js/controls/brutos.js`, `js/controls/gsPers.js`, `js/controls/nr.js`, `js/controls/rendVsTabu.js`,
+  `js/controls/rendXEe.js`, `js/controls/rendVsAsiento.js`, `js/controls/catXEmpleados.js`. 68 asserts en
+  `tests/vistaEstandar.test.js` y 92 pruebas de navegador nuevas en `tests/e2e/loteMeta4.spec.js` con su
+  fixture (`tests/e2e/fixtures/loteMeta4.html`/`.js`), datos inventados (jugadores de Banfield).
+  Verificado en Chromium, tres temas, con fixture — el mismo `run()` y el mismo `render()` de cada
+  control con datos inventados. **No se corrió ningún control de punta a punta en la app entera**: no hay
+  archivos de cliente en el repo con los cuales llegar a una pantalla de resultados por el camino del
+  analista. Los tres e2e que apuntaban a la solapa "Detalle" vieja se actualizaron
+  (`detalleTabla.spec.js`, `gridHeaderContrast.spec.js`, `resultsResumen.spec.js`).
+- Integrada a `main` el 2026-08-21 junto con las otras siete tandas paralelas (D-088); sigue pendiente
+  que Willy mire las diez pantallas en el navegador. Ver `specs/vista-estandar-resultados.md` (§8 y §9
+  al día), **D-078**.
+
+### feat(acreditaciones): solapa Fichas, una tarjeta por lista de acreditación — 2026-08-21
+
+- **Es la tanda 8 de `specs/vista-estandar-resultados.md`** (§9, punto 8): "Acreditaciones — Generar
+  Reporte" gana la solapa Fichas. La tarjeta es por **lista** de acreditación, no por legajo — la unidad
+  de este control es la acreditación y no el empleado-mes (D-021), y sigue siendo la única excepción
+  conocida a la regla de consolidar por legajo. Ningún conteo del semáforo cambia: la unidad sigue siendo
+  `'lista'` y `unitsTotal`/`unitsWithDiff` siguen contando listas formadas + grupos pendientes.
+- **Cerrada:** el número de lista en el avatar, `código — liquidación` como nombre (por ejemplo
+  "1Q — 1era Quincena"), la empresa en el tag, y en la línea de contexto la fecha de acreditación,
+  cuántas acreditaciones tiene la lista, qué listados del archivo entraron y qué hoja del `.xlsx` es. Si
+  el reporte no cierra contra el archivo de Axton, la lista sale en rojo con el badge "El reporte no
+  cierra" — el mismo criterio con el que ya se pintaba la Planilla: si el cuadre global no da, el reporte
+  entero es sospechoso y todas las listas salen marcadas, no sólo la que tiene la alerta.
+- **Abierta:** la tira va del listado de pago (cuántas acreditaciones trae) a lo que sale por el banco,
+  descontando las que quedaron sin importe y separando lo que queda para revisar; el desglose por banco
+  (lo que mira tesorería antes de mandar la lista); si hay alertas, una segunda tabla con cuántas hay de
+  cada tipo y el detalle fila por fila con el legajo y por qué quedó marcada; y una conclusión que es una
+  instrucción ("antes de mandarla al banco, resolvé…"), no un resumen del importe que ya se ve arriba.
+- **Todo lo de HR queda en la pantalla, no en el archivo (D-020), y ahora está escrito como assert**: el
+  conteo de acreditaciones, el desglose por banco, las alertas y el legajo marcado se ven en la ficha; el
+  `.xlsx` que recibe Finanzas sigue con sus 7 columnas de pago y ninguna más — el test lo compara contra
+  `EXPORT_CONTRACTS.acreditaciones_reporte.columns`.
+- **El aviso de "grupo sin fecha de acreditación" y la lista de fechas asignadas a mano se movieron arriba
+  de las tres solapas** (antes vivían adentro de la Planilla). Bloquean el export, y con la vista estándar
+  la pantalla abre en Fichas justo cuando hay un grupo pendiente — adentro de la Planilla quedaban
+  invisibles en ese momento. Decisión tomada sin Willy presente, a confirmar (D-083).
+- **Bug arreglado en la pieza compartida `js/ui/fichaList.js`:** `renderFichasPanel()` le leía `.value` al
+  `<div>` que envuelve al `<select>` del "Orden ▾" en vez de al `<select>`, así que el desplegable se veía
+  pero nunca ordenaba nada — en ninguna pantalla que ya usara la pieza. Afectaba también a Acumuladores
+  Ganancias (el control piloto de la tanda 1).
+- **Y el buscador de la solapa Fichas ahora puede decir qué se busca en cada control.** Antes dejaba
+  siempre "Buscá por legajo o nombre…", que es el texto correcto en los 7 controles cuya unidad es el
+  legajo y engaña en los 3 donde es el centro de costo, la cuenta contable o la lista: pedía un dato que
+  la ficha no tiene. `renderFichasPanel()` acepta `searchLabel` y `searchPlaceholder` —el mismo
+  pass-through que ya tenía la Planilla—, y en Acreditaciones las dos solapas buscan por número de lista,
+  liquidación, fecha o listado.
+- `js/controls/acreditaciones.js`, `js/ui/fichaList.js`, `scripts/check-datos-sensibles.mjs` (allowlist del
+  fixture nuevo). `tests/acreditacionesControl.test.js` gana 35 asserts para la función pura
+  `buildAcreditacionesFichas(res)`. `tests/e2e/acreditacionesFicha.spec.js` (nuevo, 12 pruebas) sobre el
+  fixture `tests/e2e/fixtures/acreditacionesFicha.html`; datos inventados, jugadores de Banfield.
+  `tests/e2e/vistaEstandar.spec.js` (Acumuladores) vuelve a pasar después del arreglo del "Orden ▾".
+  Verificado en navegador en los tres temas.
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), `specs/control-acreditaciones-axton.md`,
+  D-020, D-021, D-074, **D-083**.
+
+### fix(ui): reabrir una corrida vieja del asiento no marca todas sus cuentas en rojo — 2026-08-21
+
+- La pantalla de resultados se vuelve a dibujar sobre lo que quedó guardado en el navegador, así que
+  **abrir el asiento del mes pasado** pasa por la ficha por cuenta nueva. Esas corridas se guardaron antes
+  de que existiera el desglose por concepto, y la ficha las leía como "los conceptos no suman al saldo":
+  todas las cuentas en rojo diciendo algo falso, y el analista teniendo que decidir si le cree a la
+  pantalla o al archivo que ya mandó.
+- Ahora la conciliación distingue **las tres cosas** que antes eran dos: el desglose suma, el desglose **no**
+  suma, o **la corrida no lo guardó** (`null`, que no es `0` ni `false` — la regla de siempre). En ese
+  último caso la ficha muestra los dos lados y el saldo en vez de inventar un "Suman al DEBE 0,00", no
+  dibuja la tabla de detalle, y la conclusión dice que hay que volver a ejecutar el control para verlo.
+- De paso, dos cosas que se veían en pantalla: la concordancia de singular y plural ("sus 1 concepto suman
+  exacto") y una marca que repetía abajo de la tarjeta lo que ya decía el badge de al lado del nombre.
+- `js/ui/fichaCuenta.js`, `js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`,
+  `tests/fichasCuentaContable.test.js`.
+
+### feat(ui): ficha por cuenta contable en el Asiento de Remuneraciones y en la Contabilidad Desglosada — 2026-08-21
+
+- **Es la tanda 7 de `specs/vista-estandar-resultados.md`** (§9, punto 7): los dos controles cuya unidad
+  no es el empleado sino la **cuenta contable** —Asiento de Remuneraciones (FINADIET) y Contabilidad
+  Desglosada + Asiento (COTY)— ganan su solapa Fichas. Antes, ver qué conceptos de liquidación componen el
+  saldo de una cuenta exigía bajar el `.xlsx` y filtrar a mano.
+- **Ficha cerrada:** número y nombre de la cuenta, su DEBE, su HABER y si cuadra, sin abrirla. **Ficha
+  abierta:** una tira que va de "cuántos conceptos la componen" a "cuánto suman al DEBE / al HABER / al
+  saldo / lo que queda sin explicar", más una tabla con una fila por concepto —con su **código**— y el
+  efecto de cada uno sobre el saldo.
+- **El saldo se llama distinto en cada archivo y la ficha respeta esa palabra:** en FINADIET es "SALDO", en
+  la Contabilidad Desglosada con asiento armado es "NETO" (así lo rotula cada `.xlsx`); la cuenta detrás es
+  la misma (DEBE − HABER).
+- **Los dos controles cuadran al centavo contra sí mismos, no contra un umbral:** el chip "Dentro del
+  margen" sale igual, en gris con su 0, con el motivo en el `title`.
+- **En FINADIET, las cuentas y los centros de costo sin clasificar entran como ficha propia**, en "Sin
+  comparar", con saldo `—` (nunca `0,00`) y una conclusión que dice qué cargar en el Paso 2 — antes sólo se
+  veían en el Resumen.
+- **Se corrige un criterio que había quedado mal en la tanda 3 (D-085):** en la Contabilidad Desglosada,
+  una cuenta sin código pasa de leerse "Con diferencia" a leerse "Sin comparar", en las dos solapas del
+  control (Fichas y Planilla) — no hay ninguna diferencia de importe, lo que falta es el Reporte de
+  Cuentas de Redefinición del cliente.
+- **Dos huecos corregidos de paso:** el buscador de la solapa Fichas (pieza de la tanda 1) siempre decía
+  "Buscá por legajo o nombre…", aunque la pantalla fuera por cuenta contable; ahora cada control puede
+  poner su propio texto (`searchLabel` / `searchPlaceholder` en `js/ui/fichaList.js`). Y en la Planilla de
+  la Desglosada, las marcas "Sólo el DEBE" / "Sólo el HABER" (tanda 3) comparaban contra `'D'` / `'H'`
+  cuando la columna trae `'DEBE'` / `'HABER'`: las dos salían siempre en gris con `(0)`.
+- **Ningún número que calcula el control cambió** (lo que cambia es cómo se lee en pantalla una cuenta sin
+  código, ver el punto de D-085). Se corrió el módulo de la tanda 3 y el de esta tanda sobre
+  la misma entrada sintética y los balances, las líneas del asiento, las cuentas patrimoniales y el
+  semáforo completo dieron idénticos en los dos controles; lo único que se agregó es el campo `conceptos`
+  en cada línea del asiento.
+- **Nada de esto agrega un dato del empleado a ningún archivo exportado.** La ficha es pantalla; los tres
+  `.xlsx` y el CSV de la Desglosada salen con las mismas columnas que ya tenían. Sigue pendiente que Willy
+  confirme si la Contabilidad Desglosada sale del estudio (D-066 §4/§8) — esta tanda no lo resolvió.
+- Piezas nuevas y compartidas por los dos controles: `js/controls/cuentaConceptos.js` (el desglose por
+  concepto, con clave por código) y `js/ui/fichaCuenta.js` (la conciliación de la cuenta, la tira, la
+  tabla de detalle y la línea de contexto).
+- `js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`, `js/ui/fichaList.js`.
+  `tests/fichasCuentaContable.test.js` (123 asserts, sumado a `test:unit`) + `tests/e2e/fichasCuenta.spec.js`
+  (20 tests, tres temas). Datos inventados, jugadores de Banfield.
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), `specs/finadiet-asiento-remuneraciones.md`,
+  `specs/conta-desglosada-asiento.md`, **D-084, D-085**.
+
+
+### feat(ui): barra estándar y planilla con bandas en el lote Axton/general — 2026-08-20
+
+- **Es la tanda 3 de `specs/vista-estandar-resultados.md`** (§9, punto 3): nueve pantallas pasan a la vista
+  estándar — Cruce por Agrupadores, Variación Sueldos, Variación Conceptos, Variación entre quincenas
+  (POP), Acreditaciones, Importador de Novedades, Novedades vs Liquidación, Asiento de Remuneraciones
+  (FINADIET) y Contabilidad Desglosada. **La tanda 2 (lote Meta4/Marval, 10 pantallas) corre en paralelo,
+  en otra rama, y no está en esta entrada.** Ningún cálculo ni conteo cambia en ninguna de las nueve.
+- **Se jubilan las tres barras propias** de Agrupadores, Variación Sueldos y Variación Conceptos, y el
+  botón suelto "🖨 Imprimir / PDF" de Variaciones, que ahora es un ítem más del `⬇ Exportar ▾`.
+- **Cruce por Agrupadores** pasa de una tabla por agrupador —una fila por legajo en cada una, ~1000 filas
+  para ~100 empleados, con un corte "por rendimiento" en 100 filas— a **una sola planilla**, una fila por
+  legajo con una banda por agrupador. El estado de cada fila lo sigue decidiendo `tieneDiff` del panel
+  del Paso 2, con su mismo monto, porcentaje y marcado de faltantes — los chips no leen el monto del
+  cliente acá (D-069).
+- **Novedades vs Liquidación** pasa de cuatro tablas —una por banda del cruce— a **una planilla**: las
+  cuatro bandas ahora se leen en los cinco chips de estado (difiere → Con diferencia; coincide → Al
+  centavo o Dentro del margen; no comparable y sin contraparte → Sin comparar), y lo que el estado no
+  distingue quedó en `Marcas ▾`.
+- **Importador de Novedades, Asiento de Remuneraciones y Contabilidad Desglosada** cambian su desplegable
+  de "Vista"/"Solapa"/"Archivo" por sub-solapas anidadas dentro de Planilla, cada una con su propia barra
+  estándar completa — el mismo patrón que ya usaba Acumuladores para sus dos hojas.
+- **Los dos asientos** (Remuneraciones y Contabilidad Desglosada) agrupan las columnas de importe en las
+  bandas DEBE y HABER; como cuadran al centavo contra sí mismos, el chip "Dentro del margen" sale
+  deshabilitado con el motivo en su `title`, no oculto.
+- **Variación entre quincenas (POP):** el valor hora no lleva TOTAL al pie —sumar el valor hora de
+  legajos distintos no da un número que signifique algo, y el pie que había antes tampoco lo hacía—; es
+  la única columna de importe de las nueve pantallas sin TOTAL, y la spec pide TOTAL en todas (D-081).
+- **Pieza compartida:** `js/ui/planillaPanel.js`, el gemelo de `renderFichasPanel()` para los
+  controles que no llevan ficha — el control declara sus columnas y en qué estado cerró cada fila, nada
+  más. La tanda 3 la había escrito como archivo nuevo para no pisarse con la tanda 2, que hizo lo mismo
+  con el mismo nombre; **al integrar quedó una sola pieza para los 19 controles de los dos lotes**
+  (D-079, D-088).
+- **Dos arreglos en piezas compartidas que valen para los 21 controles, no sólo estos nueve** (D-080):
+  `js/ui/tableTools.js` contaba la paginación sobre el índice original de la fila y no sobre las que
+  pasan el filtro — buscar un legajo que estaba en la fila 300 no mostraba nada, y el botón "Mostrar
+  todas" además se ocultaba, sin salida; y `css/results.css` pintaba el rótulo de la segunda banda en
+  celeste sobre blanco cuando la planilla tiene sólo dos bandas (se ve en Variación Sueldos, la primera).
+- **Un desvío deliberado respecto de la spec:** `Marcas ▾` queda a la izquierda del buscador, copiando al
+  piloto de la tanda 1 (Acumuladores) en vez del §3 de la spec, que lo pide a la derecha — para que las
+  21 pantallas queden iguales entre sí, que es el objetivo real (D-081).
+- `js/ui/planillaPanel.js` (nuevo), `js/ui/tableTools.js`, `css/results.css`,
+  `js/controls/agrupadores.js`, `js/controls/variaciones.js`, `js/controls/popVariaciones.js`,
+  `js/controls/acreditaciones.js`, `js/controls/novedadesImportador.js`,
+  `js/controls/novedadesLiquidacion.js`, `js/controls/finadietAsiento.js`,
+  `js/controls/contaDesglosada.js`. `tests/vistaEstandarLote.test.js` (sumado a `test:unit`) + recorrido
+  de las nueve pantallas en `tests/e2e/vistaEstandarLote.spec.js`, tres temas. Datos inventados,
+  jugadores de Banfield.
+- Ver `specs/vista-estandar-resultados.md` (§7, §8 y §9 al día), D-074, D-077, **D-079, D-080 y D-081**.
+
+### feat(ui): tanda 4 de la vista estándar — ficha de legajo × concepto en Control NR, Novedades vs Liquidación y Variación Conceptos — 2026-08-21
+
+- Los tres controles donde la unidad es el legajo y adentro hay varios conceptos suman la solapa
+  **Fichas** (§4 y §9 de `specs/vista-estandar-resultados.md`), reusando `js/ui/fichaList.js` de la
+  tanda 1 (D-077): no se escribió ninguna ficha nueva, sólo el contenido que cada control le pasa.
+  Variación Sueldos no lleva ficha porque su fila ya dice anterior/actual/variación.
+- **Control NR**: cada tarjeta abre con el total del Reporte NR contra el total del Tabulado, la
+  diferencia de lo que sí se pudo comparar y cuántos de los conceptos liquidados por ese legajo
+  quedaron a revisar; adentro, un renglón por concepto con su código, los dos lados y la diferencia
+  (verde suave lo que el Tabulado tiene de más, rojo suave lo que tiene de menos). Las marcas de la
+  tarjeta y del `Marcas ▾` son los conceptos que ese legajo liquidó.
+- **Novedades vs Liquidación**: la tarjeta separa la diferencia de importe de la diferencia de
+  cantidad, porque una cantidad liquidada de más o de menos no se mide en la misma unidad que la
+  plata. Adentro, una tabla de ocho columnas junta las cuatro bandas del cruce (coincide, difiere,
+  no comparable, sin contraparte) en un solo lugar, con el motivo de cada una.
+- **Variación Conceptos**: la tarjeta muestra el período anterior, el actual y la variación (en ese
+  orden — ver DECISIONS), y adentro el detalle trae el escalón de la escala cuando el control lo
+  detectó (`100 % → 70 %`).
+- **Bug de criterio corregido al mirar la pantalla en Control NR**: la diferencia por legajo se
+  calculaba como la resta de los dos totales, y eso cuenta el lado que falta como si valiera cero —
+  un legajo con un importe en un concepto que el Tabulado no informa salía con una diferencia
+  negativa por ese mismo importe, cuando lo real es "no se puede comparar". Ahora la tira suma sólo
+  los conceptos comparables (`Diferencia comparada`); los dos totales de arriba siguen siendo los de
+  cada archivo, y lo que quedó sin comparar se dice en la conclusión, con el importe y de qué lado
+  está.
+- `js/controls/tabCodes.js` — `codeOfColumn(header)` nuevo: dado un encabezado de columna ya
+  resuelto, devuelve el código de concepto que declara (`'4899-COCHERA_IG'` → `'4899'`). Es la
+  vuelta de `buildColByCode()` y es lo que permite que la ficha nombre un concepto por su código y
+  no por su nombre, que el cliente puede renombrar.
+- `js/ui/fichaList.js` — el pie de la tabla de detalle acepta `foot.key` para caer en la columna que
+  el control declare como cierre, no siempre en la última (Variación Conceptos tiene una columna de
+  % después de la variación).
+- `css/results.css` — el detalle de la ficha scrollea adentro de su propio recuadro
+  (`.ficha-detail { overflow-x: auto }`): en Novedades son ocho columnas.
+- Los tres controles pasan `conDiferencias` a `renderResumenDetalle` para abrir en Fichas cuando la
+  corrida terminó con diferencias, como el resto de la vista estándar.
+- `tests/fichasLegajoConcepto.test.js` (nuevo, 109 asserts) y `tests/e2e/fichasLegajoConcepto.spec.js`
+  (nuevo, 25 tests, con los fixtures `nrFichas.html` y `variacionesConceptosFichas.html`) — sumados a
+  la cadena de `test:unit` / e2e. `tests/e2e/novedadesLiquidacion.spec.js` se actualizó para abrir la
+  solapa Resumen antes de mirarla, porque ahora ese control puede abrir en Fichas. Verificado en
+  Chromium real con fixtures (el entorno remoto bloquea el CDN de Excel/Dexie), los cinco estados y
+  los tres temas de cada pantalla.
+- Ver `specs/vista-estandar-resultados.md` §4, §8 y §9, y **D-086** en `DECISIONS.md` — seis decisiones
+  de esa entrada están tomadas sin Willy presente y esperan su confirmación. Al integrar, la entrada
+  pasó de D-078 a D-086: las tandas 2 y 3 ya se habían llevado esos números.
+
+### feat(ui): Cruce por Agrupadores y Rendimiento vs Tabulado ganan la solapa Fichas — 2026-08-21
+
+- **Es la tanda 5 de `specs/vista-estandar-resultados.md`** (§4 y §8, D-087): los dos controles cuya
+  unidad no es "un legajo con sus conceptos" ganan la ficha. Ningún cálculo ni conteo cambió: el
+  semáforo sigue contando en la unidad que declara cada control, y la suma de la diferencia de todas
+  las fichas da exactamente el `diffTotalAmount` que ya publicaba — está escrito como assert.
+- **Cruce por Agrupadores — una ficha por LEGAJO, con sus agrupadores adentro.** Es el que más gana:
+  el cruce evalúa el mismo legajo una vez por agrupador, así que hoy la planilla tiene una fila por
+  legajo × agrupador —~1000 filas para ~100 empleados— y un empleado no se puede leer entero. Cerrada,
+  la ficha muestra el legajo y su diferencia **total** (la suma en valor absoluto de los agrupadores
+  que superan el umbral — el mismo número que ya suma el semáforo). Abierta: la tira Nómina Maestra →
+  Archivo Resumen → diferencia **neta** (la resta simple, que puede compensar un agrupador con otro) →
+  diferencia total, y un renglón por agrupador con Nómina/Resumen/diferencia. `Marcas ▾` son los
+  agrupadores en los que no cierra. El legajo que está en un solo archivo cae en "Sin comparar" — no
+  hay nada que comparar, así que ningún renglón se pinta en rojo aunque el cruce marque diferencia en
+  todos sus agrupadores (D-073).
+- **Rendimiento vs Tabulado — una ficha por CENTRO DE COSTO**, la unidad que el control declara: el
+  nombre del CC va en la línea de identidad, donde en los demás controles va el nombre del empleado.
+  Abierta: a la izquierda el Tabulado abierto concepto por concepto con su código (de ahí sale cada
+  peso); a la derecha el Reporte de Rendimiento, que sólo informa las cinco categorías ya sumadas. La
+  comparación categoría por categoría con la diferencia al lado está en la tabla de detalle, no
+  arriba. `Marcas ▾` son las cinco categorías. Un concepto configurado cuya columna no está en el
+  Tabulado sale en `—`, nunca en 0,00.
+- El control guarda ahora el Tabulado abierto por concepto y por centro de costo (`tByCode`, clave
+  `categoría|código` porque un mismo código puede estar configurado en dos categorías) — es la misma
+  suma que antes se perdía al acumularse en la categoría, no una cuenta nueva. Una corrida vieja no lo
+  trae, y la ficha lo dice en vez de completar con ceros.
+- **Tres arreglos chicos en piezas compartidas, heredados por los 21 controles:** el `Orden ▾` de
+  cualquier ficha no ordenaba nada — leía `.value` de un `<div>` que no lo tiene; el título de una
+  columna de importes del detalle de la ficha salía alineado a la izquierda sobre números alineados a
+  la derecha; y `renderFichasPanel()` ahora acepta el rótulo y el placeholder del buscador, para que
+  un control por centro de costo no le diga al analista que busque por legajo o nombre.
+- `js/controls/agrupadores.js`, `js/controls/rendVsTabu.js`, `js/ui/fichaList.js`, `css/results.css`.
+  37 asserts en `tests/fichasAgrupadorCc.test.js` (sumado a `test:unit`) y 14 pruebas de navegador en
+  `tests/e2e/fichasAgrupadorCc.spec.js`, con dos fixtures nuevos. Verificado en Chromium en los tres
+  temas, con el mismo `run()` y `render()` de cada control y datos inventados (jugadores de Banfield).
+  **No se corrió ningún control de punta a punta en la app entera**: no hay archivos de cliente en el
+  repo con los que llegar a esta pantalla por el camino del analista. Esta tanda se escribió antes de
+  que las tandas 2 y 3 entraran a `main`, así que su tercera solapa se llamaba "Detalle"; al integrar
+  quedó la "Planilla" de esas dos tandas, y las funciones que esta tanda había copiado de la tanda 3
+  (`buildPlanillaRows`, `estadoDeLegajo`) o reescrito por su cuenta (`estadoDeCentroDeCosto`, que es
+  el `estadoDeFila()` compartido) quedaron en una sola cada una (D-088).
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), D-073, **D-087**. Integrada a `main` el
+  2026-08-21 junto con las otras siete tandas paralelas (D-088); sigue pendiente que Willy mire las dos
+  pantallas en el navegador.
+
+
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
 
 - **Es la tanda 1 de `specs/vista-estandar-resultados.md`** (D-074): las piezas compartidas que faltaban más el primer control migrado, para poder verlo funcionando en el navegador. Ningún cálculo ni conteo de Acumuladores Ganancias cambió — `summarize` no se tocó.

@@ -1,18 +1,18 @@
 # ESTADO.md — dónde estamos hoy
 
 > **Qué falta probar del lado de Willy, agrupado por control: `docs/pruebas-pendientes.md`** (al
-> 2026-08-20). Este archivo dice dónde estamos; ése dice qué hay que abrir y con qué archivo.
+> 2026-08-21). Este archivo dice dónde estamos; ése dice qué hay que abrir y con qué archivo.
 
 > Un bloque por frente abierto. Se pisa, no se acumula: el que avanza se reescribe, el que cierra se saca.
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
-## Vista estándar de resultados — tanda 1 hecha (piezas compartidas + Acumuladores Ganancias piloto)
-- Qué es: que las 21 pantallas de resultados se vean iguales — tres solapas (`Resumen · Fichas · Planilla`), cinco chips de estado con las mismas palabras y en el mismo orden, y el `⬇ Exportar ▾` siempre último a la derecha. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a todos (D-074).
-- Punto: **tanda 1 hecha (2026-08-20).** Las ocho piezas compartidas del §7 de la spec (8 tintes nuevos + su par oscuro, scroll de 14 px, chips opt-in con los cinco estados fijos, `js/ui/fichaList.js` nuevo, búsqueda/paginación/KPI sobre una lista, descriptor de columnas + `renderRubroGrid()`, tercera solapa con preferencia por estado) más **Acumuladores Ganancias migrado de punta a punta**, que jubila su ficha vieja de primera generación. Verificado en Chromium, tres solapas, tres temas; sin verificar el ancho del scroll (14 px) — el Chromium headless de este entorno fuerza su propia barra de 2 px.
-- Próximo paso: tanda 2 (barra + planilla, lote Meta4/Marval, 10 entradas) y tanda 3 en paralelo (lote Axton/general, 9 entradas); después las fichas por lote (tandas 4 a 8) — orden completo en el §9 de la spec. Netos ya puede arrancar en su propio chat.
-- Abierto a definir: **D-077** — dos decisiones tomadas sin Willy presente esperan su confirmación: qué significa cada chip en un control de generación (Acumuladores) y que un aviso sin clasificar cuente como "Con diferencia". También sigue abierto si prefiere "Totales por rubro" en vez de "Planilla". Y queda pendiente de mirar en pantalla el ancho del scroll (14 px): el navegador headless del contenedor fuerza su propia barra de 2 px.
-- Detalle: **`specs/vista-estandar-resultados.md`** (§7 y §9 al día; el mapa control por control sigue en el §8), `docs/prompts-vista-estandar.md`, D-074, D-076, **D-077**.
+## Vista estándar de resultados — las ocho tandas hechas e integradas; falta que Willy mire las 21 pantallas
+- Qué es: que las 21 pantallas de resultados se vean iguales — tres solapas (`Resumen · Fichas · Planilla`), cinco chips de estado y el `⬇ Exportar ▾` siempre último. Sale del handoff de Netos y se generaliza a todos (D-074).
+- Punto: **las ocho tandas están hechas e integradas a `main` el 2026-08-21** (D-077 a D-087). La barra estándar quedó en los 21 controles, la planilla con bandas en 19 y la ficha en 10. Ningún cálculo ni conteo del semáforo se movió en ninguna. Al integrar siete tandas que corrieron en paralelo sin verse entre ellas hubo que unificar una pieza que dos tandas crearon por separado con el mismo nombre (`js/ui/planillaPanel.js`) y una serie de funciones duplicadas — todo eso, y la renumeración de las decisiones que chocaban, queda en **D-088**.
+- Próximo paso: **que Willy mire las 21 pantallas en el navegador.** CI no puede ver una pantalla, así que nada de esto se generaliza sin esa mirada. Detalle de qué mirar en cada una, control por control: `docs/pruebas-pendientes.md` §6 bis a §6 novies.
+- Abierto a definir, todo pendiente de que Willy lo vea en pantalla: **D-077** (qué significa cada chip en un control que genera en vez de cruzar); **D-078** (chips grises en los tres "Generar Reporte", y que Rendimiento vs Asiento perdió el orden por columna); **D-081** (posición de `Marcas ▾` y el valor hora de POP sin TOTAL); **D-082** (el corte de "carga masiva" de EE x CATEG y su cuarta solapa "Por campo"); **D-083** (el aviso de grupo pendiente de Acreditaciones, arriba de las solapas y no adentro de Planilla); **D-085** (cuenta sin código de la Desglosada como «Sin comparar»); **D-086** (seis decisiones de la ficha de NR / Novedades / Variación Conceptos); **D-087** (qué número muestra la ficha de Agrupadores); **D-088** (que el buscador ahora sobreviva a un click en un chip, en las nueve pantallas del lote Axton).
+- Detalle: **`specs/vista-estandar-resultados.md`** (completa al día), `docs/pruebas-pendientes.md` §6 bis a §6 novies, D-074, D-076, D-077 a **D-088**.
 
 ## Monto de diferencia — cerrado el 2026-08-19
 - Qué es: el número que el analista escribe en el panel "Umbrales" ("de acá para abajo no me interesa"). Hasta hoy era un `$ 1,00` escrito a mano que ningún control leía.
@@ -33,9 +33,9 @@
 
 ## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
 - Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
-- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.
-- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista.
-- Detalle: `specs/conta-desglosada-asiento.md`, D-066.
+- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas. El 2026-08-21 ganó su solapa Fichas por cuenta contable (tanda 7 de la vista estándar, D-084) y se corrigió que una cuenta sin código se leía "Con diferencia" en vez de "Sin comparar" (D-085) — ningún número que calcula el control cambió; lo que cambia es la etiqueta con la que se lee esa cuenta en pantalla.
+- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista — la ficha nueva no lo resuelve, es pantalla y no agrega columnas a los exports.
+- Detalle: `specs/conta-desglosada-asiento.md`, D-066, **D-084, D-085**.
 
 ## Control de Netos (Sportline) — verificado contra los 3 Tabulados reales de Comercio: cierra completo; Detalle rediseñado en Fichas (mergeado)
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
@@ -69,9 +69,9 @@
 
 ## Asiento de Remuneraciones (FINADIET) — postergado
 - Qué es: control 3.9 (asiento contable), construido y disponible para el cliente que ya lo tiene configurado.
-- Punto: postergado el 2026-08-17 por relación esfuerzo/valor; el archivo de cierre real que hay en SharePoint no tiene el layout que pide `finadietAsientoParser.js`.
+- Punto: postergado el 2026-08-17 por relación esfuerzo/valor; el archivo de cierre real que hay en SharePoint no tiene el layout que pide `finadietAsientoParser.js`. El 2026-08-21 ganó su solapa Fichas por cuenta contable (tanda 7 de la vista estándar, D-084) — no mueve la postergación, es sobre el mismo control construido.
 - Próximo paso: al retomar, definir cuál es el archivo de entrada real (no es el de cierre de SharePoint).
-- Detalle: D-062.
+- Detalle: D-062, **D-084**.
 
 ## Deuda de proceso, sin urgencia (?)
 - Qué es: `tests/rendVsAsientoDrill.test.js` fuera de la cadena de CI; relevar `controlConfigs` real de los 21 clientes fuera de Marval; pendientes de v1 (insights mes a mes, export Excel multi-hoja, export/import JSON de sesión).

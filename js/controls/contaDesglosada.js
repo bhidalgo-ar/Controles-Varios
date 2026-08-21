@@ -45,7 +45,12 @@
 
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
+import { conciliarCuenta, tiraDeCuenta, detalleDeConceptos, contextoDeCuenta, rotuloDeSaldo, concordancia }
+  from '../ui/fichaCuenta.js';
+import { acumularConcepto, conceptosEnOrden } from './cuentaConceptos.js';
+import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -423,9 +428,14 @@ function armarAsiento(lineas, cuentasRef, cfg) {
     const ceco = patrimonial ? '0' : String(l.centro_costo ?? '').trim();
     const clave = patrimonial ? `P⋮${codigo}` : `R⋮${codigo || ''}⋮${norm(nombre)}⋮${ceco}`;
 
-    const g = grupos.get(clave) || { nro: codigo || null, cuenta: nombre, centro_costo: ceco, debe: 0, haber: 0 };
+    const g = grupos.get(clave)
+      || { nro: codigo || null, cuenta: nombre, centro_costo: ceco, debe: 0, haber: 0, conceptos: new Map() };
     g.debe  += l.debe  || 0;
     g.haber += l.haber || 0;
+    // El desglose por concepto se acumula en la MISMA pasada que el saldo (ver
+    // cuentaConceptos.js): es lo que abre la ficha por cuenta, y sumando acá no
+    // puede desalinearse del saldo que dice explicar.
+    acumularConcepto(g.conceptos, l);
     grupos.set(clave, g);
   }
 
@@ -438,6 +448,7 @@ function armarAsiento(lineas, cuentasRef, cfg) {
         ...g,
         debe:  round2(g.debe),
         haber: round2(g.haber),
+        conceptos: conceptosEnOrden(g.conceptos),
         neto_debe:  neto < 0 ? Math.abs(neto) : 0,
         neto_haber: neto > 0 ? neto : 0,
       };
@@ -573,9 +584,12 @@ export function renderContaDesglosadaResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'conta_desglosada',
-    detalleLabel: 'Archivos generados',
+    conDiferencias: !(results.cierra
+      && (!results.asiento || (results.asiento.cierraBruto && results.asiento.cierraNeteado
+        && results.asiento.sinCodigo.length === 0))),
     resumen: (panel) => renderResumenTab(panel, results),
-    detalle: (panel) => renderDetalleTab(panel, results),
+    fichas: (panel) => renderFichasTab(panel, results),
+    planilla: (panel) => renderDetalleTab(panel, results),
   });
 }
 
@@ -691,37 +705,339 @@ function renderResumenTab(panel, results) {
   renderChecks(panel, { heading: 'Chequeos de coherencia', items: checks });
 }
 
-// Las tres tablas del Detalle son los tres archivos que se descargan: lo que se
-// ve en pantalla es lo que sale en el .xlsx, sin una segunda lista de columnas.
-function vistasDe(results) {
-  const vistas = [];
-  if (results.asiento) vistas.push({ id: 'asiento', label: 'Asiento Contable' });
-  vistas.push({ id: 'desglosada', label: 'Contabilidad Desglosada' });
-  if (results.asiento) vistas.push({ id: 'codigo', label: 'Desglosada con Código' });
-  return vistas;
+// ── Solapa Fichas — una por cuenta contable ───────────────────────────────────
+//
+// La unidad de este control es la CUENTA, no el empleado: un asiento se lee por
+// cuenta contable (D-020/D-066). Así que la ficha por legajo no aplica — lo que
+// sirve es abrir la cuenta y ver **qué conceptos la componen**, que es justo lo
+// que hoy no se puede ver sin bajar el .xlsx y filtrar a mano.
+//
+// **Lo que la ficha muestra y el archivo no lleva.** La desglosada trae legajo y
+// fecha de ingreso porque es papel de trabajo del analista, y está pendiente que
+// Willy confirme si ese archivo sale del estudio (D-066 §4, §8 de la spec del
+// control). Esta ficha **no agrega ni un dato del empleado a ningún archivo**: es
+// pantalla, la ve el analista, y su desglose es por CONCEPTO —código y nombre de
+// concepto, que son configuración, no información de HR—. Los tres `.xlsx` y el
+// CSV salen exactamente con las columnas que ya tenían.
+
+/**
+ * El único estado que no aplica acá. **Este control cuadra al centavo contra sí
+ * mismo** (DEBE = HABER), no contra un umbral: no hay monto de diferencia del
+ * cliente que aflojar. El chip va igual, en gris y con su 0, y lo dice en el
+ * `title` — sacarlo movería los otros cuatro de lugar (§3).
+ */
+const NO_APLICA_FICHA_CONTA = {
+  margen: 'la desglosada y el asiento cuadran al centavo contra sí mismos (DEBE = HABER), '
+    + 'no hay un umbral que medir',
+};
+
+/** Estado del caso → el gradiente del avatar (§4). */
+const SEVERIDAD_POR_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+/**
+ * En qué estado cerró una cuenta.
+ *
+ * **Una cuenta sin código es "Sin comparar", no "Con diferencia".** No hay
+ * ninguna diferencia de importe: la línea suma al asiento igual, y de hecho el
+ * balance cierra. Lo que falta es el **otro archivo** — el nombre de esa cuenta
+ * no está en el Reporte de Cuentas del cliente—, que es literalmente la
+ * definición del chip. Y en ámbar nunca se lee como aprobada (D-073), que es lo
+ * que importa: es lo que hay que resolver en el Paso 2 antes de mandar el
+ * asiento.
+ *
+ * @param {object} ficha - una de las que arma `fichasDeCuentas`
+ * @param {{ cierraTodo: boolean }} corrida
+ * @returns {'conDif'|'centavo'|'sinComparar'}
+ */
+export function estadoDeCuentaConta(ficha, { cierraTodo }) {
+  if (ficha.sinCodigo) return 'sinComparar';
+  // `cuadra === false` es un desglose que NO suma al saldo. Los conceptos se
+  // acumulan en la misma pasada que el saldo, así que no puede pasar; se mira
+  // igual, porque es el único lugar donde se vería si algún día se desalinean y
+  // un desglose que no suma no puede salir en verde. `cuadra === null` es otra
+  // cosa: una corrida vieja que no guardó el desglose. Eso no es una diferencia.
+  if (ficha.conciliacion.cuadra === false) return 'conDif';
+  return cierraTodo ? 'centavo' : 'conDif';
 }
 
+/**
+ * Una ficha por cuenta. Con el Reporte de Cuentas cargado, la unidad es la línea
+ * del asiento (que ya viene agrupada por código + nombre + centro de costo). Sin
+ * él no hay asiento, así que la unidad es **la cuenta distinta de la
+ * desglosada** — la misma que cuenta el semáforo (`cuentasDistintas`), para que
+ * los chips no digan un número y el semáforo otro.
+ *
+ * Las devuelve **ya armadas** (tarjeta cerrada + cuerpo), porque eso es lo que
+ * hay que poder afirmar sin abrir un navegador: que las fichas cuentan lo mismo
+ * que el semáforo y que el desglose de cada cuenta suma exactamente su saldo. Si
+ * el test mirara una versión intermedia, probaría otra cosa que la que se dibuja.
+ */
+export function fichasDeCuentas(results) {
+  const a = results.asiento;
+  const cierraTodo = results.cierra && (!a || (a.cierraBruto && a.cierraNeteado));
+  return cuentasDeLaCorrida(results).map(f => fichaDeCuenta(f, results, cierraTodo));
+}
+
+/** Las cuentas de la corrida, antes de vestirlas de ficha. */
+function cuentasDeLaCorrida(results) {
+  const a = results.asiento;
+
+  if (a) {
+    return a.filas.map(f => ({
+      id:           `${f.nro || 'sin código'} · ${f.cuenta} · CC ${f.centro_costo || '—'}`,
+      numero:       f.nro,
+      cuenta:       f.cuenta,
+      centro_costo: f.centro_costo,
+      sinCodigo:    !f.nro,
+      esNeto:       norm(f.cuenta) === norm(results.cuentaNeto),
+      conceptos:    f.conceptos || [],
+      conciliacion: conciliarCuenta(f),
+      // El neteo que el control ya calculó, para poder mostrarlo con la misma
+      // palabra que usa el .xlsx (NETO DEBE / NETO HABER).
+      neto_debe:  f.neto_debe,
+      neto_haber: f.neto_haber,
+      conAsiento: true,
+    }));
+  }
+
+  // Sin el Reporte de Cuentas: se agrupan las líneas de la desglosada por
+  // cuenta, con la MISMA clave normalizada con la que el control cuenta las
+  // cuentas distintas (la liquidación escribe el mismo nombre con mayúsculas
+  // distintas, y dos grafías no son dos cuentas).
+  const porCuenta = new Map();
+  for (const l of results.lineas) {
+    const clave = norm(l.cuenta);
+    let g = porCuenta.get(clave);
+    if (!g) {
+      g = { cuenta: String(l.cuenta ?? '').trim(), debe: 0, haber: 0, conceptos: new Map() };
+      porCuenta.set(clave, g);
+    }
+    g.debe  += l.debe  || 0;
+    g.haber += l.haber || 0;
+    acumularConcepto(g.conceptos, l);
+  }
+
+  return [...porCuenta.values()].map(g => {
+    const cuenta = { debe: round2(g.debe), haber: round2(g.haber), conceptos: conceptosEnOrden(g.conceptos) };
+    return {
+      id:           `desglosada · ${g.cuenta}`,
+      numero:       null,
+      cuenta:       g.cuenta,
+      centro_costo: null,
+      // Sin el Reporte de Cuentas ninguna cuenta tiene código, y el semáforo no
+      // cuenta eso como una unidad con diferencia (avisa aparte que el asiento
+      // no se armó). Marcarlas todas "Sin comparar" haría que los chips
+      // contaran distinto del semáforo, que es justo lo que no puede pasar.
+      sinCodigo:    false,
+      esNeto:       norm(g.cuenta) === norm(results.cuentaNeto),
+      conceptos:    cuenta.conceptos,
+      conciliacion: conciliarCuenta(cuenta),
+      neto_debe:  null,
+      neto_haber: null,
+      conAsiento: false,
+    };
+  });
+}
+
+const MARCAS_CONTA = [
+  { value: 'patrimonial', label: 'Cuenta patrimonial (código 1x/2x)',
+    match: f => esPatrimonial(f.numero) },
+  { value: 'neto',        label: 'La cuenta del neto a pagar',
+    match: f => f.esNeto },
+  { value: 'dos_lados',   label: 'Con movimientos en los dos lados',
+    match: f => Math.abs(f.conciliacion.debe) > TOL && Math.abs(f.conciliacion.haber) > TOL },
+  { value: 'sin_codigo',  label: 'Sin código de cuenta',
+    match: f => f.sinCodigo },
+];
+
+function renderFichasTab(panel, results) {
+  renderFichasPanel(panel, {
+    fichas: fichasDeCuentas(results),
+    unitLabel: 'cuentas contables',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_FICHA_CONTA,
+    marcas: MARCAS_CONTA,
+    ordenes: [
+      { value: 'saldo',     label: 'Mayor saldo',
+        compare: (a, b) => b.conciliacion.monto - a.conciliacion.monto },
+      { value: 'codigo',    label: 'Código de cuenta',
+        compare: (a, b) => compararTexto(a.numero, b.numero)
+          || compararTexto(a.centro_costo, b.centro_costo) },
+      { value: 'conceptos', label: 'Más conceptos adentro',
+        compare: (a, b) => b.conceptos.length - a.conceptos.length },
+      { value: 'nombre',    label: 'Nombre de la cuenta',
+        compare: (a, b) => String(a.cuenta).localeCompare(String(b.cuenta), 'es') },
+    ],
+    getLabel: f => `${f.numero || ''} ${f.cuenta} ${f.centro_costo || ''}`,
+    // La unidad de este control es la cuenta: el buscador no puede ofrecer
+    // buscar por legajo, que en esta pantalla no existe.
+    searchLabel: 'Buscar cuenta o centro de costo',
+    searchPlaceholder: 'Código o nombre de cuenta…',
+    getAmount: f => f.conciliacion.monto,
+    amountLabel: 'Σ saldo de las cuentas',
+    onExport: (exportEl) => mountExportMenu(exportEl, results, results.asiento ? 'asiento' : 'desglosada'),
+  });
+}
+
+/** El descriptor de la ficha: la tarjeta cerrada y lo que se dibuja al abrirla. */
+function fichaDeCuenta(f, results, cierraTodo) {
+  const estado = estadoDeCuentaConta(f, { cierraTodo });
+  const sev = SEVERIDAD_POR_ESTADO[estado] || 'info';
+  const c = f.conciliacion;
+  const patrimonial = esPatrimonial(f.numero);
+  const badge = badgeDeCuenta(f, results, cierraTodo);
+
+  return {
+    ...f,
+    estado,
+    // El avatar lleva el NÚMERO de la cuenta, que es lo que identifica la unidad
+    // de este control. El nombre va en la línea de identidad, al lado.
+    unit: f.numero || 'sin cód.',
+    severity: sev,
+    name: f.cuenta || '(sin nombre de cuenta)',
+    // Sin asiento la cuenta todavía no está agrupada por centro de costo (la
+    // desglosada las trae de varios), así que decir "CC —" sería decir que no
+    // tiene centro, que no es lo que pasa.
+    tag: {
+      text: !f.conAsiento ? 'cuenta de la desglosada'
+        : patrimonial ? 'patrimonial · consolidada'
+          : `CC ${f.centro_costo || '—'}`,
+    },
+    badge,
+    context: contextoDeCuenta(c, fmtNum),
+    // La marca que ya dice lo mismo que el badge no se repite abajo: el badge es
+    // la causa principal y la marca es "qué MÁS le pasa" — verlo dos veces en la
+    // misma tarjeta no agrega nada. Sigue estando en "Marcas ▾" como filtro.
+    marks: MARCAS_CONTA
+      .filter(m => m.match(f) && m.label !== badge?.text)
+      .map(m => ({ text: m.label, tone: m.value === 'sin_codigo' ? 'neutral' : 'info' })),
+    // Con asiento el número grande es el NETO, que es lo que se asienta y lo que
+    // el .xlsx llama así; sin asiento todavía es el saldo bruto de la cuenta.
+    amountLabel: rotuloDeSaldo(c, f.conAsiento ? 'NETO' : 'SALDO'),
+    amount: c.monto,
+    amountTone: sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : undefined,
+    body: {
+      strip:  tiraDeCuenta(c),
+      detail: detalleDeConceptos(f.conceptos, c),
+      conclusion: conclusionDeCuenta(f, c, results, cierraTodo),
+    },
+  };
+}
+
+/** La causa principal, en una línea. Sin causa no hay badge. */
+function badgeDeCuenta(f, results, cierraTodo) {
+  if (f.conciliacion.cuadra === false) return { text: 'Los conceptos no suman al saldo', tone: 'error' };
+  if (f.sinCodigo) return { text: 'Sin código de cuenta', tone: 'warn' };
+  if (!cierraTodo) {
+    return {
+      text: 'El asiento no cierra',
+      title: 'Mientras el asiento no cierre, todas las cuentas quedan en revisión.',
+      tone: 'error',
+    };
+  }
+  if (!f.conAsiento) return { text: 'El asiento no se armó', tone: 'warn' };
+  return undefined;
+}
+
+/** No un resumen: una instrucción. Qué mirar, descartando lo que ya se explicó. */
+function conclusionDeCuenta(f, c, results, cierraTodo) {
+  if (c.cuadra === false) {
+    return {
+      tone: 'error',
+      title: `El desglose de esta cuenta no suma al saldo: sobran ${fmtNum(c.residuo)}`,
+      text: 'Los conceptos de la tabla de abajo se acumulan con el mismo importe que el saldo, así que esto no '
+        + 'debería pasar nunca. No mandes el asiento: avisá que el desglose por concepto de esta cuenta quedó '
+        + 'desalineado.',
+    };
+  }
+  if (!cierraTodo) {
+    const dif = results.asiento && !results.asiento.cierraNeteado
+      ? results.asiento.diferenciaNeteada : results.diferencia;
+    return {
+      tone: 'error',
+      title: `El asiento no cierra por ${fmtNum(Math.abs(dif))}`,
+      text: (c.conDesglose
+        ? `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto `
+          + 'su saldo, así que la diferencia no sale de acá. '
+        : 'Esta corrida no guardó el desglose por concepto de la cuenta. ')
+        + 'Mirá el Resumen: dice si el descuadre es de la desglosada o del asiento neteado. No mandes el '
+        + 'archivo hasta que cierre.',
+    };
+  }
+  if (f.sinCodigo) {
+    return {
+      tone: 'warn',
+      title: `La cuenta "${f.cuenta}" no tiene código`,
+      text: 'Su nombre no está en el Reporte de Cuentas del cliente, así que la línea suma al asiento pero sale '
+        + 'sin número de cuenta — y Contaduría no la puede cargar. Cargala como excepción en "Contabilidad '
+        + 'Desglosada" del Paso 2 (nombre ⇥ centro de costo ⇥ código, con * para cualquier centro) y volvé a '
+        + 'ejecutar. El código no se inventa por analogía: confirmalo con el cliente.',
+    };
+  }
+  if (!f.conAsiento) {
+    return {
+      tone: 'warn',
+      title: 'Esta cuenta cuadra, pero todavía no tiene número',
+      text: `${concordancia(c.cantidad).sujeto} de abajo ${concordancia(c.cantidad).suman} exacto el saldo de `
+        + 'la cuenta. Lo que falta es el Reporte de Cuentas de Redefinición del cliente: sin él no se puede '
+        + 'armar el asiento, y sin asiento no hay nada que mandarle a Contaduría. Subilo en el Paso 2.',
+    };
+  }
+  if (!c.conDesglose) {
+    return {
+      tone: 'warn',
+      title: 'Esta corrida no guardó el desglose por concepto',
+      text: 'El asiento cierra y esta cuenta está bien, pero la corrida se guardó antes de que la ficha '
+        + 'mostrara qué conceptos forman cada cuenta, así que ese detalle no está. Volvé a ejecutar el control '
+        + 'con los mismos archivos si querés verlo.',
+    };
+  }
+  return {
+    tone: 'ok',
+    title: `Cuadra al centavo: ${fmtNum(c.monto)} al ${c.lado || 'saldo cero'}`,
+    text: `${concordancia(c.cantidad).sujeto} de la tabla de abajo ${concordancia(c.cantidad).suman} `
+      + 'exactamente el saldo de esta cuenta, y el asiento cierra. No hay nada para revisar acá.',
+  };
+}
+
+// Las tres tablas de la Planilla son los tres archivos que se descargan: lo que
+// se ve en pantalla es lo que sale en el .xlsx, sin una segunda lista de
+// columnas. Cada una con la barra estándar completa (§3) y las columnas de
+// importe agrupadas en las dos bandas naturales de un asiento: DEBE y HABER.
+//
+// **Este control no compara contra un umbral**: la desglosada y el asiento
+// cuadran al centavo contra sí mismos. Por eso el chip "Dentro del margen" va en
+// gris y deshabilitado, con el motivo en su `title` — no oculto.
+
+const NO_APLICA_CONTA = {
+  margen: 'la desglosada y el asiento cuadran al centavo contra sí mismos (DEBE = HABER), no hay un umbral que medir',
+};
+
 function renderDetalleTab(panel, results) {
-  const vistas = vistasDe(results);
-  const selector = document.createElement('div');
-  selector.className = 'form-group';
-  selector.style.marginBottom = '0';
-  selector.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Archivo</label>
-    <select class="form-select" data-cd-vista style="font-size:var(--text-sm);">
-      ${vistas.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}
-    </select>
-  `;
+  const cierraTodo = results.cierra
+    && (!results.asiento || (results.asiento.cierraBruto && results.asiento.cierraNeteado));
 
-  const { searchEl, exportEl } = createResultsToolbar(panel, { left: selector });
-  const tablaHost = document.createElement('div');
-  panel.appendChild(tablaHost);
+  const tabs = [];
+  if (results.asiento) {
+    tabs.push({ id: 'asiento', label: 'Asiento Contable',
+      render: (p) => vistaAsiento(p, results, cierraTodo) });
+  }
+  tabs.push({ id: 'desglosada', label: 'Contabilidad Desglosada',
+    render: (p) => vistaDesglosada(p, results, results.lineas, false, cierraTodo,
+      'Una línea por cada lado del movimiento. El "Neto a pagar" de cada legajo va al final: es la '
+      + 'cuenta de sueldos a pagar neteada por empleado.') });
+  if (results.asiento) {
+    tabs.push({ id: 'codigo', label: 'Desglosada con Código',
+      render: (p) => vistaDesglosada(p, results, results.asiento.desglosadaConCodigo, true, cierraTodo,
+        'La desglosada completa con el código de cuenta de cada línea: es la que permite auditar el '
+        + 'asiento línea por línea.') });
+  }
 
-  const pie = document.createElement('p');
-  pie.className = 'text-muted';
-  pie.style.cssText = 'font-size:var(--text-sm);margin:var(--sp-2) var(--sp-3) 0;';
-  panel.appendChild(pie);
+  initTabs(panel, { tabs });
+}
 
+/** El mismo menú en las tres tablas: los tres archivos más lo que está en pantalla. */
+function mountExportMenu(exportEl, results, vistaId) {
   const items = [
     { key: 'desglosada', label: '📊 Contabilidad Desglosada (.xlsx)',
       desc: 'Una línea por cada lado del movimiento, con legajo y concepto.',
@@ -737,134 +1053,109 @@ function renderDetalleTab(panel, results) {
         action: () => exportConCodigoToXlsx(results) },
     );
   }
-  const vistaActual = () => selector.querySelector('[data-cd-vista]').value;
   items.push(
     { key: 'csv', label: '📄 Exportar CSV de lo que estás viendo',
       desc: 'La tabla de esta pantalla, tal como está.',
-      action: () => filasDeVista(results, vistaActual()).csv() },
+      action: () => filasDeVista(results, vistaId).csv() },
     { key: 'copy', label: '📋 Copiar la tabla de esta pantalla',
       desc: 'Se pega directo en Excel, respetando las columnas.',
-      action: () => filasDeVista(results, vistaActual()).copiar() },
+      action: () => filasDeVista(results, vistaId).copiar() },
   );
 
   renderExportMenu(exportEl, {
     items,
     note: 'La Contabilidad Desglosada lleva legajo y fecha de ingreso: es papel de trabajo del analista.',
   });
-
-  const pintar = (vistaId) => {
-    if (vistaId === 'asiento') {
-      pintarAsiento(tablaHost, searchEl, results.asiento);
-      pie.textContent = 'Las cuentas patrimoniales (código 1x/2x) van consolidadas en una línea, sin centro de '
-        + 'costo; las de resultado, agrupadas por cuenta y centro. El neteo es lo que se asienta.';
-    } else if (vistaId === 'codigo') {
-      pintarDesglosada(tablaHost, searchEl, results.asiento.desglosadaConCodigo, true);
-      pie.textContent = 'La desglosada completa con el código de cuenta de cada línea: es la que permite '
-        + 'auditar el asiento línea por línea.';
-    } else {
-      pintarDesglosada(tablaHost, searchEl, results.lineas, false);
-      pie.textContent = 'Una línea por cada lado del movimiento. El "Neto a pagar" de cada legajo va al final: '
-        + 'es la cuenta de sueldos a pagar neteada por empleado.';
-    }
-  };
-
-  selector.querySelector('[data-cd-vista]').addEventListener('change', (e) => pintar(e.target.value));
-  pintar(vistas[0].id);
 }
 
-function pintarAsiento(host, searchEl, asiento) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Nro Cuenta</th><th>Nombre de cuenta</th><th>Centro de costo</th>
-          <th class="text-right">DEBE</th><th class="text-right">HABER</th>
-          <th class="text-right">NETO DEBE</th><th class="text-right">NETO HABER</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${asiento.filas.map(f => `
-          <tr>
-            <td>${esc(f.nro || 'sin código')}</td>
-            <td>${esc(f.cuenta)}</td>
-            <td>${esc(f.centro_costo || '—')}</td>
-            <td class="text-right">${fmtNum(f.debe)}</td>
-            <td class="text-right">${fmtNum(f.haber)}</td>
-            <td class="text-right">${fmtNum(f.neto_debe)}</td>
-            <td class="text-right">${fmtNum(f.neto_haber)}</td>
-          </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="2">TOTAL — ${asiento.filas.length} cuentas contables</th>
-          <th></th>
-          <th class="text-right">${fmtNum(asiento.totalDebe)}</th>
-          <th class="text-right">${fmtNum(asiento.totalHaber)}</th>
-          <th class="text-right">${fmtNum(asiento.totalNetoDebe)}</th>
-          <th class="text-right">${fmtNum(asiento.totalNetoHaber)}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+function vistaAsiento(panel, results, cierraTodo) {
+  const a = results.asiento;
 
-  wireTableTools(host.querySelector('table'), {
-    rows: asiento.filas,
+  // Las columnas se agrupan por LADO del asiento y no por bruto/neteado: DEBE y
+  // HABER son las dos bandas naturales, y adentro de cada una va primero el
+  // bruto y después lo que se asienta. El .xlsx mantiene su propio orden
+  // (DEBE · HABER · NETO DEBE · NETO HABER), que es el layout del entregable.
+  const columns = [
+    { key: 'nro',    label: 'Nro Cuenta', sub: 'código contable', band: 'Identificación',
+      cell: f => esc(f.nro || 'sin código') },
+    { key: 'cuenta', label: 'Nombre de cuenta', band: 'Identificación' },
+    { key: 'centro_costo', label: 'Centro de costo', band: 'Identificación', close: true,
+      cell: f => esc(f.centro_costo || '—') },
+    { key: 'debe',      label: 'DEBE',      sub: 'bruto',              num: true, band: 'DEBE' },
+    { key: 'neto_debe', label: 'NETO DEBE', sub: 'lo que se asienta',  num: true, band: 'DEBE', close: true },
+    { key: 'haber',      label: 'HABER',      sub: 'bruto',             num: true, band: 'HABER' },
+    { key: 'neto_haber', label: 'NETO HABER', sub: 'lo que se asienta', num: true, band: 'HABER', close: true },
+  ];
+
+  renderPlanillaPanel(panel, {
+    rows: a.filas,
+    columns,
+    unitLabel: 'cuentas contables',
+    // Una cuenta sin código todavía no es una línea del asiento, y así la cuenta
+    // el semáforo: sale marcada aunque el asiento cuadre. Va como "Sin comparar"
+    // y no como "Con diferencia" porque no hay ninguna diferencia de importe —
+    // lo que falta es el otro archivo, el Reporte de Cuentas del cliente— y en
+    // ámbar nunca se lee como aprobada (D-073). Es el mismo criterio que la
+    // solapa Fichas (`estadoDeCuentaConta`): las dos solapas del mismo control no
+    // pueden clasificar la misma cuenta distinto.
+    estadoDe: f => (!f.nro ? 'sinComparar' : !cierraTodo ? 'conDif' : 'centavo'),
+    noAplica: NO_APLICA_CONTA,
+    marcas: [{ value: 'sin_codigo', label: 'Sin código de cuenta', match: f => !f.nro }],
     getLabel: f => `${f.nro || ''} ${f.cuenta}`,
-    searchEl,
-    label: 'Buscar cuenta',
-    placeholder: 'Código o nombre de cuenta…',
+    searchLabel: 'Buscar cuenta',
+    searchPlaceholder: 'Código o nombre de cuenta…',
     stickyCols: 2,
     // El código de cuenta del cliente tiene 9 dígitos: con el ancho de columna
     // fija por default (pensado para un legajo) sale cortado.
     col1Width: 112,
+    onExport: (exportEl) => mountExportMenu(exportEl, results, 'asiento'),
+    emptyText: 'Ninguna cuenta quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${a.filas.length} cuenta${a.filas.length === 1 ? '' : 's'} contables. `
+      + 'Las cuentas patrimoniales (código 1x/2x) van consolidadas en una línea, sin centro de costo; '
+      + 'las de resultado, agrupadas por cuenta y centro. El neteo es lo que se asienta.',
   });
 }
 
-function pintarDesglosada(host, searchEl, lineas, conCodigo) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Legajo</th><th>Ingreso</th><th>Nro</th><th>Concepto</th>
-          <th class="text-right">Importe</th><th>Centro de Costo</th><th>Cuenta</th>
-          ${conCodigo ? '<th>Código</th>' : ''}
-          <th>D/H</th><th class="text-right">DEBE</th><th class="text-right">HABER</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineas.map(l => `
-          <tr>
-            <td>${esc(l.legajo)}</td>
-            <td>${esc(l.ingreso || '—')}</td>
-            <td>${esc(l.nro || '—')}</td>
-            <td>${esc(l.concepto || '—')}</td>
-            <td class="text-right">${l.importe === null ? '—' : fmtNum(l.importe)}</td>
-            <td>${esc(l.centro_costo || '—')}</td>
-            <td>${esc(l.cuenta)}</td>
-            ${conCodigo ? `<td>${esc(l.codigo || 'sin código')}</td>` : ''}
-            <td>${esc(l.debe_haber)}</td>
-            <td class="text-right">${l.debe === null ? '—' : fmtNum(l.debe)}</td>
-            <td class="text-right">${l.haber === null ? '—' : fmtNum(l.haber)}</td>
-          </tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th colspan="2">TOTAL — ${lineas.length} líneas</th>
-          <th colspan="${conCodigo ? 7 : 6}"></th>
-          <th class="text-right">${fmtNum(lineas.reduce((a, l) => a + (l.debe || 0), 0))}</th>
-          <th class="text-right">${fmtNum(lineas.reduce((a, l) => a + (l.haber || 0), 0))}</th>
-        </tr>
-      </tfoot>
-    </table>
-  `;
+function vistaDesglosada(panel, results, lineas, conCodigo, cierraTodo, nota) {
+  const columns = [
+    { key: 'legajo',  label: 'Legajo',  band: 'Identificación' },
+    { key: 'ingreso', label: 'Ingreso', sub: 'fecha de ingreso', band: 'Identificación', close: true,
+      cell: l => esc(l.ingreso || '—') },
 
-  wireTableTools(host.querySelector('table'), {
+    { key: 'nro',      label: 'Nro',      sub: 'código de concepto', band: 'Concepto',
+      cell: l => esc(l.nro || '—') },
+    { key: 'concepto', label: 'Concepto', band: 'Concepto', cell: l => esc(l.concepto || '—') },
+    { key: 'importe',  label: 'Importe',  sub: 'lo liquidado', num: true, band: 'Concepto', close: true },
+
+    { key: 'centro_costo', label: 'Centro de Costo', band: 'Imputación',
+      cell: l => esc(l.centro_costo || '—') },
+    { key: 'cuenta', label: 'Cuenta', band: 'Imputación' },
+    ...(conCodigo ? [{ key: 'codigo', label: 'Código', sub: 'el de la cuenta', band: 'Imputación',
+      cell: l => esc(l.codigo || 'sin código') }] : []),
+    { key: 'debe_haber', label: 'D/H', sub: 'de qué lado va', band: 'Imputación', close: true },
+
+    { key: 'debe',  label: 'DEBE',  sub: 'lo que se asienta', num: true, band: 'DEBE',  close: true },
+    { key: 'haber', label: 'HABER', sub: 'lo que se asienta', num: true, band: 'HABER', close: true },
+  ];
+
+  renderPlanillaPanel(panel, {
     rows: lineas,
+    columns,
+    unitLabel: 'líneas',
+    estadoDe: l => (conCodigo && !l.codigo ? 'sinComparar' : !cierraTodo ? 'conDif' : 'centavo'),
+    noAplica: NO_APLICA_CONTA,
+    marcas: [
+      { value: 'debe',  label: 'Sólo el DEBE',  match: l => l.debe_haber === 'DEBE' },
+      { value: 'haber', label: 'Sólo el HABER', match: l => l.debe_haber === 'HABER' },
+      ...(conCodigo ? [{ value: 'sin_codigo', label: 'Sin código de cuenta', match: l => !l.codigo }] : []),
+    ],
     getLabel: l => `${l.legajo} ${l.concepto || ''} ${l.cuenta}`,
-    searchEl,
-    label: 'Buscar legajo, concepto o cuenta',
-    placeholder: 'Legajo, concepto o cuenta…',
+    searchLabel: 'Buscar legajo, concepto o cuenta',
+    searchPlaceholder: 'Legajo, concepto o cuenta…',
     stickyCols: 2,
+    onExport: (exportEl) => mountExportMenu(exportEl, results, conCodigo ? 'codigo' : 'desglosada'),
+    emptyText: 'Ninguna línea quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${lineas.length} línea${lineas.length === 1 ? '' : 's'}. ${nota}`,
   });
 }
 

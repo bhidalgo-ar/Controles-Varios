@@ -197,6 +197,18 @@ empleados por lista, excepciones, bancos y alertas de integridad. Patrones de UI
 obligatorios de `CLAUDE.md` §11 y del skill `nuevo-control`: hero, semáforo,
 ocultar filas/columnas sin valor real, paginación, buscador y menú de export.
 
+La pantalla sigue la vista estándar (`specs/vista-estandar-resultados.md`): tres
+solapas `Resumen · Fichas · Planilla`. **Fichas** (tanda 8) es una tarjeta por
+**lista** de acreditación, no por legajo — la unidad de este control es la
+acreditación y no el empleado-mes (D-021), la única excepción conocida a
+consolidar por legajo. Cerrada: número de lista, `código — liquidación`,
+empresa, fecha de acreditación, cuántas acreditaciones tiene y qué hoja del
+`.xlsx` es. Abierta: la tira del listado de pago al total que va al banco, el
+desglose por banco, las alertas de esa lista por tipo con el detalle fila por
+fila, y una conclusión que dice qué resolver antes de mandarla. El aviso de
+grupo pendiente y las fechas asignadas a mano se ven arriba de las tres
+solapas, no sólo dentro de Planilla (D-083).
+
 Alertas que calcula la app:
 
 - fila en listado de pago **sin importe**;
@@ -212,7 +224,8 @@ Cada grupo pendiente tiene, en la misma pantalla, un campo de fecha y un botón
 aplicada. Las asignaciones del run quedan listadas con un botón "Deshacer".
 
 En el archivo de julio de POP no salta ninguna alerta salvo las 4 filas sin
-importe y el grupo pendiente del anticipo de NEIRA — el resto sale limpio. En el
+importe y el grupo pendiente del anticipo suelto sin listado ni fecha — el resto
+sale limpio. En el
 archivo de agosto, el Listado 18336 (13 empleados, ninguno con fecha) aparece
 como un solo grupo pendiente, no como 13 alertas sueltas.
 

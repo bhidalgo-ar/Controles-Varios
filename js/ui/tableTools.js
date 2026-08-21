@@ -76,6 +76,49 @@ export function estadoDeDiferencia(diff, tol = currentTolerance()) {
 }
 
 /**
+ * De peor a cerrado, para cuando una fila compara VARIAS columnas y hay que
+ * decidir en qué chip cae. "Sin comparar" queda arriba de "Dentro del margen" a
+ * propósito: una columna que no se pudo comparar preocupa más que una que cerró
+ * dentro del margen, y nunca se lee como aprobada (D-073).
+ */
+const ORDEN_SEVERIDAD = ['conDif', 'sinComparar', 'margen', 'centavo'];
+
+/**
+ * El estado de una fila que compara varias columnas a la vez (Brutos compara
+ * dos, NR dieciocho, Rendimiento seis): gana el peor de todos. Sin ninguna
+ * diferencia que mirar —la fila no compara nada— es "Sin comparar".
+ *
+ * @param {(number|null)[]} diffs - las diferencias de esa fila
+ * @param {number} [tol] - el monto de diferencia de la corrida
+ * @returns {'conDif'|'margen'|'centavo'|'sinComparar'}
+ */
+export function estadoDeFila(diffs, tol = currentTolerance()) {
+  let peor = null;
+  for (const d of diffs) {
+    const e = estadoDeDiferencia(d, tol);
+    if (peor === null || ORDEN_SEVERIDAD.indexOf(e) < ORDEN_SEVERIDAD.indexOf(peor)) peor = e;
+  }
+  return peor ?? 'sinComparar';
+}
+
+/**
+ * Cuántas filas caen en cada estado, listo para `createEstadoFilter`. Una fila
+ * puede no caer en ninguno (`null`): es lo que pasa en los controles que GENERAN
+ * un archivo desde el Tabulado en vez de cruzar dos, donde no hay nada que haya
+ * cerrado o dejado de cerrar. Ahí los cuatro chips salen en cero, deshabilitados
+ * y diciendo en el `title` que no aplican — que es distinto de esconderlos.
+ */
+export function contarEstados(rows, estadoDe) {
+  const counts = { todos: rows.length };
+  for (const r of rows) {
+    const e = estadoDe(r);
+    if (!e) continue;
+    counts[e] = (counts[e] || 0) + 1;
+  }
+  return counts;
+}
+
+/**
  * El `<select>` de estado de un control, listo para chipificarse: los cinco
  * estados con esas palabras y en ese orden, con su conteo.
  *
@@ -125,6 +168,36 @@ export function estadoOptionsHtml({ counts = {}, noAplica = {} } = {}) {
 /** Arranca activo "Con diferencia" si hay alguno; si no, "Todos" (§3). */
 export function estadoInicial(counts = {}) {
   return Number(counts.conDif ?? 0) > 0 ? 'conDif' : 'todos';
+}
+
+/**
+ * El desplegable **`Marcas ▾`**: el SEGUNDO eje del filtro. El estado dice cómo
+ * cerró el caso; la marca dice qué MÁS le pasa (que no liquidó en el mes, que
+ * tocó un concepto puntual, que el CC no está en el otro archivo). Mezclar los
+ * dos ejes en la fila de chips haría que esa fila diga algo distinto en cada
+ * pantalla, que es lo contrario de lo que se pidió (§3), así que las marcas van
+ * siempre en un desplegable — aunque sean dos, aunque sean dieciocho.
+ *
+ * Una marca sin casos se muestra igual, deshabilitada y con su 0: misma regla
+ * que los chips, para que la lista no cambie de largo entre corridas.
+ *
+ * @param {{ value: string, label: string, match: (row: any) => boolean }[]} marcas
+ * @param {any[]} rows - sobre las que se cuentan los casos de cada marca
+ * @returns {HTMLElement} el envoltorio; el `<select>` sale con `querySelector`
+ */
+export function createMarcasFilter(marcas, rows, { ariaLabel = 'Marcas' } = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = 'form-group results-toolbar__drop';
+  wrap.innerHTML = `
+    <select class="form-select form-select--sm" data-marca-filter aria-label="${esc(ariaLabel)}">
+      <option value="todas">Marcas ▾</option>
+      ${marcas.map(m => {
+        const n = rows.filter(m.match).length;
+        return `<option value="${esc(m.value)}"${n === 0 ? ' disabled' : ''}>${esc(m.label)} (${fmtInt(n)})</option>`;
+      }).join('')}
+    </select>
+  `;
+  return wrap;
 }
 
 /**
@@ -310,12 +383,24 @@ export function initShowMorePagination(tbodyEl, { pageSize = PAGE_SIZE_DEFAULT }
   }
 
   function applyVisibility() {
-    dataRows.forEach((tr, i) => {
-      const withinPage = expanded || i < pageSize;
+    // La página se cuenta sobre las filas que PASAN el filtro, no sobre el
+    // índice original. Contándola sobre el índice, buscar un legajo que estaba
+    // en la fila 300 no mostraba nada —quedaba fuera de la primera página y el
+    // botón "Mostrar todas" además se ocultaba, así que no había salida— y lo
+    // mismo pasaba con cualquier chip de estado sobre una tabla larga. Es la
+    // misma cuenta que ya hace `initListPagination` para la lista de fichas.
+    let visibles = 0;
+    for (const tr of dataRows) {
       const matchesFilter = filterSet === null || filterSet.has(tr);
-      tr.style.display = (withinPage && matchesFilter) ? '' : 'none';
-    });
-    if (moreRow) moreRow.style.display = (filterSet === null && !expanded) ? '' : 'none';
+      const withinPage = matchesFilter && (expanded || visibles < pageSize);
+      if (withinPage) visibles++;
+      tr.style.display = withinPage ? '' : 'none';
+    }
+    const totalMatch = filterSet === null ? dataRows.length : dataRows.filter(tr => filterSet.has(tr)).length;
+    if (moreRow) {
+      moreRow.style.display = visibles < totalMatch ? '' : 'none';
+      moreRow.querySelector('.js-show-more').textContent = `Mostrar todas (${totalMatch - visibles} más)`;
+    }
   }
 
   applyVisibility();
@@ -368,17 +453,30 @@ export function wireTableTools(tableEl, {
   const totals = initSelectionTotals(tableEl, pagination.dataRows);
   const kpis   = initToolbarKpis(searchEl, tableEl, pagination.dataRows);
 
+  // El buscador y los filtros de la barra (los chips de estado, "Marcas ▾")
+  // son criterios DISTINTOS sobre la MISMA selección: se guardan por separado y
+  // se cruzan. Si compartieran una sola variable, buscar un legajo apagaría el
+  // chip que el analista dejó puesto, y al limpiar la búsqueda volvería la tabla
+  // entera en vez de su filtro. Es la misma regla que ya sigue la solapa Fichas
+  // (`renderFichasPanel`), acá sobre un `<tbody>`.
+  let porFiltros = null;
+  let porBusqueda = null;
+  const aplicar = () => {
+    const sel = cruzar(porFiltros, porBusqueda);
+    pagination.setFilter(sel);
+    totals.update(sel);
+    kpis.update(sel);
+  };
+
   const controller = {
     ...pagination,
-    setFilter(matchSet) {
-      pagination.setFilter(matchSet);
-      totals.update(matchSet);
-      kpis.update(matchSet);
-    },
+    /** El eje de los filtros de la barra. El buscador tiene el suyo, adentro. */
+    setFilter(matchSet) { porFiltros = matchSet; aplicar(); },
   };
 
   initSearchCombobox(searchEl, {
-    rows, trEls: pagination.dataRows, getLabel, pagination: controller,
+    rows, trEls: pagination.dataRows, getLabel,
+    pagination: { setFilter(matchSet) { porBusqueda = matchSet; aplicar(); } },
     ...(label !== undefined ? { label } : {}),
     ...(placeholder !== undefined ? { placeholder } : {}),
   });
@@ -474,9 +572,14 @@ export function initListPagination(listEl, { pageSize = PAGE_SIZE_DEFAULT, unitL
  * @param {HTMLElement[]} opts.els
  * @param {(row: any) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel='Σ'] - cómo se llama esa suma
+ * @param {number} [opts.amountDecimals=2] - con cuántos decimales se escribe. Es
+ *   2 porque casi siempre es plata; un control que CUENTA (EE x CATEG suma
+ *   campos que no coinciden) pasa 0, para que el KPI diga "3" y no "3,00".
  * @param {string} [opts.unitLabel='fichas']
  */
-export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ', unitLabel = 'fichas' } = {}) {
+export function initListKpis(kpisEl, {
+  rows, els, getAmount, amountLabel = 'Σ', amountDecimals = 2, unitLabel = 'fichas',
+} = {}) {
   if (!kpisEl) return { update() {} };
 
   const pairs = rows.map((row, i) => ({ row, el: els[i] })).filter(p => p.el);
@@ -498,7 +601,7 @@ export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ',
         ? `<strong>${fmtInt(selection.length)}</strong> de ${fmtInt(pairs.length)} ${esc(unitLabel)}`
         : `<strong>${fmtInt(pairs.length)}</strong> ${esc(unitLabel)}`}</span>
       ${getAmount ? `<span class="results-kpi">${esc(amountLabel)} <strong>${
-        suma === null ? '—' : esc(fmtAmount(suma, 2))}</strong></span>` : ''}
+        suma === null ? '—' : esc(fmtAmount(suma, amountDecimals))}</strong></span>` : ''}
     `;
   };
 
@@ -523,16 +626,18 @@ export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ',
  * @param {HTMLElement} [opts.kpisEl]
  * @param {(row: any) => number|null} [opts.getAmount]
  * @param {string} [opts.amountLabel]
+ * @param {number} [opts.amountDecimals] - 0 cuando la Σ es un conteo, no plata
  * @param {string} [opts.unitLabel='fichas']
  * @param {number} [opts.pageSize=50]
  */
 export function wireListTools(listEl, {
-  rows, getLabel, searchEl, kpisEl, getAmount, amountLabel, unitLabel = 'fichas',
+  rows, getLabel, searchEl, kpisEl, getAmount, amountLabel, amountDecimals, unitLabel = 'fichas',
   pageSize = PAGE_SIZE_DEFAULT, label, placeholder,
 } = {}) {
   const pagination = initListPagination(listEl, { pageSize, unitLabel });
   const kpis = initListKpis(kpisEl, {
     rows, els: pagination.items, getAmount, amountLabel, unitLabel,
+    ...(amountDecimals !== undefined ? { amountDecimals } : {}),
   });
 
   const controller = {
@@ -581,9 +686,20 @@ function initSelectionTotals(tableEl, dataRows) {
   let col = 0;
   for (const c of cells) { colOf.push(col); col += c.colSpan || 1; }
 
-  const sumCol   = cells.map((c, i) => ((c.colSpan || 1) === 1 && parseARNumber(c.textContent) !== null) ? colOf[i] : null);
+  // Cuál celda es el RÓTULO ("TOTAL — 514 legajos") y cuál es un importe. El
+  // rótulo se declara con `rb-total__label` (lo pone `rubroGridHtml`) y no se
+  // adivina por el texto: con una sola columna de identificación el rótulo no
+  // lleva `colspan`, y "TOTAL — 5 legajos" tiene un 5 adentro — así que el
+  // heurístico lo tomaba por un importe y lo pisaba con la suma de los legajos
+  // apenas el analista filtraba. Para las tablas que no arma la pieza sigue
+  // valiendo el heurístico de siempre.
+  const esRotulo = (c) => c.classList.contains('rb-total__label');
+  const sumCol   = cells.map((c, i) => (!esRotulo(c) && (c.colSpan || 1) === 1
+    && parseARNumber(c.textContent) !== null) ? colOf[i] : null);
   const decimals = cells.map(c => decimalsOf(c.textContent));
-  const labelIdx = sumCol.findIndex(c => c === null);
+  const labelIdx = cells.findIndex(esRotulo) >= 0
+    ? cells.findIndex(esRotulo)
+    : sumCol.findIndex(c => c === null);
 
   function update(filterSet) {
     if (!filterSet) {
@@ -675,6 +791,18 @@ function singularizar(texto, n) {
     if (primera.endsWith('s')) return [primera.slice(0, -1), ...resto].join(' ');
   }
   return texto;
+}
+
+/**
+ * Los dos ejes del filtro, cruzados: `null` en uno significa "este eje no filtra
+ * nada". Los dos en `null` = sin filtro, que es lo que devuelve la paginación a
+ * su estado normal.
+ */
+function cruzar(a, b) {
+  if (a === null && b === null) return null;
+  if (a === null) return b;
+  if (b === null) return a;
+  return new Set([...a].filter(el => b.has(el)));
 }
 
 /** Las celdas de una fila indexadas por columna (colspan mediante). */

@@ -13,11 +13,51 @@
 //   6. Distribución por CC — ídem
 
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
 import { makeLegajoKey } from '../utils/legajo.js';
-import { renderVerdict, renderTiles, renderResumenDetalle } from '../ui/resultBlocks.js';
+import { renderVerdict, renderTiles, renderResumenDetalle, renderRubroGrid } from '../ui/resultBlocks.js';
+
+// ── Los campos que este control cruza ────────────────────────────────────────
+//
+// Están declarados en un solo lugar porque los usan las cuatro vistas: la
+// planilla (una fila por campo que no coincide), la ficha (un renglón por campo,
+// coincida o no), la matriz "Por campo" (una fila por campo, con en cuántos
+// legajos falla) y el conteo del Resumen.
+//
+// El `key` es interno y viaja en los datos; el `label` es lo único que ve el
+// analista, y es el mismo en las cuatro vistas — antes la planilla decía
+// "CENTRO_COSTO" y no hay ningún archivo donde el campo se llame así.
+//
+// `cat` y `tab` son los nombres de la columna en el mapeo de cada archivo. Si a
+// un campo le falta la columna de alguno de los dos lados no se compara y no se
+// completa en silencio: sale como "sin comparar", con su nombre, en la matriz y
+// en cada ficha.
+const CAMPOS = [
+  { key: 'PUESTO',       label: 'Puesto',          cat: 'puestoColumn',       tab: 'puestoColumn' },
+  { key: 'CENTRO_COSTO', label: 'Centro de costo', cat: 'centroCostoColumn',  tab: 'ccColumn' },
+  { key: 'DEPTO',        label: 'Departamento',    cat: 'departamentoColumn', tab: 'deptoColumn' },
+];
+
+// ── Cuándo un campo deja de ser un problema de un empleado ───────────────────
+//
+// Es la pregunta que la matriz "Por campo" viene a contestar: si "Centro de
+// costo" no coincide en 80 de 100 legajos, no hay 80 errores de carga — hay un
+// archivo mal armado, y revisarlo legajo por legajo es trabajo tirado.
+//
+// El corte es un criterio, no una medición: un tercio de los legajos comparados
+// y por lo menos tres. El mínimo de tres es lo que evita que "1 de 2" se lea
+// como una carga masiva en un cliente chico o en una corrida de prueba. Los dos
+// números están acá, juntos, para que se puedan mover de un lugar.
+const MASIVO_PROPORCION = 1 / 3;
+const MASIVO_MIN_LEGAJOS = 3;
+
+/** ¿Este conteo se explica por una carga masiva y no por un empleado? */
+function esMasivo(cuantos, sobre) {
+  return sobre > 0 && cuantos >= MASIVO_MIN_LEGAJOS && (cuantos / sobre) >= MASIVO_PROPORCION;
+}
 
 /**
  * Resumen del control para la tarjeta colapsada en la pantalla de resultados.
@@ -94,6 +134,28 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
 
   // ── 1. Empleados faltantes ─────────────────────────────────────────────────
 
+  // Qué campos se pueden mirar en esta corrida: los que tienen columna de los
+  // dos lados. El que no la tiene igual viaja, para poder decir que no se pudo
+  // comparar en vez de dejarlo afuera sin avisar.
+  const camposDelCruce = CAMPOS.map(c => ({
+    key: c.key, label: c.label,
+    catCol: cm[c.cat] || null,
+    tabCol: tm[c.tab] || null,
+  }));
+
+  /** Los campos de un legajo que está en UN solo archivo: se muestran los
+   *  valores del lado que sí lo tiene, y ninguno se puede comparar. */
+  const camposDeUnLado = (row, lado) => camposDelCruce.map(c => {
+    const col = lado === 'cat' ? c.catCol : c.tabCol;
+    const valor = col ? norm(row[col]) : null;
+    return {
+      key: c.key, label: c.label,
+      cat: lado === 'cat' ? valor : null,
+      tab: lado === 'tab' ? valor : null,
+      estado: 'sinComparar',
+    };
+  });
+
   const missingInTab = [];
   for (const [, r] of catByEmp) {
     if (!tabByEmp.has(normId(r[cm.idEmpColumn]))) {
@@ -102,6 +164,7 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
         apellido: norm(r[cm.apellidoColumn]),
         nombre:   norm(r[cm.nombreColumn]),
         fAlta:    cm.fAltaColumn ? fmtDate(r[cm.fAltaColumn]) : '',
+        campos:   camposDeUnLado(r, 'cat'),
       });
     }
   }
@@ -115,39 +178,80 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
       missingInCat.push({
         id:              norm(r[tm.empleadoColumn]),  // display: valor original
         apellidoNombre:  norm(r[tm.apellidoNombreColumn]),
+        campos:          camposDeUnLado(r, 'tab'),
       });
     }
   }
 
   // ── 2. Discrepancias de campo en empleados coincidentes ────────────────────
 
+  // Cada legajo que está en los DOS archivos se mira campo por campo, y se
+  // guardan todos los campos —coincidan o no— porque la ficha muestra el
+  // renglón entero: sin los que coinciden no se puede ver si el problema es de
+  // ese campo o del legajo.
   const fieldDiscrepancies = [];
+  const difierenPorCampo = new Map(camposDelCruce.map(c => [c.key, 0]));
+  let matchedCount = 0;
+
   for (const [nid, catRow] of catByEmp) {
     const tabRow = tabByEmp.get(nid);
     if (!tabRow) continue;
+    matchedCount++;
 
-    const diffs = [];
-    if (cm.puestoColumn && tm.puestoColumn) {
-      const cv = norm(catRow[cm.puestoColumn]), tv = norm(tabRow[tm.puestoColumn]);
-      if (cv !== tv) diffs.push({ field: 'PUESTO', cat: cv, tab: tv });
-    }
-    if (cm.centroCostoColumn && tm.ccColumn) {
-      const cv = norm(catRow[cm.centroCostoColumn]), tv = norm(tabRow[tm.ccColumn]);
-      if (cv !== tv) diffs.push({ field: 'CENTRO_COSTO', cat: cv, tab: tv });
-    }
-    if (cm.departamentoColumn && tm.deptoColumn) {
-      const cv = norm(catRow[cm.departamentoColumn]), tv = norm(tabRow[tm.deptoColumn]);
-      if (cv !== tv) diffs.push({ field: 'DEPTO', cat: cv, tab: tv });
-    }
+    const campos = camposDelCruce.map(c => {
+      if (!c.catCol || !c.tabCol) {
+        return { key: c.key, label: c.label, cat: null, tab: null, estado: 'sinComparar' };
+      }
+      const cat = norm(catRow[c.catCol]);
+      const tab = norm(tabRow[c.tabCol]);
+      return { key: c.key, label: c.label, cat, tab, estado: cat === tab ? 'coincide' : 'difiere' };
+    });
+
+    const diffs = campos.filter(c => c.estado === 'difiere');
+    for (const d of diffs) difierenPorCampo.set(d.key, difierenPorCampo.get(d.key) + 1);
+
     if (diffs.length) {
       fieldDiscrepancies.push({
         id:      norm(catRow[cm.idEmpColumn]),  // display: valor original
         apellido: norm(catRow[cm.apellidoColumn]),
         nombre:   norm(catRow[cm.nombreColumn]),
-        diffs,
+        campos,
+        diffs: diffs.map(d => ({ field: d.key, label: d.label, cat: d.cat, tab: d.tab })),
       });
     }
   }
+
+  // ── La matriz campo × legajo (la solapa "Por campo") ───────────────────────
+  //
+  // El universo son los legajos que este control considera un caso: los que
+  // están en los dos archivos más los que están en uno solo. Las bajas del Rep.
+  // Categ. que el Tabulado todavía lista quedan afuera acá igual que en el resto
+  // del control — no son un error, ya se dieron de baja.
+  //
+  // Un campo sólo se puede comparar en los legajos que están en los dos
+  // archivos: el resto queda en "sin comparar", que no es lo mismo que coincidir
+  // (D-073).
+  const universo = matchedCount + missingInTab.length + missingInCat.length;
+  const byField = camposDelCruce.map(c => {
+    const comparados = (c.catCol && c.tabCol) ? matchedCount : 0;
+    const difieren   = difierenPorCampo.get(c.key);
+    return {
+      key: c.key,
+      label: c.label,
+      comparable: Boolean(c.catCol && c.tabCol),
+      comparados,
+      difieren,
+      coinciden: comparados - difieren,
+      sinComparar: universo - comparados,
+      pct: comparados > 0 ? difieren / comparados : null,
+      masivo: esMasivo(difieren, comparados),
+    };
+  }).sort((a, b) =>
+    // De peor a mejor: primero el campo que falla en más legajos. Con el mismo
+    // conteo, adelante el que menos se pudo mirar.
+    b.difieren - a.difieren
+    || b.sinComparar - a.sinComparar
+    || a.label.localeCompare(b.label));
 
   // ── 3. Distribuciones con detalle de empleados por grupo ───────────────────
   // Las distribuciones agrupan SOLO empleados activos en Rep. Categ. y
@@ -195,6 +299,9 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
     missingInTab,
     missingInCat,
     fieldDiscrepancies,
+    byField,
+    matchedCount,
+    universo,
     byPuesto,
     byCC,
     period: mapping.period || '',
@@ -206,11 +313,17 @@ export function runCatXEmpleados(catAllRows, tabRows, mapping) {
 export function renderCatXEmpleadosResults(results, container) {
   const { summary } = results;
   const totalDiffs = summary.missingInTabCount + summary.missingInCatCount + summary.fieldDiscrepancyCount;
+  const conDetalle = tieneDetalleDeCampos(results);
+  const fichas = buildFichasCatXEmpleados(results);
 
   container.innerHTML = '';
 
   renderResumenDetalle(container, {
     controlId: 'cat_x_empleados',
+    // Con diferencias abre en Fichas (lo primero que se ve es por qué falla);
+    // si cerró, en la Planilla. La preferencia del analista pisa el default,
+    // pero se guarda por control Y por estado del control (§2).
+    conDiferencias: conDetalle ? totalDiffs > 0 : undefined,
     resumen(panel) {
       const tone = totalDiffs === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -229,157 +342,532 @@ export function renderCatXEmpleadosResults(results, container) {
         { label: 'Sin Rep. Categ.', value: summary.missingInCatCount, tone: summary.missingInCatCount > 0 ? 'error' : 'ok' },
         { label: 'Discrepancias de campo', value: summary.fieldDiscrepancyCount, tone: summary.fieldDiscrepancyCount > 0 ? 'error' : 'ok' },
       ]);
+      if (!conDetalle) {
+        const aviso = document.createElement('p');
+        aviso.className = 'text-muted';
+        aviso.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) 0;';
+        aviso.textContent = 'Esta corrida se guardó con una versión anterior y no trae el detalle campo '
+          + 'por campo, así que no están las solapas "Fichas" ni "Por campo". Volvé a correr el control '
+          + 'con los mismos archivos para verlas.';
+        panel.appendChild(aviso);
+      }
     },
-    detalle(panel) { renderCatXEmpleadosDetalle(panel, results); },
+    ...(conDetalle ? {
+      fichas(panel) { renderCatXEmpleadosFichas(panel, { fichas, results }); },
+    } : {}),
+    planilla(panel) { renderCatXEmpleadosPlanilla(panel, results); },
+    // La cuarta solapa. Ver el comentario de `renderPorCampo()`: no es una
+    // planilla de totales y no reemplaza a la Planilla — contesta otra pregunta.
+    extraTabs: conDetalle
+      ? [{ id: 'porCampo', label: 'Por campo', render: (panel) => renderPorCampo(panel, results) }]
+      : [],
   });
 }
 
-function renderCatXEmpleadosDetalle(container, results) {
-  const { missingInTab, missingInCat, fieldDiscrepancies, byPuesto, byCC } = results;
-  const showFAlta = missingInTab.some(r => r.fAlta);
+// ── La ficha por legajo (§4 de specs/vista-estandar-resultados.md) ───────────
+//
+// La planilla lista un caso por fila, así que un legajo con tres campos mal
+// aparece tres veces y no se lo puede ver entero. La ficha da vuelta el eje: una
+// tarjeta por LEGAJO, con sus campos adentro.
+//
+// **Acá no hay cascada de importes**, que es lo que la ficha muestra en el resto
+// de los controles: este cruza campos de texto. La tira de conciliación es
+// entonces el conteo de campos — de los que el cruce mira, cuántos no se
+// pudieron comparar, cuántos coinciden y cuántos no —, que es la misma idea
+// (de lo que había que revisar a lo que queda sin explicar) con lo que este
+// control tiene para contar.
+//
+// Y la conclusión contesta lo que el analista se pregunta al abrir la ficha:
+// **si el problema es de este empleado o de una carga masiva**. Un campo que no
+// coincide en 80 de 100 legajos no son 80 errores de carga.
+//
+// El universo de fichas es el mismo que el de la planilla: los legajos que
+// tienen algo para revisar. Un legajo que coincide en todo no tiene ficha —no
+// hay nada que abrir—, y por eso los chips "Al centavo" y "Dentro del margen"
+// salen apagados con el porqué en el `title`.
 
-  const SUM_STYLE = [
-    'cursor:pointer', 'list-style:none', 'display:flex', 'align-items:center',
-    'gap:var(--sp-2)', 'padding:var(--sp-2) 0', 'font-weight:600',
-    'color:var(--color-primary)', 'font-size:var(--text-base)',
-    'border-bottom:1px solid var(--color-border)', 'margin-bottom:var(--sp-3)',
-  ].join(';');
+/**
+ * ¿Esta corrida trae el detalle campo por campo?
+ *
+ * Las corridas se guardan en la base y se vuelven a dibujar tal cual (ver
+ * `js/ui/controlsResults.js`). Una guardada antes de esta versión sólo tiene los
+ * campos que NO coincidían: los que sí coincidían no se guardaban. Con eso no se
+ * puede armar ni la ficha ni la matriz, y armarlas igual daría números
+ * equivocados —dirían que se comparó un campo solo—, así que esas dos solapas no
+ * se ofrecen y la pantalla dice por qué. Se arregla volviendo a correr el
+ * control con los mismos archivos.
+ */
+function tieneDetalleDeCampos(results) {
+  return Array.isArray(results.byField);
+}
 
-  // Envuelve contenido en un <details open> con título en el summary
-  const section = (title, content) => `
-    <div style="margin-bottom:var(--sp-6);">
-      <details open>
-        <summary style="${SUM_STYLE}">${esc(title)}</summary>
-        ${content}
-      </details>
+/** 'Coincide' / 'No coincide' / 'Sin comparar', para el renglón de la ficha. */
+const ESTADO_CAMPO = {
+  coincide:    'Coincide',
+  difiere:     'No coincide',
+  sinComparar: 'Sin comparar',
+};
+
+/** El valor de un campo tal como se muestra: lo que no se pudo mirar es `—`, y
+ *  una celda vacía se dice con todas las letras (vacío no es lo mismo que no
+ *  hay dato, y el analista tiene que poder distinguirlos). */
+function valorDeCampo(v) {
+  if (v === null || v === undefined) return '—';
+  return v === '' ? '(vacío)' : v;
+}
+
+/**
+ * Las fichas de una corrida: una por legajo con algo para revisar. Función pura
+ * (arma descriptores, no toca el DOM), así que se testea sin navegador.
+ */
+export function buildFichasCatXEmpleados(results) {
+  // Una corrida guardada antes de esta versión no trae el detalle campo por
+  // campo (ver `tieneDetalleDeCampos`): sin él no hay ficha que armar.
+  if (!tieneDetalleDeCampos(results)) return [];
+  const porCampo = new Map(results.byField.map(f => [f.key, f]));
+  return [
+    ...results.fieldDiscrepancies.map(e => fichaDeCampos(e, porCampo)),
+    ...results.missingInTab.map(e => fichaDeAusente(e, 'tab', results)),
+    ...results.missingInCat.map(e => fichaDeAusente(e, 'cat', results)),
+  ];
+}
+
+/** La tira: de los campos del cruce a los que no coinciden, restando. */
+function tiraDeCampos(campos, { difieren }) {
+  const sinComparar = campos.filter(c => c.estado === 'sinComparar').length;
+  const coinciden   = campos.filter(c => c.estado === 'coincide').length;
+  return [
+    { label: 'Campos del cruce', value: String(campos.length) },
+    { label: '− Sin comparar',   value: String(sinComparar) },
+    { label: 'Comparados',       value: String(campos.length - sinComparar) },
+    { label: '− Coinciden',      value: String(coinciden), invert: true },
+    // El residuo: lo que queda para revisar. En un legajo que está en un solo
+    // archivo no es 0 sino `—`: no se pudo saber, y no se lee como aprobado.
+    { label: 'No coinciden',     value: difieren === null ? '—' : String(difieren), residuo: true },
+  ];
+}
+
+/** El renglón por campo con el valor de cada lado, marcando el que difiere. */
+function detalleDeCampos(campos) {
+  return {
+    title: 'Campo por campo — cómo figura de cada lado',
+    columns: [
+      { key: 'campo',  label: 'Campo' },
+      { key: 'cat',    label: 'En Rep. Categ.' },
+      { key: 'tab',    label: 'En Tabulado' },
+      { key: 'estado', label: 'Estado' },
+    ],
+    rows: campos.map(c => ({
+      campo:  c.label,
+      cat:    valorDeCampo(c.cat),
+      tab:    valorDeCampo(c.tab),
+      estado: ESTADO_CAMPO[c.estado],
+      tone:   c.estado === 'difiere' ? 'neg' : c.estado === 'coincide' ? 'pos' : undefined,
+    })),
+  };
+}
+
+/** El legajo que está en los dos archivos y tiene algún campo distinto. */
+function fichaDeCampos(e, porCampo) {
+  const difieren = e.diffs.length;
+  const masivos = e.diffs.filter(d => porCampo.get(d.field)?.masivo);
+  const name = [e.apellido, e.nombre].filter(Boolean).join(' ');
+
+  return {
+    id: e.id,
+    name,
+    caso: CASO.campo,
+    estado: 'conDif',
+    difieren,
+    diffLabels: e.diffs.map(d => d.label),
+    masivo: masivos.length > 0,
+    severity: 'error',
+    badge: {
+      text: difieren === 1 ? '1 campo no coincide' : `${difieren} campos no coinciden`,
+      tone: 'error',
+    },
+    context: e.diffs.map(d => d.label),
+    marks: masivos.length ? [{
+      text: 'Puede ser una carga masiva',
+      tone: 'info',
+      title: `${masivos.map(d => d.label).join(', ')} no coincide${masivos.length === 1 ? '' : 'n'} `
+        + 'en buena parte de la nómina, no sólo en este legajo.',
+    }] : [],
+    amountLabel: 'NO COINCIDEN',
+    amount: String(difieren),
+    amountTone: 'error',
+    body: {
+      strip: tiraDeCampos(e.campos, { difieren }),
+      detail: detalleDeCampos(e.campos),
+      conclusion: conclusionDeCampos(e.diffs, porCampo),
+    },
+  };
+}
+
+/** El legajo que está en un archivo y no en el otro: no hay con qué comparar. */
+function fichaDeAusente(e, falta, results) {
+  const name = falta === 'tab'
+    ? [e.apellido, e.nombre].filter(Boolean).join(' ')
+    : e.apellidoNombre;
+  const sinComparar = e.campos.length;
+
+  return {
+    id: e.id,
+    name,
+    caso: falta === 'tab' ? CASO.sinTab : CASO.sinCat,
+    estado: 'sinComparar',
+    // `null`, no 0: no es que no haya diferencias, es que no se pudieron mirar.
+    difieren: null,
+    diffLabels: [],
+    masivo: ausenciaMasiva(falta, results),
+    severity: 'warn',
+    badge: { text: falta === 'tab' ? CASO.sinTab : CASO.sinCat, tone: 'warn' },
+    context: [
+      falta === 'tab' && e.fAlta ? `Alta ${e.fAlta}` : null,
+      `${sinComparar} campo${sinComparar === 1 ? '' : 's'} sin comparar`,
+    ].filter(Boolean),
+    marks: [],
+    amountLabel: 'NO COINCIDEN',
+    amount: null,          // '—': no se pudo saber (D-073)
+    amountTone: 'warn',
+    body: {
+      strip: tiraDeCampos(e.campos, { difieren: null }),
+      detail: detalleDeCampos(e.campos),
+      conclusion: conclusionDeAusente(e, falta, results),
+    },
+  };
+}
+
+/** ¿Falta tanta gente de un lado que ya no es un legajo, es el archivo? */
+function ausenciaMasiva(falta, results) {
+  return falta === 'tab'
+    ? esMasivo(results.missingInTab.length, results.summary.catActivos)
+    : esMasivo(results.missingInCat.length, results.summary.tabTotal);
+}
+
+// ── La conclusión: no un resumen, una instrucción ───────────────────────────
+
+/** "¿Esto le pasa a este empleado o a todos?" — la pregunta de esta ficha. */
+function conclusionDeCampos(diffs, porCampo) {
+  const filas = diffs.map(d => ({ label: d.label, m: porCampo.get(d.field) })).filter(x => x.m);
+  const frase = (x) => `«${x.label}» no coincide en ${fmtInt(x.m.difieren)} de ${fmtInt(x.m.comparados)} `
+    + `legajo${x.m.comparados === 1 ? '' : 's'} comparado${x.m.comparados === 1 ? '' : 's'}`;
+
+  if (filas.length === 0) {
+    return {
+      tone: 'error',
+      title: `${diffs.length} campo${diffs.length === 1 ? '' : 's'} de este legajo no coinciden`,
+      text: 'Compará los valores de la tabla de arriba contra el reporte de Categorías y contra el '
+        + 'Tabulado del período, y corregí el que esté mal.',
+    };
+  }
+
+  const masivos = filas.filter(x => x.m.masivo);
+  const propios = filas.filter(x => !x.m.masivo);
+
+  if (masivos.length && !propios.length) {
+    return {
+      tone: 'warn',
+      title: masivos.length === 1
+        ? `No parece de este empleado: ${frase(masivos[0])}`
+        : `No parece de este empleado: ${masivos.map(x => `«${x.label}»`).join(' y ')} fallan en buena parte de la nómina`,
+      // Con un solo campo la frase ya está en el título y no se repite.
+      text: (masivos.length === 1 ? '' : `${masivos.map(frase).join('. ')}. `)
+        + 'Un campo que no coincide en tantos legajos a la vez sale de cómo se armó o se exportó el '
+        + 'archivo, no de este legajo. Mirá la solapa «Por campo» y resolvé eso antes de corregir '
+        + 'empleado por empleado.',
+    };
+  }
+
+  if (masivos.length && propios.length) {
+    return {
+      tone: 'warn',
+      title: 'Hay de las dos: un campo de toda la nómina y uno de este empleado',
+      text: `${masivos.map(frase).join('. ')} — eso se arregla en el archivo y no en este legajo. `
+        + `En cambio ${propios.map(frase).join(', ')}: ése sí es de este empleado. `
+        + 'Mirá la solapa «Por campo» para el primero y corregí el segundo donde corresponda.',
+    };
+  }
+
+  return {
+    tone: 'error',
+    title: propios.length === 1
+      ? `Es de este empleado: ${frase(propios[0])}`
+      : `Es de este empleado: ${propios.length} campos que casi no fallan en el resto de la nómina`,
+    text: (propios.length === 1 ? '' : `${propios.map(frase).join('. ')}. `)
+      + 'Compará los valores de la tabla de arriba contra el reporte de Categorías y contra el Tabulado '
+      + 'del período, y corregí el que esté mal antes de mandar el control.',
+  };
+}
+
+/** Lo mismo, para el legajo que está en un solo archivo. */
+function conclusionDeAusente(e, falta, results) {
+  const { summary } = results;
+
+  if (falta === 'tab') {
+    const n = results.missingInTab.length;
+    if (ausenciaMasiva('tab', results)) {
+      return {
+        tone: 'warn',
+        title: `${fmtInt(n)} de ${fmtInt(summary.catActivos)} activos del Rep. Categ. no están en el Tabulado`,
+        text: 'No parece de este empleado: falta demasiada gente para que sea una liquidación sin cargar. '
+          + 'Confirmá que el Tabulado sea del mismo período y que traiga todas las liquidaciones del mes '
+          + 'antes de revisar legajo por legajo.',
+      };
+    }
+    return {
+      tone: 'warn',
+      title: 'Está activo en Rep. Categ. y no liquidó en el Tabulado',
+      text: (e.fAlta ? `Figura con alta el ${e.fAlta}. ` : '')
+        + 'Si entró después del cierre o estuvo el mes entero sin liquidar, está bien que no aparezca. '
+        + 'Si no, falta su liquidación en el Tabulado: no se puede comparar ninguno de sus campos.',
+    };
+  }
+
+  const n = results.missingInCat.length;
+  if (ausenciaMasiva('cat', results)) {
+    return {
+      tone: 'warn',
+      title: `${fmtInt(n)} de ${fmtInt(summary.tabTotal)} legajos del Tabulado no están en Rep. Categ.`,
+      text: 'No parece de este empleado: el reporte de Categorías está incompleto. Volvé a bajarlo sin '
+        + 'filtros antes de revisar legajo por legajo.',
+    };
+  }
+  return {
+    tone: 'warn',
+    title: 'Liquidó en el Tabulado y el Rep. Categ. no lo tiene, ni activo ni como baja',
+    text: 'O el reporte se bajó con un filtro puesto, o el legajo no está dado de alta en el sistema. '
+      + 'Confirmá cuál de las dos: si estuviera dado de baja el control no lo marcaría, así que esto no es una baja.',
+  };
+}
+
+// ── La solapa Fichas ────────────────────────────────────────────────────────
+
+function renderCatXEmpleadosFichas(panel, { fichas, results }) {
+  // El segundo eje, igual que en la planilla: de qué tipo es el caso, en qué
+  // campo, y si el campo huele a carga masiva.
+  const camposConDif = [...new Set(fichas.flatMap(f => f.diffLabels))];
+
+  renderFichasPanel(panel, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_CAT,
+    marcas: [
+      { value: 'sinTab', label: CASO.sinTab, match: f => f.caso === CASO.sinTab },
+      { value: 'sinCat', label: CASO.sinCat, match: f => f.caso === CASO.sinCat },
+      ...camposConDif.map(l => ({ value: `campo:${l}`, label: l, match: f => f.diffLabels.includes(l) })),
+      { value: 'masivo', label: 'Puede ser una carga masiva', match: f => f.masivo },
+    ],
+    ordenes: [
+      // Los que no se pudieron comparar (`difieren === null`) van al final: no
+      // es que tengan cero campos mal, es que no se sabe.
+      { value: 'campos', label: 'Más campos distintos',
+        compare: (a, b) => (b.difieren ?? -1) - (a.difieren ?? -1) },
+      { value: 'legajo', label: 'Legajo',
+        compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+      { value: 'nombre', label: 'Nombre',
+        compare: (a, b) => String(a.name).localeCompare(String(b.name)) },
+    ],
+    getLabel: f => `${f.id} — ${f.name}`,
+    // El KPI de la selección cuenta campos, no pesos: por eso va sin decimales.
+    getAmount: f => f.difieren,
+    amountLabel: 'Σ campos que no coinciden',
+    amountDecimals: 0,
+    onExport: (exportEl) => montarExport(exportEl, results),
+  });
+}
+
+// ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
+//
+// **Sin bandas y sin TOTAL**, y no por olvido: este control no compara importes
+// sino campos de texto (puesto, centro de costo, departamento) y la presencia de
+// cada empleado en cada archivo. No hay nada que agrupar en rubros ni nada que
+// totalizar — una fila de TOTAL acá sería un número inventado.
+//
+// Las tres listas que antes eran tres tablas separadas —cada una con su propio
+// buscador— ahora son una sola planilla con una fila por caso y una columna que
+// dice qué le pasa. Es lo que permite que haya UNA barra: un buscador que
+// encuentra un legajo esté en la lista que esté, un solo ⬇ Exportar ▾, y los
+// cinco chips diciendo cuántos casos son de cada tipo.
+//
+// Qué significa cada chip en un control que no compara importes:
+//   Con diferencia → el empleado está en los dos archivos y un campo no coincide
+//   Sin comparar   → el empleado está en uno solo de los dos: no hay con qué
+//                    comparar sus campos (§3 — "falta un lado")
+//   Al centavo / Dentro del margen → no aplican: acá un campo coincide o no
+//                    coincide, no hay un monto que tolerar
+
+const NO_APLICA_CAT = {
+  margen:  'compara campos de texto (puesto, centro de costo, departamento) y no importes, '
+    + 'así que no hay un monto de diferencia que tolerar',
+  centavo: 'compara campos de texto y no importes: un campo coincide o no coincide. '
+    + 'Los empleados que coinciden en todo no se listan',
+};
+
+const CASO = {
+  sinTab: 'No está en el Tabulado',
+  sinCat: 'No está en Rep. Categ. activos',
+  campo:  'Un campo no coincide',
+};
+
+/** Una fila por caso: las tres listas de diferencias, en una sola planilla. */
+function casosDeCruce({ missingInTab, missingInCat, fieldDiscrepancies }) {
+  return [
+    ...missingInTab.map(r => ({
+      caso: CASO.sinTab,
+      id: r.id,
+      empleado: [r.apellido, r.nombre].filter(Boolean).join(' '),
+      campo: null, valorCat: null, valorTab: null,
+      fAlta: r.fAlta || null,
+      estado: 'sinComparar',
+    })),
+    ...missingInCat.map(r => ({
+      caso: CASO.sinCat,
+      id: r.id,
+      empleado: r.apellidoNombre,
+      campo: null, valorCat: null, valorTab: null, fAlta: null,
+      estado: 'sinComparar',
+    })),
+    // Una fila por (empleado, campo con diferencia): es la unidad que el
+    // analista revisa, y es también la que se aplanaba antes en su tabla.
+    ...fieldDiscrepancies.flatMap(e => e.diffs.map(d => ({
+      caso: CASO.campo,
+      id: e.id,
+      empleado: [e.apellido, e.nombre].filter(Boolean).join(' '),
+      // `d.label` es de esta versión; una corrida vieja sólo tiene el código.
+      campo: d.label ?? d.field, valorCat: d.cat, valorTab: d.tab, fAlta: null,
+      estado: 'conDif',
+    }))),
+  ];
+}
+
+function renderCatXEmpleadosPlanilla(container, results) {
+  const { byPuesto, byCC } = results;
+  const casos = casosDeCruce(results);
+  const conFAlta = casos.some(c => c.fAlta);
+
+  const columns = [
+    // Sin sublabel: la columna del legajo va congelada y mide 74 px, así que
+    // cualquier base de cálculo se corta con puntos suspensivos.
+    { key: 'id',       label: 'Legajo' },
+    { key: 'empleado', label: 'Empleado', sub: 'del Rep. Categ. o del Tabulado' },
+    { key: 'caso',     label: 'Qué pasa', sub: 'el cruce por legajo' },
+    ...(conFAlta ? [{ key: 'fAlta', label: 'F. Alta', sub: 'del Rep. Categ.' }] : []),
+    { key: 'campo',    label: 'Campo',    sub: 'el que no coincide' },
+    { key: 'valorCat', label: 'Valor en Rep. Categ.', sub: 'tal cual figura en el archivo' },
+    { key: 'valorTab', label: 'Valor en Tabulado',    sub: 'tal cual figura en el archivo' },
+  ];
+
+  // El segundo eje: de qué tipo es el caso y —cuando es un campo— cuál.
+  const campos = [...new Set(casos.map(c => c.campo).filter(Boolean))];
+  const marcas = [
+    { value: 'sinTab', label: CASO.sinTab, match: c => c.caso === CASO.sinTab },
+    { value: 'sinCat', label: CASO.sinCat, match: c => c.caso === CASO.sinCat },
+    ...campos.map(f => ({ value: `campo:${f}`, label: f, match: c => c.campo === f })),
+  ];
+
+  // Sin ni un caso no hay planilla —ni chips, ni buscador, que no filtrarían
+  // nada— pero sí hay distribuciones y hay que poder exportar igual.
+  if (casos.length === 0) {
+    const barra = document.createElement('div');
+    barra.className = 'results-toolbar';
+    barra.style.justifyContent = 'flex-end';
+    container.appendChild(barra);
+    montarExport(barra, results);
+
+    const ok = document.createElement('p');
+    ok.className = 'text-muted';
+    ok.style.cssText = 'padding:var(--sp-4);';
+    ok.textContent = 'El Rep. Categ. y el Tabulado coinciden en empleados y campos: '
+      + 'no hay ningún caso para revisar.';
+    container.appendChild(ok);
+    renderDistribuciones(container, { byPuesto, byCC });
+    return;
+  }
+
+  renderPlanillaPanel(container, {
+    columns,
+    rows: casos,
+    unitLabel: 'casos',
+    bands: false,
+    totals: false,
+    estadoDe: c => c.estado,
+    noAplica: NO_APLICA_CAT,
+    marcas,
+    getLabel: c => `${c.id} — ${c.empleado}${c.campo ? ` — ${c.campo}` : ''}`,
+    searchLabel: 'Buscar empleado',
+    searchPlaceholder: 'Legajo o nombre…',
+    stickyCols: 2,
+    afterTable: (host) => renderDistribuciones(host, { byPuesto, byCC }),
+    onExport: (exportEl) => montarExport(exportEl, results),
+  });
+}
+
+// ── Las dos distribuciones (por puesto y por centro de costo) ────────────────
+// No son parte de la planilla: son dos agregados de pocas filas que se leen
+// aparte, y por eso conservan su propio "sólo con diferencia / todos".
+
+function renderDistribuciones(host, { byPuesto, byCC }) {
+  const sec = document.createElement('div');
+  sec.innerHTML = distSection(byPuesto, 'Puesto', 'Distribución por Puesto', 'puesto')
+    + distSection(byCC, 'Centro de Costo', 'Distribución por Centro de Costo', 'cc');
+  host.appendChild(sec);
+  wireDistToggle(sec, 'puesto', byPuesto, 'Puesto');
+  wireDistToggle(sec, 'cc', byCC, 'Centro de Costo');
+}
+
+const SUM_STYLE = [
+  'cursor:pointer', 'list-style:none', 'display:flex', 'align-items:center',
+  'gap:var(--sp-2)', 'padding:var(--sp-2) 0', 'font-weight:600',
+  'color:var(--color-primary)', 'font-size:var(--text-base)',
+  'border-bottom:1px solid var(--color-border)', 'margin-bottom:var(--sp-3)',
+].join(';');
+
+function distRow(r) {
+  if (r.diff === 0) {
+    return `
+      <tr>
+        <td>${esc(r.key)}</td>
+        <td style="text-align:right;">${r.catCount}</td>
+        <td style="text-align:right;">${r.tabCount}</td>
+        <td style="text-align:right;">—</td>
+      </tr>
+    `;
+  }
+
+  const soloEn = (titulo, lista) => lista.length === 0 ? '' : `
+    <div style="margin-top:var(--sp-2);">
+      <strong style="font-size:var(--text-sm);">${esc(titulo)} (${lista.length}):</strong>
+      <table class="data-table data-table--compact" style="margin-top:var(--sp-1);">
+        <thead><tr><th>Legajo</th><th>Empleado</th></tr></thead>
+        <tbody>
+          ${lista.map(e => `<tr><td>${esc(e.id)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}
+        </tbody>
+      </table>
     </div>
   `;
 
-  // ── Secciones de cruces ────────────────────────────────────────────────────
+  return `
+    <tr style="background:var(--color-warning-bg);">
+      <td>
+        <details>
+          <summary style="cursor:pointer;">${esc(r.key)}</summary>
+          <div style="padding:var(--sp-2) var(--sp-3) var(--sp-3);">
+            ${soloEn('Solo en Rep. Categ.', r.onlyInCat)}
+            ${soloEn('Solo en Tabulado', r.onlyInTab)}
+          </div>
+        </details>
+      </td>
+      <td style="text-align:right;">${r.catCount}</td>
+      <td style="text-align:right;">${r.tabCount}</td>
+      <td style="text-align:right;font-weight:600;color:var(--color-danger);">${r.diff > 0 ? '+' : ''}${r.diff}</td>
+    </tr>
+  `;
+}
 
-  const missingInTabHtml = missingInTab.length === 0 ? '' : section(
-    `Activos en Rep. Categ. que NO están en Tabulado (${missingInTab.length})`,
-    `<div class="js-diff-search" data-diff-key="missingInTab"></div>
-    <div style="overflow-x:auto;">
-      <table class="data-table data-table--compact" data-diff-key="missingInTab">
-        <thead>
-          <tr>
-            <th>ID</th><th>Apellido</th><th>Nombre</th>
-            ${showFAlta ? '<th>F. Alta</th>' : ''}
-          </tr>
-        </thead>
-        <tbody>
-          ${missingInTab.map(r => `
-            <tr>
-              <td>${esc(r.id)}</td>
-              <td>${esc(r.apellido)}</td>
-              <td>${esc(r.nombre)}</td>
-              ${showFAlta ? `<td>${esc(r.fAlta)}</td>` : ''}
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`
-  );
-
-  const missingInCatHtml = missingInCat.length === 0 ? '' : section(
-    `En Tabulado que NO están en Rep. Categ. activos (${missingInCat.length})`,
-    `<div class="js-diff-search" data-diff-key="missingInCat"></div>
-    <div style="overflow-x:auto;">
-      <table class="data-table data-table--compact" data-diff-key="missingInCat">
-        <thead><tr><th>ID</th><th>Nombre</th></tr></thead>
-        <tbody>
-          ${missingInCat.map(r => `
-            <tr><td>${esc(r.id)}</td><td>${esc(r.apellidoNombre)}</td></tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`
-  );
-
-  // Una fila por (empleado, campo con diferencia) — aplanado en el MISMO orden
-  // que se pinta, para que pagination/combobox correlacionen 1:1 con los <tr>.
-  const discRows = fieldDiscrepancies.flatMap(e => e.diffs.map(d => ({ e, d })));
-  const discrepanciesHtml = discRows.length === 0 ? '' : section(
-    `Discrepancias de campo en empleados coincidentes (${fieldDiscrepancies.length})`,
-    `<div class="js-diff-search" data-diff-key="discrepancies"></div>
-    <div style="overflow-x:auto;">
-      <table class="data-table data-table--compact" data-diff-key="discrepancies">
-        <thead>
-          <tr><th>ID</th><th>Empleado</th><th>Campo</th><th>Valor en Rep. Categ.</th><th>Valor en Tabulado</th></tr>
-        </thead>
-        <tbody>
-          ${discRows.map(({ e, d }) => `
-              <tr>
-                <td>${esc(e.id)}</td>
-                <td>${esc([e.apellido, e.nombre].filter(Boolean).join(' '))}</td>
-                <td><strong>${esc(d.field)}</strong></td>
-                <td>${esc(d.cat)}</td>
-                <td>${esc(d.tab)}</td>
-              </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>`
-  );
-
-  // ── Distribuciones con detalle de empleados en filas con diferencia ─────────
-
-  const distRow = r => {
-    if (r.diff === 0) {
-      return `
-        <tr>
-          <td>${esc(r.key)}</td>
-          <td style="text-align:right;">${r.catCount}</td>
-          <td style="text-align:right;">${r.tabCount}</td>
-          <td style="text-align:right;">—</td>
-        </tr>
-      `;
-    }
-
-    const sign       = r.diff > 0 ? '+' : '';
-    const onlyCatHtml = r.onlyInCat.length === 0 ? '' : `
-      <div style="margin-top:var(--sp-2);">
-        <strong style="font-size:var(--text-sm);">Solo en Rep. Categ. (${r.onlyInCat.length}):</strong>
-        <table class="data-table data-table--compact" style="margin-top:var(--sp-1);">
-          <thead><tr><th>ID</th><th>Empleado</th></tr></thead>
-          <tbody>
-            ${r.onlyInCat.map(e => `<tr><td>${esc(e.id)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-    const onlyTabHtml = r.onlyInTab.length === 0 ? '' : `
-      <div style="margin-top:var(--sp-2);">
-        <strong style="font-size:var(--text-sm);">Solo en Tabulado (${r.onlyInTab.length}):</strong>
-        <table class="data-table data-table--compact" style="margin-top:var(--sp-1);">
-          <thead><tr><th>ID</th><th>Empleado</th></tr></thead>
-          <tbody>
-            ${r.onlyInTab.map(e => `<tr><td>${esc(e.id)}</td><td>${esc(e.nombre)}</td></tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-
-    return `
-      <tr style="background:var(--color-warning-bg);">
-        <td>
-          <details>
-            <summary style="cursor:pointer;">${esc(r.key)}</summary>
-            <div style="padding:var(--sp-2) var(--sp-3) var(--sp-3);">
-              ${onlyCatHtml}
-              ${onlyTabHtml}
-            </div>
-          </details>
-        </td>
-        <td style="text-align:right;">${r.catCount}</td>
-        <td style="text-align:right;">${r.tabCount}</td>
-        <td style="text-align:right;font-weight:600;color:var(--color-danger);">${sign}${r.diff}</td>
-      </tr>
-    `;
-  };
-
-  const distTable = (rows, labelCol) => `
+function distTable(rows, labelCol) {
+  return `
     <div style="overflow-x:auto;">
       <table class="data-table data-table--compact">
         <thead>
@@ -394,98 +882,149 @@ function renderCatXEmpleadosDetalle(container, results) {
       </table>
     </div>
   `;
-
-  // Distribución por Puesto/CC: por default sólo se muestran las filas con
-  // diferencia — el resto coincide 1:1 y listarlas no aporta nada (CLAUDE.md
-  // §11.1). Un toggle deja ver el universo completo cuando hace falta.
-  const distSection = (allRows, labelCol, title, key) => {
-    if (allRows.length === 0) return '';
-    const diffRows = allRows.filter(r => r.diff !== 0);
-    const okCount  = allRows.length - diffRows.length;
-    const initialRows = diffRows.length > 0 ? diffRows : allRows;
-    const toggleHtml = diffRows.length > 0 && okCount > 0 ? `
-      <div style="margin-bottom:var(--sp-2);">
-        <select class="form-select form-select--sm" data-dist-toggle="${key}">
-          <option value="dif">Sólo con diferencia (${diffRows.length})</option>
-          <option value="all">Todos (${allRows.length})</option>
-        </select>
-      </div>` : '';
-    return section(
-      `${title} (${allRows.length}${okCount > 0 ? ` · ${okCount} sin diferencia` : ''})`,
-      `${toggleHtml}<div data-dist-body="${key}">${distTable(initialRows, labelCol)}</div>`
-    );
-  };
-
-  const puestoHtml = distSection(byPuesto, 'Puesto', 'Distribución por Puesto', 'puesto');
-  const ccHtml      = distSection(byCC, 'Centro de Costo', 'Distribución por Centro de Costo', 'cc');
-
-  // ── Exportar ─────────────────────────────────────────────────────────────
-  // El .xlsx trae las dos distribuciones (Puesto/CC) en hojas separadas; el
-  // CSV/copiar las aplana en una sola tabla — no incluyen las 3 listas de
-  // diferencias de arriba, que son de revisión en pantalla, no del entregable.
-
-  const toolbar = document.createElement('div');
-  toolbar.style.cssText = 'display:flex;justify-content:flex-end;padding:var(--sp-2) var(--sp-3);';
-  const exportEl = document.createElement('div');
-  toolbar.appendChild(exportEl);
-
-  const csvHeaders = ['Agrupador', 'Valor', 'Rep. Categ.', 'Tabulado', 'Dif.'];
-  const csvRows = () => [
-    ...byPuesto.map(r => ['Puesto', r.key, r.catCount, r.tabCount, r.diff]),
-    ...byCC.map(r => ['Centro de Costo', r.key, r.catCount, r.tabCount, r.diff]),
-  ];
-
-  renderExportMenu(exportEl, {
-    onExcel: () => exportCatXEmpleadosToXlsx(results),
-    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `EE_x_CATEG_${periodSuffix(results.period)}.csv`),
-    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
-  });
-
-  // ── Render final ───────────────────────────────────────────────────────────
-
-  const sectionsHtml = `
-    ${missingInTabHtml}
-    ${missingInCatHtml}
-    ${discrepanciesHtml}
-    ${puestoHtml}
-    ${ccHtml}
-  `;
-
-  container.innerHTML = '';
-  container.appendChild(toolbar);
-  const sectionsWrap = document.createElement('div');
-  sectionsWrap.innerHTML = sectionsHtml;
-  container.appendChild(sectionsWrap);
-
-  // Toggle "sólo con diferencia / todos" de las distribuciones por Puesto/CC.
-  const wireDistToggle = (key, allRows, diffRows, labelCol) => {
-    const sel  = sectionsWrap.querySelector(`[data-dist-toggle="${key}"]`);
-    const body = sectionsWrap.querySelector(`[data-dist-body="${key}"]`);
-    if (!sel || !body) return;
-    sel.addEventListener('change', () => {
-      body.innerHTML = distTable(sel.value === 'dif' ? diffRows : allRows, labelCol);
-    });
-  };
-  wireDistToggle('puesto', byPuesto, byPuesto.filter(r => r.diff !== 0), 'Puesto');
-  wireDistToggle('cc', byCC, byCC.filter(r => r.diff !== 0), 'Centro de Costo');
-
-  // Paginación (50 filas) + buscador en cada una de las 3 tablas de
-  // diferencias (missingInTab/missingInCat/discrepancies). Las tablas de
-  // distribución (byPuesto/byCC) son pocas filas y no lo necesitan.
-  wireDiffTableTools(sectionsWrap, 'missingInTab', missingInTab, r => `${r.id} — ${[r.apellido, r.nombre].filter(Boolean).join(' ')}`);
-  wireDiffTableTools(sectionsWrap, 'missingInCat', missingInCat, r => `${r.id} — ${r.apellidoNombre}`);
-  wireDiffTableTools(sectionsWrap, 'discrepancies', discRows, ({ e, d }) => `${e.id} — ${[e.apellido, e.nombre].filter(Boolean).join(' ')} — ${d.field}`);
 }
 
-function wireDiffTableTools(root, diffKey, rows, getLabel) {
-  if (!rows.length) return;
-  const table    = root.querySelector(`table[data-diff-key="${diffKey}"]`);
-  const searchEl = root.querySelector(`.js-diff-search[data-diff-key="${diffKey}"]`);
-  if (!table || !searchEl) return;
-  wireTableTools(table, {
-    rows, getLabel, searchEl,
-    label: 'Buscar', placeholder: 'ID o nombre…',
+/**
+ * Por default sólo se muestran las filas con diferencia — el resto coincide 1:1
+ * y listarlas no aporta nada. Un desplegable deja ver el universo completo.
+ * **No lleva `data-chips`**: la fila de chips es la de los cinco estados y nada
+ * más, en las 21 pantallas (§3).
+ */
+function distSection(allRows, labelCol, title, key) {
+  if (allRows.length === 0) return '';
+  const conDif = allRows.filter(r => r.diff !== 0);
+  const okCount = allRows.length - conDif.length;
+  const iniciales = conDif.length > 0 ? conDif : allRows;
+  const toggle = conDif.length > 0 && okCount > 0 ? `
+    <div style="margin-bottom:var(--sp-2);">
+      <select class="form-select form-select--sm" data-dist-toggle="${key}" aria-label="${esc(title)}">
+        <option value="dif">Sólo con diferencia (${conDif.length})</option>
+        <option value="all">Todos (${allRows.length})</option>
+      </select>
+    </div>` : '';
+  return `
+    <div style="margin-bottom:var(--sp-6);">
+      <details open>
+        <summary style="${SUM_STYLE}">${esc(`${title} (${allRows.length}${okCount > 0 ? ` · ${okCount} sin diferencia` : ''})`)}</summary>
+        ${toggle}<div data-dist-body="${key}">${distTable(iniciales, labelCol)}</div>
+      </details>
+    </div>
+  `;
+}
+
+function wireDistToggle(root, key, allRows, labelCol) {
+  const sel = root.querySelector(`[data-dist-toggle="${key}"]`);
+  const body = root.querySelector(`[data-dist-body="${key}"]`);
+  if (!sel || !body) return;
+  const conDif = allRows.filter(r => r.diff !== 0);
+  sel.addEventListener('change', () => {
+    body.innerHTML = distTable(sel.value === 'dif' ? conDif : allRows, labelCol);
+  });
+}
+
+// ── La solapa "Por campo": la matriz campo × legajo ─────────────────────────
+//
+// **No es una planilla de totales, y no reemplaza a la Planilla**: contesta otra
+// pregunta. La Planilla lista los casos uno por uno y la Ficha explica uno; acá
+// las filas son los CAMPOS, y cada uno dice en cuántos legajos no coincide.
+//
+// Es lo que hoy no se puede contestar sin exportar y contar a mano: **¿esto le
+// pasa a un empleado o a todos?**. Si "Centro de costo" no coincide en 80 de 100
+// legajos, no hay 80 errores de carga — hay un archivo mal armado, y revisarlo
+// legajo por legajo es trabajo tirado. Va ordenada de peor a mejor para que ese
+// campo sea la primera fila.
+//
+// Sin fila de TOTAL a propósito: sumar "legajos comparados" de tres campos daría
+// 300 sobre 100 empleados, que es un número inventado. Y sin la barra estándar,
+// que es de las solapas Fichas y Planilla (§3): son tres filas, no hay nada que
+// buscar ni que paginar.
+
+const COLS_POR_CAMPO = [
+  { key: 'label',       label: 'Campo',                sub: 'del Rep. Categ. contra el Tabulado' },
+  { key: 'difieren',    label: 'No coinciden',         sub: 'legajos', num: true,
+    cell: r => esc(fmtInt(r.difieren)) },
+  { key: 'pct',         label: 'Sobre los comparados', sub: '% de los que se pudieron mirar', num: true,
+    cell: r => r.pct === null ? '—' : esc(fmtPct(r.pct)) },
+  { key: 'coinciden',   label: 'Coinciden',            sub: 'legajos', num: true,
+    cell: r => esc(fmtInt(r.coinciden)) },
+  { key: 'comparados',  label: 'Comparados',           sub: 'están en los dos archivos', num: true,
+    cell: r => esc(fmtInt(r.comparados)) },
+  { key: 'sinComparar', label: 'Sin comparar',         sub: 'están en un solo archivo', num: true,
+    cell: r => esc(fmtInt(r.sinComparar)) },
+  { key: 'lectura',     label: 'Qué parece',           sub: 'carga masiva o caso puntual',
+    cell: r => lecturaDeCampo(r) },
+];
+
+/** La lectura de la fila, en una palabra: es lo que el analista viene a buscar. */
+function lecturaDeCampo(r) {
+  if (!r.comparable) {
+    return '<span class="badge badge--neutral">No se pudo comparar</span>';
+  }
+  if (r.difieren === 0) return '<span class="badge badge--success">Coincide en todos</span>';
+  if (r.masivo)         return '<span class="badge badge--danger">Parece una carga masiva</span>';
+  return '<span class="badge badge--warning">Casos puntuales</span>';
+}
+
+function renderPorCampo(panel, results) {
+  const { byField, universo, matchedCount, summary } = results;
+
+  if (universo === 0) {
+    panel.innerHTML = '<p class="text-muted" style="padding:var(--sp-4);">'
+      + 'No hay ningún legajo para cruzar en esta corrida.</p>';
+    return;
+  }
+
+  const nota = document.createElement('p');
+  nota.className = 'text-muted';
+  nota.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-3) var(--sp-3) 0;';
+  nota.textContent = `El cruce mira ${plural(byField.length, 'campo')} sobre ${plural(universo, 'legajo')}: `
+    + `${fmtInt(matchedCount)} ${matchedCount === 1 ? 'está' : 'están'} en los dos archivos `
+    + `y ${fmtInt(universo - matchedCount)} en uno solo. `
+    + 'Un campo sólo se puede comparar en los que están en los dos: el resto queda en "sin comparar", '
+    + 'que no es lo mismo que coincidir.';
+  panel.appendChild(nota);
+
+  const tableHost = document.createElement('div');
+  panel.appendChild(tableHost);
+  renderRubroGrid(tableHost, {
+    columns: COLS_POR_CAMPO,
+    rows: byField,
+    unitLabel: 'campos',
+    bands: false,
+    totals: false,
     stickyCols: 1,
+  });
+
+  const sinComparar = universo - matchedCount;
+  if (sinComparar > 0) {
+    const pie = document.createElement('p');
+    pie.className = 'text-muted';
+    pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
+    pie.textContent = `Sin comparar quedan ${plural(sinComparar, 'legajo')}: `
+      + `${fmtInt(summary.missingInTabCount)} en Rep. Categ. y no en el Tabulado, `
+      + `${fmtInt(summary.missingInCatCount)} en el Tabulado y no en Rep. Categ. `
+      + 'Cada uno tiene su ficha, con el chip "Sin comparar" puesto.';
+    panel.appendChild(pie);
+  }
+}
+
+// ── El menú de exportar, uno solo para las dos solapas con barra ─────────────
+//
+// El .xlsx trae las dos distribuciones (Puesto/CC) en hojas separadas; el CSV y
+// el copiar las aplanan en una sola tabla. No incluyen las listas de diferencias
+// de la pantalla, que son de revisión y no del entregable.
+
+const CSV_HEADERS_CAT = ['Agrupador', 'Valor', 'Rep. Categ.', 'Tabulado', 'Dif.'];
+
+function montarExport(exportEl, results) {
+  const csvRows = () => [
+    ...results.byPuesto.map(r => ['Puesto', r.key, r.catCount, r.tabCount, r.diff]),
+    ...results.byCC.map(r => ['Centro de Costo', r.key, r.catCount, r.tabCount, r.diff]),
+  ];
+  return renderExportMenu(exportEl, {
+    onExcel: () => exportCatXEmpleadosToXlsx(results),
+    onCsv:   () => downloadCsv(CSV_HEADERS_CAT, csvRows(), `EE_x_CATEG_${periodSuffix(results.period)}.csv`),
+    onCopy:  () => copyRowsToClipboard(CSV_HEADERS_CAT, csvRows()),
   });
 }
 
@@ -628,6 +1167,20 @@ function fmtDate(val) {
 }
 
 function norm(v) { return v != null ? String(v).trim() : ''; }
+
+/** Un conteo de legajos: entero, con el separador de miles de acá. */
+function fmtInt(n) { return Math.round(n || 0).toLocaleString('es-AR'); }
+
+/** '1 legajo' / '5 legajos': un conteo que se lee adentro de una oración. */
+function plural(n, singular, muchos = `${singular}s`) {
+  return `${fmtInt(n)} ${n === 1 ? singular : muchos}`;
+}
+
+/** El porcentaje de la matriz: sin decimales cuando es redondo, con uno cuando
+ *  es chico — "0 %" para 1 de 500 diría que no falla en ninguno. */
+function fmtPct(v) {
+  return `${(v * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %`;
+}
 
 function esc(str) {
   return String(str ?? '')

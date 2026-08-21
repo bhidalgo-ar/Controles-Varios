@@ -1,10 +1,31 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
-**Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). Tandas 2 a 8 —el resto
-de los 21 controles— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de
-Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
-cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
+**Estado:** decidido el 2026-08-20 con Willy. **Las ocho tandas están hechas** (2026-08-20 y 21) e
+integradas a `main` el 2026-08-21, en el orden del §9:
+
+| Tanda | Qué | Decisión |
+|---|---|---|
+| 1 | las piezas compartidas del §7 + Acumuladores Ganancias como piloto | D-077 |
+| 2 | barra + planilla, las diez entradas del lote Meta4/Marval | D-078 |
+| 3 | barra + planilla, las nueve del lote Axton/general | D-079, D-080, D-081 |
+| 4 | ficha de legajo × concepto — NR, Novedades vs Liquidación, Variación Conceptos | D-086 |
+| 5 | ficha por legajo × agrupador y por centro de costo — Agrupadores, Rendimiento vs Tabulado | D-087 |
+| 6 | ficha por legajo + matriz campo × legajo — EE x CATEG | D-082 |
+| 7 | ficha por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada | D-084, D-085 |
+| 8 | ficha por lista de acreditación — Acreditaciones | D-083 |
+
+Con eso, **la barra estándar está en los 21 controles, la planilla con bandas en los 19 que la llevan
+y la ficha en los 10 que la justifican.** Las tandas 2 a 8 corrieron en paralelo, sin verse entre
+ellas, y al integrarlas hubo que unificar la pieza de la Planilla —que dos tandas habían creado por
+separado con el mismo nombre— y dejar en una sola las funciones que quedaron duplicadas: D-088.
+
+**Lo que falta es lo que CI no puede hacer: que Willy mire las 21 pantallas en el navegador.** Cada
+decisión de las tandas 2 a 8 que se tomó sin él está marcada como pendiente de confirmación en su
+entrada de `DECISIONS.md` y resumida en `ESTADO.md`.
+
+Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21 controles. El
+mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
+`docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -29,6 +50,12 @@ volver a averiguar dónde está exportar en cada control desconfía del número 
 
 **`Resumen` · `Fichas` · `Planilla`**, en ese orden, con esos nombres, en todos los controles. Un
 control sin fichas muestra dos (`Resumen · Planilla`) — nunca un tercer nombre para lo mismo.
+
+> **Única excepción, tanda 6 (D-082): EE x CATEG lleva una cuarta solapa, "Por campo"** (la matriz
+> campo × legajo), después de Planilla. No reemplaza a ninguna de las tres — la planilla de la tanda 2
+> sigue listando los casos uno por uno — y no abre la puerta a que otro control sume la suya: la solapa
+> extra sólo entra si la spec se la reconoce por nombre a un control puntual en el mapa del §8
+> (`extraTabs` en `renderResumenDetalle()`, con ese contrato en su propio JSDoc).
 
 - **Resumen** — lo que ya hay: tiles, casos, chequeos. Willy va a rehacerlo aparte; ese trabajo no
   depende de este documento.
@@ -66,6 +93,11 @@ Una sola barra, arriba de Fichas y de Planilla, pegada al scrollear. De izquierd
 
 El exportar de la corrida entera sigue en la barra superior de la app, y no se duplica acá.
 Ningún control inventa otro botón de exportar ni le cambia el rótulo.
+
+**Confirmado en la tanda 2 (D-078): "Orden ▾" es de la solapa Fichas y de ninguna otra.** Rendimiento
+vs Asiento era la única de las diecinueve planillas que ordenaba por su cuenta (clickeando el
+encabezado); esa función se sacó de la Planilla al migrarla y vuelve cuando el control tenga su ficha
+por centro de costo (tanda 5).
 
 ### Los 5 chips de estado
 
@@ -110,6 +142,12 @@ propio de cada control y opcional. En Netos: fuera de escala, topeó aportes, va
 sin mes anterior cargado. En NR: los 18 conceptos (que ya son un desplegable hoy, y ahí se quedan —
 18 chips no son un filtro, son una pared). En Agrupadores: el agrupador.
 
+> **Nota — desvío en la implementación (D-081).** El piloto de la tanda 1 (Acumuladores) puso
+> `Marcas ▾` a la IZQUIERDA del buscador, no a la derecha como dice el párrafo de arriba, y la tanda 3
+> copió esa posición en las 9 pantallas del lote Axton/general para que las pantallas queden iguales
+> entre sí. Sigue así hasta que Willy lo vea en pantalla; si prefiere el orden de este documento, se
+> cambia en un solo lugar por pieza (`js/ui/fichaList.js`, `js/ui/planillaPanel.js`).
+
 ## 4. La ficha
 
 `<details>`/`<summary>` nativo: funciona sin JS, se navega con teclado, y el `Ctrl+F` del navegador
@@ -145,6 +183,13 @@ Al pie de la lista, "Mostrar 50 más" y "N de M fichas".
 lista flex las tarjetas se comprimen y el contenido se corta — es el bug que ya se arregló en
 Acumuladores) y el hover no usa `transform` (movería la lista entera).
 
+**Una tercera, que salió en la tanda 4 (D-086):** cuando la tira suma dos totales que vienen de
+archivos distintos y uno de los dos puede no traer dato para un concepto, la diferencia de la tira
+**no puede ser la resta de esos dos totales** — resta cuenta el lado que falta como si valiera cero.
+La tira suma sólo lo que los dos lados sí tienen (`Diferencia comparada`, en Control NR), los dos
+totales de arriba siguen siendo los de cada archivo tal cual, y lo que quedó sin comparar se dice en
+la conclusión: el importe, de qué lado está, y que no entra en la diferencia.
+
 ## 5. La planilla
 
 Encabezado de dos filas, las dos pegadas arriba:
@@ -166,6 +211,11 @@ cuando hay filtro activo (ya lo hace `initSelectionTotals()`).
 **El rótulo de la banda tiene que quedar visible al scrollear a la derecha.** Hoy se mete abajo de
 las columnas congeladas y desaparece — y la banda *es* la idea de esta vista. Se arregla en la pieza
 compartida, una vez, y lo heredan los tres controles que ya usan bandas.
+
+**Excepción encontrada en la tanda 2 (D-078): EE x CATEG no lleva bandas ni fila de TOTAL.** Compara
+campos de texto (puesto, centro de costo) y presencia en cada archivo, no importes — no hay rubro que
+agrupar ni número que totalizar. `renderRubroGrid()` acepta `bands: false` para este caso; ver el mapa
+del §8.
 
 ## 6. El scroll horizontal
 
@@ -206,9 +256,54 @@ este entorno fuerza su propia barra de 2 px e ignora `::-webkit-scrollbar`, así
 en una pantalla de verdad. De paso quedó a la vista por qué nunca se había visto: declarar
 `scrollbar-width` o `scrollbar-color` en el mismo elemento apaga esos pseudo-elementos en Chromium.
 
-**Y una deuda que se sigue pagando en las próximas tandas (2 y 3):** Brutos, GS Pers y Rendimiento vs
-Asiento pintan las bandas con colores escritos a mano (`CYAN_HDR`, `LILAC_HDR`) en vez de usar el
-tinte compartido. Pasan a la pieza y desaparece el violeta que no es de la marca.
+**Construido en la tanda 2 (2026-08-20 — D-078), sobre las diez entradas del lote Meta4/Marval del §8:**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| `renderPlanillaPanel()` — el gemelo de `renderFichasPanel()` para la solapa Planilla | `js/ui/planillaPanel.js` (nuevo) | §10: el control declara columnas, estado por fila y qué exporta; hereda la barra, el TOTAL y el cruce de filtros |
+| `estadoDeFila()`, `contarEstados()` — el peor estado de una fila que compara varias columnas | `js/ui/tableTools.js` | una fila con varias columnas necesita un solo chip (D-073) |
+| `createMarcasFilter()` — el desplegable `Marcas ▾` como pieza (antes vivía copiado en `fichaList.js`) | `js/ui/tableTools.js` | §3 |
+| El buscador y los chips como dos ejes cruzados sobre la misma selección | `js/ui/tableTools.js` | antes buscar apagaba el chip puesto |
+| Descriptor de columna con `diff: true` (badge, ámbar "sin comparar", barra de magnitud) y `bands: false` | `js/ui/resultBlocks.js` | para no repetir el armado del badge de diferencia en cada control, y para la planilla que no agrupa nada (EE x CATEG) |
+| `reporteColumns()` — columnas del contrato de exportación con banda y base de cálculo | `js/ui/planillaPanel.js` | los tres controles que generan un archivo (Brutos, GS Pers, NR "Generar Reporte") |
+
+Deuda pagada de paso, para los 21 controles: Brutos, GS Pers y Control NR dejan de pintar sus bandas
+con `CYAN_HDR`/`LILAC_HDR` y los tres de Rendimiento con `rgba(...)` escritos a mano — el violeta que
+no era de la marca desaparece.
+
+**Construido en la tanda 3 (2026-08-20 — D-079, D-080, D-081), sobre las 9 pantallas del lote
+Axton/general (agrupadores, variaciones_sueldos, variaciones_conceptos, pop_variaciones,
+acreditaciones_reporte, novedades_importador, novedades_liquidacion, finadiet_asiento,
+conta_desglosada):**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| `sortable`, `footnote` y `mag` en la solapa Planilla | `js/ui/planillaPanel.js` | lo que necesitaban las nueve y la tanda 2 no había previsto; entraron a la pieza unificada (D-088) |
+| Paginación sobre lo que pasa el filtro, no sobre el índice original | `js/ui/tableTools.js` | un legajo en la fila 300 no aparecía con un filtro activo, y "Mostrar todas" se ocultaba sin dar salida (D-080) |
+| Rótulo de la 2ª banda legible con sólo dos bandas | `css/results.css` | salía celeste sobre blanco, le ganaba la regla de la columna congelada por especificidad (D-080) |
+
+Con esto **las diecinueve planillas del §8 están migradas** y ya no queda ninguna barra propia: las tres
+que faltaban (Agrupadores, Variación Sueldos, Variación Conceptos) se jubilaron en la tanda 3.
+
+**Construido en la tanda 6 (2026-08-21 — D-082), sobre EE x CATEG:**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| Solapa **Fichas** (una tarjeta por legajo, con la tira de conteo de campos en vez de una cascada de importes) | `js/controls/catXEmpleados.js` (`buildFichasCatXEmpleados`, `renderCatXEmpleadosFichas`) | §4: acá no hay plata que cascadear, hay campos que coinciden o no |
+| Cuarta solapa **"Por campo"**, la matriz campo × legajo, sin fila de TOTAL | `js/controls/catXEmpleados.js` (`renderPorCampo`) | contesta si un campo falla en un legajo o en toda la nómina, sin exportar y contar a mano |
+| `extraTabs` en `renderResumenDetalle()` — una solapa más, reservada a la que la spec reconoce por nombre en el §8 | `js/ui/resultBlocks.js` | §2 |
+| El número grande de la ficha acepta un conteo, no sólo un importe | `js/ui/fichaList.js` | una ficha que cuenta campos, no pesos |
+| El KPI de la selección acepta `amountDecimals: 0` | `js/ui/tableTools.js` | "Σ campos que no coinciden: 3", no "3,00" |
+
+**Construido en la tanda 7 (2026-08-21 — D-084, D-085), verificado en los dos controles cuya unidad es
+la cuenta contable (finadiet_asiento, conta_desglosada):**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| El desglose por concepto de una cuenta contable, con clave por código | `js/controls/cuentaConceptos.js` (nuevo) | acumulado en la misma pasada que el saldo, para que no pueda desalinearse del asiento (D-084) |
+| El cuerpo de la ficha de una cuenta (conciliación, tira, tabla de detalle, línea de contexto) | `js/ui/fichaCuenta.js` (nuevo) | para que las dos pantallas no se vayan separando |
+| Texto del buscador configurable por control (`searchLabel` / `searchPlaceholder`) | `js/ui/fichaList.js` | el default ("Buscá por legajo o nombre…") no vale en un control por cuenta contable, por centro de costo ni por lista |
+
 
 ## 8. El mapa — control por control
 
@@ -217,29 +312,32 @@ Aprobado por Willy el 2026-08-20.
 | Control | Barra estándar | Planilla con bandas | Ficha | Nota |
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
-| **Cruce por Agrupadores** | sí *(hoy tiene barra propia)* | sí | **sí — el que más gana** | hoy son ~1000 filas para ~100 empleados: una fila por legajo × agrupador. La ficha por legajo con sus agrupadores adentro resuelve exactamente eso |
-| **Control NR** | sí | sí | **sí** | 18 conceptos; hoy la fila dice "# Difs" y nada más |
-| **Novedades vs Liquidación** | sí | sí | **sí** | legajo × concepto en cuatro bandas — mismo caso que NR |
-| **Acumuladores Ganancias** | sí *(hoy tiene barra propia)* | sí | **sí — reemplaza la ficha vieja** | es el que fija el estándar: ya tiene fichas de primera generación para jubilar |
-| **EE x CATEG** | sí *(hoy tiene barra propia)* | **no** | **sí** | el detalle son campos de texto que no coinciden, no importes: no hay nada que totalizar. La tercera solapa útil acá es una **matriz campo × legajo** — en qué campo falla más — no totales |
-| **Variación Conceptos** | sí *(hoy tiene barra propia)* | sí | **sí** | un legajo con varios conceptos que se movieron |
-| **Rendimiento vs Tabulado** | sí | sí | **sí, por centro de costo** | la unidad es el CC, no el legajo |
-| **Rendimiento vs Asiento** | sí | sí | ya tiene algo parecido → migrar | |
-| Brutos — Controlar / Generar Reporte | sí | sí | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo |
-| GS Pers — Controlar / Generar Reporte | sí | sí | no la necesita | ídem |
-| Control NR — Generar Reporte | sí | sí | no | la salida es un archivo |
-| Rendimiento x EE | sí | sí | no la necesita | |
-| Variación Sueldos | sí *(hoy tiene barra propia)* | sí | no la necesita | la fila ya dice anterior / actual / variación |
-| Variación entre quincenas (POP) | sí | sí | no la necesita | |
-| **Asiento de Remuneraciones** | sí | sí (DEBE/HABER) | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen |
-| **Contabilidad Desglosada + Asiento** | sí | sí (DEBE/HABER) | **sí, por cuenta contable** | ídem |
-| **Acreditaciones** | sí | sí | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`) |
-| Importador de Novedades | sí | sí | no la necesita | la comparación contra el F2 ya armado sí gana con bandas (cantidad/importe generado vs armado) |
+| **Cruce por Agrupadores** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 5, D-087)** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. Y la ficha por legajo con sus agrupadores adentro, con la diferencia **neta** (Nómina − Resumen) y la **total** (la que suma el semáforo) separadas: el número grande es la total, para que un empleado con dos agrupadores compensados no salga en 0 |
+| **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 4, D-086)** | 18 conceptos, en `Marcas ▾` ("el legajo liquidó ese concepto"). La ficha abre un legajo y dice en qué conceptos no cierra, con su código y los dos lados — antes la fila decía "# Difs" y nada más |
+| **Novedades vs Liquidación** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha invierte el cruce: un legajo por tarjeta con las cuatro bandas adentro |
+| **Acumuladores Ganancias** | **hecho (tanda 1)** | **hecho (tanda 1)** | **sí — reemplaza la ficha vieja** | migrado de punta a punta en la tanda 1, piloto del estándar (D-077) |
+| **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **hecho (tanda 6, D-082)** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La ficha es una tarjeta por legajo con la tira de conteo de campos (no una cascada de importes) y una conclusión que dice si el problema es del empleado o de una carga masiva. Suma una **cuarta** solapa, "Por campo" — la matriz campo × legajo, única excepción a las tres solapas del §2 |
+| **Variación Conceptos** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | un legajo con varios conceptos que se movieron, y adentro el escalón de los que se pagan en escalones (`100 % → 70 %` dice algo que "bajó $ 16.805,40" no dice) |
+| **Rendimiento vs Tabulado** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 5, D-087), por centro de costo** | la unidad es el CC, no el legajo; la lista de conceptos por columna pasó del `<th>` a una leyenda desplegable arriba de la planilla. La ficha abre el Tabulado **concepto por concepto, con su código** a la izquierda y el Reporte de Rendimiento —que sólo informa las cinco categorías ya sumadas— a la derecha: son distintas a propósito |
+| **Rendimiento vs Asiento** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | ya tiene algo parecido → migrar | pierde el orden por columna de la planilla principal (era la única que ordenaba por su cuenta; vuelve con la ficha) y el desglose que colgaba de la fila de TOTAL (el desglose por celda sigue igual); el rótulo pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo" |
+| Brutos — Controlar / Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo; se van los colores de banda escritos a mano (`CYAN_HDR`/`LILAC_HDR`) |
+| GS Pers — Controlar / Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | ídem |
+| Control NR — Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no | la salida es un archivo; los cinco chips salen igual, en gris y con `title` explicando que no aplican |
+| Rendimiento x EE | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | |
+| Variación Sueldos | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | la fila ya dice anterior / actual / variación |
+| Variación entre quincenas (POP) | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-081 |
+| **Asiento de Remuneraciones** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **hecho (tanda 7, D-084), por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen — eso es lo que muestra. Las cuentas y los centros sin clasificar entran como ficha propia, en «Sin comparar» y con saldo `—` |
+| **Contabilidad Desglosada + Asiento** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **hecho (tanda 7, D-084), por cuenta contable** | ídem. Una cuenta sin código pasa a leerse «Sin comparar» y no «Con diferencia», en las dos solapas del control (D-085) |
+| **Acreditaciones** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 8, D-083), por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no lleva atributos del empleado** (`D-020`, escrito como assert). El aviso de grupo sin fecha se movió arriba de las tres solapas (`D-083`) |
+| Importador de Novedades | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
+
+
+
 
 **Además de la ficha, dónde conviene otra cosa:**
 - **Variaciones y Variación entre quincenas** ya tienen el escalón/histograma, que es lo que sirve
   ahí. No se les fuerzan bandas donde el eje es el tiempo.
-- **EE x CATEG**: ver la nota de la matriz campo × legajo.
+- **EE x CATEG**: hecho (tanda 6, D-082) — ver §2 y §7.
 
 **El total, para tener la escala clara: la barra estándar va a los 21. La planilla con bandas, a
 19. La ficha con cascada la justifican 10** (9 más Netos).
@@ -253,14 +351,33 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    piezas de §7 más el primer control migrado de punta a punta, verificado en el navegador en los
    tres temas. **Todo lo demás depende de esta tanda, incluido el chat de Netos — que ya puede
    arrancar.**
-2. **Barra + planilla, lote Meta4/Marval** — 10 entradas del registry.
-3. **Barra + planilla, lote Axton/general** — 9 entradas. Puede ir en paralelo con la 2: no se
-   pisan archivos.
-4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
-5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
-6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
-7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
-8. **Ficha por lista de acreditación** — Acreditaciones.
+2. **Barra + planilla, lote Meta4/Marval. Hecho el 2026-08-20 (D-078).** 10 entradas del registry.
+3. **Barra + planilla, lote Axton/general. Hecho el 2026-08-20 (D-079, D-080, D-081).** 9 entradas.
+   Corrió en paralelo con la 2: no se pisaron controles, pero las dos crearon un
+   `js/ui/planillaPanel.js` con el mismo nombre, que al integrar quedó unificado (D-088).
+4. **Fichas de legajo × concepto — NR, Novedades vs Liquidación, Variación Conceptos. Hecho el
+   2026-08-21 (D-086).** Se hizo directo sobre `main`, sin esperar las tandas 2 y 3, eligiendo
+   nombres de función que no chocaran con los de esos dos PR — aun así quedaron tres pares de
+   funciones equivalentes, que al integrar se dejaron en una sola (D-088).
+
+5. **Fichas de legajo × agrupador y CC × concepto — Agrupadores, Rendimiento vs Tabulado. Hecho
+   el 2026-08-21 (D-087).** Agrupadores: una ficha por legajo con sus agrupadores adentro, con la
+   diferencia neta (Nómina menos Resumen) y la total (la que suma el semáforo) separadas.
+   Rendimiento vs Tabulado: una ficha por centro de costo, con el Tabulado abierto concepto por
+   concepto a la izquierda y el Reporte de Rendimiento por categoría a la derecha. Se hizo sobre
+   `main`, antes de que estos dos controles tuvieran la barra estándar, así que copió dos
+   funciones de la tanda 3 y escribió una tercera que ya existía compartida; al integrar quedó
+   una sola de cada una (D-088).
+6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
+   (D-082).** Se construyó sobre la tanda 2 y entró después de ella.
+7. **Fichas por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada. Hecho el
+   2026-08-21 (D-084, D-085).** Se apoyó en la barra y la planilla de la tanda 3.
+8. **Ficha por lista de acreditación — Acreditaciones. Hecho el 2026-08-21 (D-083).** Corrió en
+   paralelo con las 3 a 7,
+   apoyada en la barra y la planilla de la tanda 3. La unidad es la lista, no el legajo (D-021), y
+   lo de HR se queda en la pantalla (D-020, ahora escrito como assert contra el contrato de export).
+
+
 
 **Netos** va en su propio chat, después de la tanda 1.
 

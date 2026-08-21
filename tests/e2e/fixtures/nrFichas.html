@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasLegajoConcepto.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados completa del Control NR corriendo el run()
+     real sobre un Tabulado y un Reporte de NR inventados, para poder mirar en un
+     navegador real la solapa Fichas de un control de legajo × concepto
+     (specs/vista-estandar-resultados.md §4): la tira de conciliación, el renglón
+     por concepto con su código, las pills de marcas y la conclusión.
+
+     Va por el run() real y no por filas fabricadas a mano a propósito: así el
+     código de concepto de cada columna del Tabulado sale de donde sale en
+     producción, y la ficha muestra "3903 · INDEM_PREAVISO" y no sólo el rótulo.
+     Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runNr, renderNrResults } from '../../../js/controls/nr.js';
+
+// El encabezado del Tabulado de Meta4 viene como "CÓDIGO-NOMBRE": de ahí sale el
+// código que la ficha muestra en cada renglón.
+const PREAVISO = '3903-INDEM_PREAVISO';
+const SAC_PREAV = '3905-SAC_PREAVISO';
+const VACNOGOZ  = '3973-VAC_NO_GOZADAS';
+const HOMEOFICE = '3025-REIN_HOME_OFICE';
+
+// Cinco legajos, uno por estado posible de la solapa Fichas — para poder mirar
+// los cinco chips y las cuatro severidades de la tarjeta:
+//   7  — DOS liquidaciones del mes (mensual + baja) y un concepto que difiere
+//        fuerte → Con diferencia. Es además el caso que prueba que la ficha SUMA
+//        las pagas y no las pisa.
+//   9  — informa NR y no está en el Tabulado → Sin comparar
+//   10 — cierra al centavo → Al centavo
+//   11 — un concepto con valor de un solo lado → Sin comparar
+//   12 — diferencia de $ 4, abajo del monto de diferencia del cliente si lo sube
+//        → Al centavo con el default, Dentro del margen con el monto en $ 100
+const tabRows = [
+  { Legajo: '7',  [PREAVISO]: '60.000,00', [SAC_PREAV]: '5.000,00', [VACNOGOZ]: '30.000,00', [HOMEOFICE]: '' },
+  { Legajo: '7',  [PREAVISO]: '40.000,00', [SAC_PREAV]: '3.333,33', [VACNOGOZ]: '20.000,00', [HOMEOFICE]: '' },
+  { Legajo: '10', [PREAVISO]: '',          [SAC_PREAV]: '',         [VACNOGOZ]: '15.000,00', [HOMEOFICE]: '28.000,00' },
+  { Legajo: '11', [PREAVISO]: '',          [SAC_PREAV]: '',         [VACNOGOZ]: '',          [HOMEOFICE]: '31.500,00' },
+  { Legajo: '12', [PREAVISO]: '',          [SAC_PREAV]: '',         [VACNOGOZ]: '',          [HOMEOFICE]: '22.004,00' },
+];
+const nrRows = [
+  { LEGAJO: '7',  INDEM_PREAVISO: '60.000,00', SAC_PREAVISO: '5.000,00', VAC_NO_GOZADAS: '25.000,00', REIN_HOME_OFICE: '' },
+  { LEGAJO: '7',  INDEM_PREAVISO: '40.000,00', SAC_PREAVISO: '3.333,33', VAC_NO_GOZADAS: '13.000,00', REIN_HOME_OFICE: '' },
+  { LEGAJO: '9',  INDEM_PREAVISO: '80.000,00', SAC_PREAVISO: '6.666,67', VAC_NO_GOZADAS: '',          REIN_HOME_OFICE: '' },
+  { LEGAJO: '10', INDEM_PREAVISO: '',          SAC_PREAVISO: '',         VAC_NO_GOZADAS: '15.000,00', REIN_HOME_OFICE: '28.000,00' },
+  { LEGAJO: '11', INDEM_PREAVISO: '',          SAC_PREAVISO: '',         VAC_NO_GOZADAS: '7.000,00',  REIN_HOME_OFICE: '31.500,00' },
+  { LEGAJO: '12', INDEM_PREAVISO: '',          SAC_PREAVISO: '',         VAC_NO_GOZADAS: '',          REIN_HOME_OFICE: '22.000,00' },
+];
+
+const results = runNr(nrRows, tabRows, {
+  period: '2026-04',
+  nr: {
+    legajoColumn: 'LEGAJO',
+    indemPreavisoColumn: 'INDEM_PREAVISO',
+    sacPreavisoColumn: 'SAC_PREAVISO',
+    vacNoGozadasColumn: 'VAC_NO_GOZADAS',
+    reinHomeOficeColumn: 'REIN_HOME_OFICE',
+  },
+  tab: {
+    empleadoColumn: 'Legajo',
+    tabIndemPreavisoColumn: PREAVISO,
+    tabSacPreavisoColumn: SAC_PREAV,
+    tabVacNoGozadasColumn: VACNOGOZ,
+    tabReinHomeOficeColumn: HOMEOFICE,
+  },
+});
+window.__results = results;
+renderNrResults(results, document.getElementById('host'));
+</script></body></html>

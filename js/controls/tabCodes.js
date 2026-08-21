@@ -42,6 +42,30 @@ export function buildColByCode(sampleRowOrHeaders) {
 }
 
 /**
+ * El CÓDIGO de concepto que declara un encabezado del Tabulado: de
+ * `"3903-INDEM_PREAVISO"` sale `"3903"`, y de un encabezado que es sólo el
+ * número, ese número. Devuelve `null` cuando el encabezado no declara ninguno
+ * —o cuando no hay encabezado— y `null` acá significa "no se sabe", nunca un
+ * código inventado por parecido.
+ *
+ * Es la vuelta de `buildColByCode()`: ahí se busca la columna de un código, acá
+ * se pregunta qué código tiene una columna que ya se resolvió. Sirve para
+ * NOMBRAR un concepto en pantalla por su código —el Tabulado trae
+ * `"4899-COCHERA_IG"` y `"8805-DTO_COCHERA"`, y una ficha que muestre sólo
+ * "COCHERA" manda a mirar el concepto equivocado.
+ *
+ * @param {string?} header nombre de columna del Tabulado
+ * @returns {string|null}
+ */
+export function codeOfColumn(header) {
+  const s = String(header ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d+)[-_]/);
+  if (m) return m[1];
+  return /^\d+$/.test(s) ? s : null;
+}
+
+/**
  * Códigos **semilla** de las columnas del Tabulado que alimentan un control.
  *
  * Son semilla, no identidad (D-035/D-039): sirven para el cliente que todavía

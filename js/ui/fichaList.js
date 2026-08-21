@@ -21,7 +21,7 @@
 //   - el hover NO usa `transform`: movería la lista entera abajo del mouse.
 
 import {
-  createResultsToolbar, createEstadoFilter, wireListTools, initSearchCombobox,
+  createResultsToolbar, createEstadoFilter, createMarcasFilter, wireListTools, initSearchCombobox,
 } from './tableTools.js';
 
 function esc(str) {
@@ -41,10 +41,6 @@ function fmtCell(v) {
   return typeof v === 'string' ? v : fmtAmount(v);
 }
 
-function fmtInt(n) {
-  return Math.round(n || 0).toLocaleString('es-AR');
-}
-
 // ── La tarjeta cerrada ──────────────────────────────────────────────────────
 //
 // Descriptor de una ficha:
@@ -61,7 +57,10 @@ function fmtInt(n) {
 //   marks       — [{ text, tone?: 'info'|'neutral', title? }]: el segundo eje —
 //                 qué MÁS le pasa al caso, que no es cómo cerró
 //   amountLabel — rótulo chico en mayúsculas ('RESIDUO', 'SAC TEÓRICO')
-//   amount      — el importe grande de la derecha
+//   amount      — el número grande de la derecha. Un importe se formatea con dos
+//                 decimales; un control que CUENTA en vez de sumar plata (EE x
+//                 CATEG cuenta campos que no coinciden) pasa el texto ya armado,
+//                 y lo que no se pudo saber va como `null` → '—', nunca 0.
 //   amountTone  — 'error' | 'warn' | 'ok' | undefined
 //   body        — lo de abajo (ver fichaBodyHtml)
 
@@ -92,7 +91,7 @@ export function fichaCardHtml(ficha) {
         </span>
         <span class="ficha__right">
           ${ficha.amountLabel ? `<span class="ficha__amount-label">${esc(ficha.amountLabel)}</span>` : ''}
-          <span class="ficha__amount${ficha.amountTone ? ` ficha__amount--${esc(ficha.amountTone)}` : ''}">${esc(fmtAmount(ficha.amount))}</span>
+          <span class="ficha__amount${ficha.amountTone ? ` ficha__amount--${esc(ficha.amountTone)}` : ''}">${esc(fmtCell(ficha.amount))}</span>
         </span>
         <span class="ficha__caret" aria-hidden="true">⌄</span>
       </summary>
@@ -113,6 +112,8 @@ export function fichaCardHtml(ficha) {
 //     strip:      [{ label, value, tone?, invert?: true, residuo?: true }],
 //     tables:     [{ title, rows: [{ label, code?, value }], foot? }],  // 0 a 2
 //     detail:     { title?, columns: [{ key, label, num? }], rows, foot? },
+//                 foot = { label, value, key? }: `key` nombra la columna donde cae
+//                 el total, para el detalle que sigue con otra columna después
 //     conclusion: { tone?, title, text },
 //   }
 
@@ -178,6 +179,12 @@ function tableHtml(t) {
 /** El detalle línea por línea, con el efecto de cada línea sobre lo que se controla. */
 function detailHtml(d) {
   const cols = d.columns || [];
+  // En qué columna cae el total del pie. Por default en la última, que es donde
+  // termina la cuenta cuando el detalle es "concepto → importe"; con `foot.key`
+  // el control dice cuál es su columna de cierre, para el detalle que sigue con
+  // una columna más después del número (el % de variación, un motivo).
+  const footAt = d.foot?.key ? cols.findIndex(c => c.key === d.foot.key) : cols.length - 1;
+  const footIdx = footAt < 1 ? cols.length - 1 : footAt;
   return `
     <div class="ficha-detail">
       ${d.title ? `<div class="ficha-table__title">${esc(d.title)}</div>` : ''}
@@ -195,8 +202,9 @@ function detailHtml(d) {
         </tbody>
         ${d.foot ? `<tfoot>
           <tr class="ficha-table__foot ficha-table__foot--ink">
-            <td colspan="${Math.max(1, cols.length - 1)}">${esc(d.foot.label)}</td>
+            <td colspan="${footIdx}">${esc(d.foot.label)}</td>
             <td class="ficha-table__num">${esc(fmtCell(d.foot.value))}</td>
+            ${cols.slice(footIdx + 1).map(c => `<td${c.num ? ' class="ficha-table__num"' : ''}></td>`).join('')}
           </tr>
         </tfoot>` : ''}
       </table>
@@ -270,8 +278,16 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {{ value: string, label: string, match: (f: object) => boolean }[]} [opts.marcas]
  * @param {{ value: string, label: string, compare: (a: object, b: object) => number }[]} [opts.ordenes]
  * @param {(ficha: object) => string} [opts.getLabel] - texto buscable
+ * @param {string} [opts.searchLabel] - rótulo del buscador
+ * @param {string} [opts.searchPlaceholder] - qué se puede buscar. Los dos van
+ *   con el default de `initSearchCombobox()` ("Buscá por legajo o nombre…"), que
+ *   es el correcto en los 7 controles cuya unidad es el legajo — y no en los 3
+ *   donde es el centro de costo, la cuenta contable o la lista de acreditación:
+ *   ahí el buscador estaría pidiendo un dato que la ficha no tiene. Mismo
+ *   pass-through que ya tiene la Planilla (`renderPlanillaPanel()`).
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
+ * @param {number} [opts.amountDecimals] - 0 cuando esa Σ es un conteo y no plata
  * @param {string} [opts.unitLabel='fichas']
  * @param {(exportEl: HTMLElement) => void} [opts.onExport] - el control monta su
  *   `renderExportMenu()` acá: el exportar va último, siempre, y ningún control
@@ -281,11 +297,15 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
 export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
-  getAmount, amountLabel, unitLabel = 'fichas',
+  getAmount, amountLabel, amountDecimals, unitLabel = 'fichas',
+  searchLabel, searchPlaceholder,
   onExport, onOpen, pageSize,
 } = {}) {
   if (fichas.length === 0) {
-    panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">No hay ninguna ${esc(unitLabel.replace(/s$/, ''))} para mostrar.</p>`;
+    // "Sin legajos" y no "No hay ningún legajo": la unidad la declara el control
+    // y puede ser femenina ('listas' de acreditación), así que la frase no puede
+    // llevar género.
+    panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin ${esc(unitLabel)} para mostrar.</p>`;
     return null;
   }
 
@@ -299,19 +319,25 @@ export function renderFichasPanel(panel, {
   const estadoSel = createEstadoFilter({ counts, noAplica });
 
   const left = [estadoSel];
-  if (marcas.length) left.push(marcasDropdown(marcas, fichas));
+  if (marcas.length) left.push(createMarcasFilter(marcas, fichas));
 
   const { toolbar, searchEl, exportEl, kpisEl } = createResultsToolbar(panel, { left });
 
   // El "Orden ▾" es de la solapa Fichas y de ninguna otra: va antes del KPI,
   // que es lo último antes de exportar.
-  const ordenSel = ordenes.length ? ordenDropdown(ordenes) : null;
-  if (ordenSel) toolbar.querySelector('.results-toolbar__right').prepend(ordenSel);
+  const ordenDrop = ordenes.length ? ordenDropdown(ordenes) : null;
+  if (ordenDrop) toolbar.querySelector('.results-toolbar__right').prepend(ordenDrop);
+  // El <select> de verdad, no el envoltorio: `ordenDropdown()` devuelve el
+  // `.form-group` que lo contiene, y leerle `.value` a un <div> da `undefined`
+  // — con eso `ordenar()` no encontraba nunca su criterio y salía sin hacer
+  // nada, así que el "Orden ▾" se veía pero no ordenaba.
+  const ordenSel = ordenDrop?.querySelector('select') || null;
 
   const { listEl, els } = renderFichaList(panel, fichas, { onOpen });
 
   const tools = wireListTools(listEl, {
     rows: fichas, els, kpisEl, getAmount, amountLabel, unitLabel,
+    ...(amountDecimals !== undefined ? { amountDecimals } : {}),
     ...(pageSize !== undefined ? { pageSize } : {}),
   });
 
@@ -330,10 +356,12 @@ export function renderFichasPanel(panel, {
 
   initSearchCombobox(searchEl, {
     rows: fichas, trEls: els, getLabel,
+    ...(searchLabel !== undefined ? { label: searchLabel } : {}),
+    ...(searchPlaceholder !== undefined ? { placeholder: searchPlaceholder } : {}),
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 
-  const marcaSel = toolbar.querySelector('[data-ficha-marca]');
+  const marcaSel = toolbar.querySelector('[data-marca-filter]');
 
   function filtrar() {
     const estado = estadoSel.value;
@@ -366,7 +394,7 @@ export function renderFichasPanel(panel, {
 
   estadoSel.addEventListener('change', filtrar);
   marcaSel?.addEventListener('change', filtrar);
-  ordenSel?.querySelector('select')?.addEventListener('change', ordenar);
+  ordenSel?.addEventListener('change', ordenar);
 
   onExport?.(exportEl);
 
@@ -377,22 +405,6 @@ export function renderFichasPanel(panel, {
   if (ordenSel) ordenar();
 
   return { listEl, els, tools, estadoSel };
-}
-
-/** El segundo eje: qué MÁS le pasa al caso. Desplegable, propio de cada control. */
-function marcasDropdown(marcas, fichas) {
-  const wrap = document.createElement('div');
-  wrap.className = 'form-group results-toolbar__drop';
-  wrap.innerHTML = `
-    <select class="form-select form-select--sm" data-ficha-marca aria-label="Marcas">
-      <option value="todas">Marcas ▾</option>
-      ${marcas.map(m => {
-        const n = fichas.filter(m.match).length;
-        return `<option value="${esc(m.value)}"${n === 0 ? ' disabled' : ''}>${esc(m.label)} (${fmtInt(n)})</option>`;
-      }).join('')}
-    </select>
-  `;
-  return wrap;
 }
 
 /** Sólo en Fichas (§3). */

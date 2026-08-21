@@ -45,9 +45,10 @@
 
 import { groupRowsByLegajo } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
-import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks }
+import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, diffBadgeHtml }
   from '../ui/resultBlocks.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { initTabs } from '../ui/tabs.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -350,6 +351,10 @@ export function runNovedadesImportador(novRows, _tabRows, mapping) {
     conceptosSinCarga,
     filas,
     afuera,
+    // Qué legajos tienen algo afuera, por legajo y no sólo contados: es lo que
+    // la planilla necesita para poder decir en qué estado cerró cada uno. Va
+    // como array (no como Set) para que una corrida guardada se relea igual.
+    legajosConAfuera: [...legajosConAfuera],
     columnasExcluidas: columnasExcluidas.map(c => ({ letra: c.letra, rotulo: c.rotulo, celdas: c.celdasCargadas })),
     contra,
     avisos: [...(meta.avisos || []), ...avisosControl],
@@ -800,9 +805,33 @@ export function renderNovedadesImportadorResults(results, container) {
         });
       }
     },
-    detalle(panel) { renderDetalle(panel, results); },
+    conDiferencias: (results.summary.legajosParaRevisar ?? 0) > 0,
+    planilla(panel) { renderDetalle(panel, results); },
   });
 }
+
+// ── Solapa Planilla ───────────────────────────────────────────────────────────
+//
+// Cuatro vistas, cada una con la barra estándar completa: los cinco chips de
+// estado, el buscador, "Marcas ▾", el KPI y el ⬇ Exportar ▾ último (§3). Antes
+// eran un desplegable "Vista" con las cuatro y una sola barra compartida, que
+// dejaba los filtros diciendo cosas distintas según la vista activa.
+//
+// El estado de cada fila lo decide **el cotejo contra el importador ya armado**,
+// que es lo único que este control controla: sin ese archivo no se comparó nada
+// y las filas salen en "Sin comparar" (D-073), aunque el F2 se haya generado.
+
+/** Los legajos que hay que mirar antes de subir el importador. */
+function legajosMarcados(results) {
+  return {
+    conAfuera:  new Set(results.legajosConAfuera || []),
+    conDifF2:   new Set(results.contra?.legajosConDif || []),
+  };
+}
+
+/** El chip "Dentro del margen" no aplica: acá se coteja celda a celda. */
+const SIN_MARGEN = 'las novedades se cotejan una a una contra el importador armado, no contra un umbral';
+const SIN_ARMADO = 'no se cargó el importador ya armado, así que no se cotejó nada';
 
 function renderDetalle(container, results) {
   if (results.filas.length === 0) {
@@ -810,23 +839,24 @@ function renderDetalle(container, results) {
     return;
   }
 
-  const vistaSel = document.createElement('div');
-  vistaSel.className = 'form-group';
-  vistaSel.style.cssText = 'margin-bottom:0;min-width:220px;';
-  vistaSel.innerHTML = `
-    <label class="form-label" style="font-size:var(--text-sm);">Vista</label>
-    <select class="form-select form-select--sm" data-nov-vista>
-      <option value="f2">Lo que entra al importador</option>
-      <option value="totales">Totales por concepto</option>
-      <option value="afuera">Quedó afuera (${results.afuera.length})</option>
-      ${results.contra ? `<option value="contra">Contra el F2 armado (${results.contra.difiere.length + results.contra.soloGenerado.length + results.contra.soloArmado.length})</option>` : ''}
-    </select>
-  `;
+  const nContra = results.contra
+    ? results.contra.difiere.length + results.contra.soloGenerado.length + results.contra.soloArmado.length
+    : 0;
 
-  const { searchEl, exportEl } = createResultsToolbar(container, { left: vistaSel });
+  initTabs(container, {
+    tabs: [
+      { id: 'f2',      label: 'Lo que entra al importador', render: (p) => vistaF2(p, results) },
+      { id: 'totales', label: 'Totales por concepto',       render: (p) => vistaTotales(p, results) },
+      { id: 'afuera',  label: `Quedó afuera (${results.afuera.length})`, render: (p) => vistaAfuera(p, results) },
+      ...(results.contra
+        ? [{ id: 'contra', label: `Contra el F2 armado (${nContra})`, render: (p) => vistaContra(p, results) }]
+        : []),
+    ],
+  });
+}
 
-  // Las tres salidas son el importador completo, sin importar la vista de
-  // pantalla: es el archivo que va a Axton.
+/** Los tres del estándar, iguales en las cuatro vistas: el archivo es uno solo. */
+function mountExportMenu(exportEl, results) {
   const csvHeaders = ['Legajo', 'Apellido y Nombres', ...results.conceptos.map(c => c.codigo)];
   const csvRows = () => results.filas.map(f => [
     f.legajo, f.nombre,
@@ -841,176 +871,202 @@ function renderDetalle(container, results) {
     onCsv:   () => downloadCsv(csvHeaders, csvRows(), f2FileName(results).replace(/\.xlsx$/, '.csv')),
     onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
   });
-
-  const tableHost = document.createElement('div');
-  container.appendChild(tableHost);
-
-  function dibujar(vista) {
-    if (vista === 'totales') return dibujarTotales(tableHost, results, searchEl);
-    if (vista === 'afuera')  return dibujarAfuera(tableHost, results, searchEl);
-    if (vista === 'contra')  return dibujarContra(tableHost, results, searchEl);
-    return dibujarF2(tableHost, results, searchEl);
-  }
-
-  vistaSel.querySelector('[data-nov-vista]').addEventListener('change', (e) => dibujar(e.target.value));
-  dibujar('f2');
 }
 
-function dibujarF2(host, results, searchEl) {
-  const conceptos = results.conceptos;
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Legajo</th>
-          <th>Apellido y Nombres</th>
-          ${conceptos.map(c => `<th style="white-space:nowrap;font-size:0.72em;">${esc(c.codigo)}${c.rotulo ? `<br><small>${esc(c.rotulo)}</small>` : ''}</th>`).join('')}
-        </tr>
-      </thead>
-      <tbody>
-        ${results.filas.map(f => `
-          <tr>
-            <td>${esc(f.legajo)}</td>
-            <td>${esc(f.nombre)}</td>
-            ${conceptos.map(c => {
-              const v = f.valores.get(c.codigo);
-              const celda = v ? celdaF2(v) : null;
-              return `<td style="text-align:right;">${celda === null ? '' : esc(String(celda))}</td>`;
-            }).join('')}
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-      Cada celda sale al importador tal como se ve acá — el formato
-      <code>cantidad$importe</code> es el que espera Axton. Una celda vacía no viaja: no es un cero.
-    </p>
-  `;
-  wireTableTools(host.querySelector('table'), {
-    rows: results.filas,
-    getLabel: f => `${f.legajo} — ${f.nombre}`,
-    searchEl,
-    stickyCols: 2,
-  });
-}
+// ── Vista 1 — lo que entra al importador (una fila por legajo) ───────────────
 
-function dibujarTotales(host, results, searchEl) {
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Código</th><th>Concepto (criollo)</th><th>De dónde sale el código</th>
-          <th style="text-align:right;">Legajos</th>
-          <th style="text-align:right;">Cantidad</th>
-          <th style="text-align:right;">Importe</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${results.conceptos.map(c => `
-          <tr>
-            <td>${esc(c.codigo)}</td>
-            <td>${esc(c.rotulo || '—')}</td>
-            <td>${c.origen === 'catalogo' ? 'lo confirmaste en el Paso 2' : 'lo trae la planilla'}</td>
-            <td style="text-align:right;">${c.legajos}</td>
-            <td style="text-align:right;">${fmtNum(c.cantidadTotal)}</td>
-            <td style="text-align:right;">${fmtNum(c.importeTotal)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="3">TOTAL — ${results.conceptos.length} conceptos</td>
-          <td style="text-align:right;">${results.summary.legajos}</td>
-          <td style="text-align:right;">${fmtNum(results.summary.cantidadTotal)}</td>
-          <td style="text-align:right;">${fmtNum(results.summary.importeTotal)}</td>
-        </tr>
-      </tfoot>
-    </table>
-  `;
-  wireTableTools(host.querySelector('table'), {
-    rows: results.conceptos,
-    getLabel: c => `${c.codigo} — ${c.rotulo}`,
-    searchEl,
-    stickyCols: 2,
-  });
-}
+function vistaF2(panel, results) {
+  const { conAfuera, conDifF2 } = legajosMarcados(results);
 
-function dibujarAfuera(host, results, searchEl) {
-  if (results.afuera.length === 0) {
-    host.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">No quedó nada afuera: todo lo que trae la planilla entró al importador.</p>`;
-    return;
-  }
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr><th>Motivo</th><th>Dónde</th><th>Legajo</th><th>Valor</th><th>Por qué</th></tr>
-      </thead>
-      <tbody>
-        ${results.afuera.map(a => `
-          <tr>
-            <td>${esc(MOTIVO_LABEL[a.motivo] || a.motivo)}</td>
-            <td>${esc(dondeTexto(a))}</td>
-            <td>${esc(a.legajo || '—')}</td>
-            <td>${esc(a.texto ?? '—')}</td>
-            <td>${esc(a.detalle)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-  wireTableTools(host.querySelector('table'), {
-    rows: results.afuera,
-    getLabel: a => `${MOTIVO_LABEL[a.motivo] || a.motivo} — ${dondeTexto(a)}`,
-    searchEl,
-    stickyCols: 1,
-  });
-}
-
-function dibujarContra(host, results, searchEl) {
-  const filas = [
-    ...results.contra.soloGenerado.map(x => ({ ...x, banda: 'Sólo en la planilla del cliente' })),
-    ...results.contra.soloArmado.map(x   => ({ ...x, banda: 'Sólo en el importador armado' })),
-    ...results.contra.difiere.map(x      => ({ ...x, banda: 'Difiere' })),
+  const columns = [
+    { key: 'legajo', label: 'Legajo',             band: 'Identificación' },
+    { key: 'nombre', label: 'Apellido y Nombres', band: 'Identificación' },
+    ...results.conceptos.map(c => ({
+      key: `c_${c.codigo}`, label: c.codigo, sub: c.rotulo || null,
+      band: 'Novedades que viajan al F2', num: true, total: false,
+      cell: (f) => {
+        const v = f.valores.get(c.codigo);
+        const celda = v ? celdaF2(v) : null;
+        return celda === null ? '' : esc(String(celda));
+      },
+    })),
   ];
-  if (filas.length === 0) {
-    host.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">El importador generado coincide con el que ya estaba armado, novedad por novedad.</p>`;
-    return;
+
+  renderPlanillaPanel(panel, {
+    rows: results.filas,
+    columns,
+    unitLabel: 'legajos',
+    estadoDe: (f) => (conAfuera.has(f.clave) || conDifF2.has(f.clave)
+      ? 'conDif'
+      : (results.contra ? 'centavo' : 'sinComparar')),
+    noAplica: results.contra
+      ? { margen: SIN_MARGEN }
+      : { margen: SIN_ARMADO, centavo: SIN_ARMADO },
+    marcas: [
+      { value: 'afuera', label: 'Tiene algo que quedó afuera', match: f => conAfuera.has(f.clave) },
+      ...(results.contra
+        ? [{ value: 'contra', label: 'Difiere del F2 armado', match: f => conDifF2.has(f.clave) }]
+        : []),
+    ],
+    getLabel: f => `${f.legajo} — ${f.nombre}`,
+    searchLabel: 'Buscar legajo o nombre',
+    // La celda del F2 es `cantidad$importe`, no un importe: no hay nada que
+    // totalizar sin inventar un número. Los totales están en la vista de al lado.
+    totals: false,
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'Ningún legajo quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${results.filas.length} legajos. `
+      + 'Cada celda sale al importador tal como se ve acá — el formato «cantidad$importe» es el que '
+      + 'espera Axton. Una celda vacía no viaja: no es un cero. Los totales están en «Totales por concepto».',
+  });
+}
+
+// ── Vista 2 — totales por concepto ──────────────────────────────────────────
+
+function vistaTotales(panel, results) {
+  const conDifPorConcepto = new Set([
+    ...(results.contra?.difiere || []).map(x => x.codigo),
+    ...(results.contra?.soloGenerado || []).map(x => x.codigo),
+    ...(results.contra?.soloArmado || []).map(x => x.codigo),
+  ]);
+
+  const columns = [
+    { key: 'codigo', label: 'Código',            band: 'Identificación' },
+    { key: 'rotulo', label: 'Concepto (criollo)', band: 'Identificación',
+      cell: c => esc(c.rotulo || '—') },
+    { key: 'origen', label: 'De dónde sale el código', band: 'Identificación', close: true,
+      cell: c => esc(c.origen === 'catalogo' ? 'lo confirmaste en el Paso 2' : 'lo trae la planilla') },
+    // "En cuántos legajos aparece" no se suma entre conceptos: sumarlo daría la
+    // cantidad de novedades, que es otra cosa. El total de legajos del
+    // importador está en el pie.
+    { key: 'legajos',       label: 'Legajos',  sub: 'en cuántos aparece', num: true, band: 'Totales', total: false },
+    { key: 'cantidadTotal', label: 'Cantidad', sub: 'suma del concepto',  num: true, band: 'Totales' },
+    { key: 'importeTotal',  label: 'Importe',  sub: 'suma del concepto',  num: true, band: 'Totales', close: true },
+  ];
+
+  renderPlanillaPanel(panel, {
+    rows: results.conceptos,
+    columns,
+    unitLabel: 'conceptos',
+    estadoDe: (c) => (!results.contra ? 'sinComparar'
+      : conDifPorConcepto.has(c.codigo) ? 'conDif' : 'centavo'),
+    noAplica: results.contra
+      ? { margen: SIN_MARGEN }
+      : { margen: SIN_ARMADO, conDif: SIN_ARMADO, centavo: SIN_ARMADO },
+    getLabel: c => `${c.codigo} — ${c.rotulo || ''}`,
+    searchLabel: 'Buscar concepto',
+    searchPlaceholder: 'Código o nombre del concepto…',
+    stickyCols: 1,
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'Ningún concepto quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${results.conceptos.length} conceptos, `
+      + `sobre ${results.summary.legajos} legajo${results.summary.legajos === 1 ? '' : 's'} del importador.`,
+  });
+}
+
+// ── Vista 3 — lo que quedó afuera ───────────────────────────────────────────
+
+function vistaAfuera(panel, results) {
+  const columns = [
+    { key: 'motivo', label: 'Motivo', band: 'Qué pasó',
+      cell: a => esc(MOTIVO_LABEL[a.motivo] || a.motivo) },
+    { key: 'donde',  label: 'Dónde',  band: 'Qué pasó', cell: a => esc(dondeTexto(a)) },
+    { key: 'legajo', label: 'Legajo', band: 'Qué pasó', cell: a => esc(a.legajo || '—') },
+    { key: 'texto',  label: 'Valor',  band: 'Qué pasó', cell: a => esc(a.texto ?? '—') },
+    { key: 'detalle', label: 'Por qué', band: 'Qué pasó', close: true, cell: a => esc(a.detalle) },
+  ];
+
+  renderPlanillaPanel(panel, {
+    rows: results.afuera,
+    columns,
+    unitLabel: 'casos',
+    // Todo lo que está acá quedó afuera del importador: no hay grados. El chip
+    // lo dice sin adornos en vez de fingir que algo de esto está cerrado.
+    estadoDe: () => 'conDif',
+    noAplica: {
+      margen:      'lo que queda afuera del importador no se mide contra un umbral',
+      centavo:     'lo que queda afuera del importador no se mide contra un umbral',
+      sinComparar: 'todo lo de esta lista se leyó: lo que no se pudo leer es justo el motivo',
+    },
+    marcas: [...new Set(results.afuera.map(a => a.motivo))].map(m => ({
+      value: m, label: MOTIVO_LABEL[m] || m, match: a => a.motivo === m,
+    })),
+    getLabel: a => `${MOTIVO_LABEL[a.motivo] || a.motivo} — ${dondeTexto(a)}`,
+    searchLabel: 'Buscar motivo o columna',
+    searchPlaceholder: 'Motivo, columna o legajo…',
+    stickyCols: 1,
+    totals: false,
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'No quedó nada afuera: todo lo que trae la planilla entró al importador.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${results.afuera.length} caso${results.afuera.length === 1 ? '' : 's'}. `
+      + 'Nada de esto viaja al importador.',
+  });
+}
+
+// ── Vista 4 — contra el importador ya armado ────────────────────────────────
+
+function vistaContra(panel, results) {
+  const filas = [
+    ...results.contra.soloGenerado.map(x => ({
+      ...x, origen: 'solo_generado',
+      cantidadGenerada: x.cantidad, importeGenerado: x.importe,
+      cantidadArmada: null, importeArmada: null,
+    })),
+    ...results.contra.soloArmado.map(x => ({
+      ...x, origen: 'solo_armado',
+      cantidadGenerada: null, importeGenerado: null,
+      cantidadArmada: x.cantidad, importeArmada: x.importe,
+    })),
+    ...results.contra.difiere.map(x => ({
+      ...x, origen: 'difiere',
+      cantidadArmada: x.cantidadArmada, importeArmada: x.importeArmado,
+    })),
+  ];
+
+  const dif = (a, b) => (a === null || a === undefined || b === null || b === undefined ? null : a - b);
+  for (const f of filas) {
+    f.difCantidad = dif(f.cantidadGenerada, f.cantidadArmada);
+    f.difImporte  = dif(f.importeGenerado, f.importeArmada);
   }
-  host.innerHTML = `
-    <table class="data-table data-table--compact">
-      <thead>
-        <tr>
-          <th>Banda</th><th>Legajo</th><th>Concepto</th>
-          <th style="text-align:right;">Cantidad generada</th>
-          <th style="text-align:right;">Cantidad armada</th>
-          <th style="text-align:right;">Importe generado</th>
-          <th style="text-align:right;">Importe armado</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${filas.map(f => `
-          <tr>
-            <td>${esc(f.banda)}</td>
-            <td>${esc(f.legajo)}</td>
-            <td>${esc(f.codigo)}</td>
-            <td style="text-align:right;">${fmtNum(f.cantidadGenerada ?? (f.banda === 'Sólo en la planilla del cliente' ? f.cantidad : null))}</td>
-            <td style="text-align:right;">${fmtNum(f.cantidadArmada ?? (f.banda === 'Sólo en el importador armado' ? f.cantidad : null))}</td>
-            <td style="text-align:right;">${fmtNum(f.importeGenerado ?? (f.banda === 'Sólo en la planilla del cliente' ? f.importe : null))}</td>
-            <td style="text-align:right;">${fmtNum(f.importeArmado ?? (f.banda === 'Sólo en el importador armado' ? f.importe : null))}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-    <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-      «—» es que ese lado no trae la novedad: no es un cero. Las ${results.contra.coincide.length}
-      novedades que coinciden no se listan.
-    </p>
-  `;
-  wireTableTools(host.querySelector('table'), {
+  const maxCant = filas.reduce((m, f) => Math.max(m, Math.abs(f.difCantidad ?? 0)), 0);
+  const maxImp  = filas.reduce((m, f) => Math.max(m, Math.abs(f.difImporte ?? 0)), 0);
+
+  const columns = [
+    { key: 'legajo', label: 'Legajo',   band: 'Identificación' },
+    { key: 'codigo', label: 'Concepto', sub: 'código del importador', band: 'Identificación' },
+
+    { key: 'cantidadGenerada', label: 'Cantidad', sub: 'lo que arma la app', num: true, band: 'Generado' },
+    { key: 'importeGenerado',  label: 'Importe',  sub: 'lo que arma la app', num: true, band: 'Generado', close: true },
+
+    { key: 'cantidadArmada', label: 'Cantidad', sub: 'el F2 que ya estaba', num: true, band: 'Importador armado' },
+    { key: 'importeArmada',  label: 'Importe',  sub: 'el F2 que ya estaba', num: true, band: 'Importador armado', close: true },
+
+    { key: 'difCantidad', label: 'Δ cantidad', sub: 'generado − armado', num: true, band: 'Diferencia', mag: true,
+      cell: f => diffBadgeHtml(f.difCantidad, { max: maxCant, eps: 0, absentLabel: 'falta de un lado' }) },
+    { key: 'difImporte', label: 'Δ importe', sub: 'generado − armado', num: true, band: 'Diferencia', close: true, mag: true,
+      cell: f => diffBadgeHtml(f.difImporte, { max: maxImp, eps: 0, absentLabel: 'falta de un lado' }) },
+  ];
+
+  renderPlanillaPanel(panel, {
     rows: filas,
+    columns,
+    unitLabel: 'novedades',
+    // Que una novedad esté de un solo lado NO es una diferencia de importe: es
+    // que falta de un lado, y eso es "sin comparar" (D-073).
+    estadoDe: (f) => (f.origen === 'difiere' ? 'conDif' : 'sinComparar'),
+    noAplica: { margen: SIN_MARGEN, centavo: 'esta lista es sólo lo que NO coincide: lo que coincide no se lista' },
+    marcas: [
+      { value: 'solo_generado', label: 'Sólo en la planilla del cliente', match: f => f.origen === 'solo_generado' },
+      { value: 'solo_armado',   label: 'Sólo en el importador armado',    match: f => f.origen === 'solo_armado' },
+    ],
     getLabel: f => `${f.legajo} — ${f.codigo}`,
-    searchEl,
-    stickyCols: 2,
+    searchLabel: 'Buscar legajo o concepto',
+    searchPlaceholder: 'Legajo o código de concepto…',
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+    emptyText: 'El importador generado coincide con el que ya estaba armado, novedad por novedad.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${filas.length} novedad${filas.length === 1 ? '' : 'es'} que no coinciden. `
+      + `«—» es que ese lado no trae la novedad: no es un cero. Las ${results.contra.coincide.length} `
+      + 'novedades que coinciden no se listan.',
   });
 }
 
