@@ -16,9 +16,9 @@
 
 ## Rediseño de la solapa Resumen — propuesta escrita, espera la aprobación de Willy
 - Qué es: bajar el diseño aprobado del Resumen de Netos (veredicto accionable, barra de semáforo con umbrales, cascada de composición, de más/de menos, concentraciones) a los 21 controles, con el mismo método de tandas de Fichas y Planilla. Es el trabajo que el §2 de la spec de la vista estándar dejó explícitamente aparte.
-- Punto: **propuesta completa en `specs/vista-estandar-resumen.md`** (2026-08-21): qué bloque es genérico y cuál es de Netos con el criterio explícito, el contrato de la pieza nueva (`renderResumenPanel()`), el mapa control por control y seis tandas con Netos de piloto. **Nada implementado.**
-- Próximo paso: que Willy apruebe la spec — en particular los 8 puntos del §7 (el inventario de bloques contra el artifact del diseño, que esta sesión no pudo abrir; el destino de tiles/casos/chequeos actuales; los textos del veredicto; si las concentraciones clickean hacia Fichas).
-- Detalle: `specs/vista-estandar-resumen.md`, D-074, D-077 a D-088.
+- Punto: **propuesta completa en `specs/vista-estandar-resumen.md`** (2026-08-21): qué bloque es genérico y cuál es de Netos con el criterio explícito, el contrato de la pieza nueva (`renderResumenPanel()`), el mapa control por control, los tres candados para que todo control futuro lo traiga por defecto (§8: pieza única + 6º punto de la skill `nuevo-control` + test en CI que recorre el registry) y seis tandas con Netos de piloto. **Los prompts de las seis tandas, con modelo y esfuerzo por chat, ya están en `docs/prompts-vista-estandar-resumen.md`.** El zip que subió Willy resultó ser el handoff del Detalle (ya implementado): la pantalla del Resumen no está en ese export. **Nada implementado.**
+- Próximo paso: (1) que Willy exporte el proyecto de diseño con el turno del Resumen (o capturas de esa pantalla) — sin eso la tanda 1 no arranca; (2) que apruebe la spec, en particular los 8 puntos del §7 (destino de tiles/casos/chequeos actuales; textos del veredicto; si las concentraciones clickean hacia Fichas; el bloque de lados de Agrupadores).
+- Detalle: `specs/vista-estandar-resumen.md`, `docs/prompts-vista-estandar-resumen.md`, D-074, D-077 a D-088.
 
 ## Monto de diferencia — cerrado el 2026-08-19
 - Qué es: el número que el analista escribe en el panel "Umbrales" ("de acá para abajo no me interesa"). Hasta hoy era un `$ 1,00` escrito a mano que ningún control leía.

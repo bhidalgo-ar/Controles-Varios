@@ -6,13 +6,19 @@ que ya hay: tiles, casos, chequeos. Willy va a rehacerlo aparte"). Sale del dise
 Resumen del Control de Netos (Sportline) y se generaliza a los 21 controles, con el mismo método de
 las ocho tandas de Fichas y Planilla (§9 de la spec madre, D-077 a D-088).
 
-> **Nota sobre la fuente.** El diseño aprobado vive en un artifact de Claude Design
-> ("Control Netos - Detalle.dc.html") que esta sesión no pudo abrir (requiere la sesión de Willy).
-> El inventario de bloques del §2 sale de la descripción de Willy: veredicto grande, barra de
-> semáforo con umbrales, cascada de composición de la diferencia, desglose de más / de menos con
-> conteo de legajos, y concentración por tamaño, por empresa y por rubro. **Primera verificación de
-> la tanda 1: abrir el artifact y confirmar que no haya un bloque más** — si lo hay, entra al mapa
-> del §4 antes de generalizar nada.
+> **Nota sobre la fuente (actualizada el 2026-08-21).** El diseño aprobado vive en el proyecto de
+> Claude Design del Control de Netos. El zip que Willy subió a esta sesión
+> (`Control_Sportline_UI_mockups.zip`) resultó ser **el handoff del Detalle** — las pantallas
+> 1a/1b/1c/2a (Fichas y Totales por rubro), ya implementadas en D-076 y las ocho tandas; se
+> verificó sobre el canvas que la pantalla del Resumen no está en ese export (snapshot del
+> 2026-08-20, anterior a ese turno del diseño). Lo que ese handoff **sí** confirma y esta spec
+> hereda: la tira de la ficha tiene **cinco** pasos (neto teórico → explicado → neto esperado →
+> neto liquidado ajustado → sin explicar), y los tokens/lenguaje visual (pastillas, pills, bandas)
+> ya están en la app. El inventario de bloques del §2 sale de la descripción de Willy: veredicto
+> grande, barra de semáforo con umbrales, cascada de composición, de más / de menos con conteo de
+> legajos, y concentración por tamaño, por empresa y por rubro. **Para la tanda 1 hace falta el
+> export del proyecto de diseño que incluya el turno del Resumen** (o capturas de esa pantalla):
+> el prompt de la tanda 1 lo pide antes de dibujar nada.
 
 > Este documento es la referencia del Resumen: cuando un chat toque la solapa Resumen de cualquier
 > control, se lee esto primero, después de la spec madre. Si algo acá no coincide con el código,
@@ -174,7 +180,9 @@ pantalla (§7):
 
 Mismo método que el §9 de la spec madre: tanda 1 construye la pieza con un piloto verificable en
 navegador; el resto corre en paralelo sin pisarse (lotes sin archivos de control compartidos), y lo
-que una tanda decide sin Willy queda marcado en su entrada de DECISIONS.
+que una tanda decide sin Willy queda marcado en su entrada de DECISIONS. **El prompt de cada tanda,
+listo para copiar, con el modelo y el esfuerzo por chat, está en
+`docs/prompts-vista-estandar-resumen.md`.**
 
 1. **Pieza + piloto Netos.** `js/ui/resumenPanel.js`, los tokens/CSS que falten, y el Control de
    Netos migrado de punta a punta — es el que tiene el diseño aprobado y el único con los seis
@@ -199,9 +207,12 @@ declara en el PR para unificar al integrar.
 
 ## 7. Lo que queda pendiente de que Willy lo mire — no se adivina
 
-1. **El artifact contra este documento.** Confirmar que los seis bloques del §2 son todos los del
+1. **El diseño del Resumen contra este documento.** El zip subido es el handoff del Detalle y no
+   trae esa pantalla (ver la nota del encabezado): falta el export del proyecto de diseño con el
+   turno del Resumen, o capturas. Con eso, confirmar que los seis bloques del §2 son todos los del
    diseño y que la cascada del Resumen es la de cuatro pasos (la de la ficha tiene cinco, con
-   "neto esperado" en el medio: hay que saber cuál va a nivel control).
+   "neto esperado" en el medio — confirmado en el handoff del Detalle: hay que saber cuál va a
+   nivel control).
 2. **El destino de lo que hoy está en el Resumen** (§5): si la lista de casos muere a favor de
    Fichas, y dónde aterrizan las tiles propias de cada control.
 3. **Los textos del veredicto accionable por familia**: qué dice exactamente un cruce que cierra
@@ -220,7 +231,27 @@ declara en el PR para unificar al integrar.
 8. **Las pendientes que ya esperan en ESTADO** sobre los "Generar Reporte" (D-077/D-078): lo que
    Willy conteste ahí define el veredicto de la tanda 4.
 
-## 8. Cómo se verifica
+## 8. Que salga por defecto en todo control nuevo — y cómo se asegura
+
+El pedido de Willy: que esto no haya que acordarse de ponerlo — que cualquier control que se genere
+de acá en más lo traiga solo. Son tres candados, del más blando al más duro:
+
+1. **La pieza única.** Un control nuevo no escribe su Resumen: declara los datos (§3) y
+   `renderResumenPanel()` pone la forma. No existe otra manera de armar la solapa — igual que hoy
+   nadie escribe su propia barra de chips. Lo viejo (`renderTiles` para armar un Resumen a mano) se
+   jubila al final de las tandas, así que ni siquiera queda el camino para hacerlo distinto.
+2. **La receta.** La skill `.claude/skills/nuevo-control/` —los 5 puntos de integración que se usan
+   cada vez que Willy pide "agregá el control X"— gana el **6º punto**: declarar el Resumen
+   (veredicto, cascada, unidades con diferencia y sus dimensiones). Como todo control nuevo nace
+   por esa receta, ninguno nace sin esto. Lo actualiza la tanda 1, junto con la pieza.
+3. **El candado de CI.** Un test **en la cadena de `package.json`** recorre el `CONTROL_REGISTRY` y
+   falla si un control con pantalla no pasa por `renderResumenPanel()` (con la lista de excepciones
+   declarada y vacía al terminar las tandas). Es el mismo patrón del chequeo de datos sensibles: si
+   alguien —incluido un chat futuro— se olvida, **el PR sale en rojo**, no depende de memoria.
+   El mecanismo exacto (inspección de los módulos del registry desde node, como hace
+   `check-datos-sensibles.mjs`) lo define la tanda 1.
+
+## 9. Cómo se verifica
 
 - **El piloto contra el diseño aprobado**, bloque por bloque, en el navegador y en los tres temas.
 - **Los números de antes y después, por control**: el veredicto, el % del semáforo y todos los
