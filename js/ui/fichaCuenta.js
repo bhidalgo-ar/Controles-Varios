@@ -46,8 +46,15 @@ function round2(n) {
  * @param {number|null} [cuenta.haber]
  * @param {{ nro: string|null, concepto: string|null, debe: number, haber: number }[]} [cuenta.conceptos]
  */
-export function conciliarCuenta({ debe = 0, haber = 0, conceptos = [] } = {}) {
-  const lista = conceptos || [];
+export function conciliarCuenta({ debe = 0, haber = 0, conceptos } = {}) {
+  // Una corrida guardada ANTES de que existiera este desglose no lo trae, y la
+  // pantalla de resultados vuelve a dibujarse sobre lo guardado en IndexedDB
+  // (js/ui/controlsResults.js). Sin esta distinción, reabrir el asiento del mes
+  // pasado marcaría todas sus cuentas en rojo con un "los conceptos no suman al
+  // saldo" que es falso: no es que no sumen, es que no se guardaron. `null` no
+  // es `0` y tampoco es `false` (CLAUDE.md).
+  const conDesglose = Array.isArray(conceptos);
+  const lista = conDesglose ? conceptos : [];
   const d = round2(debe);
   const h = round2(haber);
   const conceptosDebe  = round2(lista.reduce((a, c) => a + (c.debe  || 0), 0));
@@ -68,8 +75,12 @@ export function conciliarCuenta({ debe = 0, haber = 0, conceptos = [] } = {}) {
     conceptosDebe,
     conceptosHaber,
     explicado,
-    residuo,
-    cuadra: Math.abs(residuo) <= CENTAVO,
+    /** Qué NO explican los conceptos; `null` si la corrida no guardó el desglose. */
+    residuo: conDesglose ? residuo : null,
+    /** `true` cuadra · `false` no suma · `null` no se guardó el desglose. */
+    cuadra: conDesglose ? Math.abs(residuo) <= CENTAVO : null,
+    /** Si esta corrida guardó el desglose por concepto de la cuenta. */
+    conDesglose,
     cantidad: lista.length,
   };
 }
@@ -102,6 +113,16 @@ export function concordancia(n) {
  * @param {ReturnType<typeof conciliarCuenta>} c
  */
 export function tiraDeCuenta(c) {
+  // Sin desglose guardado no se puede armar la cascada desde los conceptos: se
+  // muestra lo que la corrida sí tiene, que son los dos lados y el saldo. Poner
+  // "Suman al DEBE 0,00" sería inventar un dato que no existe.
+  if (!c.conDesglose) {
+    return [
+      { label: 'DEBE de la cuenta',  value: c.debe },
+      { label: 'HABER de la cuenta', value: c.haber },
+      { label: 'Saldo de la cuenta (DEBE − HABER)', value: c.saldo, invert: true },
+    ];
+  }
   return [
     { label: c.cantidad === 1 ? 'Concepto que la compone' : 'Conceptos que la componen',
       value: String(c.cantidad) },
@@ -168,9 +189,11 @@ export function contextoDeCuenta(c, fmt) {
   return [
     `DEBE ${fmt(c.debe)}`,
     `HABER ${fmt(c.haber)}`,
-    c.cuadra
-      ? `${c.cantidad} concepto${c.cantidad === 1 ? ' que suma' : 's que suman'} exacto`
-      : `los conceptos no suman al saldo: faltan ${fmt(c.residuo)}`,
+    !c.conDesglose
+      ? 'sin desglose por concepto: esta corrida se guardó antes'
+      : c.cuadra
+        ? `${c.cantidad} concepto${c.cantidad === 1 ? ' que suma' : 's que suman'} exacto`
+        : `los conceptos no suman al saldo: faltan ${fmt(c.residuo)}`,
   ];
 }
 

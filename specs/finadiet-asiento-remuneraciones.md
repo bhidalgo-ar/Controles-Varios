@@ -3,7 +3,10 @@
 **Estado:** implementado — control `finadiet_asiento` del `CONTROL_REGISTRY`, cubierto por
 `tests/finadietAsientoControl.test.js`. **Verificación postergada el 2026-08-17 (D-062):** la familia
 contable sale del foco por relación esfuerzo/valor. El control sigue construido y disponible para FINADIET;
-lo que se posterga es correrlo contra el archivo real y generalizarlo (ver §7).
+lo que se posterga es correrlo contra el archivo real y generalizarlo (ver §7). **Gana su solapa Fichas
+por cuenta contable el 2026-08-21** (tanda 7 de `specs/vista-estandar-resultados.md`, D-081), cubierta por
+`tests/fichasCuentaContable.test.js` — esto no mueve la postergación de arriba, es sobre el mismo control
+construido.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza dos
 archivos, arma uno. A partir del excel mensual de conceptos liquidados de FINADIET ("FINADIET CONCEPTOS",
@@ -192,6 +195,12 @@ asiento + cada cuenta y cada centro sin clasificar (todavía no son una línea, 
 serlo). Si el asiento no cierra, `unitsWithDiff` = todas: el reporte entero es sospechoso, igual que hace
 Acreditaciones cuando no cierra contra el archivo de origen. `status: 'error'` queda para lo que no produce
 asiento (sin archivo, tabla vacía, nada clasificable).
+
+**La solapa Fichas (tanda 7, D-081) muestra exactamente esas unidades.** Una ficha por línea del asiento
+—con la conciliación contra sus conceptos, cada uno con su código— más una ficha por cada cuenta y cada
+centro sin clasificar, en "Sin comparar", con saldo `—` y la instrucción de qué cargar en el Paso 2. Los
+estados de la ficha (`estadoDeCuentaAsiento`) cuentan lo mismo que `unitsTotal`/`unitsWithDiff`: no hay una
+cuenta que la ficha cuente distinto del semáforo.
 
 **Pendiente antes de usarlo en producción, hoy postergado (D-062):** correrlo contra el excel real de
 FINADIET — y la primera pregunta al retomar es **cuál es ese archivo**, porque el de cierre que sí existe en

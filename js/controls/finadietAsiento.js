@@ -625,10 +625,12 @@ const SEVERIDAD_POR_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'in
  */
 export function estadoDeCuentaAsiento(ficha, { cierra }) {
   if (ficha.sinClasificar) return 'sinComparar';
-  // Los conceptos se acumulan en la misma pasada que el saldo, así que esto no
-  // puede pasar. Se mira igual: es el único lugar donde se vería si algún día se
-  // desalinean, y un desglose que no suma no puede salir en verde.
-  if (ficha.conciliacion && !ficha.conciliacion.cuadra) return 'conDif';
+  // `cuadra === false` es un desglose que NO suma al saldo. Los conceptos se
+  // acumulan en la misma pasada que el saldo, así que no puede pasar; se mira
+  // igual, porque es el único lugar donde se vería si algún día se desalinean y
+  // un desglose que no suma no puede salir en verde. `cuadra === null` es otra
+  // cosa: una corrida vieja que no guardó el desglose. Eso no es una diferencia.
+  if (ficha.conciliacion?.cuadra === false) return 'conDif';
   return cierra ? 'centavo' : 'conDif';
 }
 
@@ -777,7 +779,7 @@ function badgeDeCuenta(f, results) {
   if (f.sinClasificar) {
     return { text: 'Quedó afuera del asiento', tone: 'warn' };
   }
-  if (!f.conciliacion.cuadra) {
+  if (f.conciliacion.cuadra === false) {
     return { text: 'Los conceptos no suman al saldo', tone: 'error' };
   }
   if (!results.cierra) {
@@ -793,7 +795,7 @@ function badgeDeCuenta(f, results) {
 
 /** No un resumen: una instrucción. Qué mirar, descartando lo que ya se explicó. */
 function conclusionDeCuenta(f, c, results) {
-  if (!c.cuadra) {
+  if (c.cuadra === false) {
     return {
       tone: 'error',
       title: `El desglose de esta cuenta no suma al saldo: sobran ${fmtNum(c.residuo)}`,
@@ -808,12 +810,23 @@ function conclusionDeCuenta(f, c, results) {
     return {
       tone: 'error',
       title: `El asiento no cierra por ${fmtNum(Math.abs(results.diferencia))}`,
-      text: `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto su saldo. `
+      text: (c.conDesglose
+        ? `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto su saldo. `
+        : 'Esta corrida no guardó el desglose por concepto de la cuenta. ')
         + (pendientes > 0
           ? 'La diferencia viene de lo que quedó afuera — filtrá por el chip "Sin comparar" para verlo y '
             + 'resolvelo en el Paso 2 antes de mandar el asiento.'
           : 'No hay nada sin clasificar, así que la diferencia está en los importes del archivo de origen: '
             + 'revisalos antes de mandar el asiento.'),
+    };
+  }
+  if (!c.conDesglose) {
+    return {
+      tone: 'warn',
+      title: 'Esta corrida no guardó el desglose por concepto',
+      text: 'El asiento cierra y esta cuenta está bien, pero la corrida se guardó antes de que la ficha '
+        + 'mostrara qué conceptos forman cada cuenta, así que ese detalle no está. Volvé a ejecutar el control '
+        + 'con el mismo archivo si querés verlo.',
     };
   }
   return {

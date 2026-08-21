@@ -153,6 +153,33 @@ assert('una cuenta sin desglose no dibuja una tabla vacía',
     concordancia(1).sujetoSuyo === 'su único concepto' && concordancia(2).sujetoSuyo === 'sus 2 conceptos');
 }
 
+// ── Una corrida guardada ANTES de que existiera el desglose ──────────────────
+//
+// La pantalla de resultados se vuelve a dibujar sobre lo que quedó en IndexedDB
+// (js/ui/controlsResults.js), así que reabrir el asiento del mes pasado pasa por
+// acá. Sin distinguir "no suman" de "no se guardaron", las 273 cuentas de una
+// corrida vieja saldrían en rojo diciendo algo falso — y el analista tendría que
+// decidir si le cree a la pantalla o al archivo que ya mandó.
+
+{
+  const vieja = conciliarCuenta({ debe: 1000, haber: 0 });  // sin `conceptos`
+  assert('una corrida sin desglose no dice que los conceptos no suman',
+    vieja.cuadra === null && vieja.conDesglose === false);
+  assert('…y su residuo es null, no un monto inventado', vieja.residuo === null);
+  assert('el saldo de la cuenta se sigue mostrando igual',
+    vieja.saldo === 1000 && vieja.monto === 1000 && vieja.lado === 'DEBE');
+  assert('la tira no inventa "Suman al DEBE 0,00": muestra los dos lados y el saldo',
+    tiraDeCuenta(vieja).length === 3
+      && tiraDeCuenta(vieja).map(p => p.label).join('|')
+        === 'DEBE de la cuenta|HABER de la cuenta|Saldo de la cuenta (DEBE − HABER)');
+  assert('…y ninguna pastilla sale en rojo de residuo',
+    tiraDeCuenta(vieja).every(p => !p.residuo));
+  assert('el contexto lo dice en criollo, sin acusar a la cuenta',
+    contextoDeCuenta(vieja, String)[2] === 'sin desglose por concepto: esta corrida se guardó antes');
+  assert('un array vacío SÍ es un desglose: la cuenta no tiene conceptos y eso cuadra',
+    conciliarCuenta({ debe: 0, haber: 0, conceptos: [] }).cuadra === true);
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // 2. cuentaConceptos — se agrupa por CÓDIGO, no por nombre
 // ══════════════════════════════════════════════════════════════════════
@@ -326,6 +353,28 @@ const FILAS_FINADIET = [
     catch (e) { error = `${f.id}: ${e.message}`; break; }
   }
   assert('las fichas de lo que quedó afuera también arman cuerpo válido', error === null, error);
+}
+
+{
+  // El asiento entero de una corrida vieja: ni una cuenta puede salir marcada.
+  const r = runFinadietAsiento(FILAS_FINADIET, [], { period: '2026-07', finadietAsientoConfig: null });
+  // Se le saca el desglose a mano, como lo tendría una corrida guardada antes.
+  for (const b of r.asiento.bloques) for (const l of b.lineas) delete l.conceptos;
+  const fichas = fichasDeAsiento(r);
+  assert('reabrir un asiento viejo no marca ninguna cuenta con diferencia',
+    fichas.every(f => f.estado === 'centavo'));
+  assert('…ninguna lleva el badge de "no suman"',
+    fichas.every(f => f.badge === undefined));
+  assert('…y la conclusión avisa que hay que volver a ejecutar para ver el detalle',
+    fichas.every(f => /volvé a ejecutar/i.test(f.body.conclusion.text)));
+  assert('…sin tabla de detalle, porque no hay desglose que mostrar',
+    fichas.every(f => f.body.detail === undefined));
+  let error = null;
+  for (const f of fichas) {
+    try { fichaCardHtml(f); fichaBodyHtml(f.body, { id: f.id }); }
+    catch (e) { error = `${f.id}: ${e.message}`; break; }
+  }
+  assert('las fichas de una corrida vieja arman cuerpo válido', error === null, error);
 }
 
 assert('estadoDeCuentaAsiento: lo sin clasificar es Sin comparar aunque el asiento cierre',

@@ -751,10 +751,12 @@ const SEVERIDAD_POR_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'in
  */
 export function estadoDeCuentaConta(ficha, { cierraTodo }) {
   if (ficha.sinCodigo) return 'sinComparar';
-  // Los conceptos se acumulan en la misma pasada que el saldo, así que esto no
-  // puede pasar. Se mira igual: es el único lugar donde se vería si algún día se
-  // desalinean, y un desglose que no suma no puede salir en verde.
-  if (!ficha.conciliacion.cuadra) return 'conDif';
+  // `cuadra === false` es un desglose que NO suma al saldo. Los conceptos se
+  // acumulan en la misma pasada que el saldo, así que no puede pasar; se mira
+  // igual, porque es el único lugar donde se vería si algún día se desalinean y
+  // un desglose que no suma no puede salir en verde. `cuadra === null` es otra
+  // cosa: una corrida vieja que no guardó el desglose. Eso no es una diferencia.
+  if (ficha.conciliacion.cuadra === false) return 'conDif';
   return cierraTodo ? 'centavo' : 'conDif';
 }
 
@@ -924,7 +926,7 @@ function fichaDeCuenta(f, results, cierraTodo) {
 
 /** La causa principal, en una línea. Sin causa no hay badge. */
 function badgeDeCuenta(f, results, cierraTodo) {
-  if (!f.conciliacion.cuadra) return { text: 'Los conceptos no suman al saldo', tone: 'error' };
+  if (f.conciliacion.cuadra === false) return { text: 'Los conceptos no suman al saldo', tone: 'error' };
   if (f.sinCodigo) return { text: 'Sin código de cuenta', tone: 'warn' };
   if (!cierraTodo) {
     return {
@@ -939,7 +941,7 @@ function badgeDeCuenta(f, results, cierraTodo) {
 
 /** No un resumen: una instrucción. Qué mirar, descartando lo que ya se explicó. */
 function conclusionDeCuenta(f, c, results, cierraTodo) {
-  if (!c.cuadra) {
+  if (c.cuadra === false) {
     return {
       tone: 'error',
       title: `El desglose de esta cuenta no suma al saldo: sobran ${fmtNum(c.residuo)}`,
@@ -954,9 +956,12 @@ function conclusionDeCuenta(f, c, results, cierraTodo) {
     return {
       tone: 'error',
       title: `El asiento no cierra por ${fmtNum(Math.abs(dif))}`,
-      text: `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto `
-        + 'su saldo, así que la diferencia no sale de acá. Mirá el Resumen: dice si el descuadre es de la '
-        + 'desglosada o del asiento neteado. No mandes el archivo hasta que cierre.',
+      text: (c.conDesglose
+        ? `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto `
+          + 'su saldo, así que la diferencia no sale de acá. '
+        : 'Esta corrida no guardó el desglose por concepto de la cuenta. ')
+        + 'Mirá el Resumen: dice si el descuadre es de la desglosada o del asiento neteado. No mandes el '
+        + 'archivo hasta que cierre.',
     };
   }
   if (f.sinCodigo) {
@@ -976,6 +981,15 @@ function conclusionDeCuenta(f, c, results, cierraTodo) {
       text: `${concordancia(c.cantidad).sujeto} de abajo ${concordancia(c.cantidad).suman} exacto el saldo de `
         + 'la cuenta. Lo que falta es el Reporte de Cuentas de Redefinición del cliente: sin él no se puede '
         + 'armar el asiento, y sin asiento no hay nada que mandarle a Contaduría. Subilo en el Paso 2.',
+    };
+  }
+  if (!c.conDesglose) {
+    return {
+      tone: 'warn',
+      title: 'Esta corrida no guardó el desglose por concepto',
+      text: 'El asiento cierra y esta cuenta está bien, pero la corrida se guardó antes de que la ficha '
+        + 'mostrara qué conceptos forman cada cuenta, así que ese detalle no está. Volvé a ejecutar el control '
+        + 'con los mismos archivos si querés verlo.',
     };
   }
   return {

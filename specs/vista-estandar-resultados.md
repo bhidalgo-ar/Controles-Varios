@@ -3,11 +3,14 @@
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
 del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 3 hecha
 (2026-08-20, rama `feat/vista-estandar-barra-axton`):** barra + planilla en las 9 pantallas del lote
-Axton/general (D-078, D-079, D-080). **Tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en
-paralelo, todavía sin mergear — no está hecha.** Tandas 4 a 8 —las fichas por lote— siguen pendientes,
-en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los
-21 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
-`docs/prompts-vista-estandar.md`.
+Axton/general (D-078, D-079, D-080). **Tanda 7 hecha (2026-08-21, rama
+`feat/vista-estandar-fichas-cuenta`, commit `393fd68`):** ficha por cuenta contable en el Asiento de
+Remuneraciones (FINADIET) y en la Contabilidad Desglosada + Asiento (COTY), los dos controles cuya
+unidad no es el legajo (D-081, D-082). **Tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en
+paralelo, todavía sin mergear — no está hecha.** Tandas 4, 5, 6 y 8 —las fichas de los otros lotes—
+siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se
+generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo
+están en `docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -226,6 +229,15 @@ conta_desglosada):**
 | Paginación sobre lo que pasa el filtro, no sobre el índice original | `js/ui/tableTools.js` | un legajo en la fila 300 no aparecía con un filtro activo, y "Mostrar todas" se ocultaba sin dar salida (D-079) |
 | Rótulo de la 2ª banda legible con sólo dos bandas | `css/results.css` | salía celeste sobre blanco, le ganaba la regla de la columna congelada por especificidad (D-079) |
 
+**Construido en la tanda 7 (2026-08-21 — D-081, D-082), verificado en los dos controles cuya unidad es
+la cuenta contable (finadiet_asiento, conta_desglosada):**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| El desglose por concepto de una cuenta contable, con clave por código | `js/controls/cuentaConceptos.js` (nuevo) | acumulado en la misma pasada que el saldo, para que no pueda desalinearse del asiento (D-081) |
+| El cuerpo de la ficha de una cuenta (conciliación, tira, tabla de detalle, línea de contexto) | `js/ui/fichaCuenta.js` (nuevo) | para que las dos pantallas no se vayan separando |
+| Texto del buscador configurable por control | `js/ui/fichaList.js` | el default ("Buscá por legajo o nombre…") no vale en un control por cuenta contable |
+
 **Y una deuda que sigue pendiente (tanda 2, en otra rama, todavía sin mergear):** Brutos, GS Pers y
 Rendimiento vs Asiento pintan las bandas con colores escritos a mano (`CYAN_HDR`, `LILAC_HDR`) en vez
 de usar el tinte compartido. Pasan a la pieza y desaparece el violeta que no es de la marca.
@@ -251,8 +263,8 @@ Aprobado por Willy el 2026-08-20.
 | Rendimiento x EE | sí | sí | no la necesita | |
 | Variación Sueldos | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | la fila ya dice anterior / actual / variación |
 | Variación entre quincenas (POP) | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-080 |
-| **Asiento de Remuneraciones** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen. Ficha pendiente (tanda 7) |
-| **Contabilidad Desglosada + Asiento** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | ídem. Ficha pendiente (tanda 7) |
+| **Asiento de Remuneraciones** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable (tanda 7)** | la ficha por legajo no aplica: se abre la cuenta y se ve qué conceptos la componen, cada uno con su código. Las cuentas y centros sin clasificar entran con su propia ficha, en "Sin comparar" (D-081) |
+| **Contabilidad Desglosada + Asiento** | **sí (tanda 3)** | **sí (tanda 3, DEBE/HABER)** | **sí, por cuenta contable (tanda 7)** | ídem. Una cuenta sin código se lee "Sin comparar" y no "Con diferencia", en las dos solapas (D-082) |
 | **Acreditaciones** | **sí (tanda 3)** | **sí (tanda 3)** | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`). Ficha pendiente (tanda 8) |
 | Importador de Novedades | **sí (tanda 3)** | **sí (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
 
@@ -281,7 +293,8 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
-7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
+7. **Fichas por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada. Hecho el
+   2026-08-21 (D-081, D-082), rama `feat/vista-estandar-fichas-cuenta`, commit `393fd68`.**
 8. **Ficha por lista de acreditación** — Acreditaciones.
 
 **Netos** va en su propio chat, después de la tanda 1.

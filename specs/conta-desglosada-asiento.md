@@ -3,7 +3,11 @@
 **Estado:** implementado — control `conta_desglosada` del `CONTROL_REGISTRY`, cubierto por
 `tests/contaDesglosadaControl.test.js` (74 asserts). Verificado el 2026-08-19 contra los dos
 archivos reales de COTY del período 05/2026: reproduce **exactas** las cinco anclas del prototipo
-(ver §7).
+(ver §7). **Gana su solapa Fichas por cuenta contable el 2026-08-21** (tanda 7 de
+`specs/vista-estandar-resultados.md`, D-081), cubierta por `tests/fichasCuentaContable.test.js`, y de
+paso se corrige un criterio de clasificación que había quedado mal en la tanda 3: una cuenta sin código
+pasa a leerse "Sin comparar" y no "Con diferencia" (D-082, ver §3 y §5). Ningún importe ni conteo
+existente cambió — se verificó corriendo el módulo anterior y el nuevo sobre la misma entrada sintética.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza
 dos archivos, arma tres. A partir del reporte "Totales de Concepto" de Axton produce la Contabilidad
@@ -99,7 +103,10 @@ cruce, por línea y en este orden:
 
 Lo que no se resuelve **no se completa**: la línea igual suma al asiento (para que el balance no se
 maquille) y sale listada como "sin código" en la pantalla de resultados, con cuántas líneas y por
-cuánto importe.
+cuánto importe. En las solapas Fichas y Planilla esa cuenta se lee **"Sin comparar" y no "Con
+diferencia"** (D-082): no hay ninguna diferencia de importe —la línea suma igual y el balance puede
+cerrar— sino que falta el Reporte de Cuentas de Redefinición del cliente, que es lo que resuelve el
+código.
 
 **Las dos excepciones cableadas del prototipo no se sembraron.** La ficha de traspaso las traía como
 supuestas y sin verificar (`sac` con centro 60 → `710100143`, y `sindicato fuva a pagar` →
@@ -132,6 +139,11 @@ Los tres salen por `writeContractSheet` (contratos `conta_desglosada`, `conta_as
 `conta_desglosada_codigo` en `js/exports/contracts.js`), así que las columnas del archivo y las de la
 pantalla son la misma lista.
 
+**La solapa Fichas (tanda 7, D-081) no agrega una cuarta columna a ninguno de los tres.** Es pantalla,
+la ve el analista, y su desglose es por concepto de liquidación —código y nombre, que son
+configuración, no información de HR—. Los tres `.xlsx` y el CSV siguen saliendo exactamente con las
+columnas de la tabla de arriba.
+
 **El asiento es `audience: 'finanzas'` y la desglosada no** (D-020): el asiento no lleva legajo ni
 nada del empleado —un asiento se lee por cuenta contable—, mientras que la desglosada lleva legajo y
 fecha de ingreso y es papel de trabajo del analista. Con el asiento se agregaron a
@@ -146,6 +158,15 @@ netos.
 `unitsWithDiff` = las cuentas sin código si todo cierra, y **todas** si no cierra: un asiento
 descuadrado hace sospechoso al entregable entero. Sin el reporte de cuentas la unidad es la cuenta
 distinta de la desglosada, y el estado es `warning` con el aviso de que el asiento no se armó.
+
+**Esto no cambió con la tanda 7.** Lo que sí cambió es cómo lo describen las solapas Fichas y Planilla:
+una cuenta sin código se lee "Sin comparar", no "Con diferencia" (D-082) — es una etiqueta de pantalla,
+no el cálculo de `unitsWithDiff`, que sigue contándola igual que antes.
+
+La solapa Fichas (`fichasDeCuentas`, tanda 7, D-081) muestra una ficha por línea del asiento con su
+desglose por concepto —cada uno con su código— y su conciliación contra el saldo. Sin el reporte de
+cuentas la unidad es la cuenta distinta de la desglosada, agrupada con la misma clave normalizada que usa
+el semáforo, para que los chips no cuenten un número y el semáforo otro.
 
 ---
 

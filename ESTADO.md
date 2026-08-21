@@ -7,12 +7,12 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
-## Vista estándar de resultados — tanda 3 hecha (barra + planilla, lote Axton/general); tanda 2 en paralelo, todavía sin mergear
+## Vista estándar de resultados — tanda 7 hecha (fichas por cuenta contable); tanda 3 (barra+planilla Axton) sin mergear todavía; tanda 2 en paralelo
 - Qué es: que las 21 pantallas de resultados se vean iguales — tres solapas (`Resumen · Fichas · Planilla`), cinco chips de estado con las mismas palabras y en el mismo orden, y el `⬇ Exportar ▾` siempre último a la derecha. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a todos (D-074).
-- Punto: **tanda 1 hecha (2026-08-20)** — piezas compartidas del §7 + Acumuladores Ganancias piloto (D-077). **Tanda 3 hecha (2026-08-20, rama `feat/vista-estandar-barra-axton`, commit `49e10ab`)**: las 9 pantallas del lote Axton/general (`agrupadores`, `variaciones_sueldos`, `variaciones_conceptos`, `pop_variaciones`, `acreditaciones_reporte`, `novedades_importador`, `novedades_liquidacion`, `finadiet_asiento`, `conta_desglosada`) pasan a la barra estándar y a la planilla con bandas; se jubilan las tres barras propias (Agrupadores, Variación Sueldos, Variación Conceptos) y el botón suelto "Imprimir/PDF". Pieza nueva `js/ui/planillaPanel.js` (gemelo de `renderFichasPanel()`, D-078) y dos arreglos que valen para los 21 controles: la paginación de `tableTools.js` contaba la página sobre el índice original y no sobre lo que pasa el filtro (D-079), y el rótulo de la 2ª banda salía celeste sobre blanco cuando la planilla tiene sólo dos bandas (D-079). **La tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en paralelo, todavía sin mergear** — no dar por hecha.
-- Próximo paso: que Willy mire las nueve pantallas de la tanda 3 (PR #182, en borrador — no se mergea a ciegas: CI no puede ver una pantalla) y esperar la tanda 2; después las fichas por lote (tandas 4 a 8, orden en el §9 de la spec). Cuando la tanda 2 mergee, ver si sus 10 controles también usan `planillaPanel.js` o si quedan dos piezas.
+- Punto: **tanda 1 hecha (2026-08-20)** — piezas compartidas del §7 + Acumuladores Ganancias piloto (D-077). **Tanda 3 hecha (2026-08-20, rama `feat/vista-estandar-barra-axton`, commit `49e10ab`, todavía sin mergear a `main`)**: 9 pantallas del lote Axton/general a la barra estándar y planilla con bandas, `js/ui/planillaPanel.js` nuevo (D-078) y dos arreglos que valen para los 21 controles (D-079). **Tanda 7 hecha (2026-08-21, misma rama, sobre la 3, commit `393fd68`)**: los dos controles cuya unidad es la CUENTA CONTABLE —Asiento de Remuneraciones (FINADIET) y Contabilidad Desglosada (COTY)— ganan su solapa Fichas: cerrada con DEBE/HABER/si cuadra, abierta con la conciliación contra sus conceptos (clave por código, D-081) y la tabla de detalle. De paso se corrige un criterio que había quedado mal en la tanda 3: una cuenta sin código de la Desglosada se lee "Sin comparar" y no "Con diferencia", en las dos solapas (D-082). Piezas nuevas: `js/controls/cuentaConceptos.js`, `js/ui/fichaCuenta.js`. **La tanda 2 (lote Meta4/Marval, 10 entradas) corre en otra rama, en paralelo, todavía sin mergear.**
+- Próximo paso: que Willy mire en el navegador las pantallas de las tandas 3 y 7 (mismo PR en borrador — no se mergea a ciegas: CI no puede ver una pantalla) y esperar la tanda 2; después las fichas de los lotes que quedan (tandas 4, 5, 6 y 8, orden en el §9 de la spec).
 - Abierto a definir: D-077 (chip de un control de generación, sin confirmar) y **D-080** — dos desvíos deliberados de la tanda 3 respecto de la spec (posición de "Marcas ▾" y la columna de valor hora de POP sin TOTAL) esperan que Willy los vea en pantalla y diga si quedan así.
-- Detalle: **`specs/vista-estandar-resultados.md`** (§7, §8 y §9 al día), `docs/prompts-vista-estandar.md`, D-074, D-076, D-077, **D-078, D-079, D-080**.
+- Detalle: **`specs/vista-estandar-resultados.md`** (§7, §8 y §9 al día), `docs/prompts-vista-estandar.md`, D-074, D-076, D-077, D-078, D-079, D-080, **D-081, D-082**.
 
 ## Monto de diferencia — cerrado el 2026-08-19
 - Qué es: el número que el analista escribe en el panel "Umbrales" ("de acá para abajo no me interesa"). Hasta hoy era un `$ 1,00` escrito a mano que ningún control leía.
@@ -33,9 +33,9 @@
 
 ## Contabilidad Desglosada + Asiento (COTY) — construido, falta abrir los Excel
 - Qué es: el control `conta_desglosada` convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento agrupado por cuenta y la desglosada con código, y controla que cierre.
-- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas.
-- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista.
-- Detalle: `specs/conta-desglosada-asiento.md`, D-066.
+- Punto: implementado y verificado el 2026-08-19 contra los dos archivos reales de COTY de 05/2026 — reproduce exactas las cinco anclas del prototipo (balance bruto 1.441.239.270,46, neteado 1.359.204.242,38, 273 filas, 12 cuentas patrimoniales, 0 sin código). La pantalla se probó en navegador en los tres temas. El 2026-08-21 ganó su solapa Fichas por cuenta contable (tanda 7 de la vista estándar, D-081) y se corrigió que una cuenta sin código se leía "Con diferencia" en vez de "Sin comparar" (D-082) — ningún importe ni conteo cambió.
+- Próximo paso: dos cosas que sólo Willy puede cerrar — (1) abrir los tres `.xlsx` descargados de la app y compararlos con los del prototipo (la descarga no se pudo ejercitar en el entorno de desarrollo: ExcelJS viene por CDN y está bloqueado); (2) confirmar si la Contabilidad Desglosada sale del estudio, porque hoy lleva legajo y fecha de ingreso como papel de trabajo del analista — la ficha nueva no lo resuelve, es pantalla y no agrega columnas a los exports.
+- Detalle: `specs/conta-desglosada-asiento.md`, D-066, **D-081, D-082**.
 
 ## Control de Netos (Sportline) — verificado contra los 3 Tabulados reales de Comercio: cierra completo; Detalle rediseñado en Fichas (mergeado)
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.
@@ -69,9 +69,9 @@
 
 ## Asiento de Remuneraciones (FINADIET) — postergado
 - Qué es: control 3.9 (asiento contable), construido y disponible para el cliente que ya lo tiene configurado.
-- Punto: postergado el 2026-08-17 por relación esfuerzo/valor; el archivo de cierre real que hay en SharePoint no tiene el layout que pide `finadietAsientoParser.js`.
+- Punto: postergado el 2026-08-17 por relación esfuerzo/valor; el archivo de cierre real que hay en SharePoint no tiene el layout que pide `finadietAsientoParser.js`. El 2026-08-21 ganó su solapa Fichas por cuenta contable (tanda 7 de la vista estándar, D-081) — no mueve la postergación, es sobre el mismo control construido.
 - Próximo paso: al retomar, definir cuál es el archivo de entrada real (no es el de cierre de SharePoint).
-- Detalle: D-062.
+- Detalle: D-062, **D-081**.
 
 ## Deuda de proceso, sin urgencia (?)
 - Qué es: `tests/rendVsAsientoDrill.test.js` fuera de la cadena de CI; relevar `controlConfigs` real de los 21 clientes fuera de Marval; pendientes de v1 (insights mes a mes, export Excel multi-hoja, export/import JSON de sesión).
