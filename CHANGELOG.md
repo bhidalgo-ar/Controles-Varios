@@ -10,7 +10,7 @@
 ### feat(ee-categ): ficha por legajo y matriz campo × legajo ("Por campo") — 2026-08-21
 
 - **Es la tanda 6 de `specs/vista-estandar-resultados.md`** (D-079, §9 punto 6), en la rama
-  `feat/vista-estandar-ee-categ`, sobre la tanda 2 (D-078) — **todavía sin mergear**: esta rama sale de
+  `feat/vista-estandar-ee-categ` (PR #184), sobre la tanda 2 (D-078) — **todavía sin mergear**: esta rama sale de
   esa, así que no se puede mergear antes que ella. **El PR de esta tanda también queda en borrador.**
 - **EE x CATEG suma la solapa Fichas.** Hasta ahora el detalle era una fila por campo que no coincidía,
   así que un legajo con tres campos mal aparecía tres veces y no se lo podía ver entero. Ahora es una

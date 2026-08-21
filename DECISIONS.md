@@ -2892,7 +2892,7 @@ descriptor `diff`/`bands`), `js/controls/brutos.js`, `js/controls/gsPers.js`, `j
 
 **Fecha:** 2026-08-21. **Contexto:** tanda 6 de `specs/vista-estandar-resultados.md` (§9 punto 6):
 la ficha por legajo y la matriz campo × legajo ("Por campo") de EE x CATEG, en la rama
-`feat/vista-estandar-ee-categ` (commit `db3f052`), sobre la tanda 2 (D-078) — **todavía sin mergear**:
+`feat/vista-estandar-ee-categ` (PR #184, commit `db3f052`), sobre la tanda 2 (D-078) — **todavía sin mergear**:
 esta rama sale de esa, así que no se puede mergear antes que ella. **El PR de esta tanda también queda
 en borrador.** Willy no vio ninguna de las cuatro decisiones de abajo antes de que se tomaran.
 

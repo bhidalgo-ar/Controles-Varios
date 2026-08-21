@@ -308,7 +308,7 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
-   (D-079), en `feat/vista-estandar-ee-categ`, PR en borrador sobre la tanda 2 todavía sin mergear.**
+   (D-079), en `feat/vista-estandar-ee-categ`, PR #184 en borrador sobre la tanda 2 todavía sin mergear.**
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
 8. **Ficha por lista de acreditación** — Acreditaciones.
 
