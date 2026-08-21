@@ -2885,3 +2885,54 @@ el resto del estándar.
 descriptor `diff`/`bands`), `js/controls/brutos.js`, `js/controls/gsPers.js`, `js/controls/nr.js`,
 `js/controls/rendVsTabu.js`, `js/controls/rendXEe.js`, `js/controls/rendVsAsiento.js`,
 `js/controls/catXEmpleados.js`, D-069, D-073, D-074, D-077.
+
+---
+
+## D-079 — Tanda 6 de la vista estándar: EE x CATEG lleva cuatro solapas, no tres, y el corte de "carga masiva" queda sin confirmar
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 6 de `specs/vista-estandar-resultados.md` (§9 punto 6):
+la ficha por legajo y la matriz campo × legajo ("Por campo") de EE x CATEG, en la rama
+`feat/vista-estandar-ee-categ` (PR #184, commit `db3f052`), sobre la tanda 2 (D-078) — **todavía sin mergear**:
+esta rama sale de esa, así que no se puede mergear antes que ella. **El PR de esta tanda también queda
+en borrador.** Willy no vio ninguna de las cuatro decisiones de abajo antes de que se tomaran.
+
+**1. Cuatro solapas y no tres.** El §2 dice que un control lleva `Resumen · Fichas · Planilla`, nunca un
+cuarto nombre para lo mismo, y el §8 anotaba que la tercera solapa útil de este control iba a ser la
+matriz. Pero la tanda 2 ya había puesto ahí una planilla real (los casos uno por uno, con buscador,
+exportar y las dos distribuciones por puesto y por CC colgando abajo), y esa planilla sigue sirviendo.
+Se sumó "Por campo" como **cuarta** solapa en vez de reemplazar la planilla de la tanda 2.
+**Alternativa descartada:** poner la matriz en el lugar de la planilla — se descartó porque hubiera sido
+rehacer trabajo ya hecho y bueno, y porque la planilla y la matriz contestan preguntas distintas (una
+lista los casos, la otra dice si un campo es un problema de la nómina entera). Es la única excepción a
+"tres solapas iguales en los 21", y queda acotada por el JSDoc de `extraTabs` en
+`js/ui/resultBlocks.js`: no es una puerta para que cada control invente las suyas, sólo entra la vista
+que la spec le reconoce por nombre a un control en el mapa del §8.
+
+**2. El corte de "esto es una carga masiva y no un empleado": un campo que no coincide en al menos un
+tercio de los legajos comparados y en por lo menos 3 legajos.** Los dos números están en
+`MASIVO_PROPORCION` / `MASIVO_MIN_LEGAJOS`, juntos, en `js/controls/catXEmpleados.js`. **Es un criterio,
+no una medición — PENDIENTE: falta que Willy lo confirme** con un caso real (D-064); del diff no se
+deduce por qué un tercio y no otra proporción, más allá de que el mínimo de 3 evita que "1 de 2" se lea
+como carga masiva en un cliente chico.
+
+**3. Los rótulos de campo en criollo (Puesto / Centro de costo / Departamento) reemplazan a
+PUESTO/CENTRO_COSTO/DEPTO en toda la pantalla** — ficha, matriz y, de paso, la columna "Campo" de la
+planilla de la tanda 2 (único cambio en esa planilla; el resto no se tocó). Antes cada vista tenía su
+propio nombre de campo; ahora las tres comparten un solo catálogo (`CAMPOS` en
+`js/controls/catXEmpleados.js`).
+
+**4. El orden de la tira de conciliación de la ficha es una cascada restando** (campos del cruce − sin
+comparar → comparados − coinciden → no coinciden), la gramática del §4, y no el orden en que se
+enumeraron los cuatro números al pedir el control.
+
+**El legajo que está en un archivo y no en el otro** sale "sin comparar" y su número grande es "—",
+nunca 0 — la misma regla de D-073, aplicada acá.
+
+**Pendiente de verificación:** `test:unit` en verde entero y el e2e completo en verde (201 passed, 3
+skipped), revisado en Chromium real en los tres temas con el fixture del lote Meta4 — pero **no se pudo
+abrir la pantalla del control dentro de la app entera**, porque hace falta un archivo real de cliente
+para llegar por el camino del analista. Sigue sin generalizarse contra un caso real (D-064).
+
+**Detalle:** `js/controls/catXEmpleados.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`,
+`js/ui/tableTools.js`, `tests/catXEmpleadosControl.test.js`, `tests/e2e/eeCategFichas.spec.js`, D-064,
+D-073, D-074, D-078.

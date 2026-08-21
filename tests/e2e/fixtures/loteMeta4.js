@@ -255,14 +255,19 @@ const RVA_MAPPING = {
 
 // ── EE x CATEG ──────────────────────────────────────────────────────────────
 
+// El puesto se renombró en el sistema de RRHH y no en Meta4: no coincide en 3 de
+// los 5 legajos que están en los dos archivos. Es lo que la solapa "Por campo"
+// tiene que hacer visible de una — no son tres errores de carga, es el archivo.
+// El centro de costo y el departamento, en cambio, fallan en un legajo cada uno:
+// ésos sí son de ese empleado. El 15 tiene los dos casos a la vez.
 const CAT_ROWS = [
-  { ID: '10', APELLIDO: 'SANGUINETTI', NOMBRE: 'JAVIER',      PUESTO: 'ANALISTA',   CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
-  { ID: '11', APELLIDO: 'ALBELLA',     NOMBRE: 'GUSTAVO',     PUESTO: 'OPERARIO',   CC: 'DEPOSITO',       DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
-  { ID: '12', APELLIDO: 'FALCIONI',    NOMBRE: 'JULIO CESAR', PUESTO: 'SUPERVISOR', CC: 'PRODUCCION',     DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
-  { ID: '14', APELLIDO: 'LUCCHETTI',   NOMBRE: 'CRISTIAN',    PUESTO: 'ANALISTA',   CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
-  { ID: '15', APELLIDO: 'ERVITI',      NOMBRE: 'WALTER',      PUESTO: 'ANALISTA',   CC: 'ADMINISTRACION', DEPTO: 'LEGALES',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
-  { ID: '16', APELLIDO: 'SILVA',       NOMBRE: 'SANTIAGO',    PUESTO: 'ANALISTA',   CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/04/2026', 'F. BAJA': '' },
-  { ID: '17', APELLIDO: 'DATOLO',      NOMBRE: 'JESUS',       PUESTO: 'OPERARIO',   CC: 'PRODUCCION',     DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '15/03/2026' },
+  { ID: '10', APELLIDO: 'SANGUINETTI', NOMBRE: 'JAVIER',      PUESTO: 'ANALISTA SR', CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
+  { ID: '11', APELLIDO: 'ALBELLA',     NOMBRE: 'GUSTAVO',     PUESTO: 'OPERARIO',    CC: 'DEPOSITO',       DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
+  { ID: '12', APELLIDO: 'FALCIONI',    NOMBRE: 'JULIO CESAR', PUESTO: 'SUPERVISOR',  CC: 'PRODUCCION',     DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
+  { ID: '14', APELLIDO: 'LUCCHETTI',   NOMBRE: 'CRISTIAN',    PUESTO: 'ANALISTA SR', CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
+  { ID: '15', APELLIDO: 'ERVITI',      NOMBRE: 'WALTER',      PUESTO: 'ANALISTA SR', CC: 'ADMINISTRACION', DEPTO: 'LEGALES',  'F. ALTA': '01/03/2019', 'F. BAJA': '' },
+  { ID: '16', APELLIDO: 'SILVA',       NOMBRE: 'SANTIAGO',    PUESTO: 'ANALISTA',    CC: 'ADMINISTRACION', DEPTO: 'SOPORTE',  'F. ALTA': '01/04/2026', 'F. BAJA': '' },
+  { ID: '17', APELLIDO: 'DATOLO',      NOMBRE: 'JESUS',       PUESTO: 'OPERARIO',    CC: 'PRODUCCION',     DEPTO: 'SOPORTE',  'F. ALTA': '01/03/2019', 'F. BAJA': '15/03/2026' },
 ];
 
 const CAT_MAPPING = {

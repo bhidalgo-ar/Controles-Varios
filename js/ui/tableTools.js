@@ -560,9 +560,14 @@ export function initListPagination(listEl, { pageSize = PAGE_SIZE_DEFAULT, unitL
  * @param {HTMLElement[]} opts.els
  * @param {(row: any) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel='Σ'] - cómo se llama esa suma
+ * @param {number} [opts.amountDecimals=2] - con cuántos decimales se escribe. Es
+ *   2 porque casi siempre es plata; un control que CUENTA (EE x CATEG suma
+ *   campos que no coinciden) pasa 0, para que el KPI diga "3" y no "3,00".
  * @param {string} [opts.unitLabel='fichas']
  */
-export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ', unitLabel = 'fichas' } = {}) {
+export function initListKpis(kpisEl, {
+  rows, els, getAmount, amountLabel = 'Σ', amountDecimals = 2, unitLabel = 'fichas',
+} = {}) {
   if (!kpisEl) return { update() {} };
 
   const pairs = rows.map((row, i) => ({ row, el: els[i] })).filter(p => p.el);
@@ -584,7 +589,7 @@ export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ',
         ? `<strong>${fmtInt(selection.length)}</strong> de ${fmtInt(pairs.length)} ${esc(unitLabel)}`
         : `<strong>${fmtInt(pairs.length)}</strong> ${esc(unitLabel)}`}</span>
       ${getAmount ? `<span class="results-kpi">${esc(amountLabel)} <strong>${
-        suma === null ? '—' : esc(fmtAmount(suma, 2))}</strong></span>` : ''}
+        suma === null ? '—' : esc(fmtAmount(suma, amountDecimals))}</strong></span>` : ''}
     `;
   };
 
@@ -609,16 +614,18 @@ export function initListKpis(kpisEl, { rows, els, getAmount, amountLabel = 'Σ',
  * @param {HTMLElement} [opts.kpisEl]
  * @param {(row: any) => number|null} [opts.getAmount]
  * @param {string} [opts.amountLabel]
+ * @param {number} [opts.amountDecimals] - 0 cuando la Σ es un conteo, no plata
  * @param {string} [opts.unitLabel='fichas']
  * @param {number} [opts.pageSize=50]
  */
 export function wireListTools(listEl, {
-  rows, getLabel, searchEl, kpisEl, getAmount, amountLabel, unitLabel = 'fichas',
+  rows, getLabel, searchEl, kpisEl, getAmount, amountLabel, amountDecimals, unitLabel = 'fichas',
   pageSize = PAGE_SIZE_DEFAULT, label, placeholder,
 } = {}) {
   const pagination = initListPagination(listEl, { pageSize, unitLabel });
   const kpis = initListKpis(kpisEl, {
     rows, els: pagination.items, getAmount, amountLabel, unitLabel,
+    ...(amountDecimals !== undefined ? { amountDecimals } : {}),
   });
 
   const controller = {
