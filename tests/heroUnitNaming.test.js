@@ -29,6 +29,8 @@ globalThis.document = { addEventListener: () => {}, querySelector: () => null, q
 globalThis.window   = { matchMedia: () => ({ matches: false }), addEventListener: () => {} };
 
 const { buildHeroHtml, buildCtrlCardsHtml } = await import('./js/ui/controlsResults.js');
+const { UNIT_NAMES } = await import('./js/ui/controlsResults.js');
+const { RUN_UNITS }  = await import('./js/ui/controlsWizard.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -306,6 +308,26 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     cards.includes('Ver la diferencia →') && cards.includes('Ver los 3 →'));
   assert('tarjeta de Generar Reporte: no inventa unidades',
     cards.includes('Reporte generado'));
+}
+
+
+// ── Las dos tablas de nombres de unidad cubren lo mismo ─────────────────────
+// `UNIT_NAMES` (pantalla de resultados) y `RUN_UNITS` (tarjeta del Paso 3, la
+// última pantalla antes de ver los resultados) nombran la MISMA cosa en dos
+// lugares. Cuando una se queda atrás, esa pantalla llama "unidades" a la unidad
+// del control: le pasó a `cuenta` —el asiento de FINADIET y la Contabilidad
+// Desglosada— que mostraba "273 unidades cruzados".
+{
+  const enResultados = Object.keys(UNIT_NAMES).sort();
+  const enLaCorrida  = Object.keys(RUN_UNITS).sort();
+  assert(`las dos tablas de unidades declaran las mismas (${enResultados.join(', ')})`,
+    enResultados.join(',') === enLaCorrida.join(','));
+  for (const unit of enResultados) {
+    assert(`${unit}: las dos tablas concuerdan en género`,
+      UNIT_NAMES[unit].fem === RUN_UNITS[unit].fem);
+    assert(`${unit}: las dos tablas usan el mismo plural`,
+      UNIT_NAMES[unit].many === RUN_UNITS[unit].many);
+  }
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);

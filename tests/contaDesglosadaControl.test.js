@@ -29,6 +29,13 @@ globalThis.document = { addEventListener: () => {} };
 import * as XLSX from './node_modules/xlsx/xlsx.mjs';
 globalThis.XLSX = XLSX; // el parser usa el global XLSX (como en browser)
 
+// El wizard —de donde sale el texto del renglón del archivo opcional— arrastra
+// `js/db.js`, que instancia Dexie al importarse (mismo arranque que
+// tests/controlConfigRegistry.test.js).
+import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
+globalThis.Dexie = Dexie;
+
 const {
   runContaDesglosada,
   summarizeContaDesglosada,
@@ -39,6 +46,7 @@ const { parseTotalesConcepto, detectHeaders } = await import('./js/parsers/total
 const { parseCuentasRedefinicion } = await import('./js/parsers/cuentasRedefinicionParser.js');
 const { textoAExcepciones } = await import('./js/ui/contaDesglosadaConfigEditor.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
+const { DEFAULT_SIN_ARCHIVO } = await import('./js/ui/controlsWizard.js');
 const { EXPORT_CONTRACTS } = await import('./js/exports/contracts.js');
 
 let ok = 0, fail = 0;
@@ -432,6 +440,15 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   assert('se ofrece sólo a COTY por ahora (D-015)',
     ctrl.scope === 'cliente' && ctrl.scopeMeta.clients.includes('COTY'));
   assert('es una variante "Generar Reporte"', ctrl.group.mode === 'Generar Reporte');
+
+  // El renglón del archivo opcional en el Paso 2 tiene que decir QUÉ se pierde
+  // sin él. Con la frase genérica ("el control corre igual sin este archivo")
+  // la pantalla afirma algo falso: sin el reporte de cuentas no hay asiento, y
+  // el analista se entera recién al ver los resultados, con el entregable a la
+  // mitad. Fue exactamente lo que pasó la primera vez que se corrió de verdad.
+  const sinArchivo = DEFAULT_SIN_ARCHIVO[ctrl.additionalFiles[1].fileType];
+  assert('el renglón del reporte de cuentas dice qué se pierde sin él', !!sinArchivo);
+  assert('…y nombra el asiento, que es lo que no se arma', /asiento/i.test(sinArchivo || ''));
 
   for (const id of ['conta_desglosada', 'conta_desglosada_codigo', 'conta_asiento']) {
     assert(`${id}: tiene contrato de export`, !!EXPORT_CONTRACTS[id]);

@@ -388,7 +388,7 @@ function buildColumnWarningsHtml(avisos) {
 // el resumen nombra la unidad, y nombrarla mal es peor que no nombrarla — un
 // control por centro de costo mostraba "0 legajos verificados sin diferencias".
 // `fem` es el género del sustantivo, para concordar "verificado/verificada".
-const UNIT_NAMES = {
+export const UNIT_NAMES = {
   legajo: { one: 'legajo',          many: 'legajos',           fem: false },
   cc:     { one: 'centro de costo', many: 'centros de costo',  fem: false },
   cuenta: { one: 'cuenta contable', many: 'cuentas contables', fem: true  },

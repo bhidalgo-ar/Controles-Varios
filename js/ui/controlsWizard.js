@@ -1115,11 +1115,18 @@ function wireThresholdsSection(container, state) {
  * "(opcional)" de antes: el analista no tiene por qué saber qué le aporta un
  * archivo que nunca cargó, y "opcional" no se lo dice.
  *
- * Un tipo que no esté acá cae a la frase genérica — que sigue siendo verdad,
- * sólo que menos útil. Inventarle un detalle sería peor.
+ * Un tipo que no esté acá cae a la frase genérica. **Y esa frase afirma algo:
+ * que el control produce lo mismo sin el archivo.** Cuando no es cierto —el
+ * Reporte de Cuentas de la Contabilidad Desglosada, sin el cual no hay asiento—
+ * declarar la entrada NO es cosmética: sin ella la pantalla le dice al analista
+ * que puede seguir de largo y el entregable sale a la mitad, sin que nada avise
+ * hasta ver los resultados. Lo que no se puede es inventarle un detalle a un
+ * archivo cuyo aporte no se conoce: ahí la frase genérica es lo correcto.
  */
-const DEFAULT_SIN_ARCHIVO = {
+export const DEFAULT_SIN_ARCHIVO = {
   cc_x_ee_file: 'Sin él, el centro de costo de cada empleado sale del asiento contable.',
+  cuentas_redefinicion_file:
+    'Sin él sale la Contabilidad Desglosada, pero NO el Asiento Contable: el código de cada cuenta sale de acá.',
 };
 
 /**
@@ -2383,7 +2390,29 @@ function runWarningSources(state) {
   return files;
 }
 
-const RUN_UNIT_PLURAL = { legajo: 'legajos', cc: 'centros de costo', lista: 'listas' };
+// Cómo nombra la tarjeta de la corrida la unidad de cada control, con su género
+// para concordar el participio ("cuentas contables cruzadas", no "cruzados").
+// Tiene que cubrir TODAS las unidades que declaran los controles (`summary.unit`,
+// ver la tabla gemela `UNIT_NAMES` de controlsResults.js): a la que falte, esta
+// pantalla la llama "unidades", que es la unidad de nadie. Le pasó a `cuenta`
+// —el asiento de FINADIET y la Contabilidad Desglosada—, que mostraban "273
+// unidades cruzados" en la última pantalla antes de ver los resultados.
+// Deuda anotada: son dos tablas para lo mismo y se desincronizan así; unificarlas
+// es un cambio que toca las dos pantallas y no entra en este arreglo.
+export const RUN_UNITS = {
+  legajo: { many: 'legajos',           fem: false },
+  cc:     { many: 'centros de costo',  fem: false },
+  cuenta: { many: 'cuentas contables', fem: true  },
+  // 'listados', no 'listas': es como los nombra la pantalla de resultados
+  // (Acreditaciones). La tabla vieja de acá decía 'listas' y las dos pantallas
+  // de la misma corrida llamaban distinto a lo mismo.
+  lista:  { many: 'listados',          fem: false },
+};
+
+/** Nombre plural de una unidad, o `null` si no está declarada. */
+function runUnitPlural(unit) {
+  return RUN_UNITS[unit]?.many || null;
+}
 
 function formatSeconds(ms) {
   // Un control chico corre en milisegundos y "0,0 s" se lee como si no hubiera
@@ -2398,7 +2427,7 @@ function runCardBadge(u) {
   if (u.summary.status === 'error') return { tone: 'error', text: 'no se pudo completar' };
   const n = u.summary.unitsWithDiff || 0;
   if (n === 0) return { tone: 'ok', text: 'sin diferencias' };
-  const unidad = RUN_UNIT_PLURAL[u.summary.unit] || `${u.summary.unit || 'unidad'}s`;
+  const unidad = runUnitPlural(u.summary.unit) || `${u.summary.unit || 'unidad'}s`;
   return {
     tone: u.tier === 'error' ? 'error' : 'warn',
     text: `${n.toLocaleString('es-AR')} ${n === 1 ? (u.summary.unit || 'unidad') : unidad} con diferencia`,
@@ -2477,8 +2506,10 @@ function renderRunScreen(container, state, ui, root) {
 function runCardHtml(u, ui) {
   if (u.status === 'done') {
     const badge  = runCardBadge(u);
+    const nombre   = runUnitPlural(u.summary?.unit);
     const cruzados = u.summary?.unitsTotal != null
-      ? `${u.summary.unitsTotal.toLocaleString('es-AR')} ${RUN_UNIT_PLURAL[u.summary.unit] || 'unidades'} cruzados · `
+      ? `${u.summary.unitsTotal.toLocaleString('es-AR')} ${nombre || 'unidades'} `
+        + `cruzad${RUN_UNITS[u.summary?.unit]?.fem || !nombre ? 'a' : 'o'}s · `
       : '';
     return `
       <div class="run-card run-card--done">
