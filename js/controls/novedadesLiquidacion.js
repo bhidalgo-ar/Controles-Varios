@@ -39,9 +39,10 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { isDiff } from './tolerance.js';
 import { diffStats } from './semaforo.js';
-import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks }
+import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, fmtSigned }
   from '../ui/resultBlocks.js';
 import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -66,6 +67,12 @@ export const DEFAULT_NOV_LIQ_CONFIG = () => ({
 // con $ 100 tres horas de más desaparecerían detrás del umbral. El importe sí
 // se mide con `isDiff()`, o sea con el monto que puso el analista (D-069).
 const CANTIDAD_EPS = 0.01;
+
+// El redondeo de Meta4/Axton, el piso de todo el repo. Acá se usa para PINTAR
+// —¿este número es distinto de cero, hay que darle color?— y no para decidir si
+// algo es una diferencia: eso lo decide `isDiff()` con el monto que puso el
+// cliente (D-069), y la banda del par ya viene decidida del cruce.
+const CENTAVO = 0.01;
 
 const BANDA_LABEL = {
   coincide:        'Coincide',
@@ -693,7 +700,10 @@ export function renderNovedadesLiquidacionResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'novedades_liquidacion',
+    // Con diferencias lo primero que se ve es POR QUÉ falla (§2): abre en Fichas.
+    conDiferencias: (results.summary?.difiere ?? 0) > 0,
     resumen: (panel) => renderResumen(results, panel),
+    fichas: (panel) => renderNovLiqFichas(results, panel),
     detalle: (panel) => renderDetalle(results, panel),
   });
 }
@@ -1027,6 +1037,406 @@ function tablaHtml(filas, vista) {
     </p>
   `;
 }
+
+// ── Solapa Fichas (§4 de specs/vista-estandar-resultados.md) ─────────────────
+//
+// La unidad del cruce es legajo × concepto, así que la tabla del Detalle tiene
+// una fila por par y un legajo con seis novedades aparece seis veces, repartido
+// además entre cuatro tablas —una por banda—. La ficha invierte eso: un legajo
+// por tarjeta, con sus novedades adentro y las cuatro bandas juntas, que es la
+// única forma de ver que la misma persona tiene una diferencia Y una novedad sin
+// contraparte.
+//
+// La ficha no recalcula nada: `runNovedadesLiquidacion()` ya publica cada par
+// con su banda, su motivo y sus dos diferencias. Acá se agrupan por legajo, se
+// suman los dos lados y se escribe qué hacer.
+//
+// **Dos cosas que ya están decididas y la ficha no puede pisar (D-070/D-073):**
+//   - El legajo del que no se pudo comparar NADA no queda aprobado. Nunca sale
+//     en verde y la conclusión lo dice con esas palabras.
+//   - "No comparable" se informa CON SU MOTIVO. El motivo va en la tabla de
+//     detalle y, cuando es la causa principal del legajo, entero en la
+//     conclusión: nunca escondido detrás de un guión.
+
+/**
+ * En qué estado cerró un legajo, para los cinco chips. Gana el peor de sus
+ * novedades: `difiere` es "Con diferencia", `coincide` se parte entre el centavo
+ * y el margen, y todo lo demás —no comparable, sin contraparte— es "Sin
+ * comparar", que es ámbar y nunca se lee como aprobado.
+ *
+ * **Ojo con el conteo del semáforo**: el numerador de `summarize` deja afuera al
+ * legajo cuyas novedades son TODAS conceptos que el analista marcó como que no
+ * llegan a la liquidación (D-070). Ese legajo igual cae en "Sin comparar" acá,
+ * porque en efecto no se comparó nada — no es una contradicción: el chip dice
+ * cómo cerró el caso y el semáforo dice si hay que revisarlo. La ficha lo aclara
+ * en su badge y en su conclusión.
+ */
+const ORDEN_ESTADO_NL = ['conDif', 'sinComparar', 'margen', 'centavo'];
+
+function estadoDeNovedadFicha(f) {
+  if (f.banda === 'difiere') return 'conDif';
+  if (f.banda !== 'coincide') return 'sinComparar';
+  const dImp  = Math.abs(f.difImporte ?? 0);
+  const dCant = Math.abs(f.difCantidad ?? 0);
+  return (dImp <= CANTIDAD_EPS && dCant <= CANTIDAD_EPS) ? 'centavo' : 'margen';
+}
+
+function estadoDeFichaNovLiq(filas) {
+  let peor = null;
+  for (const f of filas) {
+    const e = estadoDeNovedadFicha(f);
+    if (peor === null || ORDEN_ESTADO_NL.indexOf(e) < ORDEN_ESTADO_NL.indexOf(peor)) peor = e;
+  }
+  return peor ?? 'sinComparar';
+}
+
+const SEVERIDAD_NL = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+/**
+ * El segundo eje: qué MÁS le pasa al legajo, que no es cómo cerró. De acá salen
+ * las pills de cada tarjeta y el desplegable `Marcas ▾` de la barra — la misma
+ * lista y el mismo criterio, para que el filtro y la tarjeta nombren lo mismo.
+ */
+const MARCAS_NOV_LIQ = [
+  { value: 'sinContraparte', label: 'Novedad sin contraparte', tone: 'info',
+    match: f => f.filas.some(x => x.lado === 'solo_novedad' && x.motivo !== 'sin_liquidacion_esperada') },
+  { value: 'sinNovedad', label: 'Liquidado sin novedad', tone: 'info',
+    match: f => f.filas.some(x => x.lado === 'solo_liquidacion') },
+  { value: 'noComparable', label: 'No se pudo comparar', tone: 'info',
+    match: f => f.filas.some(x => x.banda === 'no_comparable') },
+  { value: 'nadaComparado', label: 'Nada comparado', tone: 'info',
+    match: f => f.nadaComparado },
+  { value: 'parcial', label: 'Comparado por una sola medida', tone: 'neutral',
+    match: f => f.filas.some(x => x.parcial) },
+  { value: 'esperado', label: 'Esperado: no llega a la liquidación', tone: 'neutral',
+    match: f => f.filas.some(x => x.motivo === 'sin_liquidacion_esperada') },
+  { value: 'sinLiquidacion', label: 'Sin liquidación en el mes', tone: 'neutral',
+    match: f => f.filas.some(x => x.motivo === 'legajo_sin_liquidacion') },
+  { value: 'delTotalizador', label: 'Dato del totalizador', tone: 'neutral',
+    match: f => f.filas.some(x => x.liqCantidadOrigen === 'totalizador' || x.liqImporteOrigen === 'totalizador') },
+];
+
+const NO_APLICA_FICHA_NL = {};
+
+/** Los descriptores de ficha: uno por legajo del cruce. Exportada para el
+ *  test: es donde se decide qué dice cada tarjeta. */
+export function buildFichasNovLiq(results) {
+  const sinNada = new Set(results.legajosSinNadaComparado || []);
+  const porLegajo = new Map();
+  for (const f of results.filas || []) {
+    if (!porLegajo.has(f.clave)) porLegajo.set(f.clave, []);
+    porLegajo.get(f.clave).push(f);
+  }
+
+  return [...porLegajo.entries()].map(([clave, filas]) => {
+    const primera = filas[0];
+    const difiere = filas.filter(f => f.banda === 'difiere');
+    // "Comparado por importe" es el subconjunto donde los DOS lados trajeron
+    // importe: es el único donde `pedido − liquidado` da exactamente la
+    // diferencia, y por eso es el que arma la cascada.
+    const conImporte = filas.filter(f => f.difImporte !== null);
+    const conCantidad = filas.filter(f => f.difCantidad !== null);
+
+    const base = {
+      id: primera.legajo,
+      clave,
+      name: primera.nombre || `Legajo ${primera.legajo}`,
+      filas,
+      difiere,
+      comparadas: filas.filter(f => f.banda === 'coincide' || f.banda === 'difiere'),
+      nadaComparado: sinNada.has(clave),
+      pedidoTotal:  sumaNullable(filas.map(f => f.novImporte)),
+      pedidoComp:   sumaNullable(conImporte.map(f => f.novImporte)),
+      liquidadoComp: sumaNullable(conImporte.map(f => f.liqImporte)),
+      difImporte:   sumaNullable(conImporte.map(f => f.difImporte)),
+      difCantidad:  sumaNullable(conCantidad.map(f => f.difCantidad)),
+      conImporte,
+      conCantidad,
+    };
+    // Lo que hay para revisar: la suma en valor absoluto de las diferencias de
+    // importe que pasan el monto del cliente — el mismo número que totaliza el
+    // Resumen (`difImporteTotal`), así que el KPI de la barra y el tile coinciden.
+    base.aRevisar = difiere.reduce((s, f) =>
+      s + (f.difImporte !== null && isDiff(f.difImporte) ? Math.abs(f.difImporte) : 0), 0);
+    base.hayDifImporte = difiere.some(f => f.difImporte !== null && isDiff(f.difImporte));
+    base.hayDifCantidad = difiere.some(f => f.difCantidad !== null && Math.abs(f.difCantidad) > CANTIDAD_EPS);
+    base.estado = estadoDeFichaNovLiq(filas);
+    return { ...base, ...presentacionNovLiq(base, results) };
+  });
+}
+
+function presentacionNovLiq(f, results) {
+  const sev = SEVERIDAD_NL[f.estado] || 'info';
+  const cuenta = { coincide: 0, difiere: 0, no_comparable: 0, sin_contraparte: 0 };
+  for (const x of f.filas) cuenta[x.banda] += 1;
+  const liquidaciones = Math.max(0, ...f.filas.map(x => x.tabLiquidaciones || 0));
+
+  return {
+    unit: f.id,
+    severity: sev,
+    // La unidad organizativa la declara el archivo, no la fila: viene como
+    // `{ numero, nombre }` y hay que armarla — pasarla tal cual dejaba un
+    // "[object Object]" en la línea de identidad de todas las tarjetas.
+    tag: unidadTag(results.unidadOrganizativa),
+    badge: badgeNovLiq(f),
+    // Las cuatro bandas del cruce, en la línea de contexto: es lo que dice de
+    // una sola lectura si el legajo tiene una diferencia, o algo que ni se miró.
+    context: [
+      `${f.filas.length} novedad${f.filas.length === 1 ? '' : 'es'} cruzada${f.filas.length === 1 ? '' : 's'}`,
+      ...['difiere', 'no_comparable', 'sin_contraparte', 'coincide']
+        .filter(b => cuenta[b] > 0)
+        .map(b => `${cuenta[b]} ${BANDA_LABEL[b].toLowerCase()}`),
+      // Cuántas liquidaciones del mes se sumaron: es el dato que explica por qué
+      // el número liquidado no es el de una sola fila del Tabulado (D-042).
+      liquidaciones > 1 ? `${liquidaciones} liquidaciones del mes sumadas` : null,
+    ],
+    marks: MARCAS_NOV_LIQ.filter(m => m.match(f)).map(m => ({ text: m.label, tone: m.tone })),
+    amountLabel: 'A revisar',
+    amount: f.aRevisar,
+    // El rojo lo pinta la PLATA en juego, no la severidad: un legajo cuya única
+    // diferencia son tres horas tiene $ 0,00 para revisar, y un 0,00 en rojo se
+    // lee como una contradicción. Qué le pasa lo dice el badge y la tira.
+    amountTone: f.aRevisar > 0 ? 'error' : (sev === 'error' || sev === 'warn') ? 'warn' : undefined,
+    body: {
+      // 1. La tira: lo pedido contra lo liquidado. La segunda pastilla dice
+      //    cuánto de lo pedido se pudo comparar de verdad por importe — es la
+      //    única resta que cierra exacta, y la distancia con la primera es
+      //    justamente lo que quedó sin mirar. Las dos diferencias van al final,
+      //    cada una con su medida: la cantidad no es plata y no se mide con el
+      //    monto del cliente (D-069).
+      strip: [
+        { label: 'Pedido', value: f.pedidoTotal },
+        { label: `Comparado · ${f.conImporte.length} de ${f.filas.length}`, value: f.pedidoComp },
+        { label: 'Liquidado', value: f.liquidadoComp, invert: true },
+        { label: 'Δ importe', value: f.difImporte, residuo: f.hayDifImporte },
+        { label: 'Δ cantidad', value: f.difCantidad, residuo: f.hayDifCantidad },
+      ],
+      // 2. El detalle: un renglón por novedad, con su CÓDIGO de concepto, las
+      //    dos medidas de los dos lados, y —para lo que no se comparó— el motivo
+      //    escrito en la misma fila.
+      detail: {
+        title: 'Novedad por novedad — lo pedido, lo liquidado y por qué',
+        columns: [
+          { key: 'concepto', label: 'Concepto' },
+          { key: 'estado', label: 'Cómo cerró · por qué' },
+          { key: 'cantNov', label: 'Cant. pedida', num: true },
+          { key: 'cantLiq', label: 'Cant. liq.', num: true },
+          { key: 'difCant', label: 'Δ cant.', num: true },
+          { key: 'impNov', label: 'Imp. pedido', num: true },
+          { key: 'impLiq', label: 'Imp. liq.', num: true },
+          { key: 'difImp', label: 'Δ importe', num: true },
+        ],
+        rows: ordenarNovedades(f.filas).map(x => ({
+          concepto: x.rotulo ? `${x.codigo} · ${x.rotulo}` : String(x.codigo),
+          estado: estadoTextoNovLiq(x),
+          cantNov: x.novCantidad, cantLiq: x.liqCantidad, difCant: x.difCantidad,
+          impNov: x.novImporte, impLiq: x.liqImporte, difImp: x.difImporte,
+          tone: toneNovLiq(x),
+        })),
+        foot: { label: 'Δ importe de lo comparado', value: f.difImporte, key: 'difImp' },
+      },
+      // 3. La conclusión: qué mirar, sin repetir el importe que ya se ve arriba.
+      conclusion: conclusionNovLiq(f),
+    },
+  };
+}
+
+/** Peor primero: lo que difiere arriba, después lo que no se pudo comparar o no
+ *  tiene contraparte, y al final lo que coincidió. */
+const RANGO_BANDA_NL = { difiere: 0, sin_contraparte: 1, no_comparable: 2, coincide: 3 };
+
+function ordenarNovedades(filas) {
+  return [...filas].sort((a, b) => {
+    const ra = RANGO_BANDA_NL[a.banda] ?? 9;
+    const rb = RANGO_BANDA_NL[b.banda] ?? 9;
+    if (ra !== rb) return ra - rb;
+    return Math.abs(b.difImporte ?? 0) - Math.abs(a.difImporte ?? 0);
+  });
+}
+
+/**
+ * Cómo cerró esa novedad y —cuando no se comparó— por qué, en la misma celda.
+ * El motivo va acá y no en un `title`: "no comparable" sin el motivo es lo mismo
+ * que no decir nada (D-070).
+ */
+function estadoTextoNovLiq(x) {
+  const banda = BANDA_LABEL[x.banda] || x.banda;
+  const motivo = x.motivo ? (MOTIVO_CORTO[x.motivo] || x.motivo) : null;
+  const parcial = x.parcial ? ' (una sola medida)' : '';
+  return motivo ? `${banda} — ${motivo}${parcial}` : `${banda}${parcial}`;
+}
+
+/** Verde suave lo que se pidió de más, rojo suave lo que se liquidó de más. Se
+ *  mira el importe, y si esa novedad no lo tiene, la cantidad. */
+function toneNovLiq(x) {
+  const v = x.difImporte !== null ? x.difImporte : x.difCantidad;
+  const eps = x.difImporte !== null ? CENTAVO : CANTIDAD_EPS;
+  if (v === null || v === undefined || Math.abs(v) <= eps) return undefined;
+  return v > 0 ? 'pos' : 'neg';
+}
+
+/** La causa principal, en una línea. */
+function badgeNovLiq(f) {
+  if (f.difiere.length > 0) {
+    const peor = ordenarNovedades(f.difiere)[0];
+    // La medida que EFECTIVAMENTE difiere, no la primera que exista: un concepto
+    // que cerró en importe y difiere en tres horas mostraba "0,00" en el badge,
+    // que es lo contrario de decir qué le pasa al caso.
+    const porImporte = peor.difImporte !== null && isDiff(peor.difImporte);
+    const v = porImporte ? peor.difImporte : peor.difCantidad;
+    const unidad = porImporte ? '' : ' de cantidad';
+    return {
+      text: `${peor.codigo} ${fmtSigned(v)}${unidad}`,
+      title: `${peor.rotulo || peor.codigo}: se pidió ${v !== null && v > 0 ? 'más' : 'menos'} `
+        + `${porImporte ? 'plata' : 'cantidad'} de lo que se liquidó.`,
+      tone: 'error',
+    };
+  }
+  if (f.nadaComparado) return { text: 'No se pudo comparar nada', tone: 'warn' };
+  const soloEsperado = f.filas.every(x => x.motivo === 'sin_liquidacion_esperada');
+  if (soloEsperado) return { text: 'Todo declarado sin liquidación', tone: 'info' };
+  const sinContra = f.filas.filter(x => x.banda === 'sin_contraparte').length;
+  if (sinContra > 0) return { text: `${sinContra} sin contraparte`, tone: 'warn' };
+  const noComp = f.filas.filter(x => x.banda === 'no_comparable').length;
+  if (noComp > 0) return { text: `${noComp} sin poder comparar`, tone: 'warn' };
+  if (f.estado === 'margen') return { text: 'Dentro del monto de diferencia', tone: 'info' };
+  return { text: 'Todo coincide', tone: 'ok' };
+}
+
+/** El tag de contexto: lo que el archivo declara como unidad organizativa. */
+function unidadTag(u) {
+  if (!u) return undefined;
+  const text = typeof u === 'string' ? u : [u.numero, u.nombre].filter(Boolean).join(' · ');
+  return text ? { text } : undefined;
+}
+
+/**
+ * No un resumen: una instrucción. Descarta lo que ya cerró y —cuando lo que hay
+ * es algo que no se pudo comparar— escribe el motivo completo, que es lo único
+ * que le dice al analista qué archivo abrir.
+ */
+function conclusionNovLiq(f) {
+  const coinciden = f.filas.filter(x => x.banda === 'coincide').length;
+  const yaCierran = coinciden === 0 ? ''
+    : coinciden === 1
+      ? ' La otra novedad de este legajo ya coincide: no hace falta mirarla.'
+      : ` Las otras ${coinciden} novedades de este legajo ya coinciden: no hace falta mirarlas.`;
+
+  if (f.difiere.length > 0) {
+    const peor = ordenarNovedades(f.difiere)[0];
+    const cuales = f.difiere.map(x => x.rotulo ? `${x.codigo} (${x.rotulo})` : x.codigo).join(', ');
+    const enCantidad = f.hayDifCantidad && !f.hayDifImporte
+      ? ' La diferencia está en la CANTIDAD, no en el importe: la cantidad se mide al centésimo y no con el '
+        + 'monto de diferencia del cliente, porque no es plata.'
+      : '';
+    return {
+      tone: 'error',
+      title: f.hayDifImporte
+        ? `Quedan ${fmtNum(f.aRevisar)} de diferencia en ${f.difiere.length} novedad${f.difiere.length === 1 ? '' : 'es'}`
+        : `${f.difiere.length} novedad${f.difiere.length === 1 ? '' : 'es'} no coincide${f.difiere.length === 1 ? '' : 'n'} con la liquidación`,
+      text: `Compará el importador contra la liquidación en ${cuales} para este legajo: `
+        + `${origenDetalle(peor)}.${enCantidad}`
+        + ' Si el importador es el que está mal, se corrige y se vuelve a subir; si la liquidación es la que está '
+        + 'mal, va a ajuste.' + yaCierran,
+    };
+  }
+
+  if (f.nadaComparado) {
+    const motivos = [...new Set(f.filas.map(x => x.motivo).filter(Boolean))]
+      .map(m => MOTIVO_LABEL[m] || m);
+    return {
+      tone: 'warn',
+      title: 'De este legajo no se pudo comparar ninguna novedad',
+      text: `Por qué: ${motivos.join('; ')}. No tener con qué comparar no es aprobar, así que este legajo `
+        + 'cuenta como para revisar aunque no tenga ninguna diferencia. Resolvé el motivo —cargá el reporte de '
+        + 'Totales de Concepto, mapeá la columna que falta, o marcá el concepto en el Paso 2— y volvé a correr.',
+    };
+  }
+
+  const sinContra = f.filas.filter(x => x.banda === 'sin_contraparte'
+    && x.motivo !== 'sin_liquidacion_esperada');
+  const noComp = f.filas.filter(x => x.banda === 'no_comparable');
+
+  if (sinContra.length > 0 || noComp.length > 0) {
+    const detalle = [...sinContra, ...noComp].map(x =>
+      `${x.codigo}${x.rotulo ? ` (${x.rotulo})` : ''}: ${MOTIVO_LABEL[x.motivo] || x.motivo}`);
+    return {
+      tone: 'warn',
+      title: sinContra.length > 0
+        ? `${sinContra.length} novedad${sinContra.length === 1 ? '' : 'es'} sin contraparte en la liquidación`
+        : `${noComp.length} novedad${noComp.length === 1 ? '' : 'es'} que no se pudo comparar`,
+      text: `${detalle.join('. ')}. Ninguna de estas bloquea ni aprueba: se informan con su motivo. `
+        + 'Nada se convierte de horas a días ni al revés — si la unidad es la que no coincide, se marca el '
+        + 'concepto en el Paso 2 y sale declarado en vez de sin explicar.' + yaCierran,
+    };
+  }
+
+  const soloEsperado = f.filas.length > 0 && f.filas.every(x => x.motivo === 'sin_liquidacion_esperada');
+  if (soloEsperado) {
+    return {
+      tone: 'info',
+      title: 'Todas sus novedades son conceptos que no llegan a la liquidación',
+      text: 'Están marcados así en el Paso 2, así que no hay nada que comparar por decisión tuya y no por un '
+        + 'hueco de los archivos: por eso este legajo no cuenta como para revisar. Si alguno de estos conceptos '
+        + 'sí tenía que liquidarse, saca la marca en el Paso 2 y volvé a correr.',
+    };
+  }
+
+  const parciales = f.filas.filter(x => x.parcial).length;
+  if (f.estado === 'margen') {
+    return {
+      tone: 'info',
+      title: 'Todo queda dentro del monto de diferencia del cliente',
+      text: 'Las novedades de este legajo no coinciden exactamente pero ninguna diferencia llega al monto '
+        + 'configurado en «Umbrales». No hay nada que corregir; si querés verlas, bajá el monto.',
+    };
+  }
+
+  return {
+    tone: 'ok',
+    title: 'Lo pedido es lo que se liquidó',
+    text: (f.filas.length === 1
+      ? 'La única novedad de este legajo coincide con la liquidación del período.'
+      : `Las ${f.filas.length} novedades de este legajo coinciden con la liquidación del período.`)
+      + (parciales > 0
+        ? ` Ojo: ${parciales} se comparó por una sola medida (una de las dos, cantidad o importe, la trae un solo `
+          + 'archivo), así que la aprobación no es completa.'
+        : ''),
+  };
+}
+
+function renderNovLiqFichas(results, panel) {
+  const fichas = buildFichasNovLiq(results);
+
+  renderFichasPanel(panel, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_FICHA_NL,
+    marcas: MARCAS_NOV_LIQ,
+    ordenes: [
+      { value: 'aRevisar', label: 'Mayor diferencia', compare: (a, b) => b.aRevisar - a.aRevisar },
+      { value: 'novedades', label: 'Más novedades cruzadas', compare: (a, b) => b.filas.length - a.filas.length },
+      { value: 'legajo', label: 'Legajo', compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+      { value: 'nombre', label: 'Nombre', compare: (a, b) => String(a.name).localeCompare(String(b.name)) },
+    ],
+    getLabel: f => `${f.id} — ${f.name}`,
+    getAmount: f => f.aRevisar,
+    amountLabel: 'Σ a revisar',
+    onExport: (exportEl) => mountNovLiqExportMenu(exportEl, results),
+  });
+}
+
+/** Los tres ítems del ⬇ Exportar ▾ — el cruce completo, con las cuatro bandas. */
+function mountNovLiqExportMenu(exportEl, results) {
+  const plano = () => buildCrucePlano(results);
+  renderExportMenu(exportEl, {
+    onExcel: () => descargarCruce(results),
+    onCsv: () => { const p = plano(); downloadCsv(p.headers, p.rows, nombreArchivo(results, 'csv')); },
+    onCopy: () => { const p = plano(); copyRowsToClipboard(p.headers, p.rows); },
+  });
+}
+
 
 // ── Export ───────────────────────────────────────────────────────────────────
 

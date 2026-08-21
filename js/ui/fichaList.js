@@ -113,6 +113,8 @@ export function fichaCardHtml(ficha) {
 //     strip:      [{ label, value, tone?, invert?: true, residuo?: true }],
 //     tables:     [{ title, rows: [{ label, code?, value }], foot? }],  // 0 a 2
 //     detail:     { title?, columns: [{ key, label, num? }], rows, foot? },
+//                 foot = { label, value, key? }: `key` nombra la columna donde cae
+//                 el total, para el detalle que sigue con otra columna después
 //     conclusion: { tone?, title, text },
 //   }
 
@@ -178,6 +180,12 @@ function tableHtml(t) {
 /** El detalle línea por línea, con el efecto de cada línea sobre lo que se controla. */
 function detailHtml(d) {
   const cols = d.columns || [];
+  // En qué columna cae el total del pie. Por default en la última, que es donde
+  // termina la cuenta cuando el detalle es "concepto → importe"; con `foot.key`
+  // el control dice cuál es su columna de cierre, para el detalle que sigue con
+  // una columna más después del número (el % de variación, un motivo).
+  const footAt = d.foot?.key ? cols.findIndex(c => c.key === d.foot.key) : cols.length - 1;
+  const footIdx = footAt < 1 ? cols.length - 1 : footAt;
   return `
     <div class="ficha-detail">
       ${d.title ? `<div class="ficha-table__title">${esc(d.title)}</div>` : ''}
@@ -195,8 +203,9 @@ function detailHtml(d) {
         </tbody>
         ${d.foot ? `<tfoot>
           <tr class="ficha-table__foot ficha-table__foot--ink">
-            <td colspan="${Math.max(1, cols.length - 1)}">${esc(d.foot.label)}</td>
+            <td colspan="${footIdx}">${esc(d.foot.label)}</td>
             <td class="ficha-table__num">${esc(fmtCell(d.foot.value))}</td>
+            ${cols.slice(footIdx + 1).map(c => `<td${c.num ? ' class="ficha-table__num"' : ''}></td>`).join('')}
           </tr>
         </tfoot>` : ''}
       </table>
