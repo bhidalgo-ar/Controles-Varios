@@ -7,6 +7,51 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(ee-categ): ficha por legajo y matriz campo × legajo ("Por campo") — 2026-08-21
+
+- **Es la tanda 6 de `specs/vista-estandar-resultados.md`** (D-082, §9 punto 6), en la rama
+  `feat/vista-estandar-ee-categ` (PR #184), sobre la tanda 2 (D-078) — **todavía sin mergear**: esta rama sale de
+  esa, así que no se puede mergear antes que ella. **El PR de esta tanda también queda en borrador.**
+- **EE x CATEG suma la solapa Fichas.** Hasta ahora el detalle era una fila por campo que no coincidía,
+  así que un legajo con tres campos mal aparecía tres veces y no se lo podía ver entero. Ahora es una
+  tarjeta por legajo: cerrada muestra legajo, nombre y cuántos campos no coinciden; abierta trae la tira
+  de conciliación —acá no es una cascada de importes sino el conteo de campos del cruce: sin comparar →
+  comparados → coinciden → no coinciden—, un renglón por campo con el valor de cada lado marcando el que
+  difiere, y una conclusión que dice si el problema parece de ese empleado o de una carga masiva.
+- **Cuarta solapa "Por campo": la matriz campo × legajo.** Filas = Puesto, Centro de costo, Departamento,
+  con en cuántos legajos no coincide cada uno, el % sobre los comparados, cuántos coinciden, cuántos
+  quedaron sin comparar, y un badge ("Parece una carga masiva" / "Casos puntuales" / "Coincide en todos" /
+  "No se pudo comparar"). Ordenada de peor a mejor. Sin fila de TOTAL: sumar "legajos comparados" de tres
+  campos daría 300 sobre 100 empleados.
+- **El legajo que está en un archivo y no en el otro** sale como "sin comparar" en la ficha y en la
+  matriz, y su número grande es "—", nunca 0 (D-073). Ningún conteo del semáforo cambió: la unidad sigue
+  siendo el legajo.
+- **La planilla de la tanda 2 (las tres tablas de diferencias fundidas en una, con columna "Qué pasa") no
+  se tocó.** Cambio cosmético: la columna "Campo" dice "Centro de costo" en vez de "CENTRO_COSTO", porque
+  ahora ese rótulo se comparte con la ficha y la matriz.
+- **Una corrida guardada antes de este cambio no rompe la pantalla.** Las corridas se guardan en la base
+  y se vuelven a dibujar tal cual; las viejas sólo tienen los campos que NO coincidían, y con eso no se
+  puede armar la ficha ni la matriz sin inventar los que sí coincidían. Ahí esas dos solapas no se
+  ofrecen y el Resumen dice que hay que volver a correr el control con los mismos archivos.
+- Piezas compartidas, chicas y genéricas: el número grande de la ficha (`js/ui/fichaList.js`) acepta un
+  conteo además de un importe; el KPI de la selección (`js/ui/tableTools.js`) acepta `amountDecimals: 0`;
+  `renderResumenDetalle()` (`js/ui/resultBlocks.js`) acepta `extraTabs` para la solapa que la spec le
+  reconoce por nombre a un control en el mapa del §8.
+- `js/controls/catXEmpleados.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`, `js/ui/tableTools.js`.
+  `tests/catXEmpleadosControl.test.js` pasa de 8 a 35 asserts; `tests/vistaEstandar.test.js` suma 2;
+  nuevo e2e `tests/e2e/eeCategFichas.spec.js` (12 tests); se adapta `tests/e2e/loteMeta4.spec.js` (de la
+  tanda 2) para buscar la solapa Planilla por nombre y no por posición, y para mirar sólo el panel de la
+  solapa activa; el fixture `tests/e2e/fixtures/loteMeta4.js` suma un campo con carga masiva (el puesto no
+  coincide en 3 de 5 legajos) para que las cuatro lecturas se vean en pantalla. `test:unit` verde entero,
+  e2e completo verde (201 passed, 3 skipped), revisado en Chromium en los tres temas con el fixture del
+  lote Meta4. **No se pudo llegar a la pantalla del control dentro de la app entera**: hace falta un
+  archivo real de cliente.
+- **Tres decisiones tomadas sin Willy presente, a confirmar** (D-082): cuatro solapas y no tres para este
+  control; el corte de "carga masiva" (un tercio de los legajos comparados y al menos 3); y los rótulos de
+  campo en criollo (Puesto / Centro de costo / Departamento) reemplazando a PUESTO/CENTRO_COSTO/DEPTO en
+  toda la pantalla.
+- Ver `specs/vista-estandar-resultados.md` (§2, §7, §8 y §9 al día), **D-082**.
+
 ### feat(ui): barra estándar y planilla con bandas en las diez pantallas del lote Meta4/Marval — 2026-08-20
 
 - **Es la tanda 2 de `specs/vista-estandar-resultados.md`** (D-078, §9 punto 2): Brutos, GS Pers y

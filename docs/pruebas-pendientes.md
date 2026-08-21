@@ -1,4 +1,4 @@
-# Pruebas pendientes de tu lado — auditoría al 2026-08-20
+# Pruebas pendientes de tu lado — auditoría al 2026-08-21
 
 > **Qué es esto.** Todo lo que se construyó y mergeó y que **ninguna persona probó todavía con un
 > archivo real**. Agrupado por control o reporte, no por PR: lo que importa es qué pantalla abrís y
@@ -28,9 +28,10 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
    **no vieron un solo archivo real**. El layout del importador está deducido de un relevamiento, no
    confirmado. §4 y §5
 
-Y una cuarta que no necesita ningún archivo y se destraba en diez minutos: **las diez pantallas de la
-tanda 2 de la vista estándar están en un PR en borrador esperando que las mires** (§6 ter). No se
-mergea hasta entonces.
+Y una cuarta que no necesita ningún archivo y se destraba en diez minutos: **las pantallas de la vista
+estándar están en dos PR en borrador esperando que las mires** — las diez de la tanda 2 (§6 ter) y la
+de EE x CATEG de la tanda 6 (§6 quater, que sale de la rama de la tanda 2). Ninguno de los dos se
+mergea hasta entonces, y en ese orden.
 
 ---
 
@@ -355,6 +356,61 @@ Están en D-078 y la pantalla ya funciona con ellas, pero es tu criterio el que 
    adentro de esa solapa. Se cambia cuando cada control tenga su ficha.
 
 **Detalle:** `specs/vista-estandar-resultados.md` (§3, §5, §7, §8 y §9), **D-078**, PR #181.
+
+---
+
+## 6 quater · Vista estándar — tanda 6: la ficha y la matriz "Por campo" de EE x CATEG
+
+> **Ojo: esto NO está mergeado, y encima va segundo.** Está en un PR **en borrador** (#184) que sale
+> de la rama de la tanda 2, así que primero entra el #181 y después éste. Como la tanda 2, no necesita
+> ningún archivo: sólo que abras la pantalla.
+
+**Qué es.** EE x CATEG suma dos solapas. **Fichas**: una tarjeta por legajo en vez de una fila por
+campo que no coincide — hasta ahora un legajo con tres campos mal aparecía tres veces y no lo podías
+ver entero. Y **"Por campo"**: una tabla chica con una fila por campo (Puesto, Centro de costo,
+Departamento) que dice en cuántos legajos no coincide cada uno, ordenada de peor a mejor.
+
+**Para qué sirve la segunda.** Para contestar de una lo que hoy hay que exportar y contar a mano: si
+"Centro de costo" no coincide en 80 de 100 legajos, no hay 80 errores de carga — hay un archivo mal
+armado, y revisarlo empleado por empleado es trabajo tirado. La pantalla lo dice con todas las letras
+("Parece una carga masiva"), y la conclusión de cada ficha también.
+
+**Cómo llegó hasta acá.** Ningún cálculo ni conteo se movió: el semáforo sigue contando legajos y da
+los mismos números. Se miró en un navegador de verdad, en los tres temas, **pero con datos
+inventados**: para llegar a esta pantalla por el camino del analista hace falta un reporte de
+Categorías y un Tabulado reales, y en el repo no hay ninguno.
+
+### Qué mirar
+
+| Qué | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| **Los conteos del Resumen** | **Exactamente los mismos que antes.** Activos, en Tabulado, sin Tabulado, sin Rep. Categ. y discrepancias de campo | Si alguno se movió, la migración se comió un caso |
+| La solapa **Fichas** | Una tarjeta **por legajo**. Un legajo con dos campos mal aparece **una** vez y dice "2 campos no coinciden" | Si aparece dos veces, volvió el problema que esto vino a resolver |
+| La ficha abierta | Un renglón por campo con el valor de cada lado; el que no coincide, en rojo; el que coincide, en verde | Un campo que falta en el renglón es un campo que nadie va a revisar |
+| **La conclusión de la ficha** | Dice si el problema parece de ese empleado o de una carga masiva, con el número: "«Puesto» no coincide en 3 de 5 legajos comparados" | Si te dice "carga masiva" para algo que sabés que es de un empleado (o al revés), es el corte de abajo |
+| El legajo que está en **un solo archivo** | Su número grande es **"—", nunca 0**, y el chip ámbar "Sin comparar" | Un 0 ahí se leería como "está todo bien", que es lo contrario de lo que pasa |
+| La solapa **"Por campo"** | Tres filas, la peor arriba, cada una con cuántos legajos no coinciden y el % | |
+| La solapa **Planilla** | **Igual que en la tanda 2**, con las dos distribuciones abajo. Lo único que cambió: la columna "Campo" dice "Centro de costo" en vez de "CENTRO_COSTO" | |
+
+**El número ancla.** Los conteos del Resumen de tu última corrida de este control: tienen que dar
+igual. Y adentro: la cantidad de fichas tiene que ser **discrepancias de campo + sin Tabulado + sin
+Rep. Categ.**, y "No coinciden" de la solapa "Por campo", sumado a lo largo de los legajos, tiene que
+dar la misma cantidad de filas que tiene la Planilla para los casos de campo.
+
+### Lo que espera un criterio tuyo
+
+Están en D-082 y la pantalla ya funciona con ellas:
+
+1. **El corte de "carga masiva":** hoy un campo se marca así cuando no coincide en **al menos un tercio
+   de los legajos comparados y en por lo menos 3**. Es un criterio inventado, no medido. Con un caso
+   real vas a ver enseguida si está alto o bajo, y son dos números que se cambian en un lugar.
+2. **Este control tiene CUATRO solapas y no tres.** El estándar dice `Resumen · Fichas · Planilla`; acá
+   se sumó "Por campo" al final en vez de reemplazar a la Planilla, porque las dos sirven y para distinto.
+   Si preferís tres, la matriz se mete arriba de la Planilla, en la misma solapa.
+3. **Los campos ahora se llaman en criollo** en toda la pantalla: Puesto, Centro de costo,
+   Departamento — antes decía PUESTO, CENTRO_COSTO, DEPTO.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§2, §7, §8 y §9), **D-082**, PR #184.
 
 ---
 

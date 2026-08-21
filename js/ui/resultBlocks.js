@@ -240,6 +240,13 @@ function estadoKey(conDiferencias) {
  *   última solapa, para los controles que todavía no migraron.
  * @param {string} [opts.detalleLabel='Detalle'] - rótulo de `detalle` (con
  *   `planilla` el rótulo es siempre "Planilla": es la palabra del estándar).
+ * @param {{ id: string, label: string, render: (panel: HTMLElement) => void }[]} [opts.extraTabs]
+ *   Una solapa MÁS, después de la Planilla. **No es la puerta para que cada
+ *   control invente las suyas**: las tres del §2 son las mismas en los 21, y acá
+ *   sólo entra la vista que la spec le reconoce por nombre a un control en el
+ *   mapa del §8 — hoy la única es la matriz campo × legajo de EE x CATEG
+ *   ("Por campo"), que contesta algo que ni la ficha ni la planilla contestan:
+ *   si un campo falla en un legajo o en toda la nómina.
  * @param {boolean} [opts.conDiferencias] - cómo terminó el control en esta
  *   corrida. Decide qué solapa abre la primera vez (con diferencias, Fichas;
  *   si cerró, Planilla) y con qué clave se guarda la preferencia del analista.
@@ -251,7 +258,7 @@ function estadoKey(conDiferencias) {
  *   solapa activa entre sus propios re-renders dentro de la misma corrida).
  */
 export function renderResumenDetalle(container, {
-  resumen, fichas, planilla, detalle, detalleLabel = 'Detalle',
+  resumen, fichas, planilla, detalle, detalleLabel = 'Detalle', extraTabs = [],
   activeId, onChange, controlId, conDiferencias,
 }) {
   // **Con qué monto de diferencia se dibuja cada solapa.** El borde de la app
@@ -271,6 +278,7 @@ export function renderResumenDetalle(container, {
   if (fichas) tabs.push({ id: 'fichas', label: 'Fichas', render: conMonto(fichas) });
   if (planilla) tabs.push({ id: 'planilla', label: 'Planilla', render: conMonto(planilla) });
   else if (detalle) tabs.push({ id: 'detalle', label: detalleLabel, render: conMonto(detalle) });
+  for (const t of extraTabs) tabs.push({ id: t.id, label: t.label, render: conMonto(t.render) });
 
   const estado = estadoKey(conDiferencias);
   // Con diferencias lo primero que se ve es por qué falla; si cerró, la planilla
