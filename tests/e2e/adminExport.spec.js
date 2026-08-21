@@ -43,7 +43,10 @@ async function importSeedFile(page, path) {
   await fileChooser.setFiles(path);
   await expect(page.locator('.modal__footer')).toBeVisible();
   await page.click('#js-confirm-ok');
-  await expect(page.locator('.toast--success')).toBeVisible();
+  // `.last()` y no el locator pelado: los toasts duran 4,5s y dos imports
+  // seguidos (los dos dicen "Seed importado") dejan dos `.toast--success`
+  // visibles a la vez, y el strict mode rompe (flaky visto en CI el 2026-08-21).
+  await expect(page.locator('.toast--success').last()).toBeVisible();
 }
 
 test('editar y exportar desde admin en un navegador llega a otro sin perder sus datos locales', async ({ page, browser }, testInfo) => {
