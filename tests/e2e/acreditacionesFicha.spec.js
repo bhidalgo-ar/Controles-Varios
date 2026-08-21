@@ -150,3 +150,25 @@ test('el semáforo cuenta en listas y no lo movió la vista nueva', async ({ pag
   expect(summary.unitsTotal).toBe(4);
   expect(summary.unitsWithDiff).toBe(2);
 });
+
+test('asignar la fecha a mano regenera las fichas y no saca al analista de la solapa (D-025)', async ({ page }) => {
+  await expect(page.locator('[role="tab"][aria-selected="true"]').first()).toHaveText('Fichas');
+
+  // El grupo pendiente es del mismo tipo (A) que la lista 1: al darle su fecha
+  // se une a ella en vez de formar una lista nueva.
+  await page.locator('[data-pending-date]').fill('2026-07-02');
+  await page.locator('[data-pending-apply]').click();
+
+  await expect(page.locator('[role="tab"][aria-selected="true"]').first()).toHaveText('Fichas');
+  await expect(page.locator('[data-pending-apply]')).toHaveCount(0);
+  await expect(page.locator('[data-undo-key]')).toHaveCount(1);
+
+  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+  await expect(page.locator('.ficha:visible')).toHaveCount(3);
+  const primera = page.locator('.ficha').first();
+  await expect(primera.locator('.ficha__ctx')).toContainText('4 acreditaciones');
+  await expect(primera.locator('.ficha__ctx')).toContainText('Listado 900 + 901 + 950');
+  await expect(primera.locator('.ficha__amount')).toHaveText('4.700,00');
+
+  expect(page.__errores).toEqual([]);
+});
