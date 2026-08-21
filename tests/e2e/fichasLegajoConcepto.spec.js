@@ -55,7 +55,7 @@ for (const p of PANTALLAS) {
     await abrirFichas(page, p.url);
     await expect(page.locator('.results-toolbar input[type="search"], .results-toolbar input[role="combobox"]'))
       .toHaveCount(1);
-    await expect(page.locator('.results-toolbar [data-marca-filter], .results-toolbar [data-ficha-marca]'))
+    await expect(page.locator('.results-toolbar [data-marca-filter]'))
       .toHaveCount(1);
     await expect(page.locator('.results-toolbar [data-ficha-orden]')).toHaveCount(1);
     await expect(page.locator('.results-toolbar__kpis')).not.toBeEmpty();

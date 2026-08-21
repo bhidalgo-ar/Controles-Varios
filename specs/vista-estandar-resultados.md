@@ -1,23 +1,31 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
-**Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tandas 2 y 3 hechas
-(2026-08-20):** las diez entradas del lote Meta4/Marval (D-078) y las nueve del lote Axton/general
-(D-079, D-080, D-081) pasan a la barra y la planilla estándar — o sea, **los 19 controles del §8 que
-llevan planilla**. Las dos tandas corrieron en paralelo y cada una había abierto su propio
-`js/ui/planillaPanel.js`; al integrarlas quedó una sola pieza (D-088). **Tanda 6 hecha (2026-08-21):**
-EE x CATEG suma la ficha por legajo y la matriz campo × legajo "Por campo" (D-082). **Tanda 8 hecha
-(2026-08-21):** ficha por lista de acreditación en "Acreditaciones — Generar Reporte" (D-083).
-**Tanda 7 hecha (2026-08-21):** ficha por cuenta contable en el Asiento de
-Remuneraciones (FINADIET) y en la Contabilidad Desglosada + Asiento (COTY), los dos controles cuya
-unidad no es el legajo (D-084, D-085). **Tanda 4 hecha (2026-08-21):** la ficha de legajo × concepto
-en Control NR, Novedades vs Liquidación y Variación Conceptos (D-086). **Falta que Willy mire las
-pantallas.** Sólo la tanda 5 —las fichas de agrupador y de centro de costo— sigue pendiente, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
-controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
+**Estado:** decidido el 2026-08-20 con Willy. **Las ocho tandas están hechas** (2026-08-20 y 21) e
+integradas a `main` el 2026-08-21, en el orden del §9:
+
+| Tanda | Qué | Decisión |
+|---|---|---|
+| 1 | las piezas compartidas del §7 + Acumuladores Ganancias como piloto | D-077 |
+| 2 | barra + planilla, las diez entradas del lote Meta4/Marval | D-078 |
+| 3 | barra + planilla, las nueve del lote Axton/general | D-079, D-080, D-081 |
+| 4 | ficha de legajo × concepto — NR, Novedades vs Liquidación, Variación Conceptos | D-086 |
+| 5 | ficha por legajo × agrupador y por centro de costo — Agrupadores, Rendimiento vs Tabulado | D-087 |
+| 6 | ficha por legajo + matriz campo × legajo — EE x CATEG | D-082 |
+| 7 | ficha por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada | D-084, D-085 |
+| 8 | ficha por lista de acreditación — Acreditaciones | D-083 |
+
+Con eso, **la barra estándar está en los 21 controles, la planilla con bandas en los 19 que la llevan
+y la ficha en los 10 que la justifican.** Las tandas 2 a 8 corrieron en paralelo, sin verse entre
+ellas, y al integrarlas hubo que unificar la pieza de la Planilla —que dos tandas habían creado por
+separado con el mismo nombre— y dejar en una sola las funciones que quedaron duplicadas: D-088.
+
+**Lo que falta es lo que CI no puede hacer: que Willy mire las 21 pantallas en el navegador.** Cada
+decisión de las tandas 2 a 8 que se tomó sin él está marcada como pendiente de confirmación en su
+entrada de `DECISIONS.md` y resumida en `ESTADO.md`.
+
+Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21 controles. El
+mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
 `docs/prompts-vista-estandar.md`.
-
-
-
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -304,13 +312,13 @@ Aprobado por Willy el 2026-08-20.
 | Control | Barra estándar | Planilla con bandas | Ficha | Nota |
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
-| **Cruce por Agrupadores** | **hecho (tanda 3)** | **hecho (tanda 3)** | **sí — el que más gana** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. La ficha por legajo con sus agrupadores adentro (tanda 5) resuelve exactamente eso |
+| **Cruce por Agrupadores** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 5, D-087)** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. Y la ficha por legajo con sus agrupadores adentro, con la diferencia **neta** (Nómina − Resumen) y la **total** (la que suma el semáforo) separadas: el número grande es la total, para que un empleado con dos agrupadores compensados no salga en 0 |
 | **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 4, D-086)** | 18 conceptos, en `Marcas ▾` ("el legajo liquidó ese concepto"). La ficha abre un legajo y dice en qué conceptos no cierra, con su código y los dos lados — antes la fila decía "# Difs" y nada más |
 | **Novedades vs Liquidación** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha invierte el cruce: un legajo por tarjeta con las cuatro bandas adentro |
 | **Acumuladores Ganancias** | **hecho (tanda 1)** | **hecho (tanda 1)** | **sí — reemplaza la ficha vieja** | migrado de punta a punta en la tanda 1, piloto del estándar (D-077) |
 | **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **hecho (tanda 6, D-082)** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La ficha es una tarjeta por legajo con la tira de conteo de campos (no una cascada de importes) y una conclusión que dice si el problema es del empleado o de una carga masiva. Suma una **cuarta** solapa, "Por campo" — la matriz campo × legajo, única excepción a las tres solapas del §2 |
 | **Variación Conceptos** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | un legajo con varios conceptos que se movieron, y adentro el escalón de los que se pagan en escalones (`100 % → 70 %` dice algo que "bajó $ 16.805,40" no dice) |
-| **Rendimiento vs Tabulado** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **sí, por centro de costo** | la unidad es el CC, no el legajo; la lista de conceptos por columna pasó del `<th>` a una leyenda desplegable arriba de la planilla. Ficha en la tanda 5 |
+| **Rendimiento vs Tabulado** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 5, D-087), por centro de costo** | la unidad es el CC, no el legajo; la lista de conceptos por columna pasó del `<th>` a una leyenda desplegable arriba de la planilla. La ficha abre el Tabulado **concepto por concepto, con su código** a la izquierda y el Reporte de Rendimiento —que sólo informa las cinco categorías ya sumadas— a la derecha: son distintas a propósito |
 | **Rendimiento vs Asiento** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | ya tiene algo parecido → migrar | pierde el orden por columna de la planilla principal (era la única que ordenaba por su cuenta; vuelve con la ficha) y el desglose que colgaba de la fila de TOTAL (el desglose por celda sigue igual); el rótulo pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo" |
 | Brutos — Controlar / Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo; se van los colores de banda escritos a mano (`CYAN_HDR`/`LILAC_HDR`) |
 | GS Pers — Controlar / Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | ídem |
@@ -352,7 +360,14 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    nombres de función que no chocaran con los de esos dos PR — aun así quedaron tres pares de
    funciones equivalentes, que al integrar se dejaron en una sola (D-088).
 
-5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
+5. **Fichas de legajo × agrupador y CC × concepto — Agrupadores, Rendimiento vs Tabulado. Hecho
+   el 2026-08-21 (D-087).** Agrupadores: una ficha por legajo con sus agrupadores adentro, con la
+   diferencia neta (Nómina menos Resumen) y la total (la que suma el semáforo) separadas.
+   Rendimiento vs Tabulado: una ficha por centro de costo, con el Tabulado abierto concepto por
+   concepto a la izquierda y el Reporte de Rendimiento por categoría a la derecha. Se hizo sobre
+   `main`, antes de que estos dos controles tuvieran la barra estándar, así que copió dos
+   funciones de la tanda 3 y escribió una tercera que ya existía compartida; al integrar quedó
+   una sola de cada una (D-088).
 6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
    (D-082).** Se construyó sobre la tanda 2 y entró después de ella.
 7. **Fichas por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada. Hecho el
@@ -361,6 +376,7 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    paralelo con las 3 a 7,
    apoyada en la barra y la planilla de la tanda 3. La unidad es la lista, no el legajo (D-021), y
    lo de HR se queda en la pantalla (D-020, ahora escrito como assert contra el contrato de export).
+
 
 
 **Netos** va en su propio chat, después de la tanda 1.

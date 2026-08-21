@@ -851,6 +851,11 @@ table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:first-child {
   letter-spacing: 0.06em; color: var(--t3); text-align: left;
 }
 .ficha-table__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* El `text-align: left` de arriba es más específico que `.ficha-table__num`, así
+   que el título de una columna de importes quedaba a la izquierda sobre números
+   alineados a la derecha — con dos columnas se disimula, con cuatro no se lee
+   cuál es cuál. */
+.ficha-detail__grid th.ficha-table__num { text-align: right; }
 .ficha-table__code { color: var(--t3); font-size: 11px; }
 .ficha-table__foot > td { font-weight: var(--fw-bold); border-bottom: none; }
 .ficha-table__foot--ink > td   { background: var(--invert-bg); color: var(--invert-fg); }

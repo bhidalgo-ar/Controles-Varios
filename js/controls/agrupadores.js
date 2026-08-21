@@ -15,11 +15,12 @@
 
 import { runMatching } from '../matching.js';
 import { computeInsights } from '../insights.js';
-import { formatAmount, formatDiff, formatDiffText, formatPct } from '../utils/currency.js';
+import { formatAmount, formatDiff, formatDiffText, formatPct, redondear } from '../utils/currency.js';
 import {
   renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, diffBadgeHtml,
 } from '../ui/resultBlocks.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 
@@ -52,7 +53,8 @@ export function runAgrupadores(nominaRows, _tabRows, mapping) {
   const insights = computeInsights(resultsPorGrupo, grouperDefs, nominaRows, resumenRows);
 
   // Los umbrales viajan en el resultado: son la base de cálculo que la planilla
-  // escribe abajo del título de cada columna de diferencia. Una corrida vieja no
+  // escribe abajo del título de cada columna de diferencia y que la ficha nombra
+  // en su conclusión ("abajo del umbral de $ 1,00"). Una corrida vieja no
   // los trae y la pantalla cae en los del default (no se inventa otro número).
   return { resultsPorGrupo, grouperDefs, thresholds, ...insights };
 }
@@ -134,8 +136,15 @@ export function renderAgrupadoresResults(results, container) {
 
   container.innerHTML = '';
 
+  // Una ficha por LEGAJO — no por legajo × agrupador. Ver la nota de
+  // `buildFichasAgrupadores()`.
+  const fichas = buildFichasAgrupadores(results);
+
   renderResumenDetalle(container, {
     controlId: 'agrupadores',
+    // Con diferencias lo primero que se ve es por qué falla (§2). El conteo no
+    // se recalcula acá: sale del mismo `legajoStats()` que alimenta el semáforo.
+    conDiferencias: unitsWithDiff > 0 || missingCount > 0,
     resumen(panel) {
       const tone = (unitsWithDiff === 0 && missingCount === 0) ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -178,6 +187,7 @@ export function renderAgrupadoresResults(results, container) {
         });
       }
     },
+    fichas(panel) { renderAgrupadoresFichas(panel, { fichas, results }); },
     planilla(panel) { renderAgrupadoresPlanilla(panel, results); },
   });
 }
@@ -244,6 +254,219 @@ export function estadoDeLegajo(r, grouperDefs) {
  * Se le pasa a la pieza como un `eps` que cae del lado que corresponde, para que
  * el badge rojo de la celda y el chip "Con diferencia" nunca cuenten distinto.
  */
+
+/** Suma lo que hay; `null` si no hay ningún valor que sumar (`null` no es `0`). */
+function sumOrNull(vals) {
+  let acc = null;
+  for (const v of vals) {
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    acc = (acc ?? 0) + v;
+  }
+  return acc === null ? null : redondear(acc);
+}
+
+const SEVERIDAD_DE_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+/** Las fichas del control, una por legajo, en el orden del legajo. */
+export function buildFichasAgrupadores(results) {
+  const defs = results.grouperDefs || [];
+  return buildPlanillaRows(results).map(r => fichaDeLegajo(r, defs, results));
+}
+
+function fichaDeLegajo(r, defs, results) {
+  const porAgrupador = defs.map(g => ({
+    name: g.name,
+    fila: r.porGrupo[g.id] || null,
+    nom:  r[`nom_${g.id}`],
+    res:  r[`res_${g.id}`],
+    dif:  r[`dif_${g.id}`],
+  }));
+
+  const estado = estadoDeLegajo(r, defs);
+  const conDif = porAgrupador.filter(a => a.fila?.tieneDiff);
+
+  // El MISMO monto que este legajo le aporta a `diffTotalAmount` del semáforo:
+  // la suma de las diferencias en valor absoluto de los agrupadores que superan
+  // el umbral (dos agrupadores con +100 y −100 son dos discrepancias reales
+  // distintas, no se cancelan). Sale de `fila.diffAbs` y no de la columna
+  // `dif_`, que es `null` cuando el legajo está en un solo archivo.
+  const difTotal = conDif.reduce((acc, a) => acc + Math.abs(a.fila.diffAbs), 0);
+
+  // La suma sobre los agrupadores DEL CRUCE: si un concepto estuviera en dos
+  // agrupadores cuenta en los dos, igual que en el cruce. El detalle de abajo
+  // muestra agrupador por agrupador, así que el total siempre se puede auditar.
+  const totalNom = sumOrNull(porAgrupador.map(a => a.nom));
+  const totalRes = sumOrNull(porAgrupador.map(a => a.res));
+  const neta = (totalNom === null || totalRes === null) ? null : redondear(totalNom - totalRes);
+
+  const peor = conDif.reduce((m, a) => (!m || Math.abs(a.fila.diffAbs) > Math.abs(m.fila.diffAbs)) ? a : m, null);
+  // La mayor diferencia que NO llegó al umbral: es lo que distingue, con la
+  // ficha cerrada, a un legajo que cuadra al centavo de uno que quedó a 60
+  // centavos — los dos suman 0,00 de diferencia contable.
+  const mayor = porAgrupador.reduce((m, a) => Math.max(m, Math.abs(a.dif ?? 0)), 0);
+
+  return {
+    id: r.legajo,
+    unit: r.legajo,
+    name: r.nombre,
+    estado,
+    difTotal,
+    severity: SEVERIDAD_DE_ESTADO[estado] || 'info',
+    tag: { text: `${defs.length} agrupador${defs.length === 1 ? '' : 'es'}` },
+    badge: badgeDeLegajo(r, peor),
+    context: [
+      r.soloEnNomina  ? 'Sólo en la Nómina Maestra'
+        : r.soloEnResumen ? 'Sólo en el archivo Resumen'
+        : conDif.length ? `${conDif.length} agrupador${conDif.length === 1 ? '' : 'es'} con diferencia`
+        : estado === 'margen' ? `Todos cierran — la mayor diferencia, ${formatAmount(mayor)}, queda abajo del umbral`
+        : 'Todos los agrupadores cierran al centavo',
+    ],
+    // El segundo eje: en qué agrupador no cierra. Son las mismas marcas del
+    // desplegable `Marcas ▾` de la barra (§3), para que la pill de la ficha y el
+    // filtro digan lo mismo.
+    marks: conDif.map(a => ({ text: a.name, tone: 'info' })),
+    amountLabel: 'Diferencia total',
+    amount: difTotal,
+    amountTone: estado === 'conDif' ? 'error' : estado === 'sinComparar' ? 'warn' : undefined,
+    body: {
+      // 1. La tira: de lo que dice la Nómina Maestra a lo que sobra. La
+      //    diferencia NETA es la resta de los dos lados; la diferencia TOTAL es
+      //    lo que suma el semáforo, que no compensa un agrupador con otro.
+      strip: [
+        { label: 'Nómina Maestra', value: totalNom },
+        { label: 'Archivo Resumen', value: totalRes },
+        { label: 'Diferencia neta', value: neta, invert: true },
+        { label: 'Diferencia total', value: difTotal, residuo: difTotal > 0 },
+      ],
+      // 2. Sin las dos tablas de "cómo debería ser / cómo salió": los dos lados
+      //    de este cruce son las columnas Nómina y Resumen del detalle de abajo,
+      //    y repetirlos arriba sería la misma tabla dos veces.
+      // 3. El detalle: un renglón por agrupador, que es lo que la ficha viene a
+      //    resolver — el legajo entero de una, sin buscarlo en N tablas.
+      detail: {
+        title: 'Agrupador por agrupador — Nómina, Resumen y la diferencia',
+        columns: [
+          { key: 'agrupador', label: 'Agrupador' },
+          { key: 'nom', label: 'Nómina',     num: true },
+          { key: 'res', label: 'Resumen',    num: true },
+          { key: 'dif', label: 'Diferencia', num: true },
+        ],
+        rows: porAgrupador.map(a => ({
+          agrupador: a.name,
+          nom: a.nom, res: a.res, dif: a.dif,
+          // Rojo sólo donde hay una diferencia que mirar. Un legajo que está en
+          // un solo archivo tiene `tieneDiff` en todos sus agrupadores (así lo
+          // marca el cruce), pero no hay nada que comparar: pintarlos en rojo lo
+          // haría leer como una diferencia y es "sin comparar" (D-073).
+          tone: (a.dif !== null && a.fila?.tieneDiff) ? 'neg' : undefined,
+        })),
+        foot: { label: 'Diferencia neta — Nómina menos Resumen', value: neta },
+      },
+      // 4. La conclusión: qué mirar, no un resumen.
+      conclusion: conclusionDeLegajo(r, { estado, conDif, difTotal, mayor, results }),
+    },
+  };
+}
+
+function badgeDeLegajo(r, peor) {
+  if (r.soloEnNomina)  return { text: 'No está en el archivo Resumen', tone: 'warn' };
+  if (r.soloEnResumen) return { text: 'No está en la Nómina Maestra', tone: 'warn' };
+  if (peor) return { text: `Diferencia en ${peor.name}`, tone: 'error' };
+  return undefined;
+}
+
+/** No un resumen: una instrucción. Descarta lo que ya quedó explicado. */
+function conclusionDeLegajo(r, { estado, conDif, difTotal, mayor, results }) {
+  const umbrales = results.thresholds || DEFAULT_AGRUPADORES_CONFIG.thresholds;
+
+  if (r.soloEnNomina) {
+    return {
+      tone: 'warn',
+      title: 'El legajo está en la Nómina Maestra y no en el archivo Resumen',
+      text: 'No hay contra qué compararlo, así que no cierra ni deja de cerrar. Fijate si es un alta que el '
+        + 'Resumen todavía no trae, o si el mismo empleado viene con otro número de legajo en uno de los dos '
+        + 'archivos — eso último se arregla desde la pantalla del cliente, en cómo se compara el legajo.',
+    };
+  }
+  if (r.soloEnResumen) {
+    return {
+      tone: 'warn',
+      title: 'El legajo está en el archivo Resumen y no en la Nómina Maestra',
+      text: 'No hay contra qué compararlo. Fijate si es una baja que la Nómina Maestra ya no trae, o si el '
+        + 'mismo empleado viene con otro número de legajo en uno de los dos archivos.',
+    };
+  }
+  if (estado === 'conDif') {
+    const nombres = conDif.map(a => a.name).join(', ');
+    return {
+      tone: 'error',
+      title: `${conDif.length} agrupador${conDif.length === 1 ? '' : 'es'} no cierra${conDif.length === 1 ? '' : 'n'}`
+        + `: ${formatAmount(difTotal)} en total`,
+      text: `Mirá los conceptos de ${nombres} para este legajo en los dos archivos: el cruce suma los mismos `
+        + 'códigos de concepto de cada lado, así que la diferencia es un concepto que está en uno y no en el '
+        + `otro, o que viene con otro importe. El resto de los agrupadores de este legajo ya cierran.`,
+    };
+  }
+  if (estado === 'margen') {
+    return {
+      tone: 'info',
+      title: `Cierra dentro del margen: la mayor diferencia es ${formatAmount(mayor)}`,
+      text: `Está abajo del umbral de ${formatAmount(umbrales.absoluteAmount)} y del `
+        + `${formatPct(umbrales.percentage)} que configuraste en "Agrupadores y umbrales", así que no cuenta `
+        + 'como diferencia. No hay nada para revisar en este legajo, salvo que quieras bajar el umbral.',
+    };
+  }
+  return {
+    tone: 'ok',
+    title: 'Cierra al centavo en todos los agrupadores',
+    text: 'La Nómina Maestra y el Resumen dicen lo mismo. No hay nada para revisar en este legajo.',
+  };
+}
+
+/**
+ * La solapa Fichas: la barra compartida (los cinco chips de estado, el buscador,
+ * `Marcas ▾` con los agrupadores, `Orden ▾`, el KPI de la selección y el
+ * `⬇ Exportar ▾` último) más la lista de fichas.
+ */
+function renderAgrupadoresFichas(panel, { fichas, results }) {
+  const defs = results.grouperDefs || [];
+  const filas = buildPlanillaRows(results);
+
+  const csvHeaders = ['Legajo', 'Apellido y Nombre', ...defs.flatMap(g => [
+    `${g.name} — Nómina`, `${g.name} — Resumen`, `${g.name} — Diferencia`, `${g.name} — Diferencia %`,
+  ])];
+  const csvRows = () => filas.map(r => [r.legajo, r.nombre, ...defs.flatMap(g => [
+    formatAmount(r[`nom_${g.id}`]), formatAmount(r[`res_${g.id}`]),
+    formatAmount(r[`dif_${g.id}`]), formatPct(r[`pct_${g.id}`]),
+  ])]);
+
+  renderFichasPanel(panel, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    // El segundo eje de este control es EL AGRUPADOR (§3 de la spec): en qué
+    // agrupador no cierra el legajo, que es otra pregunta que cómo cerró.
+    marcas: defs.map(g => ({
+      value: String(g.id),
+      label: `Diferencia en ${g.name}`,
+      match: f => f.marks.some(m => m.text === g.name),
+    })),
+    ordenes: [
+      { value: 'dif',    label: 'Mayor diferencia', compare: (a, b) => b.difTotal - a.difTotal },
+      { value: 'legajo', label: 'Legajo',
+        compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+      { value: 'nombre', label: 'Nombre', compare: (a, b) => String(a.name).localeCompare(String(b.name), 'es') },
+    ],
+    getLabel: f => `${f.id} — ${f.name}`,
+    getAmount: f => f.difTotal,
+    amountLabel: 'Σ diferencia',
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onCsv:  () => downloadCsv(csvHeaders, csvRows(), 'Cruce_por_Agrupadores.csv'),
+      onCopy: () => copyRowsToClipboard(csvHeaders, csvRows()),
+    }),
+  });
+}
+
 function celdaDiferencia(r, g, maxDif) {
   const f = r.porGrupo[g.id];
   if (!f || r.soloEnNomina || r.soloEnResumen) {

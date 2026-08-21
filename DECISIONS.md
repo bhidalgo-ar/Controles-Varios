@@ -3200,3 +3200,176 @@ sirve así, se ajusta sin tocar el resto de la ficha.
 (`codeOfColumn`), `js/ui/fichaList.js`, `tests/fichasLegajoConcepto.test.js`,
 `tests/e2e/fichasLegajoConcepto.spec.js`, D-070, D-073, D-074, D-077.
 
+---
+
+## D-087 — Tanda 5 de la vista estándar: qué números muestra la ficha de Agrupadores y por qué las dos tablas de Rendimiento vs Tabulado son distintas
+
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 5 de `specs/vista-estandar-resultados.md` (§4 y §8) — la
+solapa Fichas de Cruce por Agrupadores y de Rendimiento vs Tabulado, los dos controles cuya unidad no
+es "un legajo con sus conceptos". Willy no estaba disponible para las decisiones de abajo: quedan
+tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. Agrupadores: la ficha muestra dos diferencias distintas, y el importe grande es la TOTAL, no la
+neta.** La **neta** es Nómina Maestra menos Archivo Resumen, la resta simple — puede compensar un
+agrupador con +100 con otro en −100 y salir 0. La **total** es la suma, en valor absoluto, de la
+diferencia de los agrupadores que superan el umbral — no compensa nada, porque dos agrupadores que no
+cierran son dos discrepancias reales, no una que se cancela con la otra. El importe grande de la
+ficha cerrada es la total, porque es exactamente lo que ese legajo le aporta al `diffTotalAmount` que
+ya suma el semáforo: así el KPI de la barra ("Σ diferencia") y el número que ve el analista en la
+ficha son el mismo número. Las dos se muestran en la tira, una al lado de la otra, para que se vea la
+diferencia entre ambas y no sólo la que "ganó".
+   - Alternativa descartada: mostrar sólo la neta, que es la resta más intuitiva de leer. Se
+     descarta porque dejaría un legajo con dos agrupadores mal —uno para arriba y otro para abajo,
+     compensados— con un importe grande de 0 o cercano a 0, escondiendo justo el caso que hay que
+     revisar.
+
+**2. Agrupadores: la ficha NO lleva las dos tablas de "cómo debería ser / cómo salió" del §4 de la
+spec.** Se evaluó incluirlas como en el resto de las fichas con cascada, pero en este control los dos
+lados de la comparación —Nómina Maestra y Archivo Resumen— ya son dos columnas del detalle por
+agrupador, de abajo. Poner arriba dos tablas con esos mismos dos números, sumados en una sola fila
+cada una, sería la misma tabla dos veces sin agregar nada que el detalle no diga ya.
+   - Alternativa descartada: las dos tablas con un solo renglón (el total Nómina y el total Resumen).
+     Se descarta por redundante — PENDIENTE: si a Willy le sirve tenerlas igual como ancla visual, se
+     agregan.
+
+**3. Rendimiento vs Tabulado: las dos tablas de arriba son asimétricas, a propósito.** A la izquierda,
+el Tabulado abierto concepto por concepto con su código — es de ahí que sale cada peso, y es la única
+fuente que se puede auditar así. A la derecha, el Reporte de Rendimiento por categoría — es todo lo
+que ese archivo informa, no hay una versión más abierta. La comparación categoría por categoría, con
+la diferencia al lado de cada una, se hace en la tabla de detalle de abajo y no arriba.
+   - Alternativa descartada: armar la tabla de la derecha también por concepto, repitiendo el mismo
+     total en las categorías que aplican. Se descarta porque el Reporte de Rendimiento no informa por
+     concepto — se estaría mostrando un desglose que el archivo de origen no tiene.
+
+**4. `runRendVsTabu()` guarda el Tabulado abierto por concepto y por centro de costo (`tByCode`).** No
+es una cuenta nueva: es la misma suma que ya se calculaba, guardada antes de acumularse en la
+categoría. La clave es `categoría|código` y no sólo el código, porque un mismo código de concepto
+puede estar configurado en dos categorías distintas (D-039) y perder la categoría colisionaría dos
+conceptos distintos en una sola clave. Una corrida vieja no trae este campo, y la tabla de la ficha lo
+dice explícitamente en vez de completar con ceros — el default silencioso que `CLAUDE.md` prohíbe.
+   - Por qué no estaba antes: nada lo consumía. La pantalla vieja del control mostraba las cinco
+     categorías ya sumadas, y de los conceptos sólo la LISTA de qué columnas del Tabulado alimentan a
+     cada una (la que hoy es la leyenda del encabezado) — nunca el importe de cada concepto en cada
+     centro de costo. La ficha es lo primero que necesita ese número.
+
+**5. Agrupadores: un legajo que está en un solo archivo no pinta ningún renglón en rojo, aunque el
+cruce le marque `tieneDiff` en todos sus agrupadores.** `tieneDiff` en `runMatching()` es cómo el
+cruce marca "no hay con qué comparar", no "hay una diferencia real" — y pintar esos renglones en rojo
+se leería como que sí la hay. La regla es la misma de D-073: sin el otro lado, el estado es "Sin
+comparar", nunca un grado de cierre. La ficha lo dice en el badge ("No está en el archivo Resumen" /
+"No está en la Nómina Maestra") y en la conclusión, y el detalle deja esos renglones sin tono.
+
+**Verificación.** 37 asserts en `tests/fichasAgrupadorCc.test.js` (sumado a `test:unit`) y 14 pruebas
+de navegador en `tests/e2e/fichasAgrupadorCc.spec.js`, con dos fixtures nuevos — el mismo `run()` y
+`render()` de cada control, con datos inventados. Entre los asserts, uno prueba en el propio código
+que la suma de la diferencia de todas las fichas de un control da el mismo `diffTotalAmount` que el
+semáforo, que es el bug que ya se pagó una vez con el denominador contado en la unidad equivocada
+(D-074 §"unitsTotal"). Verificado en Chromium, tres temas. **No se corrió contra ningún archivo de
+cliente real** — no hay uno en el repo con el que llegar a esta pantalla por el camino del analista.
+
+**Detalle:** `js/controls/agrupadores.js` (`buildFichasAgrupadores`, `estadoDeLegajo`), `js/controls/rendVsTabu.js`
+(`buildFichasRendVsTabu`, `estadoDeCentroDeCosto`, `tByCode`), `js/ui/fichaList.js`, `css/results.css`,
+D-039, D-073, D-074, D-077.
+
+
+---
+
+## D-088 — Integrar siete tandas que corrieron en paralelo: una sola pieza para la Planilla, y qué quedó esperando a Willy
+
+**Fecha:** 2026-08-21. **Contexto:** las tandas 2 a 8 de `specs/vista-estandar-resultados.md` las
+escribieron siete sesiones que corrieron en paralelo de madrugada, sin verse entre ellas, cada una con
+su PR en borrador y su CI en verde. Integrarlas fue un trabajo propio, con tres choques que ninguna de
+las siete podía ver sola.
+
+### 1. `js/ui/planillaPanel.js` existía DISTINTO en dos ramas
+
+La tanda 2 y la tanda 3 crearon **las dos** un `js/ui/planillaPanel.js`, con el mismo nombre y la misma
+intención —la solapa Planilla como pieza compartida—, cada una convencida de que un **archivo nuevo** no
+se pisaba con nadie (D-079 lo dice explícitamente). Eran 353 líneas de diferencia, y no era sólo estilo:
+las dos filtran distinto.
+
+- **Tanda 2:** dibuja la tabla **una vez** y los chips **ocultan filas** (`tools.setFilter`).
+- **Tanda 3:** **re-dibuja** la tabla con la selección adentro en cada cambio de filtro.
+
+**Quedó una sola pieza, con la arquitectura de la tanda 2 y la unión de lo que cada lote necesitaba.**
+El motivo no es prolijidad: `initSearchCombobox()` reescribe el `innerHTML` del buscador, así que con la
+tabla re-dibujada **cada click en un chip le borraba al analista lo que había tipeado**. Dibujando una
+vez, el chip y el buscador son dos ejes que se cruzan — que es justo lo que la tanda 2 había arreglado a
+propósito en `wireTableTools` (D-078) y dejado escrito como test.
+
+Lo que aportó cada lado a la pieza única:
+
+| De la tanda 2 | De la tanda 3 |
+|---|---|
+| la tabla se dibuja una vez, los chips ocultan filas | `columns` como función de las filas (ocultar la columna sin valores) |
+| `beforeTable` / `afterTable` (leyendas y notas alrededor de la tabla) | `footnote`, que sigue al filtro ("Mostrando 23 de 514…") |
+| `bands: false`, `empty`, `stickyCols`, `col1Width` | `emptyText` cuando el filtro no deja ninguna fila |
+| `reporteColumns()` y `NO_APLICA_REPORTE` (los tres "Generar Reporte") | `mag: true` → `.rb-magcell`, que es de donde el KPI cuenta |
+| el `Marcas ▾` compartido de `tableTools.js` | `sortable` (sólo Variaciones, donde ya existía) |
+
+`sortable` es el único que no entra tal cual: la tanda 3 lo hacía re-dibujando. Acá **reordena moviendo
+las `<tr>` que ya están** y reordena `dataRows` en el mismo movimiento, para no cortarle el hilo al
+buscador, a la paginación ni al TOTAL de la selección — y para que "los primeros 50" sean los del orden
+nuevo.
+
+**Lo que esto cambia en pantalla, y hay que confirmar:** en las **nueve pantallas del lote Axton**, hasta
+esta integración un click en un chip borraba el texto del buscador; ahora el buscador sobrevive y el chip
+filtra adentro de lo buscado. Es el comportamiento que la tanda 2 eligió a propósito para sus diez
+pantallas y el que hace que las diecinueve se comporten igual, pero **no lo confirmó Willy**: si prefiere
+que el chip limpie la búsqueda, se cambia en un solo lugar.
+
+### 2. Funciones duplicadas, una por cada par
+
+Ninguna es un criterio distinto: son la misma cuenta escrita dos veces porque las ramas no se veían.
+
+| Duplicado | Quedó | Por qué |
+|---|---|---|
+| `buildPlanillaRows()` y `estadoDeLegajo()` de Agrupadores, **copiadas textualmente** de la tanda 3 por la tanda 5 | una sola | byte por byte idénticas; lo avisó el propio PR de la tanda 5 |
+| `estadoDeLegajoNr()` (tanda 2, planilla) y `estadoDeFichaNr()` (tanda 4, ficha) | `estadoDeLegajoNr()`, y la usan las dos solapas | mismo orden de severidad y las dos se quedan sólo con los conceptos que ese legajo liquidó. Si contaran distinto, la misma pantalla se contradiría |
+| `conceptosConValor()` (tanda 2) y `conceptosConValorNr()` (tanda 4) | `conceptosConValor()` | idénticas; así el `Marcas ▾` de las dos solapas ofrece lo mismo |
+| `estadoDeCentroDeCosto()` (tanda 5) contra `estadoDeFila()` de `tableTools.js` (tanda 2) | `estadoDeFila()` | la tanda 5 ya había anotado que era esa función; la ficha y la fila del mismo CC no pueden caer en chips distintos |
+| `marcasDropdown()` local (tanda 3, en `planillaPanel`; y el de `fichaList`) contra `createMarcasFilter()` (tanda 2, en `tableTools`) | `createMarcasFilter()` | un solo desplegable `Marcas ▾` para las 21 pantallas, con un solo `data-marca-filter` |
+| el `Orden ▾` que se veía pero no ordenaba: **lo encontraron y arreglaron por separado las tandas 5 y 8** | el de la tanda 8 | el mismo arreglo con otros nombres de variable |
+| `searchLabel` / `searchPlaceholder` en `fichaList.js`: lo agregaron **las tandas 5, 7 y 8** | el de la tanda 8 | la misma opción, con tres comentarios distintos |
+| `componentCols` local (tanda 2, dos veces) contra `COMPONENT_COLS` de módulo (tanda 5) | `COMPONENT_COLS` | el mismo filtro derivado de `COLS` |
+
+### 3. La numeración de DECISIONS estaba pisada
+
+Siete ramas numeraron a partir de lo que veían en `main`, así que **D-078 lo usaban cuatro tandas y
+D-081 tres**. Renumerado por orden de merge, sin tocar el contenido de ninguna entrada, y con las
+referencias arregladas en el código, en las specs, en el CHANGELOG y en `docs/pruebas-pendientes.md`:
+
+| Tanda | Numeraba | Quedó |
+|---|---|---|
+| 2 | D-078 | **D-078** (sin cambio) |
+| 3 | D-078, D-079, D-080 | **D-079, D-080, D-081** |
+| 6 | D-079 | **D-082** |
+| 8 | D-081 | **D-083** |
+| 7 | D-081, D-082 | **D-084, D-085** |
+| 4 | D-078 | **D-086** |
+| 5 | D-081 | **D-087** |
+
+### Lo que git resolvió solo y estaba mal
+
+Vale anotarlo porque no dio conflicto y no lo habría visto nadie: al mergear la tanda 5, el auto-merge
+**se comió el `tByCode` de `runRendVsTabu()`** —el Tabulado abierto concepto por concepto— porque la
+tanda 2 había reescrito ese tramo. La ficha por centro de costo quedaba con su tabla de conceptos vacía.
+Lo agarró `tests/fichasAgrupadorCc.test.js`, que es exactamente para lo que sirve tener la regla escrita
+como assert. Después de eso se verificó, rama por rama, que cada línea de código que cada una agregaba
+esté en el árbol integrado o sea uno de los duplicados de arriba.
+
+### Ningún número se movió
+
+`unitsTotal` / `unitsWithDiff` se siguen contando en la unidad que declara cada control y el color sigue
+saliendo de `computeSemaforoStatus()`. Los tests que se rompieron con un merge se entendieron antes de
+tocarlos: los nueve casos fueron **selectores de e2e**, no cálculos — filas contadas sobre el DOM en vez
+de sobre lo visible (la pieza unificada oculta en vez de rehacer), barras que ahora son dos porque el
+control ganó su solapa Fichas, un atributo de desplegable que pasó a ser el compartido, y un tile del
+Resumen que hay que ir a buscar a su solapa porque el control **ahora abre en Fichas** cuando terminó con
+diferencias (§2) — eso último es lo que la tanda 2 había dejado pendiente "para cuando cada control tenga
+su ficha", y la tanda 4 se lo dio a NR, Novedades y Variación Conceptos.
+
+**Detalle:** `js/ui/planillaPanel.js`, `js/ui/fichaList.js`, `js/ui/tableTools.js`,
+`js/controls/nr.js`, `js/controls/agrupadores.js`, `js/controls/rendVsTabu.js`,
+`js/controls/variaciones.js`, `js/controls/novedadesLiquidacion.js`, D-074, D-077, D-078 a D-087.
