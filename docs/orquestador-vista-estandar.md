@@ -55,3 +55,46 @@ a los 7 días de todos modos).
    (source_revision = feat/vista-estandar-cimientos, outcome_branch = la rama de la tanda).
 3. Actualizar este archivo y re-agendar con send_later.
 4. Nada de mergear. Nada de avisar a Willy salvo que una tanda esté trabada de verdad.
+
+---
+
+## Cierre — las 8 tandas terminadas (2026-08-21 01:35Z)
+
+Las ocho corrieron. Siete PRs en borrador, CI verde en todos, **ninguno mergeado** (la tanda 1 es la
+excepción: mergeó sola su #180 antes de que la prohibición se reforzara).
+
+| Tanda | PR | Rama | Base real |
+|---|---|---|---|
+| 1 | #180 (MERGEADO) | feat/vista-estandar-cimientos | main |
+| 2 | #181 | feat/vista-estandar-barra-meta4 | main |
+| 3 | #182 | feat/vista-estandar-barra-axton | main |
+| 4 | #186 | feat/vista-estandar-fichas-legajo-concepto | main |
+| 5 | #187 | feat/vista-estandar-fichas-agrupador-cc | main |
+| 6 | #184 | feat/vista-estandar-ee-categ | **la rama de la tanda 2** |
+| 7 | #185 | feat/vista-estandar-fichas-cuenta | main + la rama de la tanda 3 mergeada adentro |
+| 8 | #183 | feat/vista-estandar-acreditaciones | main + la rama de la tanda 3 mergeada adentro |
+
+### Los tres choques a resolver antes de mergear
+
+1. **`js/ui/planillaPanel.js` existe distinto en #181 y en #182.** Las dos tandas lo crearon como
+   archivo nuevo, cada una para su lote, creyendo que así no se pisaban. 353 líneas de diferencia
+   entre las dos versiones. Hay que unificarlo **antes** de mergear el segundo de los dos.
+2. **Funciones duplicadas.** #187 copió textualmente `buildPlanillaRows()` y `estadoDeLegajo()` de la
+   rama de la tanda 3 (lo dice en su PR): al mergear aparecen dos veces idénticas y se borra una.
+   #186 y #181 tienen cada uno su `estadoDeFichaNr` / `estadoDeLegajoNr`, que hacen casi lo mismo.
+3. **Numeración de DECISIONS pisada.** D-078 lo usan la tanda 2 y la tanda 4; D-081 lo usan las
+   tandas 5, 7 y 8. Hay que renumerar al mergear.
+
+### Orden de merge sugerido
+
+1. **#181** (tanda 2) — es la base de #184.
+2. **#182** (tanda 3) — unificando `planillaPanel.js` con el de #181 en este paso.
+3. **#184** (tanda 6) — GitHub la reapunta a main sola cuando entra #181.
+4. **#183** (tanda 8) y **#185** (tanda 7) — sus diffs se reducen solos cuando entra #182.
+5. **#186** (tanda 4) y **#187** (tanda 5) — conflictos de import y de doc, de agregado.
+
+### Lo que ninguna tanda pudo verificar
+
+Ningún control se corrió de punta a punta en la app con un archivo real de cliente: no hay uno en el
+repo, y el contenedor bloquea los CDN de Dexie y SheetJS. Todas miraron sus pantallas en un Chromium
+real con fixtures que corren el `run()` y el `render()` verdaderos y datos inventados.
