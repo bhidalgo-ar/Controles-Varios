@@ -5,6 +5,9 @@ cliente —export de Meta4 o de Axton— más un reporte del mismo período, y l
 cierran. Corre entera en el navegador del analista: no hay backend y los datos no salen de ahí.
 
 Owner: Willy (Guillermo), único dueño del repo. Los usuarios son los analistas de Payroll de H&A.
+Zona horaria de Willy: **Argentina, GMT-3**, todo el año (sin horario de verano) — convertí a esa
+hora cualquier horario que él dé en una charla ("a las 23hs" es su hora local) y a UTC cualquier
+horario que vos programes (triggers, `run_once_at`).
 
 ---
 
