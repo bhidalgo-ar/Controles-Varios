@@ -33,6 +33,7 @@ const ALLOWLIST = new Set([
   // CBU de 22 dígitos para que la pantalla no salga toda en alerta. Los de acá
   // son ceros y dígitos repetidos escritos a mano.
   'tests/e2e/fixtures/acreditaciones.html',
+  'tests/e2e/fixtures/acreditacionesFicha.html',
 ]);
 
 // Archivos que no tiene sentido escanear por contenido (hashes, minificados).

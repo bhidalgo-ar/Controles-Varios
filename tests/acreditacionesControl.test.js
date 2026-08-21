@@ -7,6 +7,11 @@
 // Listado (ancla principal) y por liquidación cruda (fallback sin Listado), la
 // unificación de alertas por grupo pendiente y la asignación manual de fecha
 // con regeneración del reporte (D-022).
+//
+// Y la ficha de la vista estándar (§4 de specs/vista-estandar-resultados.md):
+// una por LISTA de acreditación, nunca por legajo (D-021), con todo lo de HR
+// —conteo de empleados, bancos, alertas— en pantalla y nada de eso en el .xlsx
+// que recibe Finanzas del cliente (D-020).
 
 // registry.js importa (transitivamente) módulos de UI que registran un listener
 // a nivel de módulo — necesitan un `document` mínimo fuera del navegador.
@@ -17,7 +22,10 @@ const {
   normalizeLiqType,
   assignAcreditacionesDate,
   unassignAcreditacionesDate,
+  buildAcreditacionesFichas,
 } = await import('./js/controls/acreditaciones.js');
+const { fichaBodyHtml } = await import('./js/ui/fichaList.js');
+const { EXPORT_CONTRACTS } = await import('./js/exports/contracts.js');
 
 let ok = 0, fail = 0;
 function assert(desc, val) {
@@ -291,6 +299,136 @@ const unaEmpresa = ctrl.run(
   [], { period: '2026-07', acreditacionesConfig: { splitByEmpresa: true } }
 );
 assert('con una sola empresa el corte por empresa no tiene efecto', unaEmpresa.splitByEmpresa === false);
+
+// ── La ficha, una por LISTA de acreditación (§4 de la vista estándar) ────────
+//
+// Lo que se prueba acá es que la ficha NO se convierta en una ficha por legajo
+// "para que quede igual a las otras": la unidad de este control es la
+// acreditación y no el empleado-mes (D-021), y es la única excepción conocida a
+// la regla de consolidar por legajo. Y que la pantalla pueda mostrar cuántos
+// empleados tiene cada lista sin que eso se filtre al .xlsx que recibe Finanzas
+// del cliente (D-020).
+
+const fichas = buildAcreditacionesFichas(results);
+
+assert('hay una ficha por lista de acreditación, no una por empleado (D-021)',
+  fichas.length === results.summary.listas && fichas.length === 4);
+
+// El legajo 1 tiene DOS acreditaciones en el mes (anticipo + 1era quincena) y
+// hay 3 legajos distintos entre las listas: si la ficha fuera por legajo habría
+// 3 tarjetas, y consolidar los importes sería el bug.
+const legajosDistintos = new Set(results.listas.flatMap(l => l.rows).map(r => r.legajo));
+assert('la ficha no consolida por legajo: 4 listas sobre 3 legajos distintos',
+  legajosDistintos.size === 3 && fichas.length === 4);
+assert('el avatar de la ficha es el número de lista, no un legajo',
+  fichas.map(f => f.unit).join(',') === '1,2,3,4');
+assert('las acreditaciones de las fichas suman las de las listas, sin sumarse entre sí',
+  fichas.reduce((a, f) => a + f.lista.count, 0) === results.listas.reduce((a, l) => a + l.count, 0));
+
+// ── La tarjeta cerrada: lista, empresa, liquidación, fecha, empleados y total ─
+
+const f1 = fichas[0];   // lista 1 — anticipos del 02-07, 2 acreditaciones, sin alertas
+assert('cerrada: la liquidación va con su código', f1.name === 'A — Anticipos de sueldo');
+assert('cerrada: la empresa va en el tag, aunque el archivo tenga una sola',
+  f1.tag.text === 'CLIENTE DEMO SA');
+assert('cerrada: la fecha de acreditación va en la línea de contexto',
+  f1.context.includes('Acreditan el 02/07/2026'));
+assert('cerrada: cuántos empleados tiene la lista', f1.context.includes('2 acreditaciones'));
+assert('cerrada: los listados que entraron a la lista', f1.context.includes('Listado 900 + 901'));
+assert('cerrada: qué hoja del .xlsx es', f1.context.some(c => c.includes('01 A 02-07')));
+assert('cerrada: el importe grande es el total de la lista',
+  f1.amount === 3000 && f1.amountLabel === 'Total de la lista');
+assert('una lista sin alertas sale en verde y sin badge de causa',
+  f1.severity === 'ok' && f1.badge === undefined && f1.marks.length === 0);
+
+const f3 = fichas[2];   // lista 3 — 1era quincena del 16-07, con una fila sin importe
+assert('una lista con alertas sale en ámbar', f3.severity === 'warn');
+assert('el badge dice cuántas hay para revisar', f3.badge.text === '1 para revisar');
+assert('las marcas dicen de qué tipo son las alertas', f3.marks[0].text === 'Sin importe: 1');
+
+// ── La tarjeta abierta ──────────────────────────────────────────────────────
+
+assert('la tira arranca en cuántas hay en el listado de pago y termina en el total',
+  f1.body.strip[0].label === 'En el listado de pago' && f1.body.strip[0].value === '2'
+  && f1.body.strip.at(-1).label === 'Total que va al banco'
+  && f1.body.strip.at(-1).value === 3000 && f1.body.strip.at(-1).invert === true);
+
+assert('la fila sin importe se descuenta en la tira: 3 en el listado, 1 sin importe, 2 se acreditan',
+  f3.body.strip.map(p => `${p.label}=${p.value}`).slice(0, 3).join(' ')
+    === 'En el listado de pago=3 − Sin importe=1 Se acreditan=2',
+  f3.body.strip.map(p => `${p.label}=${p.value}`).join(' '));
+assert('lo que queda para revisar va al final de la tira, en rojo',
+  f3.body.strip.at(-1).label === 'Para revisar' && f3.body.strip.at(-1).residuo === true);
+
+const banco1 = f1.body.tables[0];
+assert('la primera tabla es el desglose por banco', banco1.title.includes('por banco'));
+assert('el desglose por banco suma el total de la lista',
+  banco1.rows.reduce((a, r) => a + r.value, 0) === f1.lista.total
+  && banco1.foot.value === f1.lista.total);
+assert('una lista limpia no dibuja la tabla de alertas', f1.body.tables.length === 1);
+assert('una lista con alertas sí la dibuja, y dice cuántas acreditaciones quedaron marcadas',
+  f3.body.tables.length === 2 && f3.body.tables[1].foot.value === '1 de 3');
+
+assert('una lista limpia no dibuja el detalle línea por línea', f1.body.detail === undefined);
+assert('el detalle nombra el legajo y por qué quedó marcado',
+  f3.body.detail.rows.length === 1
+  && f3.body.detail.rows[0].legajo === '3'
+  && f3.body.detail.rows[0].alerta === 'Sin importe');
+assert('el detalle cierra con el neto de las acreditaciones marcadas (la sin importe suma 0)',
+  f3.body.detail.foot.value === 0);
+
+assert('la conclusión de una lista limpia dice que está para mandar',
+  f1.body.conclusion.tone === 'ok' && f1.body.conclusion.title === 'La lista está para mandar');
+assert('la conclusión de una lista con alertas es una instrucción, no un resumen',
+  f3.body.conclusion.tone === 'warn'
+  && f3.body.conclusion.text.startsWith('Antes de mandarla al banco, resolvé:')
+  && f3.body.conclusion.text.includes('en el listado de pago sin importe: el banco no les va a acreditar nada')
+  && f3.body.conclusion.text.includes('La tabla de acá arriba dice en qué legajo está cada una.'));
+
+// Las dos obligatorias del §4 (tira y conclusión) las verifica la pieza
+// compartida: si una ficha de este control no las declara, fichaBodyHtml tira.
+for (const f of fichas) fichaBodyHtml(f.body, { id: f.id });
+assert('todas las fichas pasan la validación de la pieza compartida (tira + conclusión)', true);
+
+// ── El cuadre global manda sobre las listas ─────────────────────────────────
+//
+// Si el reporte no cierra contra el archivo de Axton, el reporte entero es
+// sospechoso y ninguna lista se manda: es el mismo criterio con el que se cuenta
+// el semáforo (summarizeAcreditacionesReporte).
+
+const noCierra = {
+  ...results,
+  summary: { ...results.summary, diferencia: -50, totalOrigen: results.summary.totalOrigen + 50 },
+};
+const fichasNoCierra = buildAcreditacionesFichas(noCierra);
+assert('si el cuadre global no da, TODAS las listas salen en rojo',
+  fichasNoCierra.every(f => f.severity === 'error' && f.badge.text === 'El reporte no cierra'));
+assert('y la tira termina en la diferencia del reporte, en rojo',
+  fichasNoCierra[0].body.strip.at(-1).label === 'Diferencia del reporte'
+  && fichasNoCierra[0].body.strip.at(-1).residuo === true);
+assert('la conclusión manda a resolver el cuadre antes que la lista',
+  fichasNoCierra[0].body.conclusion.tone === 'error'
+  && fichasNoCierra[0].body.conclusion.text.includes('Resolvé el cuadre primero.'));
+
+// ── Ningún conteo cambia ────────────────────────────────────────────────────
+
+assert('las fichas marcadas son las mismas listas que cuenta el semáforo',
+  fichas.filter(f => f.severity !== 'ok').length === results.summary.listasConAlerta);
+
+const summaryDespues = ctrl.summarize(results);
+assert('armar las fichas no mueve ningún conteo del semáforo (la función es pura)',
+  summaryDespues.unitsTotal === summary.unitsTotal
+  && summaryDespues.unitsWithDiff === summary.unitsWithDiff
+  && results.listas.reduce((a, l) => a + l.count, 0) === 7);
+
+// ── D-020: lo que la ficha muestra NO se filtra al archivo ──────────────────
+
+assert('la ficha muestra conteo de empleados, bancos y alertas por lista…',
+  f3.body.tables.length === 2 && f3.body.detail.rows.length === 1
+  && f1.context.includes('2 acreditaciones'));
+assert('…y el .xlsx que recibe Finanzas sigue con sus 7 columnas de pago y nada más (D-020)',
+  EXPORT_CONTRACTS.acreditaciones_reporte.columns.map(c => c.key).join(',')
+    === 'legajo,nombre,cuit,neto,fecha,banco,cbu');
 
 // ── Casos de error ───────────────────────────────────────────────────────────
 

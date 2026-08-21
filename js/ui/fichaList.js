@@ -305,8 +305,13 @@ export function renderFichasPanel(panel, {
 
   // El "Orden ▾" es de la solapa Fichas y de ninguna otra: va antes del KPI,
   // que es lo último antes de exportar.
-  const ordenSel = ordenes.length ? ordenDropdown(ordenes) : null;
-  if (ordenSel) toolbar.querySelector('.results-toolbar__right').prepend(ordenSel);
+  const ordenDrop = ordenes.length ? ordenDropdown(ordenes) : null;
+  if (ordenDrop) toolbar.querySelector('.results-toolbar__right').prepend(ordenDrop);
+  // El <select> de verdad, no el envoltorio: `ordenDropdown()` devuelve el
+  // `.form-group` que lo contiene, y leerle `.value` a un <div> da `undefined`
+  // — con eso `ordenar()` no encontraba nunca su criterio y salía sin hacer
+  // nada, así que el "Orden ▾" se veía pero no ordenaba.
+  const ordenSel = ordenDrop?.querySelector('select') || null;
 
   const { listEl, els } = renderFichaList(panel, fichas, { onOpen });
 
@@ -366,7 +371,7 @@ export function renderFichasPanel(panel, {
 
   estadoSel.addEventListener('change', filtrar);
   marcaSel?.addEventListener('change', filtrar);
-  ordenSel?.querySelector('select')?.addEventListener('change', ordenar);
+  ordenSel?.addEventListener('change', ordenar);
 
   onExport?.(exportEl);
 
