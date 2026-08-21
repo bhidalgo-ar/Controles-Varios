@@ -2759,3 +2759,88 @@ sirve así en un control de generación, se ajusta sin tocar el resto del están
 **Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
 `js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
 D-069, D-074, D-076.
+
+---
+
+## D-078 — Tanda 4 de la vista estándar: ficha de legajo × concepto en NR, Novedades vs Liquidación y Variación Conceptos
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 4 de `specs/vista-estandar-resultados.md` (§9), los tres
+controles donde la unidad es el legajo y adentro hay varios conceptos. Usa `js/ui/fichaList.js`, la pieza
+que salió de la tanda 1 (D-077); no se escribió ninguna ficha nueva. Willy no estaba disponible mientras se
+hizo el trabajo (de madrugada): las seis decisiones de la sección 3 quedan tomadas y a la espera de que las
+confirme viéndolas en pantalla.
+
+**1. Qué va adentro de cada ficha.**
+
+- **Control NR**: la tira es `Reporte NR → Tabulado → Diferencia comparada (invertida) → A revisar · N de
+  M conceptos (residuo)`. El detalle trae un renglón por concepto que ese legajo liquidó, con su CÓDIGO,
+  el Tabulado, el Reporte NR y la diferencia; verde suave lo que el Tabulado tiene de más, rojo suave lo
+  que tiene de menos. Las marcas —en la tarjeta como pills (tope de 6, "+N más") y en `Marcas ▾`— son los
+  conceptos que el legajo liquidó.
+- **Novedades vs Liquidación**: la tira es `Pedido → Comparado · N de M → Liquidado (invertida) → Δ
+  importe → Δ cantidad`. Las dos diferencias van separadas porque la cantidad no es plata y no se mide
+  con el monto de diferencia del cliente. El detalle son ocho columnas (concepto con código, cómo cerró y
+  por qué, las dos medidas de los dos lados y las dos diferencias), con las cuatro bandas del cruce juntas
+  en una sola tabla. Marcas: sin contraparte, liquidado sin novedad, no se pudo comparar, nada comparado,
+  comparado por una sola medida, esperado que no llega a la liquidación, sin liquidación en el mes, dato
+  del totalizador.
+- **Variación Conceptos**: la tira es `<período anterior> → <período actual> (invertida) → Variación · N
+  conceptos (residuo)`. El detalle trae el concepto con código, el escalón (`100 % → 70 %`, sólo si el
+  control detectó una escala), los dos períodos, la variación y el %. Marcas: bajó de escalón sin causa
+  visible / con licencia cargada, subió de escalón, alta, baja, concepto nuevo, dejó de liquidar, con
+  licencia o ausencia.
+
+**2. La diferencia de un legajo se suma sólo sobre lo comparable, nunca como la resta de los dos
+totales.** En NR, restar el total del Reporte NR menos el total del Tabulado cuenta como cero el lado que
+falta: un legajo con un importe liquidado en un concepto que el Tabulado no informa salía con una
+diferencia negativa por ese mismo importe, cuando lo que corresponde decir es "no se puede comparar". La
+tira ahora suma sólo los conceptos donde los dos lados tienen dato (`Diferencia comparada`); los dos
+totales de arriba de la tira siguen siendo cada uno el de su propio archivo —eso es lo que el analista
+compara a simple vista—, y lo que quedó sin comparar se dice en la conclusión: el importe, de qué lado
+está, y que no entra en la diferencia. Es la regla `null` no es `0` de `CLAUDE.md` aplicada a un total en
+vez de a un valor suelto.
+
+**3. Seis decisiones tomadas sin Willy, a confirmar:**
+
+1. **El importe grande de la tarjeta ("A revisar").** En NR y en Novedades es la suma en valor absoluto
+   de las diferencias que pasan el monto del cliente — el mismo número que totaliza el tile "Diferencia
+   total" del Resumen —, no el neto. Un legajo con +12.000 en un concepto y −12.000 en otro tiene neto
+   cero y dos conceptos mal, y ése es el caso que la ficha existe para mostrar. En Variación Conceptos el
+   importe grande sí es el neto con signo, porque ahí la pregunta es "cuánto se movió", no "cuánto hay
+   que revisar".
+2. **El rojo del importe lo pinta el monto, no la severidad del caso.** Un legajo de Novedades cuya única
+   diferencia son unas horas de más o de menos tiene $ 0,00 para revisar, y un 0,00 en rojo se lee como
+   una contradicción: ese caso queda en ámbar.
+3. **El orden de la tira en Variación Conceptos es anterior → actual → variación**, aunque el pedido
+   original decía "el período anterior, la variación y el actual": la variación queda última porque es
+   el residuo —lo que hay que mirar— y así la resta cierra a la vista, en el mismo orden que las otras dos
+   fichas de esta tanda.
+4. **Novedades: el legajo cuyas novedades son todas conceptos declarados "no llega a la liquidación" cae
+   en "Sin comparar" (ámbar)**, aunque el semáforo lo deje afuera del numerador por la excepción de D-070.
+   No es una contradicción entre la ficha y el semáforo: el chip de la ficha dice cómo cerró el caso, el
+   semáforo dice si hay que revisarlo. La ficha lo aclara en el badge y en la conclusión para que no se
+   lea como un error.
+5. **Variación Conceptos: la barra de Fichas no lleva `⬇ Exportar ▾`.** En ese control el exportar y el
+   🖨 Imprimir / PDF ya están arriba de las solapas y valen para las dos, así que sumar otro exportar en
+   la barra de Fichas pondría dos botones de exportar en la misma pantalla — justo lo que el estándar
+   viene a sacar (§3). Se resuelve solo cuando la barra de ese control se migre a la vista estándar
+   (tanda 3, PR #182).
+6. **La ficha de Novedades muestra el bruto y la unidad organizativa del legajo.** Es la pantalla del
+   analista de Payroll, no un archivo que sale hacia Finanzas (D-020), así que no aplica la restricción
+   de "sólo lo necesario para pagar".
+
+**Nombres elegidos para no chocar con los PR abiertos.** Este PR sale de `main` mientras hay dos PR sin
+mergear que tocan los mismos archivos: #181 (tanda 2, incluye `nr.js`) y #182 (tanda 3, incluye
+`novedadesLiquidacion.js` y `variaciones.js`). Se evitó a propósito reusar los nombres que esos PR
+introducen (`estadoDeFila`, `estadoDeNovedad`, `estadoDeVariacion`, `NO_APLICA_NOV_LIQ`,
+`NO_APLICA_VARIACION`, `renderPlanillaPanel`); acá quedan `estadoDeFichaNr`,
+`estadoDeNovedadFicha`/`estadoDeFichaNovLiq`, `estadoDeFichaVariacion`, `NO_APLICA_FICHA_NL` y
+`NO_APLICA_FICHA_VAR`, para que un merge no deje dos declaraciones iguales.
+
+**Pendiente.** Las seis decisiones de la sección 2 esperan que Willy las vea en pantalla; si alguna no le
+sirve así, se ajusta sin tocar el resto de la ficha.
+
+**Detalle:** `js/controls/nr.js` (`buildFichasNr`), `js/controls/novedadesLiquidacion.js`
+(`buildFichasNovLiq`), `js/controls/variaciones.js` (`buildFichasConceptos`), `js/controls/tabCodes.js`
+(`codeOfColumn`), `js/ui/fichaList.js`, `tests/fichasLegajoConcepto.test.js`,
+`tests/e2e/fichasLegajoConcepto.spec.js`, D-070, D-073, D-074, D-077.

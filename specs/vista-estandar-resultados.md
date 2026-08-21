@@ -1,10 +1,13 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). Tandas 2 a 8 —el resto
-de los 21 controles— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de
-Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
-cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
+del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 4 hecha
+(2026-08-21, rama `feat/vista-estandar-fichas-legajo-concepto`, sin mergear todavía):** la ficha de
+legajo × concepto en Control NR, Novedades vs Liquidación y Variación Conceptos (D-078). Tandas 2 y 3
+están en PR abiertos sin mergear (#181, #182); tandas 5 a 8 siguen pendientes, en el orden del §9.
+Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21 controles. El
+mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
+`docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -145,6 +148,13 @@ Al pie de la lista, "Mostrar 50 más" y "N de M fichas".
 lista flex las tarjetas se comprimen y el contenido se corta — es el bug que ya se arregló en
 Acumuladores) y el hover no usa `transform` (movería la lista entera).
 
+**Una tercera, que salió en la tanda 4 (D-078):** cuando la tira suma dos totales que vienen de
+archivos distintos y uno de los dos puede no traer dato para un concepto, la diferencia de la tira
+**no puede ser la resta de esos dos totales** — resta cuenta el lado que falta como si valiera cero.
+La tira suma sólo lo que los dos lados sí tienen (`Diferencia comparada`, en Control NR), los dos
+totales de arriba siguen siendo los de cada archivo tal cual, y lo que quedó sin comparar se dice en
+la conclusión: el importe, de qué lado está, y que no entra en la diferencia.
+
 ## 5. La planilla
 
 Encabezado de dos filas, las dos pegadas arriba:
@@ -218,11 +228,11 @@ Aprobado por Willy el 2026-08-20.
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
 | **Cruce por Agrupadores** | sí *(hoy tiene barra propia)* | sí | **sí — el que más gana** | hoy son ~1000 filas para ~100 empleados: una fila por legajo × agrupador. La ficha por legajo con sus agrupadores adentro resuelve exactamente eso |
-| **Control NR** | sí | sí | **sí** | 18 conceptos; hoy la fila dice "# Difs" y nada más |
-| **Novedades vs Liquidación** | sí | sí | **sí** | legajo × concepto en cuatro bandas — mismo caso que NR |
+| **Control NR** | sí | sí | **sí — hecho (tanda 4, D-078)** | 18 conceptos; antes la fila decía "# Difs" y nada más |
+| **Novedades vs Liquidación** | sí | sí | **sí — hecho (tanda 4, D-078)** | legajo × concepto en cuatro bandas — mismo caso que NR |
 | **Acumuladores Ganancias** | sí *(hoy tiene barra propia)* | sí | **sí — reemplaza la ficha vieja** | es el que fija el estándar: ya tiene fichas de primera generación para jubilar |
 | **EE x CATEG** | sí *(hoy tiene barra propia)* | **no** | **sí** | el detalle son campos de texto que no coinciden, no importes: no hay nada que totalizar. La tercera solapa útil acá es una **matriz campo × legajo** — en qué campo falla más — no totales |
-| **Variación Conceptos** | sí *(hoy tiene barra propia)* | sí | **sí** | un legajo con varios conceptos que se movieron |
+| **Variación Conceptos** | sí *(hoy tiene barra propia)* | sí | **sí — hecho (tanda 4, D-078)** | un legajo con varios conceptos que se movieron. Su barra de Fichas no lleva `⬇ Exportar ▾` hasta que se migre en la tanda 3 (D-078) |
 | **Rendimiento vs Tabulado** | sí | sí | **sí, por centro de costo** | la unidad es el CC, no el legajo |
 | **Rendimiento vs Asiento** | sí | sí | ya tiene algo parecido → migrar | |
 | Brutos — Controlar / Generar Reporte | sí | sí | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo |
@@ -253,10 +263,15 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
    piezas de §7 más el primer control migrado de punta a punta, verificado en el navegador en los
    tres temas. **Todo lo demás depende de esta tanda, incluido el chat de Netos — que ya puede
    arrancar.**
-2. **Barra + planilla, lote Meta4/Marval** — 10 entradas del registry.
+2. **Barra + planilla, lote Meta4/Marval** — 10 entradas del registry. En PR abierto (#181), sin
+   mergear.
 3. **Barra + planilla, lote Axton/general** — 9 entradas. Puede ir en paralelo con la 2: no se
-   pisan archivos.
-4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
+   pisan archivos. En PR abierto (#182), sin mergear.
+4. **Fichas de legajo × concepto — hecho (2026-08-21, D-078).** NR, Novedades vs Liquidación,
+   Variación Conceptos, sobre `js/ui/fichaList.js` de la tanda 1. Rama
+   `feat/vista-estandar-fichas-legajo-concepto`, hecha directo sobre `main` sin esperar las tandas 2
+   y 3 (que tocan los mismos archivos): eligió nombres de función que no chocan con los de esos dos
+   PR, para que el merge de los tres no deje declaraciones duplicadas.
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.

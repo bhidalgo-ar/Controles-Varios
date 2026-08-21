@@ -1093,6 +1093,12 @@ export function buildFichasConceptos(relevantes, grupos, ctx) {
       sumActual:   sumaGrupos(r, grupos, 'actual'),
       hayEscala: conEscala.length > 0,
     };
+    // La variación del legajo es la suma de las variaciones de sus conceptos, con
+    // la MISMA cuenta que hace el control por concepto: un lado que no está
+    // cuenta como cero. Acá eso es correcto y no es el `null` que no es `0` —un
+    // alta liquidó cero el mes anterior porque no existía, y el control ya cuenta
+    // esa variación completa—, a diferencia de un cruce entre dos archivos, donde
+    // un lado que falta significa "no se sabe" (ver la ficha de NR).
     base.variacion = (base.sumAnterior === null && base.sumActual === null)
       ? null : (base.sumActual ?? 0) - (base.sumAnterior ?? 0);
     base.estado = estadoDeFichaVariacion(r, grupos);
