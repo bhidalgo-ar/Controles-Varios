@@ -86,7 +86,11 @@ test('las cuatro bandas del cruce se recorren con los cinco chips de estado', as
 
   // "Con diferencia" son las que el control marcó como `difiere`.
   await chips.filter({ hasText: 'Con diferencia' }).click();
-  const filas = await page.locator('table.data-table tbody tr').count();
+  // Filas VISIBLES: la planilla estándar dibuja la tabla una sola vez y el chip
+  // oculta lo que no entra en la selección, así que contar `tr` del DOM cuenta
+  // también las escondidas. Es el mismo idioma que usan el resto de los specs
+  // de la vista estándar (`loteMeta4`, `vistaEstandarLote`).
+  const filas = await page.locator('table.data-table tbody tr:visible').count();
   const difieren = await page.evaluate(() =>
     window.__results.filas.filter(f => f.banda === 'difiere').length);
   expect(filas).toBe(difieren);
@@ -97,8 +101,8 @@ test('"Marcas ▾" separa lo que sólo está de un lado', async ({ page }) => {
   await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
   await page.locator('.results-chip', { hasText: 'Todos' }).click();
 
-  await page.selectOption('[data-planilla-marca]', 'solo_novedad');
-  const filas = await page.locator('table.data-table tbody tr').count();
+  await page.selectOption('[data-marca-filter]', 'solo_novedad');
+  const filas = await page.locator('table.data-table tbody tr:visible').count();
   const esperadas = await page.evaluate(() =>
     window.__results.filas.filter(f => f.lado === 'solo_novedad').length);
   expect(filas).toBe(esperadas);

@@ -44,10 +44,12 @@ test('la Planilla lista los legajos y "—" no se lee como un cero', async ({ pa
 
 test('"Marcas ▾" deja ver sólo los movimientos y el total sigue a la selección', async ({ page }) => {
   await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
-  const filas = page.locator('table.data-table tbody tr');
+  // Filas VISIBLES: el `Marcas ▾` de la planilla estándar oculta las que no
+  // entran en la selección en vez de rehacer la tabla.
+  const filas = page.locator('table.data-table tbody tr:visible');
   const todas = await filas.count();
 
-  await page.selectOption('[data-planilla-marca]', 'movs');
+  await page.selectOption('[data-marca-filter]', 'movs');
   const movs = await filas.count();
   expect(movs).toBeGreaterThan(0);
   expect(movs).toBeLessThan(todas);
