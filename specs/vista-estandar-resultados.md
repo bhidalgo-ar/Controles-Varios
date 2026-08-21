@@ -8,10 +8,13 @@ llevan planilla**. Las dos tandas corrieron en paralelo y cada una había abiert
 `js/ui/planillaPanel.js`; al integrarlas quedó una sola pieza (D-088). **Tanda 6 hecha (2026-08-21):**
 EE x CATEG suma la ficha por legajo y la matriz campo × legajo "Por campo" (D-082). **Tanda 8 hecha
 (2026-08-21):** ficha por lista de acreditación en "Acreditaciones — Generar Reporte" (D-083).
-**Falta que Willy mire las pantallas.** Tandas 4, 5 y 7 —el resto de las fichas, por lote— siguen
-pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
+**Tanda 7 hecha (2026-08-21):** ficha por cuenta contable en el Asiento de
+Remuneraciones (FINADIET) y en la Contabilidad Desglosada + Asiento (COTY), los dos controles cuya
+unidad no es el legajo (D-084, D-085). **Falta que Willy mire las pantallas.** Tandas 4 y 5 —el resto
+de las fichas, por lote— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
 `docs/prompts-vista-estandar.md`.
+
 
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
@@ -275,6 +278,16 @@ que faltaban (Agrupadores, Variación Sueldos, Variación Conceptos) se jubilaro
 | El número grande de la ficha acepta un conteo, no sólo un importe | `js/ui/fichaList.js` | una ficha que cuenta campos, no pesos |
 | El KPI de la selección acepta `amountDecimals: 0` | `js/ui/tableTools.js` | "Σ campos que no coinciden: 3", no "3,00" |
 
+**Construido en la tanda 7 (2026-08-21 — D-084, D-085), verificado en los dos controles cuya unidad es
+la cuenta contable (finadiet_asiento, conta_desglosada):**
+
+| Pieza | Dónde | Por qué |
+|---|---|---|
+| El desglose por concepto de una cuenta contable, con clave por código | `js/controls/cuentaConceptos.js` (nuevo) | acumulado en la misma pasada que el saldo, para que no pueda desalinearse del asiento (D-084) |
+| El cuerpo de la ficha de una cuenta (conciliación, tira, tabla de detalle, línea de contexto) | `js/ui/fichaCuenta.js` (nuevo) | para que las dos pantallas no se vayan separando |
+| Texto del buscador configurable por control (`searchLabel` / `searchPlaceholder`) | `js/ui/fichaList.js` | el default ("Buscá por legajo o nombre…") no vale en un control por cuenta contable, por centro de costo ni por lista |
+
+
 ## 8. El mapa — control por control
 
 Aprobado por Willy el 2026-08-20.
@@ -296,10 +309,11 @@ Aprobado por Willy el 2026-08-20.
 | Rendimiento x EE | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | |
 | Variación Sueldos | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | la fila ya dice anterior / actual / variación |
 | Variación entre quincenas (POP) | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-081 |
-| **Asiento de Remuneraciones** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen. Ficha en la tanda 7 |
-| **Contabilidad Desglosada + Asiento** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | ídem. Ficha en la tanda 7 |
+| **Asiento de Remuneraciones** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **hecho (tanda 7, D-084), por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen — eso es lo que muestra. Las cuentas y los centros sin clasificar entran como ficha propia, en «Sin comparar» y con saldo `—` |
+| **Contabilidad Desglosada + Asiento** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **hecho (tanda 7, D-084), por cuenta contable** | ídem. Una cuenta sin código pasa a leerse «Sin comparar» y no «Con diferencia», en las dos solapas del control (D-085) |
 | **Acreditaciones** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 8, D-083), por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no lleva atributos del empleado** (`D-020`, escrito como assert). El aviso de grupo sin fecha se movió arriba de las tres solapas (`D-083`) |
 | Importador de Novedades | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
+
 
 
 **Además de la ficha, dónde conviene otra cosa:**
@@ -327,11 +341,13 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
    (D-082).** Se construyó sobre la tanda 2 y entró después de ella.
-7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
+7. **Fichas por cuenta contable — Asiento de Remuneraciones, Contabilidad Desglosada. Hecho el
+   2026-08-21 (D-084, D-085).** Se apoyó en la barra y la planilla de la tanda 3.
 8. **Ficha por lista de acreditación — Acreditaciones. Hecho el 2026-08-21 (D-083).** Corrió en
    paralelo con las 3 a 7,
    apoyada en la barra y la planilla de la tanda 3. La unidad es la lista, no el legajo (D-021), y
    lo de HR se queda en la pantalla (D-020, ahora escrito como assert contra el contrato de export).
+
 
 **Netos** va en su propio chat, después de la tanda 1.
 

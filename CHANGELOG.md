@@ -147,6 +147,66 @@
 - Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), `specs/control-acreditaciones-axton.md`,
   D-020, D-021, D-074, **D-083**.
 
+### fix(ui): reabrir una corrida vieja del asiento no marca todas sus cuentas en rojo — 2026-08-21
+
+- La pantalla de resultados se vuelve a dibujar sobre lo que quedó guardado en el navegador, así que
+  **abrir el asiento del mes pasado** pasa por la ficha por cuenta nueva. Esas corridas se guardaron antes
+  de que existiera el desglose por concepto, y la ficha las leía como "los conceptos no suman al saldo":
+  todas las cuentas en rojo diciendo algo falso, y el analista teniendo que decidir si le cree a la
+  pantalla o al archivo que ya mandó.
+- Ahora la conciliación distingue **las tres cosas** que antes eran dos: el desglose suma, el desglose **no**
+  suma, o **la corrida no lo guardó** (`null`, que no es `0` ni `false` — la regla de siempre). En ese
+  último caso la ficha muestra los dos lados y el saldo en vez de inventar un "Suman al DEBE 0,00", no
+  dibuja la tabla de detalle, y la conclusión dice que hay que volver a ejecutar el control para verlo.
+- De paso, dos cosas que se veían en pantalla: la concordancia de singular y plural ("sus 1 concepto suman
+  exacto") y una marca que repetía abajo de la tarjeta lo que ya decía el badge de al lado del nombre.
+- `js/ui/fichaCuenta.js`, `js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`,
+  `tests/fichasCuentaContable.test.js`.
+
+### feat(ui): ficha por cuenta contable en el Asiento de Remuneraciones y en la Contabilidad Desglosada — 2026-08-21
+
+- **Es la tanda 7 de `specs/vista-estandar-resultados.md`** (§9, punto 7): los dos controles cuya unidad
+  no es el empleado sino la **cuenta contable** —Asiento de Remuneraciones (FINADIET) y Contabilidad
+  Desglosada + Asiento (COTY)— ganan su solapa Fichas. Antes, ver qué conceptos de liquidación componen el
+  saldo de una cuenta exigía bajar el `.xlsx` y filtrar a mano.
+- **Ficha cerrada:** número y nombre de la cuenta, su DEBE, su HABER y si cuadra, sin abrirla. **Ficha
+  abierta:** una tira que va de "cuántos conceptos la componen" a "cuánto suman al DEBE / al HABER / al
+  saldo / lo que queda sin explicar", más una tabla con una fila por concepto —con su **código**— y el
+  efecto de cada uno sobre el saldo.
+- **El saldo se llama distinto en cada archivo y la ficha respeta esa palabra:** en FINADIET es "SALDO", en
+  la Contabilidad Desglosada con asiento armado es "NETO" (así lo rotula cada `.xlsx`); la cuenta detrás es
+  la misma (DEBE − HABER).
+- **Los dos controles cuadran al centavo contra sí mismos, no contra un umbral:** el chip "Dentro del
+  margen" sale igual, en gris con su 0, con el motivo en el `title`.
+- **En FINADIET, las cuentas y los centros de costo sin clasificar entran como ficha propia**, en "Sin
+  comparar", con saldo `—` (nunca `0,00`) y una conclusión que dice qué cargar en el Paso 2 — antes sólo se
+  veían en el Resumen.
+- **Se corrige un criterio que había quedado mal en la tanda 3 (D-085):** en la Contabilidad Desglosada,
+  una cuenta sin código pasa de leerse "Con diferencia" a leerse "Sin comparar", en las dos solapas del
+  control (Fichas y Planilla) — no hay ninguna diferencia de importe, lo que falta es el Reporte de
+  Cuentas de Redefinición del cliente.
+- **Dos huecos corregidos de paso:** el buscador de la solapa Fichas (pieza de la tanda 1) siempre decía
+  "Buscá por legajo o nombre…", aunque la pantalla fuera por cuenta contable; ahora cada control puede
+  poner su propio texto (`searchLabel` / `searchPlaceholder` en `js/ui/fichaList.js`). Y en la Planilla de
+  la Desglosada, las marcas "Sólo el DEBE" / "Sólo el HABER" (tanda 3) comparaban contra `'D'` / `'H'`
+  cuando la columna trae `'DEBE'` / `'HABER'`: las dos salían siempre en gris con `(0)`.
+- **Ningún número que calcula el control cambió** (lo que cambia es cómo se lee en pantalla una cuenta sin
+  código, ver el punto de D-085). Se corrió el módulo de la tanda 3 y el de esta tanda sobre
+  la misma entrada sintética y los balances, las líneas del asiento, las cuentas patrimoniales y el
+  semáforo completo dieron idénticos en los dos controles; lo único que se agregó es el campo `conceptos`
+  en cada línea del asiento.
+- **Nada de esto agrega un dato del empleado a ningún archivo exportado.** La ficha es pantalla; los tres
+  `.xlsx` y el CSV de la Desglosada salen con las mismas columnas que ya tenían. Sigue pendiente que Willy
+  confirme si la Contabilidad Desglosada sale del estudio (D-066 §4/§8) — esta tanda no lo resolvió.
+- Piezas nuevas y compartidas por los dos controles: `js/controls/cuentaConceptos.js` (el desglose por
+  concepto, con clave por código) y `js/ui/fichaCuenta.js` (la conciliación de la cuenta, la tira, la
+  tabla de detalle y la línea de contexto).
+- `js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`, `js/ui/fichaList.js`.
+  `tests/fichasCuentaContable.test.js` (123 asserts, sumado a `test:unit`) + `tests/e2e/fichasCuenta.spec.js`
+  (20 tests, tres temas). Datos inventados, jugadores de Banfield.
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), `specs/finadiet-asiento-remuneraciones.md`,
+  `specs/conta-desglosada-asiento.md`, **D-084, D-085**.
+
 
 ### feat(ui): barra estándar y planilla con bandas en el lote Axton/general — 2026-08-20
 

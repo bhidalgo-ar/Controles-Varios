@@ -3045,3 +3045,73 @@ Resumen, donde antes no aparecía nada de esto.
 **Detalle:** `js/controls/acreditaciones.js`, `specs/control-acreditaciones-axton.md` ("Salida — la
 app"), `tests/e2e/acreditacionesFicha.spec.js`, D-020, D-021.
 
+---
+
+## D-084 — Ficha por cuenta contable: el desglose por concepto se acumula en la misma pasada del asiento, no en una tabla aparte
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 7 de `specs/vista-estandar-resultados.md` (§9, punto 7) — la
+solapa Fichas de los dos controles cuya unidad es la CUENTA CONTABLE: Asiento de Remuneraciones (FINADIET)
+y Contabilidad Desglosada + Asiento (COTY).
+
+**La alternativa descartada:** una tabla aparte con el desglose por concepto, cruzada contra las líneas
+del asiento por una clave armada de nuevo (código de cuenta + centro de costo, en cada lado). Se descarta
+porque el agrupamiento del asiento puede cambiar de un lado (por ejemplo, si se ajusta cómo se arma la
+clave de una cuenta patrimonial) sin que cambie del otro, y ese desalineamiento no lo detecta nadie: los
+totales de la cuenta siguen cerrando igual, porque son otro cálculo. Un desglose que muestra los conceptos
+de la cuenta equivocada sumando a un saldo que no es el suyo es peor que no tener desglose.
+
+**Lo que se hizo:** el desglose se acumula **adentro** de la misma entrada de la línea contable
+(`e.conceptos` en `finadietAsiento.js`, `g.conceptos` en `contaDesglosada.js`), en la misma pasada que
+acumula el DEBE y el HABER de esa cuenta. Así el desglose no puede desalinearse del saldo que dice
+explicar: es aritméticamente el mismo número, partido por concepto. La clave del desglose es el **código**
+del concepto de liquidación, no su nombre (regla general del proyecto) — dos grafías del mismo código
+(`'Vacaciones'` / `'VACACIONES'`) se suman como un solo concepto en vez de partirse en dos líneas.
+
+**El residuo se calcula y se muestra igual**, aunque por construcción tenga que dar siempre cero: es el
+único lugar de la pantalla donde se vería si algún día el desglose y el saldo se desalinean — y esa clase
+de error no se nota mirando los totales, que siguen cerrando. Piezas nuevas y compartidas por los dos
+controles: `js/controls/cuentaConceptos.js` (el acumulador) y `js/ui/fichaCuenta.js` (la conciliación, la
+tira, la tabla de detalle y la línea de contexto).
+
+**De paso, en el Asiento de Remuneraciones (FINADIET):** las cuentas y los centros de costo que quedaron
+SIN CLASIFICAR entran como ficha propia, en "Sin comparar", con saldo `—` (no `0,00`, porque no tienen
+saldo) y una conclusión que dice qué cargar en el Paso 2. La alternativa descartada es no mostrarlos en
+Fichas y dejar que el analista los encuentre en el Resumen: se descarta porque así hay exactamente una
+ficha por cada unidad que cuenta el semáforo (`unitsTotal`), y las que no cerraron son exactamente las que
+cuenta `unitsWithDiff` — verificado como assert en `tests/fichasCuentaContable.test.js`.
+
+**Dónde vive el detalle.** `js/controls/cuentaConceptos.js`, `js/ui/fichaCuenta.js`,
+`js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`, `tests/fichasCuentaContable.test.js`
+(123 asserts).
+
+---
+
+## D-085 — Contabilidad Desglosada: una cuenta sin código es "Sin comparar", no "Con diferencia", en las dos solapas del control
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 7 de `specs/vista-estandar-resultados.md`, control
+`conta_desglosada`. Corrige un criterio de clasificación que había quedado mal en la tanda 3
+(D-079/D-080/D-081).
+
+**Lo que estaba mal:** la solapa Planilla (y, al construirla en esta tanda, la solapa Fichas) clasificaba
+una cuenta sin código de la Contabilidad Desglosada como "Con diferencia" (`estadoDe: f => (!cierraTodo ||
+!f.nro ? 'conDif' : 'centavo')`). No hay ninguna diferencia de **importe** que justifique el rojo: la línea
+suma al asiento igual, y de hecho el balance cierra. Lo que falta es el **otro archivo** — el nombre de esa
+cuenta no está en el Reporte de Cuentas de Redefinición del cliente —, que es literalmente la definición
+del chip "Sin comparar" (§3 de la spec de la vista estándar). Y en ámbar nunca se lee como aprobada
+(D-073): sigue siendo algo que hay que resolver en el Paso 2 antes de mandar el asiento, sólo que con el
+nombre correcto de lo que le pasa.
+
+**Se corrige en las DOS solapas** porque las dos leen el mismo archivo y no pueden clasificar la misma
+cuenta distinto: `vistaAsiento()` y `vistaDesglosada()` (Planilla) y `estadoDeCuentaConta()` (Fichas) usan
+ahora el mismo criterio. Con esto sale de `NO_APLICA_CONTA` la entrada `sinComparar` que decía "las tres
+tablas salen del mismo archivo, así que no hay un lado que pueda faltar": esa justificación era falsa para
+el asiento, que sí necesita un segundo archivo (el Reporte de Cuentas).
+
+**Lo que no cambia:** el semáforo global del control (`summarizeContaDesglosada`, `unitsTotal` /
+`unitsWithDiff`) no se tocó — sigue contando una cuenta sin código dentro de `unitsWithDiff` cuando el
+asiento no cierra. Lo que cambió es sólo la etiqueta con la que cada chip y cada ficha describen esa cuenta
+en pantalla, no el cálculo del semáforo (CLAUDE.md: el color del semáforo nunca sale del estado por fila).
+
+**Dónde vive el detalle.** `js/controls/contaDesglosada.js` (`estadoDeCuentaConta`, `vistaAsiento`,
+`vistaDesglosada`, `NO_APLICA_CONTA`), `specs/conta-desglosada-asiento.md`, D-073, D-079.
+

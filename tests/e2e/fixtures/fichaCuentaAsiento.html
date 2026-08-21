@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasCuenta.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del "Asiento de Remuneraciones" (FINADIET)
+     para mirar la solapa FICHAS: una ficha por cuenta contable, que abierta
+     muestra qué conceptos la componen y cómo suman hasta el saldo.
+
+     Sin parámetros el asiento cierra y todas las cuentas salen "Al centavo".
+     Con ?sinclasificar=1 se agregan una cuenta y un centro de costo que no están
+     en la tabla del cliente: los dos entran como ficha en "Sin comparar" y el
+     asiento deja de cerrar, que es el otro estado que hay que poder mirar.
+     Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runFinadietAsiento, renderFinadietAsientoResults, summarizeFinadietAsiento }
+  from '../../../js/controls/finadietAsiento.js';
+
+const mov = ({ centro, importe, debe = '', haber = '', nro, concepto }) => ({
+  centro, importe,
+  cuenta_debe: debe, cuenta_debe_nombre: '',
+  cuenta_haber: haber, cuenta_haber_nombre: '',
+  nro_concepto: nro, concepto,
+});
+
+// Dos centros de costo de la semilla del cliente y cuatro conceptos: el asiento
+// cierra al centavo y cada cuenta se puede abrir para ver su desglose.
+const rows = [
+  mov({ centro: 'ADMINISTRACION',      importe: 100000, debe: '521101',   haber: '213111', nro: '1010', concepto: 'Sueldo' }),
+  mov({ centro: 'ADMINISTRACION',      importe:  18000, debe: '521201',   haber: '213212', nro: '1120', concepto: 'Jubilacion' }),
+  mov({ centro: 'ADMINISTRACION',      importe:   4500, debe: '521101.1', haber: '213111', nro: '1130', concepto: 'Horas extras' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe: 240000, debe: '521101',   haber: '213111', nro: '1010', concepto: 'Sueldo' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe:  43200, debe: '521201',   haber: '213212', nro: '1120', concepto: 'Jubilacion' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe:  12000, debe: '521101',   haber: '213111', nro: '1130', concepto: 'Horas extras' }),
+  mov({ centro: 'PRODUCCION - M.O.I.', importe:  87000, debe: '521102',   haber: '213111', nro: '1200', concepto: 'Aguinaldo' }),
+];
+
+if (new URLSearchParams(location.search).get('sinclasificar') === '1') {
+  rows.push(
+    // Una cuenta que no está en la tabla de cuentas contables del cliente.
+    mov({ centro: 'ADMINISTRACION', importe: 7000, debe: '999999', haber: '213111', nro: '1400', concepto: 'Concepto inventado' }),
+    // Un centro de costo que no está en la tabla de centros.
+    mov({ centro: 'DEPOSITO NUEVO', importe: 3000, debe: '521101', haber: '213111', nro: '1010', concepto: 'Sueldo' }),
+  );
+}
+
+const results = runFinadietAsiento(rows, [], { period: '2026-07', finadietAsientoConfig: null });
+window.__results = results;
+window.__summary = summarizeFinadietAsiento(results);
+renderFinadietAsientoResults(results, document.getElementById('host'));
+</script></body></html>
