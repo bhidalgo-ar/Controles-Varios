@@ -1,0 +1,55 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasAgrupadorCc.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del "Cruce por Agrupadores" con la ficha por
+     LEGAJO de la vista estándar (§4 de specs/vista-estandar-resultados.md): la
+     tarjeta cerrada con el legajo y su diferencia total, y adentro un renglón
+     por agrupador con nómina, resumen y diferencia. Datos 100 % inventados,
+     jugadores de Banfield. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body><div id="host" class="page-content page-content--wide"></div>
+<script type="module">
+import { runAgrupadores, renderAgrupadoresResults, summarizeAgrupadores }
+  from '../../../js/controls/agrupadores.js';
+
+// Seis legajos y TRES agrupadores: dieciocho filas de cruce y seis fichas. Es
+// justamente lo que la ficha viene a resolver — con la tabla plana hay que
+// buscar al mismo empleado en tres lugares.
+//   1 — coincide exacto en los tres agrupadores        → Al centavo
+//   2 — $ 100 en Sueldo y $ 40 en Cargas sociales      → Con diferencia
+//   3 — sólo está en la Nómina Maestra                 → Sin comparar
+//   4 — 0,004 de diferencia (el redondeo de Excel)     → Al centavo
+//   5 — $ 0,60 de diferencia, abajo del umbral de $ 1  → Dentro del margen
+//   6 — sólo está en el archivo Resumen                → Sin comparar
+const nominaRows = [
+  { legajo: '1', apellido: 'SANGUINETTI', nombre: 'JAVIER',      '100': 1000,     '200': 500, '300': 120 },
+  { legajo: '2', apellido: 'FALCIONI',    nombre: 'JULIO CESAR', '100': 2000,     '200': 340, '300': 200 },
+  { legajo: '3', apellido: 'DATOLO',      nombre: 'JESUS',       '100': 1500,     '200': 200, '300': 90 },
+  { legajo: '4', apellido: 'ERVITI',      nombre: 'WALTER',      '100': 1800.004, '200': 250, '300': 110 },
+  { legajo: '5', apellido: 'SILVA',       nombre: 'SANTIAGO',    '100': 1700.60,  '200': 400, '300': 150 },
+];
+const resumenLargoRows = [
+  { legajo: '1', '100': 1000, '200': 500, '300': 120 },
+  { legajo: '2', '100': 1900, '200': 300, '300': 200 },
+  { legajo: '4', '100': 1800, '200': 250, '300': 110 },
+  { legajo: '5', '100': 1700, '200': 400, '300': 150 },
+  { legajo: '6', '100': 900,  '200': 150, '300': 60 },
+];
+
+const results = runAgrupadores(nominaRows, [], {
+  resumenLargoRows,
+  grouperDefs: [
+    { id: 1, name: 'Sueldo' },
+    { id: 2, name: 'Cargas sociales' },
+    { id: 3, name: 'No remunerativos' },
+  ],
+  grouperConceptsMap: { 1: ['100'], 2: ['200'], 3: ['300'] },
+  agrupadoresConfig: { thresholds: { absoluteAmount: 1, percentage: 0.1, flagMissing: true } },
+});
+window.__results = results;
+window.__summary = summarizeAgrupadores(results);
+renderAgrupadoresResults(results, document.getElementById('host'));
+</script></body></html>

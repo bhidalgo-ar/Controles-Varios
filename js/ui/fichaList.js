@@ -273,6 +273,10 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
  * @param {string} [opts.unitLabel='fichas']
+ * @param {string} [opts.searchLabel] - el buscador dice por qué se puede buscar,
+ *   y eso depende de la unidad: en un control por centro de costo, "Buscá por
+ *   legajo o nombre" manda al analista a escribir algo que la lista no tiene.
+ * @param {string} [opts.searchPlaceholder]
  * @param {(exportEl: HTMLElement) => void} [opts.onExport] - el control monta su
  *   `renderExportMenu()` acá: el exportar va último, siempre, y ningún control
  *   inventa otro botón ni le cambia el rótulo.
@@ -282,6 +286,7 @@ export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
   getAmount, amountLabel, unitLabel = 'fichas',
+  searchLabel, searchPlaceholder,
   onExport, onOpen, pageSize,
 } = {}) {
   if (fichas.length === 0) {
@@ -307,6 +312,10 @@ export function renderFichasPanel(panel, {
   // que es lo último antes de exportar.
   const ordenSel = ordenes.length ? ordenDropdown(ordenes) : null;
   if (ordenSel) toolbar.querySelector('.results-toolbar__right').prepend(ordenSel);
+  // El `<select>` de adentro. `ordenDropdown()` devuelve el ENVOLTORIO —es lo
+  // que se monta en la barra— y un `<div>` no tiene `.value`: leyéndolo de ahí,
+  // `ordenar()` no encontraba nunca el criterio y el desplegable no hacía nada.
+  const ordenSelect = ordenSel?.querySelector('select') || null;
 
   const { listEl, els } = renderFichaList(panel, fichas, { onOpen });
 
@@ -330,6 +339,8 @@ export function renderFichasPanel(panel, {
 
   initSearchCombobox(searchEl, {
     rows: fichas, trEls: els, getLabel,
+    ...(searchLabel !== undefined ? { label: searchLabel } : {}),
+    ...(searchPlaceholder !== undefined ? { placeholder: searchPlaceholder } : {}),
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 
@@ -354,7 +365,7 @@ export function renderFichasPanel(panel, {
   }
 
   function ordenar() {
-    const def = ordenes.find(o => o.value === ordenSel.value);
+    const def = ordenes.find(o => o.value === ordenSelect?.value);
     if (!def) return;
     const pares = fichas.map((f, i) => ({ f, el: els[i] }));
     pares.sort((a, b) => def.compare(a.f, b.f));
@@ -366,7 +377,7 @@ export function renderFichasPanel(panel, {
 
   estadoSel.addEventListener('change', filtrar);
   marcaSel?.addEventListener('change', filtrar);
-  ordenSel?.querySelector('select')?.addEventListener('change', ordenar);
+  ordenSelect?.addEventListener('change', ordenar);
 
   onExport?.(exportEl);
 

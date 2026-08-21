@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasAgrupadorCc.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Rendimiento vs Tabulado" con la ficha
+     por CENTRO DE COSTO de la vista estándar (§4 de
+     specs/vista-estandar-resultados.md): la tarjeta cerrada con el CC y su
+     diferencia, y adentro el Tabulado abierto concepto por concepto más la
+     comparación categoría por categoría. Datos 100 % inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body><div id="host" class="page-content page-content--wide"></div>
+<script type="module">
+import { runRendVsTabu, renderRendVsTabuResults, summarizeRendVsTabu }
+  from '../../../js/controls/rendVsTabu.js';
+import { withTolerance, stampTolerance } from '../../../js/controls/tolerance.js';
+
+// Cuatro centros de costo, uno por estado de la barra. El código '9999' está
+// configurado a propósito y NO existe como columna del Tabulado: es el concepto
+// que la ficha tiene que mostrar en `—` y no completar con 0,00 en silencio.
+const MAPPING = {
+  rend: {
+    ccCodeColumn: 'CC', ccNameColumn: 'Nombre CC', precioColumn: 'Precio',
+    estimuloColumn: 'Estimulo', cargasColumn: 'Cargas',
+    provMesColumn: 'ProvMes', provCcssColumn: 'ProvCcss',
+  },
+  tab: { idCCColumn: 'ID_CC', ccColumn: 'N_CC' },
+  conceptGrouping: {
+    precio:   [{ code: '1003', sign: 1 }, { code: '1017', sign: 1 }, { code: '9999', sign: 1 }],
+    estimulo: [{ code: '1006', sign: 1 }],
+    cargas:   [{ code: '6050', sign: 1 }, { code: '6110', sign: -1 }],
+    provMes:  [{ code: '3670', sign: 1 }],
+    provCcss: [{ code: '3672', sign: 1 }],
+  },
+  period: '2026-05',
+};
+
+const filaRend = (over = {}) => ({
+  CC: '', 'Nombre CC': '', Precio: 0, Estimulo: 0, Cargas: 0, ProvMes: 0, ProvCcss: 0, ...over,
+});
+
+const rendRows = [
+  // 0011 — el Tabulado suma 1.600 en PRECIO y el reporte informa 1.500 → Con diferencia
+  filaRend({ CC: '0011', 'Nombre CC': 'Administracion', Precio: 1500, Estimulo: 200, Cargas: 900, ProvMes: 300, ProvCcss: 80 }),
+  // 0022 — cierra al centavo en las cinco categorías
+  filaRend({ CC: '0022', 'Nombre CC': 'Produccion', Precio: 4200, Estimulo: 0, Cargas: 1400, ProvMes: 350, ProvCcss: 90 }),
+  // 0033 — 0,50 de diferencia: abajo del monto de diferencia del cliente → Dentro del margen
+  filaRend({ CC: '0033', 'Nombre CC': 'Logistica', Precio: 2600.50, Estimulo: 0, Cargas: 800, ProvMes: 200, ProvCcss: 50 }),
+  // 0099 — no está en el Tabulado → Sin comparar
+  filaRend({ CC: '0099', 'Nombre CC': 'Deposito', Precio: 500, Cargas: 150 }),
+];
+
+const tabRows = [
+  { ID_CC: '11', N_CC: 'Administracion',
+    '1003-SUELDO': 1000, '1017-PRESENTISMO': 600, '1006-ASIG_ESTIMULO': 200,
+    '6050-CONTRIBUCIONES': 1000, '6110-RETENCION_SS': 100, '3670-PROV_SAC': 300, '3672-PROV_CCSS': 80 },
+  { ID_CC: '22', N_CC: 'Produccion',
+    '1003-SUELDO': 3800, '1017-PRESENTISMO': 400, '1006-ASIG_ESTIMULO': 0,
+    '6050-CONTRIBUCIONES': 1500, '6110-RETENCION_SS': 100, '3670-PROV_SAC': 350, '3672-PROV_CCSS': 90 },
+  { ID_CC: '33', N_CC: 'Logistica',
+    '1003-SUELDO': 2400, '1017-PRESENTISMO': 200, '1006-ASIG_ESTIMULO': 0,
+    '6050-CONTRIBUCIONES': 800, '6110-RETENCION_SS': 0, '3670-PROV_SAC': 200, '3672-PROV_CCSS': 50 },
+];
+
+// El monto de diferencia del cliente es $ 1,00 (D-069) — el mismo camino que la
+// app: se estampa en la corrida y se corre midiendo con eso. Sin esto el default
+// es el centavo y el chip "Dentro del margen" no tendría ningún caso.
+const results = withTolerance(1, () => runRendVsTabu(rendRows, tabRows, MAPPING));
+stampTolerance(results, 1);
+window.__results = results;
+window.__summary = withTolerance(1, () => summarizeRendVsTabu(results));
+withTolerance(1, () => renderRendVsTabuResults(results, document.getElementById('host')));
+</script></body></html>
