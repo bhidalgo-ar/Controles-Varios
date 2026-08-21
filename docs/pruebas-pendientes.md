@@ -28,6 +28,10 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
    **no vieron un solo archivo real**. El layout del importador está deducido de un relevamiento, no
    confirmado. §4 y §5
 
+Y una cuarta que no necesita ningún archivo y se destraba en diez minutos: **las diez pantallas de la
+tanda 2 de la vista estándar están en un PR en borrador esperando que las mires** (§6 ter). No se
+mergea hasta entonces.
+
 ---
 
 ## 1 · Control de Netos (Sportline / IFSA)
@@ -301,6 +305,59 @@ Están escritas en D-077 y la pantalla ya funciona con ellas, pero es tu criteri
 
 **Detalle:** `specs/vista-estandar-resultados.md`, D-074, D-076, D-077.
 
+## 6 ter · Vista estándar — tanda 2: las diez pantallas del lote Meta4/Marval
+
+> **Ojo: esto NO está mergeado.** Está en un PR **en borrador** (#181) justamente porque son diez
+> pantallas que los analistas abren todos los días y lo que falta es tu mirada. Es el ítem de esta
+> lista que más rápido se destraba: no necesita ningún archivo, sólo que abras las pantallas.
+
+**Qué es.** Brutos, GS Pers y Control NR (los tres en sus dos modos: Controlar y Generar Reporte),
+Rendimiento vs Tabulado, Rendimiento x EE, Rendimiento vs Asiento y EE x CATEG pasan a la misma barra
+y la misma planilla que ya tiene Acumuladores. La solapa que se llamaba «Detalle» en esas diez pasa a
+llamarse **«Planilla»**.
+
+**Cómo llegó hasta acá.** Ningún cálculo se tocó. De cada una de las diez pantallas se anotaron, antes
+y después, la cantidad de filas y el total de cada columna, y se compararon uno por uno. Se miraron en
+un navegador de verdad, en los tres temas, y se disparó la descarga del CSV de cada una. **Pero con
+datos inventados**: no hay archivos de cliente en el repo con los cuales llegar a una pantalla de
+resultados por el camino del analista, así que la primera vez que estas diez pantallas ven un Tabulado
+real vas a ser vos.
+
+### Qué mirar
+
+| Qué | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| **Los totales de cada columna** en las diez planillas | **Exactamente los mismos números que antes.** Es lo único que no puede haber cambiado | Si un total se movió, la migración se comió una fila o una columna |
+| El renglón de abajo | Dice `TOTAL — N legajos` (o `N centros de costo`), y pasa a `TOTAL de la selección` cuando filtrás | Un total que no cierra con lo que estás mirando |
+| Los cinco chips | Las mismas cinco palabras y en el mismo orden en las diez, y **la suma de los cuatro últimos da el primero** | Un caso que no aparece con ningún chip es un caso que nadie va a encontrar |
+| **Lo que sale en rojo** | Sólo lo que supera **tu** monto de diferencia. Antes la tabla medía siempre con $ 0,01 aunque el panel dijera otra cosa | Con el monto en $ 100, un legajo de $ 40 salía en rojo en la tabla y "sin diferencia" en el resumen de arriba |
+| La base de cálculo abajo de cada título | Dice de dónde sale el número ("la suma de sus conceptos en el Tabulado", "suma de todas las liquidaciones del mes") | Si alguna dice algo que no es, la planilla miente con confianza |
+| **EE x CATEG** | Una sola tabla con una fila por caso y una columna "Qué pasa", en vez de las tres de antes. Abajo siguen las dos distribuciones | |
+| **Rendimiento vs Asiento** | El desglose de una celda de CONTA (click en el importe) sigue abriendo conceptos y empleados | Se sacó el desglose de la fila de TOTAL y el ordenar clickeando el encabezado: si los usabas, decilo |
+
+**El número ancla.** No hay uno solo: son los totales que ya conocés de tu última corrida de cada
+control. La regla es que **tienen que dar igual**. La única excepción prevista es la columna "# Difs"
+de NR y la cantidad de celdas en rojo, que ahora se miden con el monto que configuraste y antes se
+medían con $ 0,01 — o sea que pueden **bajar**, nunca subir.
+
+### Lo que espera un criterio tuyo
+
+Están en D-078 y la pantalla ya funciona con ellas, pero es tu criterio el que vale:
+
+1. **Los tres "Generar Reporte"** (Brutos, GS Pers, NR) muestran los cinco chips igual, en gris y en
+   cero, con un cartelito que explica que ese control arma un archivo y no cruza nada. ¿Preferís que
+   ahí no aparezcan?
+2. **Rendimiento vs Asiento perdió el ordenar por columna** (clickear el encabezado) y el desglose que
+   colgaba de la fila de TOTAL. ¿Los usabas?
+3. **El rótulo "Qué pasa"** de la columna nueva de EE x CATEG, y que sus tres listas ahora sean una
+   sola tabla.
+4. **Qué solapa abre.** Estas diez siguen abriendo en Resumen, no en Planilla, porque el veredicto vive
+   adentro de esa solapa. Se cambia cuando cada control tenga su ficha.
+
+**Detalle:** `specs/vista-estandar-resultados.md` (§3, §5, §7, §8 y §9), **D-078**, PR #181.
+
+---
+
 ## 7 · Detector de formato del Tabulado (pieza T)
 
 **Qué es.** Reconocer, por la firma del archivo, si un Tabulado es Meta4 horizontal, Axton completo,
@@ -387,8 +444,9 @@ app**, así que no hay nada que abrir:
 - **Los datos de prueba pasaron a ser jugadores de Banfield** — cambia sólo lo que dicen los tests y
   los dos ejemplos de nombre de la app. Si ves "SANGUINETTI JAVIER" en un placeholder, es esto.
 - **El gate de mockup antes de construir un control** — regla de proceso para las próximas veces.
-- **La vista estándar de resultados** — la **tanda 1 ya salió** y sí deja pantalla para mirar: pasó a
-  la §6 bis. Lo que queda sin código son las tandas 2 a 8, o sea los otros 19 controles.
+- **La vista estándar de resultados** — la **tanda 1 ya salió** (§6 bis) y la **tanda 2 está en un PR
+  en borrador** esperando tu mirada (§6 ter). Lo que queda sin código son las tandas 3 a 8, o sea los
+  otros nueve controles y las fichas.
 - **El runbook del orquestador y los prompts por tanda** — cómo se van a repartir los ocho chats.
 - **Los agentes nuevos** (documentalista, inspector-archivo) y el chequeo de datos sensibles antes de
   commitear — herramientas de trabajo, no app.
