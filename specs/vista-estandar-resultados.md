@@ -1,10 +1,16 @@
 # Vista estándar de resultados — Fichas + Planilla, iguales en toda la app
 
 **Estado:** decidido el 2026-08-20 con Willy. **Tanda 1 hecha (2026-08-20):** las piezas compartidas
-del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). Tandas 2 a 8 —el resto
-de los 21 controles— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de
-Netos (Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de
-cada tanda de trabajo están en `docs/prompts-vista-estandar.md`.
+del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). **Tanda 5 hecha
+(2026-08-21, D-081):** la solapa Fichas de Cruce por Agrupadores y de Rendimiento vs Tabulado —los dos
+controles cuya unidad no es el legajo con sus conceptos—, verificada con fixture, sin archivo de
+cliente real. **Ojo:** la barra y la planilla de esos dos controles (tandas 2 y 3) todavía no
+entraron a `main` — están en PRs abiertos sin mergear (#181 `feat/vista-estandar-barra-meta4` para
+Rendimiento vs Tabulado y la rama `feat/vista-estandar-barra-axton` para Agrupadores), así que la
+tercera solapa de los dos sigue llamándose "Detalle" y no "Planilla" hasta que entren. Tandas 2, 3,
+4, 6, 7 y 8 siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos
+(Sportline) y se generaliza a los 21 controles. El mapa de abajo está aprobado; los prompts de cada
+tanda de trabajo están en `docs/prompts-vista-estandar.md`.
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -257,7 +263,13 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 3. **Barra + planilla, lote Axton/general** — 9 entradas. Puede ir en paralelo con la 2: no se
    pisan archivos.
 4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
-5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
+5. **Fichas de legajo × agrupador y CC × concepto — Agrupadores, Rendimiento vs Tabulado. Hecho el
+   2026-08-21 (D-081).** Agrupadores: una ficha por legajo con sus agrupadores adentro, con la
+   diferencia neta (Nómina menos Resumen) y la total (la que suma el semáforo) separadas. Rendimiento
+   vs Tabulado: una ficha por centro de costo, con el Tabulado abierto concepto por concepto a la
+   izquierda y el Reporte de Rendimiento por categoría a la derecha. Se hizo antes de que estos dos
+   controles tuvieran la barra estándar (tandas 2 y 3, todavía en PRs sin mergear): la tercera solapa
+   de los dos sigue llamándose "Detalle" hasta que entren.
 6. **Ficha de campos que no coinciden + matriz campo × legajo** — EE x CATEG.
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
 8. **Ficha por lista de acreditación** — Acreditaciones.

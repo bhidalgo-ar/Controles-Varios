@@ -2759,3 +2759,77 @@ sirve así en un control de generación, se ajusta sin tocar el resto del están
 **Detalle:** `js/controls/acumuladoresGanancias.js` (`ESTADO_POR_ISSUE`, `NO_APLICA_ACUM`, `estadoDeFicha`),
 `js/ui/fichaList.js`, `js/ui/tableTools.js`, `js/ui/resultBlocks.js`, `js/ui/viewPreference.js`, D-026, D-060,
 D-069, D-074, D-076.
+
+---
+
+## D-081 — Tanda 5 de la vista estándar: qué números muestra la ficha de Agrupadores y por qué las dos tablas de Rendimiento vs Tabulado son distintas
+
+> Numerada D-081 y no D-078 porque las tandas 2 y 3 de la vista estándar ya se llevaron D-078, D-079 y
+> D-080 en sus PRs, que a esta fecha siguen abiertos y sin mergear.
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 5 de `specs/vista-estandar-resultados.md` (§4 y §8) — la
+solapa Fichas de Cruce por Agrupadores y de Rendimiento vs Tabulado, los dos controles cuya unidad no
+es "un legajo con sus conceptos". Willy no estaba disponible para las decisiones de abajo: quedan
+tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. Agrupadores: la ficha muestra dos diferencias distintas, y el importe grande es la TOTAL, no la
+neta.** La **neta** es Nómina Maestra menos Archivo Resumen, la resta simple — puede compensar un
+agrupador con +100 con otro en −100 y salir 0. La **total** es la suma, en valor absoluto, de la
+diferencia de los agrupadores que superan el umbral — no compensa nada, porque dos agrupadores que no
+cierran son dos discrepancias reales, no una que se cancela con la otra. El importe grande de la
+ficha cerrada es la total, porque es exactamente lo que ese legajo le aporta al `diffTotalAmount` que
+ya suma el semáforo: así el KPI de la barra ("Σ diferencia") y el número que ve el analista en la
+ficha son el mismo número. Las dos se muestran en la tira, una al lado de la otra, para que se vea la
+diferencia entre ambas y no sólo la que "ganó".
+   - Alternativa descartada: mostrar sólo la neta, que es la resta más intuitiva de leer. Se
+     descarta porque dejaría un legajo con dos agrupadores mal —uno para arriba y otro para abajo,
+     compensados— con un importe grande de 0 o cercano a 0, escondiendo justo el caso que hay que
+     revisar.
+
+**2. Agrupadores: la ficha NO lleva las dos tablas de "cómo debería ser / cómo salió" del §4 de la
+spec.** Se evaluó incluirlas como en el resto de las fichas con cascada, pero en este control los dos
+lados de la comparación —Nómina Maestra y Archivo Resumen— ya son dos columnas del detalle por
+agrupador, de abajo. Poner arriba dos tablas con esos mismos dos números, sumados en una sola fila
+cada una, sería la misma tabla dos veces sin agregar nada que el detalle no diga ya.
+   - Alternativa descartada: las dos tablas con un solo renglón (el total Nómina y el total Resumen).
+     Se descarta por redundante — PENDIENTE: si a Willy le sirve tenerlas igual como ancla visual, se
+     agregan.
+
+**3. Rendimiento vs Tabulado: las dos tablas de arriba son asimétricas, a propósito.** A la izquierda,
+el Tabulado abierto concepto por concepto con su código — es de ahí que sale cada peso, y es la única
+fuente que se puede auditar así. A la derecha, el Reporte de Rendimiento por categoría — es todo lo
+que ese archivo informa, no hay una versión más abierta. La comparación categoría por categoría, con
+la diferencia al lado de cada una, se hace en la tabla de detalle de abajo y no arriba.
+   - Alternativa descartada: armar la tabla de la derecha también por concepto, repitiendo el mismo
+     total en las categorías que aplican. Se descarta porque el Reporte de Rendimiento no informa por
+     concepto — se estaría mostrando un desglose que el archivo de origen no tiene.
+
+**4. `runRendVsTabu()` guarda el Tabulado abierto por concepto y por centro de costo (`tByCode`).** No
+es una cuenta nueva: es la misma suma que ya se calculaba, guardada antes de acumularse en la
+categoría. La clave es `categoría|código` y no sólo el código, porque un mismo código de concepto
+puede estar configurado en dos categorías distintas (D-039) y perder la categoría colisionaría dos
+conceptos distintos en una sola clave. Una corrida vieja no trae este campo, y la tabla de la ficha lo
+dice explícitamente en vez de completar con ceros — el default silencioso que `CLAUDE.md` prohíbe.
+   - Por qué no estaba antes: nada lo consumía. La pantalla vieja del control mostraba las cinco
+     categorías ya sumadas, y de los conceptos sólo la LISTA de qué columnas del Tabulado alimentan a
+     cada una (la que hoy es la leyenda del encabezado) — nunca el importe de cada concepto en cada
+     centro de costo. La ficha es lo primero que necesita ese número.
+
+**5. Agrupadores: un legajo que está en un solo archivo no pinta ningún renglón en rojo, aunque el
+cruce le marque `tieneDiff` en todos sus agrupadores.** `tieneDiff` en `runMatching()` es cómo el
+cruce marca "no hay con qué comparar", no "hay una diferencia real" — y pintar esos renglones en rojo
+se leería como que sí la hay. La regla es la misma de D-073: sin el otro lado, el estado es "Sin
+comparar", nunca un grado de cierre. La ficha lo dice en el badge ("No está en el archivo Resumen" /
+"No está en la Nómina Maestra") y en la conclusión, y el detalle deja esos renglones sin tono.
+
+**Verificación.** 37 asserts en `tests/fichasAgrupadorCc.test.js` (sumado a `test:unit`) y 14 pruebas
+de navegador en `tests/e2e/fichasAgrupadorCc.spec.js`, con dos fixtures nuevos — el mismo `run()` y
+`render()` de cada control, con datos inventados. Entre los asserts, uno prueba en el propio código
+que la suma de la diferencia de todas las fichas de un control da el mismo `diffTotalAmount` que el
+semáforo, que es el bug que ya se pagó una vez con el denominador contado en la unidad equivocada
+(D-074 §"unitsTotal"). Verificado en Chromium, tres temas. **No se corrió contra ningún archivo de
+cliente real** — no hay uno en el repo con el que llegar a esta pantalla por el camino del analista.
+
+**Detalle:** `js/controls/agrupadores.js` (`buildFichasAgrupadores`, `estadoDeLegajo`), `js/controls/rendVsTabu.js`
+(`buildFichasRendVsTabu`, `estadoDeCentroDeCosto`, `tByCode`), `js/ui/fichaList.js`, `css/results.css`,
+D-039, D-073, D-074, D-077.

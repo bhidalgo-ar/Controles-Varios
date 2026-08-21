@@ -7,6 +7,50 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(ui): Cruce por Agrupadores y Rendimiento vs Tabulado ganan la solapa Fichas — 2026-08-21
+
+- **Es la tanda 5 de `specs/vista-estandar-resultados.md`** (§4 y §8, D-081): los dos controles cuya
+  unidad no es "un legajo con sus conceptos" ganan la ficha. Ningún cálculo ni conteo cambió: el
+  semáforo sigue contando en la unidad que declara cada control, y la suma de la diferencia de todas
+  las fichas da exactamente el `diffTotalAmount` que ya publicaba — está escrito como assert.
+- **Cruce por Agrupadores — una ficha por LEGAJO, con sus agrupadores adentro.** Es el que más gana:
+  el cruce evalúa el mismo legajo una vez por agrupador, así que hoy la planilla tiene una fila por
+  legajo × agrupador —~1000 filas para ~100 empleados— y un empleado no se puede leer entero. Cerrada,
+  la ficha muestra el legajo y su diferencia **total** (la suma en valor absoluto de los agrupadores
+  que superan el umbral — el mismo número que ya suma el semáforo). Abierta: la tira Nómina Maestra →
+  Archivo Resumen → diferencia **neta** (la resta simple, que puede compensar un agrupador con otro) →
+  diferencia total, y un renglón por agrupador con Nómina/Resumen/diferencia. `Marcas ▾` son los
+  agrupadores en los que no cierra. El legajo que está en un solo archivo cae en "Sin comparar" — no
+  hay nada que comparar, así que ningún renglón se pinta en rojo aunque el cruce marque diferencia en
+  todos sus agrupadores (D-073).
+- **Rendimiento vs Tabulado — una ficha por CENTRO DE COSTO**, la unidad que el control declara: el
+  nombre del CC va en la línea de identidad, donde en los demás controles va el nombre del empleado.
+  Abierta: a la izquierda el Tabulado abierto concepto por concepto con su código (de ahí sale cada
+  peso); a la derecha el Reporte de Rendimiento, que sólo informa las cinco categorías ya sumadas. La
+  comparación categoría por categoría con la diferencia al lado está en la tabla de detalle, no
+  arriba. `Marcas ▾` son las cinco categorías. Un concepto configurado cuya columna no está en el
+  Tabulado sale en `—`, nunca en 0,00.
+- El control guarda ahora el Tabulado abierto por concepto y por centro de costo (`tByCode`, clave
+  `categoría|código` porque un mismo código puede estar configurado en dos categorías) — es la misma
+  suma que antes se perdía al acumularse en la categoría, no una cuenta nueva. Una corrida vieja no lo
+  trae, y la ficha lo dice en vez de completar con ceros.
+- **Tres arreglos chicos en piezas compartidas, heredados por los 21 controles:** el `Orden ▾` de
+  cualquier ficha no ordenaba nada — leía `.value` de un `<div>` que no lo tiene; el título de una
+  columna de importes del detalle de la ficha salía alineado a la izquierda sobre números alineados a
+  la derecha; y `renderFichasPanel()` ahora acepta el rótulo y el placeholder del buscador, para que
+  un control por centro de costo no le diga al analista que busque por legajo o nombre.
+- `js/controls/agrupadores.js`, `js/controls/rendVsTabu.js`, `js/ui/fichaList.js`, `css/results.css`.
+  37 asserts en `tests/fichasAgrupadorCc.test.js` (sumado a `test:unit`) y 14 pruebas de navegador en
+  `tests/e2e/fichasAgrupadorCc.spec.js`, con dos fixtures nuevos. Verificado en Chromium en los tres
+  temas, con el mismo `run()` y `render()` de cada control y datos inventados (jugadores de Banfield).
+  **No se corrió ningún control de punta a punta en la app entera**: no hay archivos de cliente en el
+  repo con los que llegar a esta pantalla por el camino del analista. La tercera solapa de los dos
+  controles sigue llamándose "Detalle" y no "Planilla" — esa parte es de las tandas 2 y 3, que están
+  en PRs abiertos sin mergear (#181 `feat/vista-estandar-barra-meta4` y la rama
+  `feat/vista-estandar-barra-axton`).
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), D-073, **D-081**. PR en borrador: falta
+  que Willy mire las dos pantallas en el navegador.
+
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
 
 - **Es la tanda 1 de `specs/vista-estandar-resultados.md`** (D-074): las piezas compartidas que faltaban más el primer control migrado, para poder verlo funcionando en el navegador. Ningún cálculo ni conteo de Acumuladores Ganancias cambió — `summarize` no se tocó.
