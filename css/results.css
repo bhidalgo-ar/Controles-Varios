@@ -660,6 +660,11 @@ table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th,
 table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th:first-child,
 table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:first-child,
 table.rb-grid.rb-grid--stick1 thead tr.rb-rubro__bands > th:nth-child(2),
+/* El caso de DOS bandas (Identificación + una) entra por el último selector de
+   la lista: ahí la segunda banda es el `:nth-child(2)` de la fila, y la regla que
+   fija la 2ª columna congelada (`background: var(--color-surface)`,
+   components.css) le ganaba por especificidad — el rótulo quedaba en celeste
+   sobre blanco, ilegible (Variación Sueldos fue el primero en mostrarlo). */
 table.rb-grid.rb-grid--stick2 thead tr.rb-rubro__bands > th:nth-child(2) {
   background: var(--invert-bg);
   color: var(--invert-accent);

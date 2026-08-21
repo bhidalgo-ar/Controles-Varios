@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del "Asiento de Remuneraciones" (FINADIET)
+     con la vista estándar (specs/vista-estandar-resultados.md): las tres solapas
+     del archivo, cada una con la barra de los cinco chips y las columnas de
+     importe en las bandas DEBE y HABER. Este control cuadra al centavo contra sí
+     mismo, así que el chip "Dentro del margen" tiene que salir deshabilitado y
+     con su motivo, no oculto. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runFinadietAsiento, renderFinadietAsientoResults, summarizeFinadietAsiento }
+  from '../../../js/controls/finadietAsiento.js';
+
+const mov = ({ centro = 'ADMINISTRACION', importe, debe = null, haber = null, nro = '1010', concepto = 'Sueldo' }) => ({
+  centro, importe,
+  cuenta_debe: debe || '', cuenta_debe_nombre: '',
+  cuenta_haber: haber || '', cuenta_haber_nombre: '',
+  nro_concepto: nro, concepto,
+});
+
+// Dos centros de costo y cuatro conceptos, todos con cuenta y centro conocidos
+// (los de la semilla del cliente): el asiento cierra al centavo.
+const rows = [
+  mov({ centro: 'ADMINISTRACION',      importe: 100000, debe: '521101',   haber: '213111', nro: '1010', concepto: 'Sueldo' }),
+  mov({ centro: 'ADMINISTRACION',      importe:  18000, debe: '521201',   haber: '213212', nro: '1120', concepto: 'Jubilacion' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe: 240000, debe: '521101',   haber: '213111', nro: '1010', concepto: 'Sueldo' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe:  43200, debe: '521201',   haber: '213212', nro: '1120', concepto: 'Jubilacion' }),
+  mov({ centro: 'PRODUCCION - M.O.D.', importe:  12000, debe: '521101.1', haber: '213111', nro: '1130', concepto: 'Horas extras' }),
+];
+
+const results = runFinadietAsiento(rows, [], { period: '2026-07', finadietAsientoConfig: null });
+window.__results = results;
+window.__summary = summarizeFinadietAsiento(results);
+renderFinadietAsientoResults(results, document.getElementById('host'));
+</script></body></html>

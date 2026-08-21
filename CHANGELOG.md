@@ -57,6 +57,56 @@
 - **El PR queda en borrador**: falta que Willy mire las diez pantallas en el navegador antes de
   mergear. Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), **D-078**.
 
+### feat(ui): barra estándar y planilla con bandas en el lote Axton/general — 2026-08-20
+
+- **Es la tanda 3 de `specs/vista-estandar-resultados.md`** (§9, punto 3): nueve pantallas pasan a la vista
+  estándar — Cruce por Agrupadores, Variación Sueldos, Variación Conceptos, Variación entre quincenas
+  (POP), Acreditaciones, Importador de Novedades, Novedades vs Liquidación, Asiento de Remuneraciones
+  (FINADIET) y Contabilidad Desglosada. **La tanda 2 (lote Meta4/Marval, 10 pantallas) corre en paralelo,
+  en otra rama, y no está en esta entrada.** Ningún cálculo ni conteo cambia en ninguna de las nueve.
+- **Se jubilan las tres barras propias** de Agrupadores, Variación Sueldos y Variación Conceptos, y el
+  botón suelto "🖨 Imprimir / PDF" de Variaciones, que ahora es un ítem más del `⬇ Exportar ▾`.
+- **Cruce por Agrupadores** pasa de una tabla por agrupador —una fila por legajo en cada una, ~1000 filas
+  para ~100 empleados, con un corte "por rendimiento" en 100 filas— a **una sola planilla**, una fila por
+  legajo con una banda por agrupador. El estado de cada fila lo sigue decidiendo `tieneDiff` del panel
+  del Paso 2, con su mismo monto, porcentaje y marcado de faltantes — los chips no leen el monto del
+  cliente acá (D-069).
+- **Novedades vs Liquidación** pasa de cuatro tablas —una por banda del cruce— a **una planilla**: las
+  cuatro bandas ahora se leen en los cinco chips de estado (difiere → Con diferencia; coincide → Al
+  centavo o Dentro del margen; no comparable y sin contraparte → Sin comparar), y lo que el estado no
+  distingue quedó en `Marcas ▾`.
+- **Importador de Novedades, Asiento de Remuneraciones y Contabilidad Desglosada** cambian su desplegable
+  de "Vista"/"Solapa"/"Archivo" por sub-solapas anidadas dentro de Planilla, cada una con su propia barra
+  estándar completa — el mismo patrón que ya usaba Acumuladores para sus dos hojas.
+- **Los dos asientos** (Remuneraciones y Contabilidad Desglosada) agrupan las columnas de importe en las
+  bandas DEBE y HABER; como cuadran al centavo contra sí mismos, el chip "Dentro del margen" sale
+  deshabilitado con el motivo en su `title`, no oculto.
+- **Variación entre quincenas (POP):** el valor hora no lleva TOTAL al pie —sumar el valor hora de
+  legajos distintos no da un número que signifique algo, y el pie que había antes tampoco lo hacía—; es
+  la única columna de importe de las nueve pantallas sin TOTAL, y la spec pide TOTAL en todas (D-081).
+- **Pieza compartida:** `js/ui/planillaPanel.js`, el gemelo de `renderFichasPanel()` para los
+  controles que no llevan ficha — el control declara sus columnas y en qué estado cerró cada fila, nada
+  más. La tanda 3 la había escrito como archivo nuevo para no pisarse con la tanda 2, que hizo lo mismo
+  con el mismo nombre; **al integrar quedó una sola pieza para los 19 controles de los dos lotes**
+  (D-079, D-088).
+- **Dos arreglos en piezas compartidas que valen para los 21 controles, no sólo estos nueve** (D-080):
+  `js/ui/tableTools.js` contaba la paginación sobre el índice original de la fila y no sobre las que
+  pasan el filtro — buscar un legajo que estaba en la fila 300 no mostraba nada, y el botón "Mostrar
+  todas" además se ocultaba, sin salida; y `css/results.css` pintaba el rótulo de la segunda banda en
+  celeste sobre blanco cuando la planilla tiene sólo dos bandas (se ve en Variación Sueldos, la primera).
+- **Un desvío deliberado respecto de la spec:** `Marcas ▾` queda a la izquierda del buscador, copiando al
+  piloto de la tanda 1 (Acumuladores) en vez del §3 de la spec, que lo pide a la derecha — para que las
+  21 pantallas queden iguales entre sí, que es el objetivo real (D-081).
+- `js/ui/planillaPanel.js` (nuevo), `js/ui/tableTools.js`, `css/results.css`,
+  `js/controls/agrupadores.js`, `js/controls/variaciones.js`, `js/controls/popVariaciones.js`,
+  `js/controls/acreditaciones.js`, `js/controls/novedadesImportador.js`,
+  `js/controls/novedadesLiquidacion.js`, `js/controls/finadietAsiento.js`,
+  `js/controls/contaDesglosada.js`. `tests/vistaEstandarLote.test.js` (sumado a `test:unit`) + recorrido
+  de las nueve pantallas en `tests/e2e/vistaEstandarLote.spec.js`, tres temas. Datos inventados,
+  jugadores de Banfield.
+- Ver `specs/vista-estandar-resultados.md` (§7, §8 y §9 al día), D-074, D-077, **D-079, D-080 y D-081**.
+
+
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
 
 - **Es la tanda 1 de `specs/vista-estandar-resultados.md`** (D-074): las piezas compartidas que faltaban más el primer control migrado, para poder verlo funcionando en el navegador. Ningún cálculo ni conteo de Acumuladores Ganancias cambió — `summarize` no se tocó.

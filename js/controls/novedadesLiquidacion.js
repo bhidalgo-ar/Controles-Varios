@@ -39,9 +39,9 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { isDiff } from './tolerance.js';
 import { diffStats } from './semaforo.js';
-import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks }
+import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, diffBadgeHtml }
   from '../ui/resultBlocks.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { periodSuffix } from '../utils/dates.js';
@@ -693,8 +693,9 @@ export function renderNovedadesLiquidacionResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'novedades_liquidacion',
+    conDiferencias: (results.summary?.difiere ?? 0) > 0,
     resumen: (panel) => renderResumen(results, panel),
-    detalle: (panel) => renderDetalle(results, panel),
+    planilla: (panel) => renderDetalle(results, panel),
   });
 }
 
@@ -930,102 +931,106 @@ function origenDetalle(f) {
   return texto;
 }
 
-const VISTAS = ['difiere', 'sin_contraparte', 'no_comparable', 'coincide'];
+// ── Solapa Planilla ───────────────────────────────────────────────────────────
+//
+// El cruce entero en UNA tabla, con las columnas en bandas: lo pedido · lo
+// liquidado · la diferencia · de dónde salió el número. Antes eran cuatro tablas
+// con columnas distintas —una por banda del cruce— y había que cambiar de vista
+// para saber si un legajo tenía además una novedad sin contraparte.
+//
+// Las cuatro bandas del cruce no desaparecen: pasan a ser el estado de cada fila
+// —los cinco chips de la barra— y lo que el estado no distingue (de qué lado
+// falta la novedad, por qué no se pudo comparar) queda en "Marcas ▾".
+//   difiere         → Con diferencia
+//   coincide        → Al centavo, o Dentro del margen si quedó abajo del monto
+//   no_comparable   → Sin comparar
+//   sin_contraparte → Sin comparar
+
+/**
+ * En qué estado cerró cada novedad. `banda` ya trae la decisión del control —se
+ * calculó con `isDiff()`, o sea con el monto de diferencia del cliente (D-069)—
+ * así que acá sólo se traduce; lo único que se agrega es partir "coincide" entre
+ * el centavo y el margen, que es lo que los cinco chips distinguen.
+ */
+export function estadoDeNovedad(f) {
+  if (f.banda === 'difiere') return 'conDif';
+  if (f.banda !== 'coincide') return 'sinComparar';
+  const dImp  = Math.abs(f.difImporte ?? 0);
+  const dCant = Math.abs(f.difCantidad ?? 0);
+  return (dImp <= CANTIDAD_EPS && dCant <= CANTIDAD_EPS) ? 'centavo' : 'margen';
+}
+
+const NO_APLICA_NOV_LIQ = {};
 
 function renderDetalle(results, panel) {
-  const s = results.summary;
-  const conteo = {
-    coincide: s.coincide, difiere: s.difiere,
-    no_comparable: s.noComparable, sin_contraparte: s.sinContraparte,
-  };
+  const filas = results.filas || [];
+  const maxDifImp  = filas.reduce((m, f) => Math.max(m, Math.abs(f.difImporte ?? 0)), 0);
+  const maxDifCant = filas.reduce((m, f) => Math.max(m, Math.abs(f.difCantidad ?? 0)), 0);
 
-  const grupo = document.createElement('div');
-  grupo.className = 'form-group';
-  grupo.innerHTML = `
-    <select class="form-select form-select--sm" data-nl-vista data-chips="1" aria-label="Banda del cruce">
-      ${VISTAS.map(v => `<option value="${v}">${BANDA_LABEL[v]} (${conteo[v]})</option>`).join('')}
-    </select>
-  `;
-  const vistaSel = grupo.querySelector('[data-nl-vista]');
-  vistaSel.value = s.difiere > 0 ? 'difiere'
-    : s.sinContraparte > 0 ? 'sin_contraparte'
-      : s.noComparable > 0 ? 'no_comparable' : 'coincide';
+  const columns = [
+    { key: 'legajo', label: 'Legajo', band: 'Identificación' },
+    { key: 'nombre', label: 'Nombre', band: 'Identificación' },
+    { key: 'codigo', label: 'Concepto', sub: 'código del importador', band: 'Identificación',
+      cell: f => `${esc(f.codigo)}${f.rotulo ? ` <span class="text-muted">${esc(f.rotulo)}</span>` : ''}` },
 
-  const { searchEl, exportEl } = createResultsToolbar(panel, { left: grupo });
+    { key: 'novCantidad', label: 'Cantidad', sub: 'lo pedido', num: true, band: 'Novedad' },
+    { key: 'novImporte',  label: 'Importe',  sub: 'lo pedido', num: true, band: 'Novedad', close: true },
+
+    { key: 'liqCantidad', label: 'Cantidad', sub: 'todas las liquidaciones del mes', num: true, band: 'Liquidación' },
+    { key: 'liqImporte',  label: 'Importe',  sub: 'todas las liquidaciones del mes', num: true, band: 'Liquidación', close: true },
+
+    // La cantidad se mide con su propio EPS y no con el monto del cliente: el
+    // monto está en pesos, y con $ 100 tres horas de más desaparecerían detrás
+    // del umbral. Es la misma regla con la que el control decidió la banda.
+    { key: 'difCantidad', label: 'Δ cantidad', sub: 'novedad − liquidación', num: true, band: 'Diferencia',
+      mag: true,
+      cell: f => diffBadgeHtml(f.difCantidad, { max: maxDifCant, eps: CANTIDAD_EPS, absentLabel: 'no se comparó' }) },
+    { key: 'difImporte',  label: 'Δ importe',  sub: 'novedad − liquidación', num: true, band: 'Diferencia',
+      close: true, mag: true,
+      cell: f => diffBadgeHtml(f.difImporte, { max: maxDifImp, absentLabel: 'no se comparó' }) },
+
+    { key: 'porQue', label: 'De dónde sale', sub: 'el número liquidado, o por qué no se comparó',
+      band: 'Contexto', total: false, cell: f => esc(porQueTexto(f)) },
+  ];
+
   const plano = () => buildCrucePlano(results);
-  renderExportMenu(exportEl, {
-    onExcel: () => descargarCruce(results),
-    onCsv: () => { const p = plano(); downloadCsv(p.headers, p.rows, nombreArchivo(results, 'csv')); },
-    onCopy: () => { const p = plano(); copyRowsToClipboard(p.headers, p.rows); },
+
+  renderPlanillaPanel(panel, {
+    rows: filas,
+    columns,
+    // La fila de TOTAL cuenta NOVEDADES, que es lo que hay una por fila. La
+    // unidad del semáforo sigue siendo el legajo y no se toca (`unitsTotal`).
+    unitLabel: 'novedades',
+    estadoDe: estadoDeNovedad,
+    noAplica: NO_APLICA_NOV_LIQ,
+    marcas: [
+      { value: 'solo_novedad',     label: 'Sólo en el importador',        match: f => f.lado === 'solo_novedad' },
+      { value: 'solo_liquidacion', label: 'Sólo en la liquidación',       match: f => f.lado === 'solo_liquidacion' },
+      { value: 'no_comparable',    label: 'No se pudo comparar',          match: f => f.banda === 'no_comparable' },
+      { value: 'parcial',          label: 'Comparada por una sola medida', match: f => !!f.parcial },
+    ],
+    getLabel: f => `${f.legajo} — ${f.codigo}`,
+    searchLabel: 'Buscar legajo o concepto',
+    searchPlaceholder: 'Legajo o código de concepto…',
+    stickyCols: 2,
+    onExport: (exportEl) => renderExportMenu(exportEl, {
+      onExcel: () => descargarCruce(results),
+      onCsv: () => { const p = plano(); downloadCsv(p.headers, p.rows, nombreArchivo(results, 'csv')); },
+      onCopy: () => { const p = plano(); copyRowsToClipboard(p.headers, p.rows); },
+    }),
+    emptyText: 'Ninguna novedad quedó con los filtros puestos.',
+    footnote: (shown) => `Mostrando ${shown.length} de ${filas.length} novedad${filas.length === 1 ? '' : 'es'} cruzadas. `
+      + '«—» no es un cero: es que no hay dato de esa medida en ese lado. La diferencia es novedad '
+      + 'menos liquidación, y del Tabulado se suman todas las liquidaciones del mes de cada legajo.',
   });
-
-  const host = document.createElement('div');
-  panel.appendChild(host);
-
-  const dibujar = (vista) => {
-    const filas = results.filas.filter(f => f.banda === vista);
-    if (!filas.length) {
-      host.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(vacioTexto(vista))}</p>`;
-      return;
-    }
-    host.innerHTML = tablaHtml(filas, vista);
-    wireTableTools(host.querySelector('table'), {
-      rows: filas,
-      getLabel: f => `${f.legajo} — ${f.codigo}`,
-      searchEl,
-      stickyCols: 2,
-    });
-  };
-
-  vistaSel.addEventListener('change', () => dibujar(vistaSel.value));
-  dibujar(vistaSel.value);
 }
 
-function vacioTexto(vista) {
-  if (vista === 'difiere') return 'Ninguna novedad comparada difiere de la liquidación.';
-  if (vista === 'sin_contraparte') return 'Todas las novedades tienen contraparte en la liquidación, y no hay conceptos liquidados sin novedad.';
-  if (vista === 'no_comparable') return 'Todas las novedades se pudieron comparar.';
-  return 'Ninguna novedad coincidió — mirá las otras bandas.';
-}
-
-function tablaHtml(filas, vista) {
-  const esCruce = vista === 'difiere' || vista === 'coincide';
-  const cabecera = esCruce
-    ? ['Legajo', 'Nombre', 'Concepto', 'Cant. novedad', 'Cant. liquidada', 'Δ cantidad',
-      'Imp. novedad', 'Imp. liquidado', 'Δ importe', 'Origen']
-    : vista === 'no_comparable'
-      ? ['Legajo', 'Nombre', 'Concepto', 'Cant. novedad', 'Imp. novedad', 'Cant. liquidada', 'Imp. liquidado', 'Por qué no se comparó']
-      : ['Legajo', 'Nombre', 'Concepto', 'Lado', 'Cant. novedad', 'Imp. novedad', 'Cant. liquidada', 'Imp. liquidado', 'Motivo'];
-
-  const celdaNum = (v) => `<td style="text-align:right;">${esc(fmtNum(v))}</td>`;
-
-  const cuerpo = filas.map((f) => {
-    const base = `<td>${esc(f.legajo)}</td><td>${esc(f.nombre)}</td>`
-      + `<td>${esc(f.codigo)}${f.rotulo ? ` <span class="text-muted">${esc(f.rotulo)}</span>` : ''}</td>`;
-    if (esCruce) {
-      return `<tr>${base}${celdaNum(f.novCantidad)}${celdaNum(f.liqCantidad)}${celdaNum(f.difCantidad)}`
-        + `${celdaNum(f.novImporte)}${celdaNum(f.liqImporte)}${celdaNum(f.difImporte)}`
-        + `<td>${esc(origenTexto(f))}${f.parcial ? ' <span class="text-muted">(una sola medida)</span>' : ''}</td></tr>`;
-    }
-    if (vista === 'no_comparable') {
-      return `<tr>${base}${celdaNum(f.novCantidad)}${celdaNum(f.novImporte)}${celdaNum(f.liqCantidad)}${celdaNum(f.liqImporte)}`
-        + `<td>${esc(MOTIVO_CORTO[f.motivo] || f.motivo || '')}</td></tr>`;
-    }
-    return `<tr>${base}<td>${esc(f.lado === 'solo_novedad' ? 'sólo en el importador' : 'sólo en la liquidación')}</td>`
-      + `${celdaNum(f.novCantidad)}${celdaNum(f.novImporte)}${celdaNum(f.liqCantidad)}${celdaNum(f.liqImporte)}`
-      + `<td>${esc(MOTIVO_CORTO[f.motivo] || f.motivo || '')}</td></tr>`;
-  }).join('');
-
-  return `
-    <table class="data-table data-table--compact">
-      <thead><tr>${cabecera.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-      <tbody>${cuerpo}</tbody>
-    </table>
-    <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) 0;">
-      «—» no es un cero: es que no hay dato de esa medida en ese lado. La diferencia es
-      novedad menos liquidación, y del Tabulado se suman todas las liquidaciones del mes de cada legajo.
-    </p>
-  `;
+/** De dónde salió el número liquidado, o por qué esa fila no se pudo comparar. */
+function porQueTexto(f) {
+  if (f.banda === 'no_comparable' || f.banda === 'sin_contraparte') {
+    return MOTIVO_CORTO[f.motivo] || f.motivo || '';
+  }
+  return origenTexto(f) + (f.parcial ? ' · una sola medida' : '');
 }
 
 // ── Export ───────────────────────────────────────────────────────────────────

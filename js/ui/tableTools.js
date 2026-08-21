@@ -383,12 +383,24 @@ export function initShowMorePagination(tbodyEl, { pageSize = PAGE_SIZE_DEFAULT }
   }
 
   function applyVisibility() {
-    dataRows.forEach((tr, i) => {
-      const withinPage = expanded || i < pageSize;
+    // La página se cuenta sobre las filas que PASAN el filtro, no sobre el
+    // índice original. Contándola sobre el índice, buscar un legajo que estaba
+    // en la fila 300 no mostraba nada —quedaba fuera de la primera página y el
+    // botón "Mostrar todas" además se ocultaba, así que no había salida— y lo
+    // mismo pasaba con cualquier chip de estado sobre una tabla larga. Es la
+    // misma cuenta que ya hace `initListPagination` para la lista de fichas.
+    let visibles = 0;
+    for (const tr of dataRows) {
       const matchesFilter = filterSet === null || filterSet.has(tr);
-      tr.style.display = (withinPage && matchesFilter) ? '' : 'none';
-    });
-    if (moreRow) moreRow.style.display = (filterSet === null && !expanded) ? '' : 'none';
+      const withinPage = matchesFilter && (expanded || visibles < pageSize);
+      if (withinPage) visibles++;
+      tr.style.display = withinPage ? '' : 'none';
+    }
+    const totalMatch = filterSet === null ? dataRows.length : dataRows.filter(tr => filterSet.has(tr)).length;
+    if (moreRow) {
+      moreRow.style.display = visibles < totalMatch ? '' : 'none';
+      moreRow.querySelector('.js-show-more').textContent = `Mostrar todas (${totalMatch - visibles} más)`;
+    }
   }
 
   applyVisibility();

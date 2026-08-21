@@ -18,9 +18,9 @@
 
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
-import { createResultsToolbar, wireTableTools } from '../ui/tableTools.js';
+import { wireTableTools } from '../ui/tableTools.js';
 import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle } from '../ui/resultBlocks.js';
-import { getViewPreference } from '../ui/viewPreference.js';
+import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -493,11 +493,13 @@ export function renderAcreditacionesReporteResults(results, container) {
     return;
   }
 
-  // Se recuerda la solapa activa entre draws: asignar/deshacer una fecha
-  // manual (D-022) reconstruye toda la pantalla, y no tiene sentido devolver
-  // al analista al Resumen si estaba trabajando en el Detalle. Arranca desde
-  // la preferencia guardada de una corrida anterior, no siempre en 'resumen'.
-  let activeTabId = getViewPreference('acreditaciones_reporte').tab || 'resumen';
+  // Se recuerda la solapa activa entre draws: asignar/deshacer una fecha manual
+  // (D-022) reconstruye toda la pantalla, y no tiene sentido devolver al
+  // analista al Resumen si estaba trabajando en la Planilla. En el PRIMER draw
+  // se deja decidir a la pieza compartida (la preferencia guardada de este
+  // control y este estado, o el default del §2); recién cuando el analista
+  // cambia de solapa se fija acá.
+  let activeTabId = null;
 
   // draw() reconstruye toda la pantalla a partir de `res`. Se vuelve a llamar
   // cada vez que el analista asigna o deshace una fecha manual (D-022) — así el
@@ -517,9 +519,10 @@ export function renderAcreditacionesReporteResults(results, container) {
     container.innerHTML = '';
 
     renderResumenDetalle(container, {
-      activeId: activeTabId,
+      ...(activeTabId ? { activeId: activeTabId } : {}),
       onChange(id) { activeTabId = id; },
       controlId: 'acreditaciones_reporte',
+      conDiferencias: !cierraOk || s.listasConAlerta > 0 || pendingGroups.length > 0,
       resumen(panel) {
         renderVerdict(panel, {
           tone: cierraOk ? 'ok' : 'error',
@@ -555,7 +558,7 @@ export function renderAcreditacionesReporteResults(results, container) {
           });
         }
       },
-      detalle(panel) { drawDetalle(res, panel); },
+      planilla(panel) { drawDetalle(res, panel); },
     });
   }
 
@@ -569,23 +572,11 @@ export function renderAcreditacionesReporteResults(results, container) {
     const overrides = res._cfg?.dateOverrides || {};
     if (Object.keys(overrides).length > 0) renderOverridesBox(res, overrides, container, draw);
 
-    // ── Toolbar: filtro por tipo + buscador + exportar ──────────────────────
-    const typesPresent = [...new Map(listas.map(l => [l.code, l])).values()]
-      .sort((a, b) => a.order - b.order);
-
-    const filterGroup = document.createElement('div');
-    filterGroup.className = 'form-group';
-    filterGroup.style.cssText = 'margin-bottom:0;min-width:240px;';
-    filterGroup.innerHTML = `
-      <label class="form-label" style="font-size:var(--text-sm);">Filtrar por tipo de liquidación</label>
-      <select class="form-select form-select--sm" data-acred-type-filter>
-        <option value="all">Todos los tipos (${typesPresent.length})</option>
-        ${typesPresent.map(t => `<option value="${esc(t.code)}">${esc(t.label)}</option>`).join('')}
-      </select>
-    `;
-
-    const { searchEl, exportEl } = createResultsToolbar(container, { left: filterGroup });
-
+    // ── La planilla de listas, con la barra estándar ────────────────────────
+    // La unidad es la LISTA de acreditación, no el empleado (D-021): una lista
+    // es una hoja del .xlsx y una acreditación del banco. El conteo de empleados
+    // y las alertas se ven acá porque esta pantalla la mira el analista; el
+    // .xlsx que va a Finanzas no los lleva (D-020).
     if (listas.length === 0) {
       const p = document.createElement('p');
       p.className = 'text-muted';
@@ -604,71 +595,66 @@ export function renderAcreditacionesReporteResults(results, container) {
       l.label, fmtDate(l.fecha), fmtDate(l.fecha), l.listados.join(' + '), fmtNum(l.total),
     ]);
 
-    renderExportMenu(exportEl, {
-      onExcel: () => exportAcreditacionesToXlsx(res),
-      onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acreditaciones_${periodSuffix(res.period)}.csv`),
-      onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+    const cierraOk    = Math.abs(res.summary.diferencia) <= CIERRE_EPS;
+    const totalEmpl   = listas.reduce((a, l) => a + l.count, 0);
+    const totalAlerts = listas.reduce((a, l) => a + l.alerts, 0);
+    const tiposPresentes = [...new Map(listas.map(l => [l.code, l])).values()]
+      .sort((a, b) => a.order - b.order);
+
+    const columns = [
+      { key: 'n', label: 'Lista', sub: 'una hoja del .xlsx', band: 'Identificación' },
+      ...(res.splitByEmpresa ? [{ key: 'empresa', label: 'Empresa', band: 'Identificación' }] : []),
+      { key: 'label', label: 'Liquidación', sub: 'tipo de liquidación', band: 'Acreditación',
+        cell: l => `<span class="badge">${esc(l.code)}</span> ${esc(l.label)}` },
+      { key: 'fecha', label: 'Fecha de acreditación', sub: 'la que va al banco', band: 'Acreditación',
+        cell: l => esc(fmtDate(l.fecha)) },
+      { key: 'listados', label: 'Listado', sub: 'los que entraron a la lista', band: 'Acreditación', close: true,
+        cell: l => `<span class="text-muted">${esc(l.listados.join(' + ')) || '—'}</span>` },
+      // Empleados y alertas son CUENTAS, no importes: no se totalizan con dos
+      // decimales en el pie — el total de las dos va en la nota, en criollo.
+      { key: 'count', label: 'Empleados', sub: 'acreditaciones de la lista', num: true, total: false,
+        band: 'Totales', cell: l => esc(String(l.count)) },
+      { key: 'total', label: 'Total', sub: 'lo que acredita el banco', num: true, band: 'Totales', close: true },
+      ...(totalAlerts > 0 ? [{ key: 'alerts', label: 'Alertas', sub: 'para revisar antes de mandar',
+        num: true, total: false, band: 'Totales',
+        cell: l => (l.alerts > 0
+          ? `<span class="rb-diffbadge rb-diffbadge--error">${l.alerts}</span>`
+          : '<span class="rb-diffzero">—</span>') }] : []),
+    ];
+
+    renderPlanillaPanel(container, {
+      rows: listas,
+      columns,
+      unitLabel: 'listas',
+      // Este reporte cierra AL CENTAVO contra el archivo de origen: es plata que
+      // el banco va a acreditar, así que no hay margen que medir (D-069). Si el
+      // cuadre global no da, el reporte entero es sospechoso y todas las listas
+      // salen marcadas — el mismo criterio con el que se cuenta el semáforo.
+      estadoDe: l => (!cierraOk || l.alerts > 0 ? 'conDif' : 'centavo'),
+      noAplica: {
+        margen: 'el reporte cierra al centavo contra el archivo de Axton: es plata que el banco va a acreditar',
+        sinComparar: 'todas las listas salen del mismo archivo, así que no falta un lado',
+      },
+      marcas: tiposPresentes.map(t => ({
+        value: t.code, label: `${t.code} — ${t.label}`, match: l => l.code === t.code,
+      })),
+      getLabel: l => `${l.n} — ${l.label} ${fmtDate(l.fecha)}`,
+      searchLabel: 'Buscar lista',
+      searchPlaceholder: 'Número de lista, liquidación o fecha…',
+      stickyCols: 1,
+      onExport: (exportEl) => renderExportMenu(exportEl, {
+        onExcel: () => exportAcreditacionesToXlsx(res),
+        onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acreditaciones_${periodSuffix(res.period)}.csv`),
+        onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+      }),
+      emptyText: 'Ninguna lista quedó con los filtros puestos.',
+      footnote: (shown) => `Mostrando ${shown.length} de ${listas.length} lista${listas.length === 1 ? '' : 's'}. `
+        + `Cada lista es una hoja del .xlsx, y suman ${totalEmpl} ${totalEmpl === 1 ? 'acreditación' : 'acreditaciones'}`
+        + (totalAlerts > 0 ? ` y ${totalAlerts} alerta${totalAlerts === 1 ? '' : 's'}` : '')
+        + '. '
+        + (res.splitByEmpresa ? `Las listas se parten por empresa (${res.empresas.length} empresas en el archivo). ` : '')
+        + 'El conteo de empleados y las alertas se ven acá: el .xlsx que va a Finanzas no los incluye.',
     });
-
-    // ── Tabla de listas ────────────────────────────────────────────────────
-    const tableHost = document.createElement('div');
-    container.appendChild(tableHost);
-
-    function renderTable(selectedCode) {
-      const shown = selectedCode === 'all' ? listas : listas.filter(l => l.code === selectedCode);
-      // Columnas que no aportan nada no se muestran (CLAUDE.md §11.1).
-      const showEmpresa = res.splitByEmpresa;
-      const showAlerts  = shown.some(l => l.alerts > 0);
-
-      tableHost.innerHTML = `
-        <table class="data-table data-table--compact">
-          <thead>
-            <tr>
-              <th style="text-align:center;">Lista</th>
-              ${showEmpresa ? '<th>Empresa</th>' : ''}
-              <th>Liquidación</th>
-              <th>Fecha de acreditación</th>
-              <th>Listado</th>
-              <th style="text-align:right;">Empleados</th>
-              <th style="text-align:right;">Total</th>
-              ${showAlerts ? '<th style="text-align:center;">Alertas</th>' : ''}
-            </tr>
-          </thead>
-          <tbody>
-            ${shown.map(l => `
-              <tr>
-                <td style="text-align:center;font-weight:600;">${l.n}</td>
-                ${showEmpresa ? `<td>${esc(l.empresa)}</td>` : ''}
-                <td><span class="badge">${esc(l.code)}</span> ${esc(l.label)}</td>
-                <td>${esc(fmtDate(l.fecha))}</td>
-                <td style="font-size:0.85em;color:var(--color-text-muted);">${esc(l.listados.join(' + ')) || '—'}</td>
-                <td style="text-align:right;">${l.count}</td>
-                <td style="text-align:right;font-weight:600;">${fmtNum(l.total)}</td>
-                ${showAlerts ? `<td style="text-align:center;${l.alerts > 0 ? 'color:var(--color-danger);font-weight:700;' : ''}">${l.alerts || '—'}</td>` : ''}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <p class="text-muted" style="font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);">
-          Mostrando ${shown.length} de ${listas.length} lista${listas.length === 1 ? '' : 's'}.
-          Cada lista es una hoja del .xlsx.
-          ${res.splitByEmpresa ? `Las listas se parten por empresa (${res.empresas.length} empresas en el archivo).` : ''}
-          El conteo de empleados y las alertas se ven acá: el .xlsx que va a Finanzas no los incluye.
-        </p>
-      `;
-
-      wireTableTools(tableHost.querySelector('table'), {
-        rows: shown,
-        getLabel: l => `${l.n} — ${l.label} ${fmtDate(l.fecha)}`,
-        searchEl,
-        label: 'Buscar lista',
-        stickyCols: 1,
-      });
-    }
-
-    filterGroup.querySelector('[data-acred-type-filter]')
-      .addEventListener('change', (e) => renderTable(e.target.value));
-    renderTable('all');
 
     // ── Bancos (corte para tesorería) ───────────────────────────────────────
     const bancosBox = document.createElement('details');
