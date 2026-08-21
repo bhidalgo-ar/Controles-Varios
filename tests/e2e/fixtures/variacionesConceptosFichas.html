@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/fichasLegajoConcepto.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de Variación Conceptos con dos tabulados
+     inventados, para mirar en un navegador real la solapa Fichas de §4: la tira
+     con los dos períodos y la variación, el renglón por concepto con su código y
+     su escalón, y la conclusión que separa la caída que se explica sola de la que
+     hay que preguntar. Datos 100% inventados. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runVariacionesConceptos, renderVariacionesConceptosResults }
+  from '../../../js/controls/variaciones.js';
+
+const C2517 = '2517 - Premio de progreso';
+const C2519 = '2519 - Premio productividad';
+const C1500 = '1500 - Licencia';
+
+const fila = (legajo, nombre, valores) => ({
+  Legajo: legajo, 'Apellido y Nombre': nombre, Bruto: '1.200.000,00', ...valores,
+});
+
+// El 2517 se paga en escalones (100 % y 70 %): con los valores repetidos entre
+// legajos, el control lo reconoce como escala y la caída se lee como escalón y
+// no como pesos.
+//   1 — bajó de escalón y NO tiene nada cargado que lo explique → el caso a preguntar
+//   2 — no se movió
+//   3 — movió el otro concepto (el que no tiene escala)
+//   4 — alta del período: no estaba en el Tabulado anterior
+//   5 — bajó de escalón CON una licencia cargada: se explica sola
+const prev = [
+  fila('1', 'SANGUINETTI JAVIER',   { [C2517]: '16.805,40', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('2', 'FALCIONI JULIO CESAR', { [C2517]: '16.805,40', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('3', 'LUCCHETTI CRISTIAN',   { [C2517]: '11.763,78', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('5', 'CVITANICH DARIO',      { [C2517]: '16.805,40', [C2519]: '4.000,00', [C1500]: '' }),
+];
+const act = [
+  fila('1', 'SANGUINETTI JAVIER',   { [C2517]: '11.763,78', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('2', 'FALCIONI JULIO CESAR', { [C2517]: '16.805,40', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('3', 'LUCCHETTI CRISTIAN',   { [C2517]: '11.763,78', [C2519]: '9.500,00', [C1500]: '' }),
+  fila('4', 'URZI AGUSTIN',         { [C2517]: '16.805,40', [C2519]: '4.000,00', [C1500]: '' }),
+  fila('5', 'CVITANICH DARIO',      { [C2517]: '11.763,78', [C2519]: '4.000,00', [C1500]: '38.000,00' }),
+];
+const meta = (period) => ({ period, quincena: 2, tipoLiquidacion: '2da Quincena' });
+
+const results = runVariacionesConceptos(prev, act, {
+  tab: { empleadoColumn: 'Legajo', apellidoNombreColumn: 'Apellido y Nombre' },
+  variaciones: {
+    config: {
+      conceptos: [
+        { codigo: '2517', label: 'Premio de progreso' },
+        { codigo: '2519', label: 'Premio productividad' },
+      ],
+    },
+    anterior: { meta: meta('2026-03') },
+    actual:   { meta: meta('2026-04') },
+  },
+});
+window.__results = results;
+renderVariacionesConceptosResults(results, document.getElementById('host'));
+</script></body></html>

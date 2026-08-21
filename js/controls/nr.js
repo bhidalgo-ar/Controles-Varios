@@ -4,6 +4,8 @@ import { isDiff } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
+import { codeOfColumn } from './tabCodes.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
@@ -137,6 +139,17 @@ export function runNr(nrRows, tabRows, mapping) {
     return { legajo, valores, sinTabData: !tabVals };
   });
 
+  // El CÓDIGO de concepto de cada columna del Tabulado que alimentó el cruce.
+  // No entra en ningún cálculo: es para que la pantalla pueda NOMBRAR cada
+  // concepto por su código, que es lo único estable —el rótulo lo renombra el
+  // cliente sin avisar, y el Tabulado real trae `'4899-COCHERA_IG'` y
+  // `'8805-DTO_COCHERA'` a la vez (D-039). Sale de la columna que el analista
+  // confirmó en el Paso 2, así que es el código de ESTE cliente y no una
+  // semilla; si el encabezado no declara ninguno queda `null`, nunca uno
+  // inventado por parecido.
+  const codigos = {};
+  for (const c of NR_CONCEPTS) codigos[c.key] = codeOfColumn(tm[c.tabKey]);
+
   const conDif     = rows.filter(r =>
     Object.values(r.valores).some(v => isDiff(v.ctrl))
   ).length;
@@ -145,6 +158,7 @@ export function runNr(nrRows, tabRows, mapping) {
   return {
     summary: { total: rows.length, conDif, sinTabData },
     rows,
+    codigos,
     period: mapping.period || '',
   };
 }
@@ -198,6 +212,8 @@ export function renderNrResults(results, container) {
 
   renderResumenDetalle(container, {
     controlId: 'nr',
+    // Con diferencias lo primero que se ve es POR QUÉ falla (§2): abre en Fichas.
+    conDiferencias: diffRows.length > 0,
     resumen(panel) {
       const tone = diffRows.length === 0 ? 'ok' : 'warn';
       renderVerdict(panel, {
@@ -238,6 +254,7 @@ export function renderNrResults(results, container) {
         });
       }
     },
+    fichas(panel) { renderNrFichas(panel, { relevantRows, results }); },
     planilla(panel) { renderNrPlanilla(panel, { relevantRows, diffRows, results }); },
   });
 }
@@ -351,6 +368,355 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
     }),
   });
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// La solapa Fichas (§4 de specs/vista-estandar-resultados.md)
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// La planilla compara 18 columnas entre cientos de legajos; la ficha abre UN
+// legajo y dice por qué no cierra. Hasta acá la fila de un legajo decía
+// "# Difs: 3" y nada más: cuáles de los 18 conceptos, de qué lado, y por cuánto
+// había que ir a buscarlo al .xlsx exportado.
+//
+// La ficha no recalcula nada. Los dos lados de cada concepto y su diferencia ya
+// los publica `runNr()` en `valores[key] = { nrVal, tabVal, ctrl }`; acá se
+// suman los conceptos de ESE legajo y se les pone nombre, código y una
+// instrucción.
+
+/** Los conceptos que este legajo tiene con valor real en alguna de las dos fuentes. */
+function conceptosDeLegajo(r) {
+  return NR_CONCEPTS.filter(c => hasValor(r.valores[c.key]));
+}
+
+/** Suma que respeta `null`: sin ningún dato el total es `null`, no `0`. */
+function sumaONull(valores) {
+  let total = null;
+  for (const v of valores) {
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    total = (total ?? 0) + v;
+  }
+  return total;
+}
+
+const SEVERIDAD_NR = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+/**
+ * El segundo eje del filtro: **qué conceptos liquidó** este legajo. Son los 18 y
+ * van en `Marcas ▾`, nunca en la fila de chips: 18 chips no son un filtro, son
+ * una pared, y la fila de chips dice siempre lo mismo en las 21 pantallas (§3).
+ *
+ * La misma lista alimenta las pills de cada tarjeta, así que el desplegable y la
+ * ficha nombran exactamente lo mismo.
+ */
+function marcasNr(conceptos, codigos) {
+  return conceptos.map(c => ({
+    value: c.key,
+    label: etiquetaConcepto(c, codigos),
+    match: (f) => f.conceptos.some(x => x.key === c.key),
+  }));
+}
+
+/** El concepto nombrado por su CÓDIGO y su rótulo. Sin código, sólo el rótulo:
+ *  un código inventado por parecido manda a mirar la columna equivocada. */
+function etiquetaConcepto(c, codigos) {
+  const cod = codigos?.[c.key] || null;
+  return cod ? `${cod} · ${c.label}` : c.label;
+}
+
+/** Cuántas pills de concepto entran en una tarjeta antes de que sean una pared. */
+const MAX_PILLS_NR = 6;
+
+const NO_APLICA_NR = {};
+
+/** Los descriptores de ficha del control: uno por legajo con algún valor NR.
+ *  Exportada para el test: es donde se decide qué dice cada tarjeta. */
+export function buildFichasNr(relevantRows, codigos) {
+  return relevantRows.map(r => {
+    const conceptos = conceptosDeLegajo(r);
+    const conDif = conceptos.filter(c => isDif(r.valores[c.key].ctrl));
+    const sinComparar = conceptos.filter(c => r.valores[c.key].ctrl === null);
+
+    const sumNr  = sumaONull(conceptos.map(c => r.valores[c.key].nrVal));
+    const sumTab = sumaONull(conceptos.map(c => r.valores[c.key].tabVal));
+    // **La diferencia se suma sólo sobre lo COMPARABLE, no como resta de los dos
+    // totales.** Con la resta, un concepto que trae valor de un solo lado se
+    // cuenta como si el otro lado valiera cero: un legajo con 7.000,00 en un
+    // concepto que el Tabulado no informa salía con "−7.000,00 de diferencia",
+    // que es exactamente lo que `null` no es (CLAUDE.md). Los dos totales de
+    // arriba siguen siendo los de cada archivo —eso es lo que el analista
+    // compara—, y lo que quedó afuera se dice en la línea de contexto, en la
+    // tabla con "—" y en la conclusión.
+    const difComparada = sumaONull(conceptos.map(c => r.valores[c.key].ctrl));
+    // Lo que hay para revisar es la suma de las diferencias EN VALOR ABSOLUTO de
+    // los conceptos que las tienen — el mismo número que el tile "Diferencia
+    // total" del Resumen totaliza. No es el neto: un legajo con +12.000 en un
+    // concepto y −12.000 en otro tiene neto cero y dos conceptos mal, y ése es
+    // justo el caso que la ficha existe para mostrar.
+    const aRevisar = conDif.reduce((s, c) => s + Math.abs(r.valores[c.key].ctrl), 0);
+
+    const base = { id: r.legajo, row: r, conceptos, conDif, sinComparar, sumNr, sumTab, difComparada, aRevisar };
+    // El mismo estado que la planilla, con la misma función: si la ficha y la
+    // fila contaran distinto, la misma pantalla se contradiría.
+    base.estado = estadoDeLegajoNr(r, conceptos);
+    return { ...base, ...presentacionNr(base, codigos) };
+  });
+}
+
+/** Lo que se ve: la tarjeta cerrada arriba y el cuerpo que se dibuja al abrir. */
+function presentacionNr(f, codigos) {
+  const { row: r, conceptos, conDif, sinComparar } = f;
+  const sev = SEVERIDAD_NR[f.estado] || 'info';
+  const nIndem = conceptos.filter(c => c.group === 'indem').length;
+
+  // El peor concepto: es el que da el badge, o sea la causa principal.
+  const peor = [...conDif].sort((a, b) =>
+    Math.abs(r.valores[b.key].ctrl) - Math.abs(r.valores[a.key].ctrl))[0] || null;
+
+  return {
+    unit: r.legajo,
+    severity: sev,
+    name: `Legajo ${r.legajo}`,
+    tag: { text: nIndem === conceptos.length ? 'Indemnizatorios' : nIndem > 0 ? 'Indem. + otros NR' : 'Otros NR' },
+    badge: badgeNr(f, peor, codigos),
+    context: [
+      `${conceptos.length} de ${NR_CONCEPTS.length} conceptos con valor`,
+      conDif.length > 0
+        ? `${conDif.length} con diferencia`
+        : sinComparar.length > 0 ? 'ninguna diferencia comparable' : 'todos coinciden',
+      sinComparar.length > 0 ? `${sinComparar.length} de un solo lado` : null,
+    ],
+    marks: pillsNr(f, codigos),
+    amountLabel: 'A revisar',
+    amount: f.aRevisar,
+    amountTone: sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : undefined,
+    body: {
+      // 1. La tira: el total del reporte de NR contra el total del Tabulado, y
+      //    qué conceptos explican la diferencia. Las dos primeras pastillas son
+      //    los dos lados tal como los trae cada archivo; la tercera es la
+      //    diferencia de lo que SÍ se pudo comparar (no la resta de las dos de
+      //    arriba: ver `difComparada`); la cuarta, lo que hay que ir a mirar (por
+      //    qué son dos números distintos, ver `aRevisar`).
+      strip: [
+        { label: 'Reporte NR', value: f.sumNr },
+        { label: 'Tabulado', value: f.sumTab },
+        { label: 'Diferencia comparada', value: f.difComparada, invert: true },
+        {
+          label: conDif.length > 0
+            ? `A revisar · ${conDif.length} de ${conceptos.length} concepto${conceptos.length === 1 ? '' : 's'}`
+            : 'A revisar',
+          value: f.aRevisar,
+          residuo: conDif.length > 0,
+        },
+      ],
+      // 2. El detalle: un renglón por concepto de este legajo, con su CÓDIGO,
+      //    los dos lados y la diferencia. Verde suave lo que el Tabulado tiene
+      //    de más, rojo suave lo que tiene de menos.
+      detail: {
+        title: 'Concepto por concepto — los dos lados y la diferencia',
+        columns: [
+          { key: 'concepto', label: 'Concepto' },
+          { key: 'tab', label: 'Tabulado', num: true },
+          { key: 'nr', label: 'Reporte NR', num: true },
+          { key: 'dif', label: 'Tab − NR', num: true },
+        ],
+        rows: ordenarConceptos(conceptos, r).map(c => {
+          const v = r.valores[c.key];
+          return {
+            concepto: etiquetaConcepto(c, codigos),
+            tab: v.tabVal, nr: v.nrVal, dif: v.ctrl,
+            tone: v.ctrl === null || Math.abs(v.ctrl) <= CENTAVO_NR
+              ? undefined : (v.ctrl > 0 ? 'pos' : 'neg'),
+          };
+        }),
+        foot: { label: 'Diferencia comparada', value: f.difComparada, key: 'dif' },
+      },
+      // 3. La conclusión: qué mirar, descontando lo que ya está explicado.
+      conclusion: conclusionNr(f, peor, codigos),
+    },
+  };
+}
+
+/** El redondeo de Meta4, el piso de todo el repo: abajo de esto no hay color. */
+const CENTAVO_NR = 0.01;
+
+/** Peor primero: la diferencia más grande arriba, después lo que no se pudo
+ *  comparar, y al final lo que cerró. */
+function ordenarConceptos(conceptos, r) {
+  const rango = (c) => {
+    const d = r.valores[c.key].ctrl;
+    if (d === null) return 1;
+    return isDif(d) ? 0 : 2;
+  };
+  return [...conceptos].sort((a, b) => {
+    const ra = rango(a), rb = rango(b);
+    if (ra !== rb) return ra - rb;
+    return Math.abs(r.valores[b.key].ctrl ?? 0) - Math.abs(r.valores[a.key].ctrl ?? 0);
+  });
+}
+
+/** La causa principal, en una línea. */
+function badgeNr(f, peor, codigos) {
+  const r = f.row;
+  if (peor) {
+    const v = r.valores[peor.key].ctrl;
+    return {
+      text: `${etiquetaConcepto(peor, codigos)} ${fmtSigned(v)}`,
+      title: `El Tabulado tiene ${v > 0 ? 'de más' : 'de menos'} que el Reporte NR en este concepto.`,
+      tone: 'error',
+    };
+  }
+  if (r.sinTabData) {
+    return { text: 'No está en el Tabulado', tone: 'warn' };
+  }
+  if (f.sinComparar.length > 0) {
+    return {
+      text: `${f.sinComparar.length} concepto${f.sinComparar.length === 1 ? '' : 's'} de un solo lado`,
+      tone: 'warn',
+    };
+  }
+  if (f.estado === 'margen') {
+    return { text: 'Dentro del monto de diferencia', tone: 'info' };
+  }
+  return { text: 'Coincide al centavo', tone: 'ok' };
+}
+
+/**
+ * Las pills de la tarjeta: los conceptos que este legajo liquidó, los mismos que
+ * el desplegable `Marcas ▾`. En celeste el que tiene diferencia, en gris el que
+ * cerró. Con más de MAX_PILLS_NR la línea deja de ser una marca y pasa a ser una
+ * pared: se cortan y se dice cuántas quedaron afuera.
+ */
+function pillsNr(f, codigos) {
+  const r = f.row;
+  const orden = ordenarConceptos(f.conceptos, r);
+  const pills = orden.slice(0, MAX_PILLS_NR).map(c => ({
+    text: etiquetaConcepto(c, codigos),
+    tone: isDif(r.valores[c.key].ctrl) || r.valores[c.key].ctrl === null ? 'info' : 'neutral',
+  }));
+  const resto = orden.length - pills.length;
+  if (resto > 0) pills.push({ text: `+${resto} más`, tone: 'neutral', title: orden.slice(MAX_PILLS_NR).map(c => etiquetaConcepto(c, codigos)).join(' · ') });
+  return pills;
+}
+
+/** No un resumen del importe que ya se ve arriba: una instrucción, descontando
+ *  lo que la ficha ya explicó. */
+function conclusionNr(f, peor, codigos) {
+  const r = f.row;
+  const cerraron = f.conceptos.length - f.conDif.length - f.sinComparar.length;
+  const yaExplicado = cerraron === 0 ? ''
+    : cerraron === 1
+      ? ' El otro concepto de este legajo ya cierra: no hace falta mirarlo.'
+      : ` Los otros ${cerraron} conceptos de este legajo ya cierran: no hace falta mirarlos.`;
+
+  if (r.sinTabData) {
+    return {
+      tone: 'warn',
+      title: 'Este legajo informa NR y no aparece en el Tabulado',
+      text: 'El Reporte de NR trae valores para este legajo y el Tabulado del período no lo tiene en ninguna '
+        + 'liquidación. Confirmá que los dos archivos sean del mismo mes y de la misma empresa antes de '
+        + 'tocar el reporte: si el Tabulado es el correcto, el legajo está de más en el Reporte de NR.',
+    };
+  }
+
+  if (f.conDif.length > 0) {
+    const cuales = f.conDif.map(c => etiquetaConcepto(c, codigos)).join(', ');
+    const sinCmp = f.sinComparar.length > 0
+      ? ` Además hay ${f.sinComparar.length} concepto${f.sinComparar.length === 1 ? '' : 's'} con valor de un solo `
+        + 'lado, que sale abajo con «—»: no se pudo comparar, así que su importe no está sumado en la '
+        + 'diferencia de arriba.'
+      : '';
+    return {
+      tone: 'error',
+      title: `Quedan ${fmtNum(f.aRevisar)} para revisar en ${f.conDif.length} concepto${f.conDif.length === 1 ? '' : 's'}`,
+      text: `Abrí el Tabulado en la columna de ${cuales} para este legajo y sumá sus liquidaciones del mes: `
+        + `el control ya las suma, así que una diferencia acá es un valor distinto, no una paga de menos.`
+        + (peor && f.conDif.length > 1 ? ` Arrancá por ${etiquetaConcepto(peor, codigos)}, que es la más grande.` : '')
+        + sinCmp + yaExplicado,
+    };
+  }
+
+  if (f.sinComparar.length > 0) {
+    // Con el importe y de qué lado: es lo que le permite al analista buscarlo en
+    // el archivo, y es plata que la diferencia de arriba NO incluye a propósito.
+    const cuales = f.sinComparar.map(c => {
+      const v = r.valores[c.key];
+      const lado = v.tabVal !== null ? 'el Tabulado' : 'el Reporte de NR';
+      const monto = v.tabVal !== null ? v.tabVal : v.nrVal;
+      return `${etiquetaConcepto(c, codigos)} (${fmtNum(monto)} en ${lado}, nada del otro lado)`;
+    }).join(', ');
+    return {
+      tone: 'warn',
+      title: `${f.sinComparar.length} concepto${f.sinComparar.length === 1 ? '' : 's'} con valor de un solo lado`,
+      text: `${cuales}. Ese importe NO entra en la diferencia de arriba: un concepto sin el otro lado no vale `
+        + 'cero, no se sabe cuánto vale. O la columna no está mapeada en el Paso 2, o el concepto se liquidó '
+        + 'de un solo lado — revisá el mapeo primero.'
+        + yaExplicado,
+    };
+  }
+
+  if (f.estado === 'margen') {
+    return {
+      tone: 'info',
+      title: 'Todo queda dentro del monto de diferencia del cliente',
+      text: 'Los conceptos de este legajo no coinciden exactamente pero ninguna diferencia llega al monto '
+        + 'configurado en «Umbrales». No hay nada que corregir; si querés verlas, bajá el monto.',
+    };
+  }
+
+  return {
+    tone: 'ok',
+    title: 'Cierra al centavo',
+    text: (f.conceptos.length === 1
+      ? 'El único concepto no remunerativo de este legajo coincide entre el Reporte de NR y el Tabulado. '
+      : `Los ${f.conceptos.length} conceptos no remunerativos de este legajo coinciden entre el Reporte de `
+        + 'NR y el Tabulado. ')
+      + 'No hay nada para revisar acá.',
+  };
+}
+
+function renderNrFichas(panel, { relevantRows, results }) {
+  const codigos = results.codigos || {};
+  const fichas = buildFichasNr(relevantRows, codigos);
+  // El universo de `Marcas ▾`: los mismos conceptos que son columnas en la
+  // planilla, así el desplegable de las dos solapas ofrece lo mismo.
+  const conceptos = conceptosConValor(relevantRows);
+
+  renderFichasPanel(panel, {
+    fichas,
+    unitLabel: 'legajos',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_NR,
+    marcas: marcasNr(conceptos, codigos),
+    ordenes: [
+      { value: 'aRevisar', label: 'Mayor diferencia', compare: (a, b) => b.aRevisar - a.aRevisar },
+      { value: 'conceptos', label: 'Más conceptos con diferencia', compare: (a, b) => b.conDif.length - a.conDif.length },
+      { value: 'legajo', label: 'Legajo', compare: (a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) },
+    ],
+    getLabel: f => `${f.id}`,
+    getAmount: f => f.aRevisar,
+    amountLabel: 'Σ a revisar',
+    onExport: (exportEl) => mountNrExportMenu(exportEl, { rows: relevantRows, results }),
+  });
+}
+
+/** Los tres ítems del ⬇ Exportar ▾ de la solapa Fichas. Siempre los 18
+ *  conceptos y todos los legajos evaluados: el filtro de pantalla recorta lo que
+ *  se ve, no lo que se archiva. */
+function mountNrExportMenu(exportEl, { rows, results }) {
+  const csvHeaders = ['Legajo', '# Difs', ...NR_CONCEPTS.map(c => c.label)];
+  const csvRows = () => rows.map(r => [
+    r.legajo,
+    NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length,
+    ...NR_CONCEPTS.map(c => fmtNum(r.valores[c.key].ctrl)),
+  ]);
+  renderExportMenu(exportEl, {
+    onExcel: () => exportNrToXlsx({ ...results, rows }),
+    onCsv:   () => downloadCsv(csvHeaders, csvRows(), `NR_Control_${periodSuffix(results.period)}.csv`),
+    onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
+  });
+}
+
 
 // ── Modo 2: Generar Reporte ───────────────────────────────────────────────────
 

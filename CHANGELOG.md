@@ -257,6 +257,52 @@
   jugadores de Banfield.
 - Ver `specs/vista-estandar-resultados.md` (§7, §8 y §9 al día), D-074, D-077, **D-079, D-080 y D-081**.
 
+### feat(ui): tanda 4 de la vista estándar — ficha de legajo × concepto en Control NR, Novedades vs Liquidación y Variación Conceptos — 2026-08-21
+
+- Los tres controles donde la unidad es el legajo y adentro hay varios conceptos suman la solapa
+  **Fichas** (§4 y §9 de `specs/vista-estandar-resultados.md`), reusando `js/ui/fichaList.js` de la
+  tanda 1 (D-077): no se escribió ninguna ficha nueva, sólo el contenido que cada control le pasa.
+  Variación Sueldos no lleva ficha porque su fila ya dice anterior/actual/variación.
+- **Control NR**: cada tarjeta abre con el total del Reporte NR contra el total del Tabulado, la
+  diferencia de lo que sí se pudo comparar y cuántos de los conceptos liquidados por ese legajo
+  quedaron a revisar; adentro, un renglón por concepto con su código, los dos lados y la diferencia
+  (verde suave lo que el Tabulado tiene de más, rojo suave lo que tiene de menos). Las marcas de la
+  tarjeta y del `Marcas ▾` son los conceptos que ese legajo liquidó.
+- **Novedades vs Liquidación**: la tarjeta separa la diferencia de importe de la diferencia de
+  cantidad, porque una cantidad liquidada de más o de menos no se mide en la misma unidad que la
+  plata. Adentro, una tabla de ocho columnas junta las cuatro bandas del cruce (coincide, difiere,
+  no comparable, sin contraparte) en un solo lugar, con el motivo de cada una.
+- **Variación Conceptos**: la tarjeta muestra el período anterior, el actual y la variación (en ese
+  orden — ver DECISIONS), y adentro el detalle trae el escalón de la escala cuando el control lo
+  detectó (`100 % → 70 %`).
+- **Bug de criterio corregido al mirar la pantalla en Control NR**: la diferencia por legajo se
+  calculaba como la resta de los dos totales, y eso cuenta el lado que falta como si valiera cero —
+  un legajo con un importe en un concepto que el Tabulado no informa salía con una diferencia
+  negativa por ese mismo importe, cuando lo real es "no se puede comparar". Ahora la tira suma sólo
+  los conceptos comparables (`Diferencia comparada`); los dos totales de arriba siguen siendo los de
+  cada archivo, y lo que quedó sin comparar se dice en la conclusión, con el importe y de qué lado
+  está.
+- `js/controls/tabCodes.js` — `codeOfColumn(header)` nuevo: dado un encabezado de columna ya
+  resuelto, devuelve el código de concepto que declara (`'4899-COCHERA_IG'` → `'4899'`). Es la
+  vuelta de `buildColByCode()` y es lo que permite que la ficha nombre un concepto por su código y
+  no por su nombre, que el cliente puede renombrar.
+- `js/ui/fichaList.js` — el pie de la tabla de detalle acepta `foot.key` para caer en la columna que
+  el control declare como cierre, no siempre en la última (Variación Conceptos tiene una columna de
+  % después de la variación).
+- `css/results.css` — el detalle de la ficha scrollea adentro de su propio recuadro
+  (`.ficha-detail { overflow-x: auto }`): en Novedades son ocho columnas.
+- Los tres controles pasan `conDiferencias` a `renderResumenDetalle` para abrir en Fichas cuando la
+  corrida terminó con diferencias, como el resto de la vista estándar.
+- `tests/fichasLegajoConcepto.test.js` (nuevo, 109 asserts) y `tests/e2e/fichasLegajoConcepto.spec.js`
+  (nuevo, 25 tests, con los fixtures `nrFichas.html` y `variacionesConceptosFichas.html`) — sumados a
+  la cadena de `test:unit` / e2e. `tests/e2e/novedadesLiquidacion.spec.js` se actualizó para abrir la
+  solapa Resumen antes de mirarla, porque ahora ese control puede abrir en Fichas. Verificado en
+  Chromium real con fixtures (el entorno remoto bloquea el CDN de Excel/Dexie), los cinco estados y
+  los tres temas de cada pantalla.
+- Ver `specs/vista-estandar-resultados.md` §4, §8 y §9, y **D-086** en `DECISIONS.md` — seis decisiones
+  de esa entrada están tomadas sin Willy presente y esperan su confirmación. Al integrar, la entrada
+  pasó de D-078 a D-086: las tandas 2 y 3 ya se habían llevado esos números.
+
 
 ### feat(ui): arranca la vista estándar — piezas compartidas + Acumuladores Ganancias migrado de punta a punta — 2026-08-20
 

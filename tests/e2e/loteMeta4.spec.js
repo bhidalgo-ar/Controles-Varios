@@ -162,7 +162,11 @@ const CON_TILE = ['brutos', 'gs_pers', 'nr', 'rend_vs_tabu', 'rend_x_ee', 'rend_
 for (const id of CON_TILE) {
   test(`${id} · el chip "Con diferencia" dice lo mismo que la tile del Resumen`, async ({ page }) => {
     await page.goto(`${FIXTURE}?control=${id}`);
-    const tile = await page.locator('.rb-tile', { hasText: 'Con diferencia' })
+    // El Resumen se abre explícitamente: los controles que ya tienen su ficha
+    // (NR, desde la tanda 4) abren en Fichas cuando terminaron con diferencias
+    // (§2), así que el Resumen puede no ser la solapa de arranque.
+    await page.getByRole('tab', { name: 'Resumen', exact: true }).click();
+    const tile = await panel(page).locator('.rb-tile', { hasText: 'Con diferencia' })
       .locator('.rb-tile__value').first().textContent();
     await page.getByRole('tab', { name: 'Planilla', exact: true }).click();
     const chip = await panel(page).locator('.results-chip', { hasText: 'Con diferencia' })

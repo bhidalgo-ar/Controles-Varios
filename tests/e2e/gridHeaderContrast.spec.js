@@ -23,6 +23,11 @@ import { test, expect } from '@playwright/test';
 
 const FIXTURE = '/tests/e2e/fixtures/nrDetalle.html';
 
+/** El panel de la solapa activa. Desde que NR tiene su ficha (tanda 4) hay dos
+ *  barras en el DOM —la de Fichas y la de la Planilla—, así que un selector sin
+ *  acotar matchea dos veces. Se mira siempre la solapa que está a la vista. */
+const panel = (page) => page.locator('.tabs__panel:not([hidden])');
+
 /** `rgb()`/`rgba()` → `[r, g, b, a]`. */
 function parseColor(c) {
   const n = c.match(/[\d.]+/g).map(Number);
@@ -124,16 +129,17 @@ test('un control sin diferencias sigue teniendo exportable y tabla de evaluados'
 
 test('un control con diferencias arranca mostrando sólo las diferencias', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=dif`);
-  await page.click('text=Planilla');
+  await page.getByRole('tab', { name: 'Planilla', exact: true }).click();
+  const p = panel(page);
 
-  await expect(page.locator('.results-toolbar select[data-chips]')).toHaveValue('conDif');
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
+  await expect(p.locator('.results-toolbar select[data-chips]')).toHaveValue('conDif');
+  await expect(p.locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
 
   // Los chips no re-dibujan la tabla: esconden filas. Por eso las dos siguen en
   // el DOM y el TOTAL puede pasar a ser el de la selección.
-  await expect(page.locator('table.rb-grid tbody tr')).toHaveCount(2);
+  await expect(p.locator('table.rb-grid tbody tr')).toHaveCount(2);
 
   // Pasar a "Todos" trae los evaluados sin diferencia.
-  await page.selectOption('.results-toolbar select[data-chips]', 'todos');
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
+  await p.locator('.results-toolbar select[data-chips]').selectOption('todos');
+  await expect(p.locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
 });

@@ -10,10 +10,12 @@ EE x CATEG suma la ficha por legajo y la matriz campo × legajo "Por campo" (D-0
 (2026-08-21):** ficha por lista de acreditación en "Acreditaciones — Generar Reporte" (D-083).
 **Tanda 7 hecha (2026-08-21):** ficha por cuenta contable en el Asiento de
 Remuneraciones (FINADIET) y en la Contabilidad Desglosada + Asiento (COTY), los dos controles cuya
-unidad no es el legajo (D-084, D-085). **Falta que Willy mire las pantallas.** Tandas 4 y 5 —el resto
-de las fichas, por lote— siguen pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
+unidad no es el legajo (D-084, D-085). **Tanda 4 hecha (2026-08-21):** la ficha de legajo × concepto
+en Control NR, Novedades vs Liquidación y Variación Conceptos (D-086). **Falta que Willy mire las
+pantallas.** Sólo la tanda 5 —las fichas de agrupador y de centro de costo— sigue pendiente, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
 `docs/prompts-vista-estandar.md`.
+
 
 
 
@@ -173,6 +175,13 @@ Al pie de la lista, "Mostrar 50 más" y "N de M fichas".
 lista flex las tarjetas se comprimen y el contenido se corta — es el bug que ya se arregló en
 Acumuladores) y el hover no usa `transform` (movería la lista entera).
 
+**Una tercera, que salió en la tanda 4 (D-086):** cuando la tira suma dos totales que vienen de
+archivos distintos y uno de los dos puede no traer dato para un concepto, la diferencia de la tira
+**no puede ser la resta de esos dos totales** — resta cuenta el lado que falta como si valiera cero.
+La tira suma sólo lo que los dos lados sí tienen (`Diferencia comparada`, en Control NR), los dos
+totales de arriba siguen siendo los de cada archivo tal cual, y lo que quedó sin comparar se dice en
+la conclusión: el importe, de qué lado está, y que no entra en la diferencia.
+
 ## 5. La planilla
 
 Encabezado de dos filas, las dos pegadas arriba:
@@ -296,11 +305,11 @@ Aprobado por Willy el 2026-08-20.
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
 | **Cruce por Agrupadores** | **hecho (tanda 3)** | **hecho (tanda 3)** | **sí — el que más gana** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. La ficha por legajo con sus agrupadores adentro (tanda 5) resuelve exactamente eso |
-| **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **sí** | 18 conceptos, ahora en `Marcas ▾` ("el legajo liquidó ese concepto"); la ficha es de la tanda 4 |
-| **Novedades vs Liquidación** | **hecho (tanda 3)** | **hecho (tanda 3)** | **sí** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha (mismo caso que NR) es de la tanda 4 |
+| **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 4, D-086)** | 18 conceptos, en `Marcas ▾` ("el legajo liquidó ese concepto"). La ficha abre un legajo y dice en qué conceptos no cierra, con su código y los dos lados — antes la fila decía "# Difs" y nada más |
+| **Novedades vs Liquidación** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha invierte el cruce: un legajo por tarjeta con las cuatro bandas adentro |
 | **Acumuladores Ganancias** | **hecho (tanda 1)** | **hecho (tanda 1)** | **sí — reemplaza la ficha vieja** | migrado de punta a punta en la tanda 1, piloto del estándar (D-077) |
 | **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **hecho (tanda 6, D-082)** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La ficha es una tarjeta por legajo con la tira de conteo de campos (no una cascada de importes) y una conclusión que dice si el problema es del empleado o de una carga masiva. Suma una **cuarta** solapa, "Por campo" — la matriz campo × legajo, única excepción a las tres solapas del §2 |
-| **Variación Conceptos** | **hecho (tanda 3)** | **hecho (tanda 3)** | **sí** | un legajo con varios conceptos que se movieron; la ficha es de la tanda 4 |
+| **Variación Conceptos** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | un legajo con varios conceptos que se movieron, y adentro el escalón de los que se pagan en escalones (`100 % → 70 %` dice algo que "bajó $ 16.805,40" no dice) |
 | **Rendimiento vs Tabulado** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **sí, por centro de costo** | la unidad es el CC, no el legajo; la lista de conceptos por columna pasó del `<th>` a una leyenda desplegable arriba de la planilla. Ficha en la tanda 5 |
 | **Rendimiento vs Asiento** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | ya tiene algo parecido → migrar | pierde el orden por columna de la planilla principal (era la única que ordenaba por su cuenta; vuelve con la ficha) y el desglose que colgaba de la fila de TOTAL (el desglose por celda sigue igual); el rótulo pasa de "TOTAL GENERAL" a "TOTAL — N centros de costo" |
 | Brutos — Controlar / Generar Reporte | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | no la necesita | 2-3 conceptos por legajo: la fila ya lo dice todo; se van los colores de banda escritos a mano (`CYAN_HDR`/`LILAC_HDR`) |
@@ -313,6 +322,7 @@ Aprobado por Willy el 2026-08-20.
 | **Contabilidad Desglosada + Asiento** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **hecho (tanda 7, D-084), por cuenta contable** | ídem. Una cuenta sin código pasa a leerse «Sin comparar» y no «Con diferencia», en las dos solapas del control (D-085) |
 | **Acreditaciones** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 8, D-083), por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no lleva atributos del empleado** (`D-020`, escrito como assert). El aviso de grupo sin fecha se movió arriba de las tres solapas (`D-083`) |
 | Importador de Novedades | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
+
 
 
 
@@ -337,7 +347,11 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 3. **Barra + planilla, lote Axton/general. Hecho el 2026-08-20 (D-079, D-080, D-081).** 9 entradas.
    Corrió en paralelo con la 2: no se pisaron controles, pero las dos crearon un
    `js/ui/planillaPanel.js` con el mismo nombre, que al integrar quedó unificado (D-088).
-4. **Fichas de legajo × concepto** — NR, Novedades vs Liquidación, Variación Conceptos.
+4. **Fichas de legajo × concepto — NR, Novedades vs Liquidación, Variación Conceptos. Hecho el
+   2026-08-21 (D-086).** Se hizo directo sobre `main`, sin esperar las tandas 2 y 3, eligiendo
+   nombres de función que no chocaran con los de esos dos PR — aun así quedaron tres pares de
+   funciones equivalentes, que al integrar se dejaron en una sola (D-088).
+
 5. **Fichas de legajo × agrupador y CC × concepto** — Agrupadores, Rendimiento vs Tabulado.
 6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
    (D-082).** Se construyó sobre la tanda 2 y entró después de ella.

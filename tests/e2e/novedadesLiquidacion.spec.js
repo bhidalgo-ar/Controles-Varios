@@ -6,6 +6,14 @@
 // los cinco chips de estado, que lo no comparable se lea con su motivo y NO como
 // un cero —que es lo único que evita que el analista lea "0,00" donde no hubo
 // comparación—, y que todo se lea en los tres temas. Fixture con datos inventados.
+//
+// **Este cruce tiene diferencias, así que abre en Fichas** (§2 de
+// specs/vista-estandar-resultados.md): lo primero que se ve es por qué falla. Los
+// tests que miran el Resumen o la Planilla abren su solapa primero, y buscan
+// adentro del panel activo — la solapa Fichas tiene su propia fila de cinco chips
+// y queda en el DOM aunque esté oculta. La solapa Fichas tiene su propio test en
+// tests/e2e/fichasLegajoConcepto.spec.js.
+
 
 import { test, expect } from '@playwright/test';
 
@@ -19,7 +27,14 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__listo);
 });
 
+/** Activa una solapa por su rótulo y devuelve su panel, para no leer el de al lado. */
+async function solapa(page, rotulo) {
+  await page.locator('[role="tab"]', { hasText: rotulo }).click();
+  return page.locator('[role="tabpanel"]:not([hidden])');
+}
+
 test('el Resumen muestra el veredicto, las cinco tarjetas y los chequeos del cruce', async ({ page }) => {
+  await solapa(page, 'Resumen');
   await expect(page.locator('.rb-verdict')).toBeVisible();
   // 5 tarjetas: legajos cruzados, coinciden, con diferencia, no comparables y
   // sin contraparte.
@@ -54,7 +69,7 @@ test('el legajo con dos liquidaciones se suma, no se pisa', async ({ page }) => 
 });
 
 test('la Planilla trae las dos medidas, la diferencia y de dónde sale el número', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
+  await solapa(page, 'Planilla');
 
   const thead = page.locator('table.data-table thead');
   await expect(thead).toContainText('Δ importe');
@@ -68,13 +83,16 @@ test('la Planilla trae las dos medidas, la diferencia y de dónde sale el númer
 });
 
 test('las cuatro bandas del cruce se recorren con los cinco chips de estado', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
+  // Los chips se buscan adentro del panel de la Planilla: la solapa Fichas tiene
+  // su propia fila de cinco y queda en el DOM aunque esté oculta.
+  const panel = await solapa(page, 'Planilla');
 
   // Los cinco del estándar, con esas palabras y en ese orden (§3).
-  const chips = page.locator('.results-chip');
+  const chips = panel.locator('.results-chip');
   await expect(chips).toHaveCount(5);
   expect((await chips.allInnerTexts()).map(t => t.trim().split(/\s+/).slice(0, -1).join(' ')))
     .toEqual(['Todos', 'Con diferencia', 'Dentro del margen', 'Al centavo', 'Sin comparar']);
+
 
   // "Sin comparar" junta lo no comparable y lo que no tiene contraparte: el
   // motivo se lee en la columna de contexto, y la diferencia NO sale en cero.
@@ -98,11 +116,11 @@ test('las cuatro bandas del cruce se recorren con los cinco chips de estado', as
 });
 
 test('"Marcas ▾" separa lo que sólo está de un lado', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
-  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+  const panel = await solapa(page, 'Planilla');
+  await panel.locator('.results-chip', { hasText: 'Todos' }).click();
 
-  await page.selectOption('[data-marca-filter]', 'solo_novedad');
-  const filas = await page.locator('table.data-table tbody tr:visible').count();
+  await panel.locator('[data-marca-filter]').selectOption('solo_novedad');
+  const filas = await panel.locator('table.data-table tbody tr:visible').count();
   const esperadas = await page.evaluate(() =>
     window.__results.filas.filter(f => f.lado === 'solo_novedad').length);
   expect(filas).toBe(esperadas);
@@ -115,6 +133,7 @@ test('el concepto que el Tabulado no muestra se compara contra el totalizador', 
   expect(fila.liqImporteOrigen).toBe('totalizador');
   expect(fila.banda).toBe('coincide');
   // Y el Resumen lo dice con nombre, en su propia sección: no lo esconde.
+  await solapa(page, 'Resumen');
   await expect(page.getByText('Conceptos del importador sin columna en el Tabulado')).toBeVisible();
   await expect(page.locator('.rb-issues')
     .filter({ hasText: 'Concepto 520121' })).toContainText('Totales de Concepto');
@@ -126,6 +145,7 @@ test('el concepto que el Tabulado no muestra se compara contra el totalizador', 
 // antes de decidir— tengan contraste AA contra su fondo en cada tema.
 for (const tema of ['sobrio', 'intenso', 'oscuro']) {
   test(`${tema}: el veredicto y los casos del cruce se leen`, async ({ page }) => {
+    await solapa(page, 'Resumen');
     await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), tema);
 
     for (const sel of ['.rb-verdict h3', '.rb-issue__what', '.rb-issue__who']) {
@@ -170,7 +190,7 @@ for (const tema of ['sobrio', 'intenso', 'oscuro']) {
     }
 
     // Los cinco chips de estado: que estén pintados en el tema.
-    await page.locator('[role="tab"]', { hasText: 'Planilla' }).click();
-    await expect(page.locator('.results-chip')).toHaveCount(5);
+    const panelPlanilla = await solapa(page, 'Planilla');
+    await expect(panelPlanilla.locator('.results-chip')).toHaveCount(5);
   });
 }
