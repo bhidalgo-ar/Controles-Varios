@@ -6,6 +6,12 @@
 // lo no comparable se lea con su motivo y NO como un cero —que es lo único que
 // evita que el analista lea "0,00" donde no hubo comparación—, y que todo se lea
 // en los tres temas. Fixture con datos inventados.
+//
+// **Este cruce tiene diferencias, así que ahora abre en Fichas** (§2 de
+// specs/vista-estandar-resultados.md): lo primero que se ve es por qué falla. Los
+// tests que miran el Resumen o el Detalle abren su solapa primero — antes el
+// Resumen era el default y no hacía falta. La solapa Fichas tiene su propio test
+// en tests/e2e/fichasLegajoConcepto.spec.js.
 
 import { test, expect } from '@playwright/test';
 
@@ -19,7 +25,14 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__listo);
 });
 
+/** Activa una solapa por su rótulo y devuelve su panel, para no leer el de al lado. */
+async function solapa(page, rotulo) {
+  await page.locator('[role="tab"]', { hasText: rotulo }).click();
+  return page.locator('[role="tabpanel"]:not([hidden])');
+}
+
 test('el Resumen muestra el veredicto, las cinco tarjetas y los chequeos del cruce', async ({ page }) => {
+  await solapa(page, 'Resumen');
   await expect(page.locator('.rb-verdict')).toBeVisible();
   // 5 tarjetas: legajos cruzados, coinciden, con diferencia, no comparables y
   // sin contraparte.
@@ -81,9 +94,10 @@ test('las cuatro bandas del Detalle se dibujan', async ({ page }) => {
 });
 
 test('el analista cambia de banda clickeando la chip, no sólo por el select', async ({ page }) => {
-  await page.locator('[role="tab"]', { hasText: 'Detalle' }).click();
-  // Con 4 opciones el <select> se dibuja como chips: es lo que el analista toca.
-  const chips = page.locator('.results-chip');
+  const panel = await solapa(page, 'Detalle');
+  // Las chips se buscan adentro del panel del Detalle: la solapa Fichas tiene su
+  // propia fila de cinco chips, y queda en el DOM aunque esté oculta.
+  const chips = panel.locator('.results-chip');
   await expect(chips).toHaveCount(4);
 
   await chips.filter({ hasText: 'No comparable' }).click();
@@ -102,6 +116,7 @@ test('el concepto que el Tabulado no muestra se compara contra el totalizador', 
   expect(fila.liqImporteOrigen).toBe('totalizador');
   expect(fila.banda).toBe('coincide');
   // Y el Resumen lo dice con nombre, en su propia sección: no lo esconde.
+  await solapa(page, 'Resumen');
   await expect(page.getByText('Conceptos del importador sin columna en el Tabulado')).toBeVisible();
   await expect(page.locator('.rb-issues')
     .filter({ hasText: 'Concepto 520121' })).toContainText('Totales de Concepto');
@@ -113,6 +128,7 @@ test('el concepto que el Tabulado no muestra se compara contra el totalizador', 
 // antes de decidir— tengan contraste AA contra su fondo en cada tema.
 for (const tema of ['sobrio', 'intenso', 'oscuro']) {
   test(`${tema}: el veredicto y los casos del cruce se leen`, async ({ page }) => {
+    await solapa(page, 'Resumen');
     await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), tema);
 
     for (const sel of ['.rb-verdict h3', '.rb-issue__what', '.rb-issue__who']) {
