@@ -328,7 +328,7 @@ equipo la define una vez.
 **Fecha:** 2026-08-06
 **Contexto:** El export de agosto de Plastic Omnium Pilar mostró un caso que el archivo de julio no tenía: un Listado completo (18336, 13 empleados) sin **ninguna** fecha de acreditación conocida en todo el archivo. Con la regla de D-021 (heredar la fecha por el texto crudo de la liquidación, ambiguo cuando esa liquidación tiene varias fechas en el mes), esas 13 filas caían en `SIN ASIGNAR` — correctamente detectadas, pero como **13 alertas idénticas**, una por empleado, en vez de un solo problema a resolver. Guillermo pidió unificarlas y agregar una forma de asignar la fecha a mano y regenerar el reporte.
 **Decisión:**
-1. **Se cambia el ancla principal de "texto de la liquidación" a "Listado".** Un Listado es la unidad real del banco: si algún empleado de ese Listado tiene fecha, todos la comparten. `buildReport()` construye `datesByListado` (Map de Listado → fechas conocidas entre sus filas) y, para una fila sin fecha, primero intenta resolver por su Listado; sólo si la fila **no tiene Listado** cae al fallback anterior (fecha única por texto crudo de liquidación, sin distinguir Listado) — necesario para casos como el anticipo suelto de NEIRA (D-021), que no tiene Listado que lo ancle.
+1. **Se cambia el ancla principal de "texto de la liquidación" a "Listado".** Un Listado es la unidad real del banco: si algún empleado de ese Listado tiene fecha, todos la comparten. `buildReport()` construye `datesByListado` (Map de Listado → fechas conocidas entre sus filas) y, para una fila sin fecha, primero intenta resolver por su Listado; sólo si la fila **no tiene Listado** cae al fallback anterior (fecha única por texto crudo de liquidación, sin distinguir Listado) — necesario para casos como el anticipo suelto de julio de POP (D-021), que no tiene Listado que lo ancle.
 2. **Los grupos pendientes se agrupan por la misma clave que se usó para intentar resolverlos** — `L:<listado>` o `Q:<liquidación cruda>` — en vez de quedar como filas sueltas. `results.sinAsignar` pasa de ser un objeto único `{rows, total, count}` a un **array de grupos**, cada uno con su propio `count`/`total`. La alerta correspondiente (`tipo: 'sin_asignar'`) es una por grupo, no una por fila — dice "Listado 18336 — 13 empleados", no 13 líneas idénticas.
 3. **Asignación manual con regeneración instantánea, sin volver a cargar el archivo.** `buildReport(rows, cfg, ...)` es una función pura de las filas ya tipadas + `cfg.dateOverrides` (Map de `anchorKey → 'YYYY-MM-DD'`) — no muta `rows`, así se puede volver a invocar con otro `dateOverrides` cuantas veces haga falta. `assignAcreditacionesDate(results, groupKey, isoDate)` y `unassignAcreditacionesDate(results, groupKey)` recomputan el reporte completo a partir de `results._rows`/`_cfg` (guardados en el resultado de `run()` con prefijo `_` para señalar que son estado interno, no parte del contrato público del control). La pantalla de resultados usa un patrón `draw(res)` que reconstruye todo el DOM y vuelve a llamarse a sí misma tras cada asignación/deshecho — el botón "Exportar" queda siempre atado al resultado más reciente.
 4. **La asignación manual usa la misma regla de agrupación que las fechas del archivo:** si la fecha asignada coincide con el tipo+fecha de una lista ya existente, el grupo se mergea ahí (con su Listado sumado a la columna `Listado` de esa lista); si no, forma una lista nueva. No hay lógica especial para "fechas asignadas a mano" en el paso de agrupación — sólo en el paso de resolución de fecha, antes de agrupar.
@@ -3017,4 +3017,31 @@ para llegar por el camino del analista. Sigue sin generalizarse contra un caso r
 **Detalle:** `js/controls/catXEmpleados.js`, `js/ui/fichaList.js`, `js/ui/resultBlocks.js`,
 `js/ui/tableTools.js`, `tests/catXEmpleadosControl.test.js`, `tests/e2e/eeCategFichas.spec.js`, D-064,
 D-073, D-074, D-078.
+
+---
+
+## D-083 — Acreditaciones: el aviso de grupo pendiente se ve arriba de las tres solapas, no dentro de Planilla
+
+**Fecha:** 2026-08-21. **Contexto:** tanda 8 de `specs/vista-estandar-resultados.md` (ficha por lista de
+acreditación). Decisión tomada sin Willy presente (no estaba disponible), a confirmar.
+
+**Qué se cambió:** el aviso de "grupo sin fecha de acreditación" (con el campo y el botón "Asignar") y la
+lista de fechas ya asignadas a mano en la corrida (con "Deshacer") pasaron a vivir arriba de las tres
+solapas — `Resumen · Fichas · Planilla` —, antes de `renderResumenDetalle()`. Antes vivían adentro de la
+solapa Planilla.
+
+**Por qué:** un grupo pendiente bloquea el export del `.xlsx`, así que resolverlo no puede depender de en
+qué solapa esté parado el analista. Con la vista estándar la pantalla abre en Fichas cuando hay
+diferencias — que es justo cuando suele haber un grupo pendiente sin resolver —, así que el aviso quedaba
+adentro de una solapa que el analista no tenía por qué visitar.
+
+**Alternativa descartada:** dejar el aviso donde estaba y replicarlo (o un resumen de él) también en
+Fichas. Se descartó por duplicar la misma información en dos lugares con el riesgo de que se
+desincronicen; un único aviso arriba de las solapas evita eso.
+
+**Pendiente:** que Willy vea el nuevo lugar del aviso en pantalla y confirme que no molesta arriba de
+Resumen, donde antes no aparecía nada de esto.
+
+**Detalle:** `js/controls/acreditaciones.js`, `specs/control-acreditaciones-axton.md` ("Salida — la
+app"), `tests/e2e/acreditacionesFicha.spec.js`, D-020, D-021.
 

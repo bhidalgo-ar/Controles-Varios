@@ -102,6 +102,52 @@
 - **El PR queda en borrador**: falta que Willy mire las diez pantallas en el navegador antes de
   mergear. Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), **D-078**.
 
+### feat(acreditaciones): solapa Fichas, una tarjeta por lista de acreditación — 2026-08-21
+
+- **Es la tanda 8 de `specs/vista-estandar-resultados.md`** (§9, punto 8): "Acreditaciones — Generar
+  Reporte" gana la solapa Fichas. La tarjeta es por **lista** de acreditación, no por legajo — la unidad
+  de este control es la acreditación y no el empleado-mes (D-021), y sigue siendo la única excepción
+  conocida a la regla de consolidar por legajo. Ningún conteo del semáforo cambia: la unidad sigue siendo
+  `'lista'` y `unitsTotal`/`unitsWithDiff` siguen contando listas formadas + grupos pendientes.
+- **Cerrada:** el número de lista en el avatar, `código — liquidación` como nombre (por ejemplo
+  "1Q — 1era Quincena"), la empresa en el tag, y en la línea de contexto la fecha de acreditación,
+  cuántas acreditaciones tiene la lista, qué listados del archivo entraron y qué hoja del `.xlsx` es. Si
+  el reporte no cierra contra el archivo de Axton, la lista sale en rojo con el badge "El reporte no
+  cierra" — el mismo criterio con el que ya se pintaba la Planilla: si el cuadre global no da, el reporte
+  entero es sospechoso y todas las listas salen marcadas, no sólo la que tiene la alerta.
+- **Abierta:** la tira va del listado de pago (cuántas acreditaciones trae) a lo que sale por el banco,
+  descontando las que quedaron sin importe y separando lo que queda para revisar; el desglose por banco
+  (lo que mira tesorería antes de mandar la lista); si hay alertas, una segunda tabla con cuántas hay de
+  cada tipo y el detalle fila por fila con el legajo y por qué quedó marcada; y una conclusión que es una
+  instrucción ("antes de mandarla al banco, resolvé…"), no un resumen del importe que ya se ve arriba.
+- **Todo lo de HR queda en la pantalla, no en el archivo (D-020), y ahora está escrito como assert**: el
+  conteo de acreditaciones, el desglose por banco, las alertas y el legajo marcado se ven en la ficha; el
+  `.xlsx` que recibe Finanzas sigue con sus 7 columnas de pago y ninguna más — el test lo compara contra
+  `EXPORT_CONTRACTS.acreditaciones_reporte.columns`.
+- **El aviso de "grupo sin fecha de acreditación" y la lista de fechas asignadas a mano se movieron arriba
+  de las tres solapas** (antes vivían adentro de la Planilla). Bloquean el export, y con la vista estándar
+  la pantalla abre en Fichas justo cuando hay un grupo pendiente — adentro de la Planilla quedaban
+  invisibles en ese momento. Decisión tomada sin Willy presente, a confirmar (D-083).
+- **Bug arreglado en la pieza compartida `js/ui/fichaList.js`:** `renderFichasPanel()` le leía `.value` al
+  `<div>` que envuelve al `<select>` del "Orden ▾" en vez de al `<select>`, así que el desplegable se veía
+  pero nunca ordenaba nada — en ninguna pantalla que ya usara la pieza. Afectaba también a Acumuladores
+  Ganancias (el control piloto de la tanda 1).
+- **Y el buscador de la solapa Fichas ahora puede decir qué se busca en cada control.** Antes dejaba
+  siempre "Buscá por legajo o nombre…", que es el texto correcto en los 7 controles cuya unidad es el
+  legajo y engaña en los 3 donde es el centro de costo, la cuenta contable o la lista: pedía un dato que
+  la ficha no tiene. `renderFichasPanel()` acepta `searchLabel` y `searchPlaceholder` —el mismo
+  pass-through que ya tenía la Planilla—, y en Acreditaciones las dos solapas buscan por número de lista,
+  liquidación, fecha o listado.
+- `js/controls/acreditaciones.js`, `js/ui/fichaList.js`, `scripts/check-datos-sensibles.mjs` (allowlist del
+  fixture nuevo). `tests/acreditacionesControl.test.js` gana 35 asserts para la función pura
+  `buildAcreditacionesFichas(res)`. `tests/e2e/acreditacionesFicha.spec.js` (nuevo, 12 pruebas) sobre el
+  fixture `tests/e2e/fixtures/acreditacionesFicha.html`; datos inventados, jugadores de Banfield.
+  `tests/e2e/vistaEstandar.spec.js` (Acumuladores) vuelve a pasar después del arreglo del "Orden ▾".
+  Verificado en navegador en los tres temas.
+- Ver `specs/vista-estandar-resultados.md` (§8 y §9 al día), `specs/control-acreditaciones-axton.md`,
+  D-020, D-021, D-074, **D-083**.
+
+
 ### feat(ui): barra estándar y planilla con bandas en el lote Axton/general — 2026-08-20
 
 - **Es la tanda 3 de `specs/vista-estandar-resultados.md`** (§9, punto 3): nueve pantallas pasan a la vista

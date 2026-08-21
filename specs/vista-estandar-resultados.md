@@ -6,11 +6,13 @@ del §7 y Acumuladores Ganancias migrado de punta a punta, como piloto (D-077). 
 (D-079, D-080, D-081) pasan a la barra y la planilla estándar — o sea, **los 19 controles del §8 que
 llevan planilla**. Las dos tandas corrieron en paralelo y cada una había abierto su propio
 `js/ui/planillaPanel.js`; al integrarlas quedó una sola pieza (D-088). **Tanda 6 hecha (2026-08-21):**
-EE x CATEG suma la ficha por legajo y la matriz campo × legajo "Por campo" (D-082). **Falta que Willy
-mire las pantallas.** Tandas 4, 5, 7 y 8 —el resto de las fichas, por lote— siguen pendientes, en el
-orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
+EE x CATEG suma la ficha por legajo y la matriz campo × legajo "Por campo" (D-082). **Tanda 8 hecha
+(2026-08-21):** ficha por lista de acreditación en "Acreditaciones — Generar Reporte" (D-083).
+**Falta que Willy mire las pantallas.** Tandas 4, 5 y 7 —el resto de las fichas, por lote— siguen
+pendientes, en el orden del §9. Sale del handoff de diseño del Control de Netos (Sportline) y se generaliza a los 21
 controles. El mapa de abajo está aprobado; los prompts de cada tanda de trabajo están en
 `docs/prompts-vista-estandar.md`.
+
 
 > Este documento es la referencia: cuando un chat nuevo toque la pantalla de resultados de
 > cualquier control, se lee esto primero. Si algo acá no coincide con lo que hace el código, gana
@@ -296,8 +298,9 @@ Aprobado por Willy el 2026-08-20.
 | Variación entre quincenas (POP) | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | el valor hora es la única columna de importe sin TOTAL, D-081 |
 | **Asiento de Remuneraciones** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | la ficha por legajo no aplica: lo que sirve es abrir la cuenta y ver qué conceptos la componen. Ficha en la tanda 7 |
 | **Contabilidad Desglosada + Asiento** | **hecho (tanda 3)** | **hecho (tanda 3, DEBE/HABER)** | **sí, por cuenta contable** | ídem. Ficha en la tanda 7 |
-| **Acreditaciones** | **hecho (tanda 3)** | **hecho (tanda 3)** | **sí, por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no puede llevar atributos del empleado** (`D-020`). Ficha en la tanda 8 |
+| **Acreditaciones** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 8, D-083), por lista de acreditación** | la unidad es la acreditación, no el empleado (`D-021`). **Y el archivo lo recibe Finanzas: la ficha no lleva atributos del empleado** (`D-020`, escrito como assert). El aviso de grupo sin fecha se movió arriba de las tres solapas (`D-083`) |
 | Importador de Novedades | **hecho (tanda 3)** | **hecho (tanda 3)** | no la necesita | migrado con sub-solapas anidadas en Planilla (una por vista: importador, totales por concepto, lo que quedó afuera, contra el importador ya armado), cada una con su propia barra |
+
 
 **Además de la ficha, dónde conviene otra cosa:**
 - **Variaciones y Variación entre quincenas** ya tienen el escalón/histograma, que es lo que sirve
@@ -325,7 +328,10 @@ El detalle de cada tanda, con su prompt listo para copiar, está en
 6. **Ficha de campos que no coinciden + matriz campo × legajo — EE x CATEG. Hecho el 2026-08-21
    (D-082).** Se construyó sobre la tanda 2 y entró después de ella.
 7. **Fichas por cuenta contable** — Asiento de Remuneraciones, Contabilidad Desglosada.
-8. **Ficha por lista de acreditación** — Acreditaciones.
+8. **Ficha por lista de acreditación — Acreditaciones. Hecho el 2026-08-21 (D-083).** Corrió en
+   paralelo con las 3 a 7,
+   apoyada en la barra y la planilla de la tanda 3. La unidad es la lista, no el legajo (D-021), y
+   lo de HR se queda en la pantalla (D-020, ahora escrito como assert contra el contrato de export).
 
 **Netos** va en su propio chat, después de la tanda 1.
 

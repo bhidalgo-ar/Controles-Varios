@@ -269,6 +269,13 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {{ value: string, label: string, match: (f: object) => boolean }[]} [opts.marcas]
  * @param {{ value: string, label: string, compare: (a: object, b: object) => number }[]} [opts.ordenes]
  * @param {(ficha: object) => string} [opts.getLabel] - texto buscable
+ * @param {string} [opts.searchLabel] - rótulo del buscador
+ * @param {string} [opts.searchPlaceholder] - qué se puede buscar. Los dos van
+ *   con el default de `initSearchCombobox()` ("Buscá por legajo o nombre…"), que
+ *   es el correcto en los 7 controles cuya unidad es el legajo — y no en los 3
+ *   donde es el centro de costo, la cuenta contable o la lista de acreditación:
+ *   ahí el buscador estaría pidiendo un dato que la ficha no tiene. Mismo
+ *   pass-through que ya tiene la Planilla (`renderPlanillaPanel()`).
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
  * @param {number} [opts.amountDecimals] - 0 cuando esa Σ es un conteo y no plata
@@ -282,6 +289,7 @@ export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
   getAmount, amountLabel, amountDecimals, unitLabel = 'fichas',
+  searchLabel, searchPlaceholder,
   onExport, onOpen, pageSize,
 } = {}) {
   if (fichas.length === 0) {
@@ -308,8 +316,13 @@ export function renderFichasPanel(panel, {
 
   // El "Orden ▾" es de la solapa Fichas y de ninguna otra: va antes del KPI,
   // que es lo último antes de exportar.
-  const ordenSel = ordenes.length ? ordenDropdown(ordenes) : null;
-  if (ordenSel) toolbar.querySelector('.results-toolbar__right').prepend(ordenSel);
+  const ordenDrop = ordenes.length ? ordenDropdown(ordenes) : null;
+  if (ordenDrop) toolbar.querySelector('.results-toolbar__right').prepend(ordenDrop);
+  // El <select> de verdad, no el envoltorio: `ordenDropdown()` devuelve el
+  // `.form-group` que lo contiene, y leerle `.value` a un <div> da `undefined`
+  // — con eso `ordenar()` no encontraba nunca su criterio y salía sin hacer
+  // nada, así que el "Orden ▾" se veía pero no ordenaba.
+  const ordenSel = ordenDrop?.querySelector('select') || null;
 
   const { listEl, els } = renderFichaList(panel, fichas, { onOpen });
 
@@ -334,6 +347,8 @@ export function renderFichasPanel(panel, {
 
   initSearchCombobox(searchEl, {
     rows: fichas, trEls: els, getLabel,
+    ...(searchLabel !== undefined ? { label: searchLabel } : {}),
+    ...(searchPlaceholder !== undefined ? { placeholder: searchPlaceholder } : {}),
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 
@@ -370,7 +385,7 @@ export function renderFichasPanel(panel, {
 
   estadoSel.addEventListener('change', filtrar);
   marcaSel?.addEventListener('change', filtrar);
-  ordenSel?.querySelector('select')?.addEventListener('change', ordenar);
+  ordenSel?.addEventListener('change', ordenar);
 
   onExport?.(exportEl);
 

@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/acreditacionesFicha.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados de "Acreditaciones — Generar Reporte" para
+     mirar la solapa FICHAS: una tarjeta por lista de acreditación (D-021), con
+     el desglose por banco, las alertas de esa lista y qué la frena.
+
+     Datos 100% inventados, con nombres de Banfield; los CBU son dígitos
+     repetidos escritos a mano (ver la ALLOWLIST de scripts/check-datos-sensibles.mjs).
+
+     Tiene, a propósito: dos bancos en la misma lista (para que el desglose tenga
+     más de una fila), una lista con DOS tipos de alerta distintos, dos listas
+     limpias, un legajo que acredita en las tres listas (si la ficha fuera por
+     legajo habría una sola tarjeta para él, que es el bug que D-021 prohíbe), y
+     un listado completo sin fecha, que queda pendiente de asignar. -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runAcreditacionesReporte, renderAcreditacionesReporteResults, summarizeAcreditacionesReporte }
+  from '../../../js/controls/acreditaciones.js';
+
+// Uno por legajo: dos legajos con el mismo CBU dispararían la alerta de "CBU
+// compartido" y toda la pantalla saldría en rojo por un dato de prueba.
+const CBU1 = '0720000000000000000001';
+const CBU2 = '0720000000000000000002';
+const CBU3 = '0170000000000000000003';
+const CBU4 = '0170000000000000000004';
+const CBU5 = '0170000000000000000005';
+
+const ANTICIPO = 'Anticipo de sueldo (De carga) Julio 2026 (Anticipos 07-2026) (C)';
+const QUINC1   = '1er Quincena c/sobregiro Julio 2026 (1era Quincena 07-2026) (C)';
+const QUINC2   = '2da Quincena c/ sobregiro Julio 2026 (2da Quincena 07-2026) (C)';
+
+const row = (o) => ({
+  legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cuit: '',
+  cliente: 'CLIENTE DEMO SA', uo_cliente: 'Mensualizados',
+  liquidacion: ANTICIPO, neto: null, listado: '', descripcion: '',
+  fecha_acreditacion: null, banco: 'BANCO DEMO', cbu: CBU1, empresa: 'CLIENTE DEMO SA',
+  ...o,
+});
+
+const acredRows = [
+  // Lista 1 — anticipos del 02-07, dos listados del mismo pago y dos bancos.
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cbu: CBU1, neto: 1000, listado: '900', fecha_acreditacion: '2026-07-02' }),
+  row({ legajo: '2', apellido_nombre: 'ALBELLA GUSTAVO',    cbu: CBU2, neto: 2000, listado: '901', fecha_acreditacion: '2026-07-02', banco: 'BANCO PRUEBA' }),
+
+  // Lista 2 — 1era quincena del 16-07, con dos tipos de alerta distintos.
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cbu: CBU1, neto: 3000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  row({ legajo: '2', apellido_nombre: 'ALBELLA GUSTAVO',    cbu: CBU2, neto: 4000, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1, banco: 'BANCO PRUEBA' }),
+  // En el listado de pago sin importe: el banco no le va a acreditar nada.
+  row({ legajo: '3', apellido_nombre: 'ERVITI WALTER',      cbu: CBU3, neto: null, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+  // CBU que no tiene 22 dígitos: el banco rechaza la transferencia.
+  row({ legajo: '6', apellido_nombre: 'CVITANICH DARIO',    cbu: '123', neto: 1500, listado: '910', fecha_acreditacion: '2026-07-16', liquidacion: QUINC1 }),
+
+  // Lista 3 — 2da quincena del 31-07, limpia.
+  row({ legajo: '1', apellido_nombre: 'SANGUINETTI JAVIER', cbu: CBU1, neto: 5000, listado: '920', fecha_acreditacion: '2026-07-31', liquidacion: QUINC2 }),
+  row({ legajo: '2', apellido_nombre: 'ALBELLA GUSTAVO',    cbu: CBU2, neto: 6000, listado: '920', fecha_acreditacion: '2026-07-31', liquidacion: QUINC2, banco: 'BANCO PRUEBA' }),
+
+  // Listado 950 completo sin ninguna fecha conocida → un solo grupo pendiente.
+  row({ legajo: '4', apellido_nombre: 'FALCIONI JULIO CESAR', cbu: CBU4, neto: 800, listado: '950', fecha_acreditacion: null }),
+  row({ legajo: '5', apellido_nombre: 'SILVA SANTIAGO',       cbu: CBU5, neto: 900, listado: '950', fecha_acreditacion: null }),
+];
+
+const results = runAcreditacionesReporte(acredRows, [], { period: '2026-07' });
+window.__results = results;
+window.__summary = summarizeAcreditacionesReporte(results);
+renderAcreditacionesReporteResults(results, document.getElementById('host'));
+</script></body></html>

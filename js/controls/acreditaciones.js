@@ -21,6 +21,7 @@ import { renderExportMenu } from '../ui/exportMenu.js';
 import { wireTableTools } from '../ui/tableTools.js';
 import { renderVerdict, renderTiles, renderIssues, renderResumenDetalle } from '../ui/resultBlocks.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -487,6 +488,231 @@ const ALERT_LABEL = {
   sin_asignar:      'Sin asignar',
 };
 
+/**
+ * En qué estado cerró una lista, con la MISMA regla en las dos solapas.
+ *
+ * Este reporte cierra AL CENTAVO contra el archivo de origen: es plata que el
+ * banco va a acreditar, así que no hay margen que medir (D-069). Si el cuadre
+ * global no da, el reporte entero es sospechoso y todas las listas salen
+ * marcadas — el mismo criterio con el que se cuenta el semáforo.
+ */
+function estadoDeLista(lista, cierraOk) {
+  return (!cierraOk || lista.alerts > 0) ? 'conDif' : 'centavo';
+}
+
+const NO_APLICA_ACRED = {
+  margen: 'el reporte cierra al centavo contra el archivo de Axton: es plata que el banco va a acreditar',
+  sinComparar: 'todas las listas salen del mismo archivo, así que no falta un lado',
+};
+
+/** Los tipos de liquidación que aparecen en esta corrida, en el orden de la tabla. */
+function tiposDeLasListas(listas) {
+  return [...new Map(listas.map(l => [l.code, l])).values()]
+    .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * El `⬇ Exportar ▾` de las dos solapas: el mismo menú, con los mismos tres
+ * ítems y en el mismo lugar (último de la barra). El export siempre incluye
+ * TODAS las listas, sin importar el filtro de pantalla: el .xlsx es el
+ * entregable del control (el reporte en sí), no una foto de lo que se ve.
+ */
+function mountExportMenu(exportEl, res) {
+  const headers = ['Lista', ...(res.splitByEmpresa ? ['Empresa'] : []), 'Liquidación', 'Fecha de acred', 'Fecha de paga', 'Listado', 'Total'];
+  const rows = () => res.listas.map(l => [
+    l.n,
+    ...(res.splitByEmpresa ? [l.empresa] : []),
+    l.label, fmtDate(l.fecha), fmtDate(l.fecha), l.listados.join(' + '), fmtNum(l.total),
+  ]);
+  return renderExportMenu(exportEl, {
+    onExcel: () => exportAcreditacionesToXlsx(res),
+    onCsv:   () => downloadCsv(headers, rows(), `Acreditaciones_${periodSuffix(res.period)}.csv`),
+    onCopy:  () => copyRowsToClipboard(headers, rows()),
+  });
+}
+
+/** El desglose por banco de UNA lista: es lo que tesorería mira antes de mandarla. */
+function bancosDeLista(lista) {
+  const porBanco = new Map();
+  for (const r of lista.rows) {
+    const banco = r.banco || '(sin banco)';
+    if (!porBanco.has(banco)) porBanco.set(banco, { banco, count: 0, total: 0 });
+    const b = porBanco.get(banco);
+    b.count++;
+    b.total += r.neto ?? 0;
+  }
+  return [...porBanco.values()]
+    .map(b => ({ ...b, total: round2(b.total) }))
+    .sort((a, b) => b.total - a.total || a.banco.localeCompare(b.banco, 'es'));
+}
+
+/**
+ * Las alertas de UNA lista, contadas por tipo. Ojo con la diferencia: `lista.alerts`
+ * cuenta ACREDITACIONES marcadas (una fila con CBU inválido y sin importe cuenta
+ * una sola vez) y esto cuenta ALERTAS (esa misma fila aporta dos). Las dos cosas
+ * se muestran, cada una con su rótulo, para que ningún número quede sin explicar.
+ */
+function alertasPorTipo(lista) {
+  const porTipo = new Map();
+  for (const r of lista.rows) {
+    for (const a of r.alerts) porTipo.set(a.tipo, (porTipo.get(a.tipo) || 0) + 1);
+  }
+  return [...porTipo.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+/** Qué hacer con cada tipo de alerta, en criollo: es lo que va en la conclusión. */
+const ALERT_QUE_MIRAR = {
+  sin_importe:      n => `${n} en el listado de pago sin importe: el banco no les va a acreditar nada`,
+  neto_no_positivo: n => `${n} con importe menor o igual a cero`,
+  duplicado:        n => `${n} repetida${n === 1 ? '' : 's'} (mismo legajo, importe, fecha y liquidación)`,
+  cbu_invalido:     n => `${n} con el CBU vacío o con menos de 22 dígitos: el banco rechaza la transferencia`,
+  cbu_compartido:   n => `${n} con el CBU compartido con otro legajo`,
+};
+
+/**
+ * Una ficha por LISTA de acreditación — la unidad de este control es la
+ * acreditación y no el empleado-mes (D-021).
+ *
+ * Todo lo que se ve acá —cuántos empleados tiene la lista, el desglose por
+ * banco, las alertas fila por fila— es información que la PANTALLA muestra
+ * porque la mira el analista de H&A. El .xlsx que recibe Finanzas del cliente
+ * no la lleva y esta función no lo toca: no agrega ni una columna al export
+ * (D-020).
+ *
+ * Es pura —no toca el DOM— para poder probarla con node.
+ *
+ * @param {object} res - resultado de runAcreditacionesReporte()
+ * @returns {object[]} descriptores de `renderFichasPanel()`, más `lista` y
+ *   `searchLabel` para ordenar, filtrar y buscar sin volver a buscar la lista.
+ */
+export function buildAcreditacionesFichas(res) {
+  const s = res.summary;
+  const cierraOk = Math.abs(s.diferencia) <= CIERRE_EPS;
+  // Con una sola empresa en el archivo el corte no se aplica y `l.empresa`
+  // queda vacío — pero la empresa igual se sabe, y la ficha la tiene que decir.
+  const empresaUnica = res.empresas.length === 1 ? res.empresas[0] : '';
+
+  return res.listas.map(lista => {
+    const empresa    = lista.empresa || empresaUnica;
+    const bancos     = bancosDeLista(lista);
+    const porTipo    = alertasPorTipo(lista);
+    const conAlerta  = lista.rows.filter(r => r.alerts.length > 0);
+    const sinImporte = lista.rows.filter(r => r.neto === null).length;
+    const seAcreditan = lista.count - sinImporte;
+    const severity = !cierraOk ? 'error' : (lista.alerts > 0 ? 'warn' : 'ok');
+
+    return {
+      id:   lista.n,
+      unit: lista.n,
+      severity,
+      name: `${lista.code} — ${lista.label}`,
+      ...(empresa ? { tag: { text: empresa } } : {}),
+      badge: !cierraOk
+        ? { text: 'El reporte no cierra', tone: 'error' }
+        : (lista.alerts > 0
+            ? { text: `${lista.alerts} para revisar`, tone: 'warn' }
+            : undefined),
+      context: [
+        `Acreditan el ${fmtDate(lista.fecha)}`,
+        `${lista.count} ${lista.count === 1 ? 'acreditación' : 'acreditaciones'}`,
+        lista.listados.length ? `Listado ${lista.listados.join(' + ')}` : 'Sin listado',
+        `Hoja "${listaLabel(lista)}" del .xlsx`,
+      ],
+      // El segundo eje: qué MÁS le pasa a la lista. El estado ya dijo cómo cerró.
+      marks: porTipo.map(([tipo, n]) => ({
+        text: `${ALERT_LABEL[tipo] || tipo}: ${n}`, tone: 'info',
+      })),
+      amountLabel: 'Total de la lista',
+      amount: lista.total,
+      amountTone: severity === 'error' ? 'error' : (severity === 'warn' ? 'warn' : undefined),
+      body: {
+        // 1. La tira: del listado de pago a lo que sale por el banco. Es la
+        //    cascada que produce el número grande de la ficha.
+        strip: [
+          { label: 'En el listado de pago', value: `${lista.count}` },
+          ...(sinImporte > 0 ? [{ label: '− Sin importe', value: `${sinImporte}` }] : []),
+          { label: 'Se acreditan', value: `${seAcreditan}` },
+          { label: 'Total que va al banco', value: lista.total, invert: true },
+          ...(lista.alerts > 0
+            ? [{ label: 'Para revisar', value: `${lista.alerts} de ${lista.count}`, residuo: true }] : []),
+          ...(!cierraOk
+            ? [{ label: 'Diferencia del reporte', value: s.diferencia, residuo: true }] : []),
+        ],
+        // 2. Las dos tablas: a la izquierda cómo sale la plata, a la derecha qué
+        //    la frena. La de bancos va siempre — es el corte que mira tesorería.
+        tables: [
+          {
+            title: 'Cómo se acredita — desglose por banco',
+            rows: bancos.map(b => ({ label: b.banco, code: `${b.count}`, value: b.total })),
+            foot: { label: 'TOTAL de la lista', value: lista.total, tone: 'ink' },
+          },
+          ...(porTipo.length > 0 ? [{
+            title: 'Qué la frena — alertas de esta lista',
+            rows: porTipo.map(([tipo, n]) => ({ label: ALERT_LABEL[tipo] || tipo, value: `${n}` })),
+            foot: { label: 'Acreditaciones marcadas', value: `${lista.alerts} de ${lista.count}`, tone: 'error' },
+          }] : []),
+        ],
+        // 3. El detalle: qué fila de la lista está marcada y por qué.
+        detail: conAlerta.length > 0 ? {
+          title: 'Fila por fila, lo que hay que resolver antes de mandarla',
+          columns: [
+            { key: 'legajo',  label: 'Legajo' },
+            { key: 'nombre',  label: 'Apellido y Nombre' },
+            { key: 'alerta',  label: 'Alerta' },
+            { key: 'detalle', label: 'Detalle' },
+            { key: 'neto',    label: 'Neto', num: true },
+          ],
+          rows: conAlerta.flatMap(r => r.alerts.map(a => ({
+            legajo:  r.legajo,
+            nombre:  r.nombre,
+            alerta:  ALERT_LABEL[a.tipo] || a.tipo,
+            detalle: a.detalle,
+            neto:    r.neto,
+            tone:    'neg',
+          }))),
+          foot: { label: 'Neto de las acreditaciones marcadas', value: sumNeto(conAlerta) },
+        } : undefined,
+        // 4. La conclusión: qué mirar, no un resumen del importe que ya se ve arriba.
+        conclusion: conclusionDeLista(lista, { cierraOk, s, porTipo }),
+      },
+      lista,
+      searchLabel: [
+        lista.n, lista.code, lista.label, fmtDate(lista.fecha),
+        lista.listados.join(' '), empresa,
+      ].filter(Boolean).join(' '),
+    };
+  });
+}
+
+/** No un resumen: una instrucción. Qué queda por resolver y qué mirar. */
+function conclusionDeLista(lista, { cierraOk, s, porTipo }) {
+  if (!cierraOk) {
+    return {
+      tone: 'error',
+      title: `El reporte no cierra contra el archivo de Axton por ${fmtNum(s.diferencia)}`,
+      text: `Listas ${fmtNum(s.totalAcreditado)} + sin asignar ${fmtNum(s.sinAsignarTotal)} `
+        + `contra ${fmtNum(s.totalOrigen)} que informa el archivo. Mientras esa diferencia no dé cero `
+        + 'no se manda ninguna lista: lo que falta o sobra puede estar en ésta. Resolvé el cuadre primero.',
+    };
+  }
+  if (porTipo.length > 0) {
+    const partes = porTipo.map(([tipo, n]) => (ALERT_QUE_MIRAR[tipo] || (k => `${k} de tipo ${tipo}`))(n));
+    return {
+      tone: 'warn',
+      title: `${lista.alerts} de ${lista.count} acreditaciones de esta lista quedaron marcadas`,
+      text: `Antes de mandarla al banco, resolvé: ${partes.join('; ')}. `
+        + 'La tabla de acá arriba dice en qué legajo está cada una. Nada de esto va al .xlsx que recibe Finanzas.',
+    };
+  }
+  return {
+    tone: 'ok',
+    title: 'La lista está para mandar',
+    text: `${lista.count} ${lista.count === 1 ? 'acreditación' : 'acreditaciones'} por ${fmtNum(lista.total)}, `
+      + `con fecha ${fmtDate(lista.fecha)}. Ninguna quedó marcada y el reporte cierra exacto contra el archivo `
+      + 'de Axton: no hay nada que revisar en esta lista.',
+  };
+}
+
 export function renderAcreditacionesReporteResults(results, container) {
   if (results.error) {
     container.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">${esc(results.error)}</p>`;
@@ -518,7 +744,22 @@ export function renderAcreditacionesReporteResults(results, container) {
 
     container.innerHTML = '';
 
-    renderResumenDetalle(container, {
+    // Los grupos sin fecha y las fechas asignadas a mano van ARRIBA de las tres
+    // solapas, no adentro de una: mientras un grupo esté pendiente el .xlsx no
+    // se puede exportar, y con la vista estándar la pantalla abre en Fichas
+    // cuando hay diferencias — que es justo cuando hay grupos pendientes. Si el
+    // aviso viviera adentro de la Planilla, el analista abriría en una solapa
+    // que no le muestra lo único que puede hacer.
+    if (pendingGroups.length > 0) renderPendingBox(res, pendingGroups, container, draw);
+    const overrides = res._cfg?.dateOverrides || {};
+    if (Object.keys(overrides).length > 0) renderOverridesBox(res, overrides, container, draw);
+
+    // Las solapas van en su propio host: initTabs() vacía el contenedor que
+    // recibe, y los dos avisos de arriba tienen que sobrevivir a eso.
+    const tabsHost = document.createElement('div');
+    container.appendChild(tabsHost);
+
+    renderResumenDetalle(tabsHost, {
       ...(activeTabId ? { activeId: activeTabId } : {}),
       onChange(id) { activeTabId = id; },
       controlId: 'acreditaciones_reporte',
@@ -558,19 +799,61 @@ export function renderAcreditacionesReporteResults(results, container) {
           });
         }
       },
+      fichas(panel) { drawFichas(res, panel); },
       planilla(panel) { drawDetalle(res, panel); },
     });
   }
 
+  /**
+   * Solapa Fichas — una tarjeta por LISTA de acreditación (§4 de
+   * specs/vista-estandar-resultados.md).
+   *
+   * La unidad de este control es la acreditación, no el empleado-mes (D-021):
+   * un legajo con anticipo + quincena + mensual está en tres listas distintas y
+   * consolidarlo sería el bug, no lo contrario. Es la única excepción conocida a
+   * la regla de consolidar por legajo, y por eso la ficha NO es por legajo.
+   */
+  function drawFichas(res, panel) {
+    if (res.listas.length === 0) {
+      panel.innerHTML = '<p class="text-muted" style="padding:var(--sp-4);">'
+        + 'Todavía no hay ninguna lista formada: asigná una fecha a los grupos pendientes de arriba.</p>';
+      return;
+    }
+
+    const cierraOk = Math.abs(res.summary.diferencia) <= CIERRE_EPS;
+    const fichas = buildAcreditacionesFichas(res);
+    const tiposPresentes = tiposDeLasListas(res.listas);
+
+    renderFichasPanel(panel, {
+      fichas,
+      unitLabel: 'listas',
+      estadoDe: f => estadoDeLista(f.lista, cierraOk),
+      noAplica: NO_APLICA_ACRED,
+      // El mismo segundo eje que la Planilla: el tipo de liquidación. Que las
+      // dos solapas filtren igual es la mitad del punto de la vista estándar —
+      // el analista pone un filtro, cambia de solapa y sigue viendo lo mismo.
+      marcas: tiposPresentes.map(t => ({
+        value: t.code, label: `${t.code} — ${t.label}`, match: f => f.lista.code === t.code,
+      })),
+      ordenes: [
+        { value: 'lista',   label: 'Número de lista',       compare: (a, b) => a.lista.n - b.lista.n },
+        { value: 'total',   label: 'Mayor total',           compare: (a, b) => b.lista.total - a.lista.total },
+        { value: 'alertas', label: 'Más para revisar',      compare: (a, b) => b.lista.alerts - a.lista.alerts || a.lista.n - b.lista.n },
+        { value: 'fecha',   label: 'Fecha de acreditación', compare: (a, b) => a.lista.fecha.localeCompare(b.lista.fecha) || a.lista.n - b.lista.n },
+      ],
+      getLabel: f => f.searchLabel,
+      // La unidad acá es la lista, no el legajo: el buscador tiene que pedir lo
+      // que la ficha efectivamente tiene. Mismo texto que la Planilla.
+      searchLabel: 'Buscar lista',
+      searchPlaceholder: 'Número de lista, liquidación, fecha o listado…',
+      getAmount: f => f.lista.total,
+      amountLabel: 'Σ acreditado',
+      onExport: (exportEl) => mountExportMenu(exportEl, res),
+    });
+  }
+
   function drawDetalle(res, container) {
-    const { listas, sinAsignar: pendingGroups } = res;
-
-    // ── Grupos pendientes: asignar fecha a mano ─────────────────────────────
-    if (pendingGroups.length > 0) renderPendingBox(res, pendingGroups, container, draw);
-
-    // ── Fechas asignadas a mano en este run (con "deshacer") ────────────────
-    const overrides = res._cfg?.dateOverrides || {};
-    if (Object.keys(overrides).length > 0) renderOverridesBox(res, overrides, container, draw);
+    const { listas } = res;
 
     // ── La planilla de listas, con la barra estándar ────────────────────────
     // La unidad es la LISTA de acreditación, no el empleado (D-021): una lista
@@ -586,20 +869,10 @@ export function renderAcreditacionesReporteResults(results, container) {
       return;
     }
 
-    // El export siempre incluye TODAS las listas, sin importar el filtro de
-    // pantalla. El .xlsx es el entregable del control (el reporte en sí).
-    const csvHeaders = ['Lista', ...(res.splitByEmpresa ? ['Empresa'] : []), 'Liquidación', 'Fecha de acred', 'Fecha de paga', 'Listado', 'Total'];
-    const csvRows = () => listas.map(l => [
-      l.n,
-      ...(res.splitByEmpresa ? [l.empresa] : []),
-      l.label, fmtDate(l.fecha), fmtDate(l.fecha), l.listados.join(' + '), fmtNum(l.total),
-    ]);
-
     const cierraOk    = Math.abs(res.summary.diferencia) <= CIERRE_EPS;
     const totalEmpl   = listas.reduce((a, l) => a + l.count, 0);
     const totalAlerts = listas.reduce((a, l) => a + l.alerts, 0);
-    const tiposPresentes = [...new Map(listas.map(l => [l.code, l])).values()]
-      .sort((a, b) => a.order - b.order);
+    const tiposPresentes = tiposDeLasListas(listas);
 
     const columns = [
       { key: 'n', label: 'Lista', sub: 'una hoja del .xlsx', band: 'Identificación' },
@@ -626,15 +899,8 @@ export function renderAcreditacionesReporteResults(results, container) {
       rows: listas,
       columns,
       unitLabel: 'listas',
-      // Este reporte cierra AL CENTAVO contra el archivo de origen: es plata que
-      // el banco va a acreditar, así que no hay margen que medir (D-069). Si el
-      // cuadre global no da, el reporte entero es sospechoso y todas las listas
-      // salen marcadas — el mismo criterio con el que se cuenta el semáforo.
-      estadoDe: l => (!cierraOk || l.alerts > 0 ? 'conDif' : 'centavo'),
-      noAplica: {
-        margen: 'el reporte cierra al centavo contra el archivo de Axton: es plata que el banco va a acreditar',
-        sinComparar: 'todas las listas salen del mismo archivo, así que no falta un lado',
-      },
+      estadoDe: l => estadoDeLista(l, cierraOk),
+      noAplica: NO_APLICA_ACRED,
       marcas: tiposPresentes.map(t => ({
         value: t.code, label: `${t.code} — ${t.label}`, match: l => l.code === t.code,
       })),
@@ -642,11 +908,7 @@ export function renderAcreditacionesReporteResults(results, container) {
       searchLabel: 'Buscar lista',
       searchPlaceholder: 'Número de lista, liquidación o fecha…',
       stickyCols: 1,
-      onExport: (exportEl) => renderExportMenu(exportEl, {
-        onExcel: () => exportAcreditacionesToXlsx(res),
-        onCsv:   () => downloadCsv(csvHeaders, csvRows(), `Acreditaciones_${periodSuffix(res.period)}.csv`),
-        onCopy:  () => copyRowsToClipboard(csvHeaders, csvRows()),
-      }),
+      onExport: (exportEl) => mountExportMenu(exportEl, res),
       emptyText: 'Ninguna lista quedó con los filtros puestos.',
       footnote: (shown) => `Mostrando ${shown.length} de ${listas.length} lista${listas.length === 1 ? '' : 's'}. `
         + `Cada lista es una hoja del .xlsx, y suman ${totalEmpl} ${totalEmpl === 1 ? 'acreditación' : 'acreditaciones'}`
