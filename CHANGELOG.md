@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(paso2): el reporte de cuentas dejaba de parecer necesario y el asiento salía sin armar — 2026-08-21
+
+- **El síntoma:** se corre Contabilidad Desglosada + Asiento, y la pantalla termina en la desglosada — el asiento no aparece por ningún lado. No estaba roto: **el asiento no se arma si no se carga el "Reporte de Cuentas de Redefinición" del cliente**, que es de donde sale el código de cada cuenta.
+- **La causa:** ese archivo es opcional, así que en el Paso 2 va en el renglón chico del final, y ahí decía la frase genérica de cualquier opcional: *"El control corre igual sin este archivo"*. Para este control eso es falso — sin él falta la mitad del entregable. Ahora dice qué se pierde: **"Sin él sale la Contabilidad Desglosada, pero NO el Asiento Contable: el código de cada cuenta sale de acá."**
+- **La tarjeta de la última pantalla antes de los resultados nombra la unidad del control.** Decía "273 **unidades** cruzados" en los dos controles que miden cuentas contables (la Contabilidad Desglosada y el asiento de FINADIET); ahora dice "273 cuentas contables cruzadas". Era una segunda tabla de nombres que se había quedado atrás de la de la pantalla de resultados — y al ponerlas frente a frente apareció otra: a los listados de Acreditaciones una pantalla los llamaba "listas" y la otra "listados". Quedaron las dos igual, con un assert que falla si vuelven a separarse.
+- **Nada del cálculo cambia**: los mismos tres archivos, las mismas columnas y los mismos totales. Verificado de punta a punta en un navegador con los dos archivos reales de COTY de 05/2026 —cargar los dos archivos, ejecutar y llegar a los resultados— con el asiento de 273 líneas y sus tres solapas en su lugar.
+
 ### feat(ee-categ): ficha por legajo y matriz campo × legajo ("Por campo") — 2026-08-21
 
 - **Es la tanda 6 de `specs/vista-estandar-resultados.md`** (D-082, §9 punto 6), en la rama
