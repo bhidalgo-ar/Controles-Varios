@@ -3374,3 +3374,121 @@ su ficha", y la tanda 4 se lo dio a NR, Novedades y Variación Conceptos.
 **Detalle:** `js/ui/planillaPanel.js`, `js/ui/fichaList.js`, `js/ui/tableTools.js`,
 `js/controls/nr.js`, `js/controls/agrupadores.js`, `js/controls/rendVsTabu.js`,
 `js/controls/variaciones.js`, `js/controls/novedadesLiquidacion.js`, D-074, D-077, D-078 a D-087.
+
+---
+
+## D-089 — Tanda 1 del tablero del Resumen: el contrato de `summary.resumen`, el rubro causante de Netos, y qué se decidió sin Willy
+
+**2026-08-21.** Primera tanda de `specs/vista-estandar-resumen.md`: el hero del Resumen del run
+(`buildHeroHtml()`) pasa a ser el tablero de `docs/handoff-resumen-netos.md` —3a para un run de un
+control, 3b para uno de varios—, con Control de Netos como piloto publicando todos los campos. Las
+tandas 2 a 6 cablean los otros 20 controles y no vuelven a tocar el tablero.
+
+### El contrato: `summary.resumen`, y quién decide qué
+
+El tablero se escribe UNA vez (`js/ui/controlsResults.js`) y cada `summarize` publica los cortes en
+`summary.resumen`, armados por `js/controls/resumenStats.js`. La línea que divide las dos piezas es
+la que importa: **`resumenStats` agrupa y suma; nunca decide quién tiene diferencia.** Eso ya lo
+decidió el control con su tolerancia, y el helper recibe las filas ya elegidas (`rows`) más el
+universo evaluado (`allRows`, sólo para el denominador de cada grupo). Si el helper volviera a
+comparar contra una tolerancia, el tablero podría contar distinto que la tarjeta del checklist del
+mismo run.
+
+Tres detalles del contrato que no son obvios y ya se pagaron una vez cada uno en otro lugar del repo:
+
+- **Un bloque que no aplica queda DECLARADO, no ausente.** `notApplicable: ['signed', 'cause', …]`
+  distingue "este control no tiene lados" de "alguien se olvidó de cablear los lados". Es lo que
+  hace que el candado de CI pueda reconocer como migrado a un control que no cruza nada (los tres
+  "Generar Reporte", Acumuladores), y un nombre de bloque inventado corta con error en vez de
+  ignorarse.
+- **`unitKeys` son objetos, no strings.** `{ key, label, amount, group }`. Con la clave pelada,
+  "los legajos que aparecen en varios controles" no podía mostrar nombre ni importe, y el corte por
+  empresa cruzando controles tenía que sumar conteos de varios controles — que es contar cinco veces
+  al mismo legajo. Con el grupo viajando en la clave, esa unión es exacta.
+- **Nombre y empresa se escapan en el helper, una sola vez.** Vienen de un Excel de un tercero y el
+  tablero los inserta tal cual. Con el escape repartido entre el helper y la pantalla, un `&` de un
+  apellido salía como `&amp;amp;`. Está escrito como assert.
+
+### El puente de Netos: cierra, y por eso el tercer paso va con signo
+
+El handoff describe el tercer bloque del puente ("+ Sin explicar") como *"bruto, sumando los dos
+signos"*, y a la vez pide que los cuatro pasos cierren exacto contra la fila TOTAL de la Planilla.
+Las dos cosas juntas no se pueden: en el mock todos los residuos son positivos y la diferencia no
+se ve. **Gana que cierre**: el paso 3 muestra la suma CON SIGNO (por legajo vale
+`netoAjustado = netoTeorico + explicado + residuo`), y el bruto —los dos signos sumados— lo dice el
+bloque "Para qué lado", que es donde significa algo. La nota del bloque pasó a "neto de los dos
+signos". Un puente que no cierra hace que el analista descarte la pantalla entera.
+
+Y entran **sólo los legajos comparables**: el legajo sin neto liquidado no se resta contra nada, se
+informa aparte con su importe (`bridge.uncompared`). Es D-086 aplicado acá.
+
+### El rubro causante de Netos: las marcas del control, no la cascada
+
+El corte "Qué rubro la causa" es el único campo de esta tanda que pedía criterio nuevo, y se resolvió
+por el lado conservador. **El residuo no se puede descomponer en rubros a partir de la cascada**: la
+cascada es justamente lo EXPLICADO, así que decir "horas extras causa la diferencia" cuando las horas
+extras son lo que el control ya explicó dice lo contrario de lo que pasó — y una frase de diagnóstico
+equivocada es peor que ninguna. Lo que sí es una causa son las marcas que el propio control detecta y
+que mueven el neto teórico, en este orden: **básico fuera de escala**, **tope de aportes sin
+declarar** (sólo si el control corrió sin tope), **perfil de jubilado sin confirmar**. Todo lo demás
+va entero a "Sin identificar", con su banda rayada.
+
+La consecuencia hay que decirla: en un run donde no se movió ningún parámetro, casi todo cae en "Sin
+identificar" y la card no se dibuja (con cero rubros atribuidos se reduciría a una sola fila, que es
+el riesgo 1 del handoff). En un run donde sí se movió un parámetro —el caso que el handoff describe—
+las marcas se prenden en masa, que es exactamente la señal. **Queda para que Willy lo mire en
+pantalla**: si prefiere que el rubro salga del concepto que más se movió en el mes, es otra regla y la
+tiene que firmar él.
+
+### La escala de severidad: tres zonas, y el verde no tiene ancho
+
+`computeSemaforoStatus()` sólo da 'ok' con CERO unidades con diferencia, así que el verde es un punto
+y como zona no tiene ancho. El handoff lo dibuja igual con el ancho de un paso del umbral (en su mock,
+verde y amarillo miden 5,7 % cada uno = 2 % sobre un eje de 35 %), así que se dibuja así: verde con el
+ancho de un paso, amarillo de 0 al umbral, rojo todo lo que sigue, y el marcador descuenta el
+corrimiento del verde para caer en la zona que le toca. **En ningún lugar del tablero hay un 2 %
+escrito**: el corte, el color y la leyenda salen del umbral del cliente.
+
+### Las conclusiones en caja: sólo las aritméticas
+
+Se generan la concentración ("25 legajos (21,6 % de los casos) concentran el 83,8 % de la plata"), el
+conteo de grupos arriba del corte, la cobertura del corte por causa y la comparación con el mes
+anterior. **Las de diagnóstico no** ("no es una empresa sola, es el cálculo", "parece un parámetro que
+no se aplicó"): son el punto 5 del §7 de la spec y las define Willy sobre casos reales.
+
+### El pre-filtro del Detalle: se pide la intención, no el valor
+
+"Ver los N →" desde un corte deja el Detalle filtrado. El valor del chip **no es el mismo en todos los
+controles** —la vista estándar usa `conDif` (`js/ui/tableTools.js`) y Netos, que tiene su propio
+select, usa `diferencia`—, así que el tablero pide la intención (`data-hero-prefilter="conDif"`) y
+`applyDetailPrefilter` la resuelve contra las opciones que ese control realmente tiene. Con el valor
+cableado, el pre-filtro funcionaba en un control y en los otros no hacía nada, en silencio. Dos
+cuidados más: se busca sólo en el panel VISIBLE (`initTabs` deja los paneles ya renderizados en el DOM,
+ocultos, y filtrar una tabla invisible es peor que no filtrar), y si el panel abierto no tiene filtro
+de estado se activan las otras solapas hasta encontrarlo — la planilla de varios controles se renderiza
+recién al activarla.
+
+### El candado de CI
+
+`tests/resumenContract.test.js` recorre el `CONTROL_REGISTRY` y falla si un `summarize` no publica
+`resumen`. La lista de excepciones arranca con los 20 no migrados, con su tanda escrita, y **también
+falla si una excepción ya no hace falta**: así se achica sola cuando una tanda migra su lote, sin que
+nadie se acuerde de limpiarla. Cuando quede vacía protege a los controles futuros. La receta de
+`.claude/skills/nuevo-control/` ganó el 6º punto de integración, que es el candado blando.
+
+### Lo que cambió de copy, y lo que no cambió de números
+
+**Ningún cálculo ni conteo se movió.** `unitsTotal`/`unitsWithDiff` se siguen contando en la unidad que
+declara cada control, el color sigue saliendo de `computeSemaforoStatus()`, no se suman `unitsTotal`
+entre controles (`groupSummariesByUnit`/`unitsMax` siguen mandando) y `touchedByRed` es una unión de
+claves. Lo que cambió entero es el copy: el hero decía "116 legajos con diferencias" y el tablero dice
+"No liberar la liquidación" con el número al lado. Por eso `tests/heroUnitNaming.test.js` se reescribió
+—las siete reglas son las mismas, las frases son otras— y en un run de varios controles el conteo por
+unidad vive en la tarjeta de cada control, que es donde no se pueden mezclar dos unidades.
+
+Dos campos nuevos y opcionales en `summary`: `unitsUncompared` (el KPI "Sin comparar", que el handoff
+pide y no existía) y `resumen`. Un control que no los publica no muestra ese KPI ni esos bloques.
+
+**Detalle:** `js/controls/resumenStats.js`, `js/ui/controlsResults.js`, `css/results.css`,
+`js/controls/controlNetos.js`, `tests/resumenStats.test.js`, `tests/resumenContract.test.js`,
+`specs/vista-estandar-resumen.md`, `docs/handoff-resumen-netos.md`, D-020, D-060, D-069, D-074, D-086.

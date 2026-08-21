@@ -63,9 +63,9 @@ const brutosOk = {
   },
 };
 
-/** El número que quedó en el KPI "Legajos cruzados" del hero. */
+/** El número que quedó en el KPI "Legajos cruzados" del tablero del Resumen. */
 function kpiLegajosCruzados(html) {
-  const m = html.match(/results-hero__kpi-value[^>]*>([^<]+)<\/span>\s*<span class="results-hero__kpi-label">Legajos cruzados/);
+  const m = html.match(/rsm-kpi__value[^>]*>([^<]+)<\/span>\s*<span class="rsm-kpi__label">Legajos cruzados/);
   return m ? m[1].trim() : null;
 }
 

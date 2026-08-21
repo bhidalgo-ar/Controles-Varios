@@ -291,6 +291,36 @@
   --band-close-cell-bg: rgba(21, 38, 61, 0.07);
   --ficha-strip-bg:     rgba(21, 38, 61, 0.045);
   --row-highlight-bg:   rgba(0, 172, 212, 0.09);
+
+  /* ── Tokens del tablero del Resumen (docs/handoff-resumen-netos.md) ─────────
+     El veredicto se apoya en la superficie invertida (`--invert-bg`), que en
+     Oscuro es CLARA: todo lo que se dibuja encima necesita su propio par por
+     tema, igual que `--invert-fg`. Sin esto, la bajada del veredicto salía en
+     #C7D5E4 sobre un fondo casi blanco. */
+  --invert-t2:           #C7D5E4;
+  --invert-t3:           #8FA3BA;
+  --invert-line:         rgba(255, 255, 255, 0.14);
+  --invert-track:        rgba(255, 255, 255, 0.10);
+  --invert-ghost-bd:     rgba(255, 255, 255, 0.25);
+  --invert-ghost-hover:  rgba(255, 255, 255, 0.10);
+  --invert-error:        #FB8254;
+  --invert-warn:         #F59E0B;
+  --invert-ok:           #22C55E;
+
+  /* Caja de conclusión de cada corte, pistas de barra y la caja de lectura de
+     la evolución (el rojo más suave que --error-bg, que ahí pesaba de más). */
+  --conclusion-bg:  #F7F9FB;
+  --track:          #F1F3F5;
+  --track-warm:     #F7F3F0;
+  --error-bg-soft:  rgba(232, 85, 24, 0.06);
+
+  /* "Sin identificar": el rayado que dice que el corte por causa es PARCIAL. No
+     es decorativo — es lo que impide que un corte incompleto se lea completo. */
+  --unident-a: #C7D5E4;
+  --unident-b: #EEF3F8;
+
+  /* Las barras históricas de la sparkline de una tarjeta de control. */
+  --spark-past: #C7D5E4;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -382,6 +412,28 @@
   --band-close-cell-bg: rgba(234, 241, 248, 0.07);
   --ficha-strip-bg:     rgba(234, 241, 248, 0.05);
   --row-highlight-bg:   rgba(31, 190, 224, 0.16);
+
+  /* ── Tokens del tablero del Resumen ────────────────────────────────────────
+     Acá `--invert-bg` es CLARO, así que todo lo de encima se da vuelta. */
+  --invert-t2:           #4A6080;
+  --invert-t3:           #5F758D;
+  --invert-line:         rgba(21, 38, 61, 0.16);
+  --invert-track:        rgba(21, 38, 61, 0.10);
+  --invert-ghost-bd:     rgba(21, 38, 61, 0.25);
+  --invert-ghost-hover:  rgba(21, 38, 61, 0.07);
+  --invert-error:        #C0420F;
+  --invert-warn:         #9A5A0B;
+  --invert-ok:           #177A50;
+
+  --conclusion-bg:  rgba(234, 241, 248, 0.05);
+  --track:          rgba(234, 241, 248, 0.08);
+  --track-warm:     rgba(234, 241, 248, 0.06);
+  --error-bg-soft:  rgba(232, 85, 24, 0.12);
+
+  --unident-a: #3A4B5E;
+  --unident-b: #232F3D;
+
+  --spark-past: #3A4B5E;
   }
 }
 
@@ -473,6 +525,28 @@
   --band-close-cell-bg: rgba(234, 241, 248, 0.07);
   --ficha-strip-bg:     rgba(234, 241, 248, 0.05);
   --row-highlight-bg:   rgba(31, 190, 224, 0.16);
+
+  /* ── Tokens del tablero del Resumen ────────────────────────────────────────
+     Acá `--invert-bg` es CLARO, así que todo lo de encima se da vuelta. */
+  --invert-t2:           #4A6080;
+  --invert-t3:           #5F758D;
+  --invert-line:         rgba(21, 38, 61, 0.16);
+  --invert-track:        rgba(21, 38, 61, 0.10);
+  --invert-ghost-bd:     rgba(21, 38, 61, 0.25);
+  --invert-ghost-hover:  rgba(21, 38, 61, 0.07);
+  --invert-error:        #C0420F;
+  --invert-warn:         #9A5A0B;
+  --invert-ok:           #177A50;
+
+  --conclusion-bg:  rgba(234, 241, 248, 0.05);
+  --track:          rgba(234, 241, 248, 0.08);
+  --track-warm:     rgba(234, 241, 248, 0.06);
+  --error-bg-soft:  rgba(232, 85, 24, 0.12);
+
+  --unident-a: #3A4B5E;
+  --unident-b: #232F3D;
+
+  --spark-past: #3A4B5E;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -584,6 +658,31 @@
   --band-close-cell-bg: rgba(21, 38, 61, 0.07);
   --ficha-strip-bg:     rgba(21, 38, 61, 0.045);
   --row-highlight-bg:   rgba(0, 172, 212, 0.09);
+
+  /* ── Tokens del tablero del Resumen (docs/handoff-resumen-netos.md) ─────────
+     El veredicto se apoya en la superficie invertida (`--invert-bg`), que en
+     Oscuro es CLARA: todo lo que se dibuja encima necesita su propio par por
+     tema, igual que `--invert-fg`. */
+  --invert-t2:           #C7D5E4;
+  --invert-t3:           #8FA3BA;
+  --invert-line:         rgba(255, 255, 255, 0.14);
+  --invert-track:        rgba(255, 255, 255, 0.10);
+  --invert-ghost-bd:     rgba(255, 255, 255, 0.25);
+  --invert-ghost-hover:  rgba(255, 255, 255, 0.10);
+  --invert-error:        #FB8254;
+  --invert-warn:         #F59E0B;
+  --invert-ok:           #22C55E;
+
+  --conclusion-bg:  #F7F9FB;
+  --track:          #F1F3F5;
+  --track-warm:     #F7F3F0;
+  --error-bg-soft:  rgba(232, 85, 24, 0.06);
+
+  /* "Sin identificar": el rayado que dice que el corte por causa es PARCIAL. */
+  --unident-a: #C7D5E4;
+  --unident-b: #EEF3F8;
+
+  --spark-past: #C7D5E4;
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -1,6 +1,9 @@
 # Vista estándar del Resumen — el veredicto del run y dónde están los errores, para los 21 controles
 
-**Estado:** propuesta del 2026-08-21, **pendiente de aprobación de Willy. Nada implementado.**
+**Estado:** **tanda 1 implementada el 2026-08-21** (el tablero 3a/3b + `resumenStats` + Control de
+Netos de piloto + los dos candados del §8) — ver **D-089**. Las tandas 2 a 6, que cablean los campos
+del `summarize` de los otros 20 controles, siguen pendientes y pueden correr en paralelo. El piloto
+espera que Willy lo mire en el navegador.
 Reescrita el mismo día al recibir el handoff completo del diseño
 (`docs/handoff-resumen-netos.md` — pantallas 3a y 3b del canvas de Netos): la primera versión de
 esta spec, escrita sin el handoff, asumía que el rediseño era de la solapa Resumen de adentro de
@@ -108,7 +111,7 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 
 | Control | S | Puente — la forma | byGroup | byCause | Nota |
 |---|---|---|---|---|---|
-| **Control de Netos** | sí | **el del diseño**: Neto teórico → Explicado → Sin explicar → Neto liquidado (agregado en el `run()` desde `explicado`/`residuo` por legajo, que ya existen) | **empresa** (1-3 Tabulados) | rubro (antigüedad, presentismo, no remu, retenciones) + sin identificar | el piloto |
+| **Control de Netos** | ✅ hecho | ✅ **el del diseño**, agregado en el `run()` (`bridge`): entra sólo lo comparable y el legajo sin neto se informa aparte (D-086); el paso "Sin explicar" va **con signo** para que el puente cierre contra la fila TOTAL de la Planilla — el bruto lo dice "Para qué lado" | ✅ **empresa**, sólo si la corrida trae más de un Tabulado | ✅ **las marcas que el control detecta** (básico fuera de escala · tope sin declarar · perfil de jubilado sin confirmar) + sin identificar. **NO la cascada**: la cascada es lo explicado, y atribuirle la diferencia diría lo contrario de lo que pasó (D-089). Willy puede cambiar la regla en pantalla | el piloto |
 | Brutos — Controlar | sí | Total Tabulado → Diferencia comparada → Total Reporte | — | los 2 conceptos | |
 | GS Pers — Controlar | sí | ídem | — | los 2 conceptos | |
 | Control NR — Controlar | sí | dos totales con **D-086**: la diferencia suma sólo lo comparable, lo sin comparar se dice aparte | — | 18 conceptos o las 2 bandas (arrancar por banda; Willy elige en pantalla) | |
@@ -152,11 +155,12 @@ El prompt de cada tanda, listo para copiar, con el modelo y el esfuerzo por chat
 `docs/prompts-vista-estandar-resumen.md`. La tanda 1 construye el tablero completo; las siguientes
 son cablear los campos del `summarize` por lote — mucho más chicas que las de Fichas/Planilla.
 
-1. **El tablero (3a y 3b) + el helper + Netos de piloto.** `buildHeroHtml()` → tablero,
-   `buildCtrlCardHtml()` enriquecida, `js/controls/resumenStats.js`, la consulta de historia, la
-   navegación pre-filtrada al Detalle, y Netos publicando todos los campos (es el del diseño, con
-   puente completo y 1-3 empresas). Se verifica contra el handoff, bloque por bloque. **Todo lo
-   demás depende de ésta.**
+1. ~~**El tablero (3a y 3b) + el helper + Netos de piloto.**~~ **Hecha el 2026-08-21 (D-089).**
+   `buildHeroHtml()` es el tablero, `buildCtrlCardHtml()` tiene %, sparkline y "venía en",
+   `js/controls/resumenStats.js` existe, la historia sale de las corridas guardadas, "Ver los N →"
+   pre-filtra el Detalle y "ficha →" abre la ficha, y Netos publica todos los campos. Los dos
+   candados del §8 están puestos. **Lo único que falta de esta tanda es la mirada de Willy en el
+   navegador.**
 2. **Cruce Meta4/Marval** (6): brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento.
    Con éstos, el run del checklist de Marval es el primer 3b real.
 3. **Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
@@ -180,14 +184,23 @@ para unificar al integrar.
    queda contando lo mismo dos veces. ¿Se jubila, se reduce a chequeos, o queda? Se decide viendo
    el tablero andando.
 3. **La historia**: ¿la comparación es contra la corrida **definitiva** de cada período (lo que
-   asume el handoff) o contra la última? (Riesgo 2 del handoff.)
+   asume el handoff) o contra la última? (Riesgo 2 del handoff.) **La tanda 1 arrancó con
+   definitiva** (entre dos definitivas o dos borradores gana la más reciente): cambiarlo es una
+   línea en `getHistoryByControlId()`.
 4. **El ancho**: el tablero está diseñado a 1352 px y el Resumen respeta el tope de 1280 (D-060) —
-   ¿tres columnas apretadas a 1fr, o el Resumen pasa a ancho completo? Hay que decidirlo antes de
-   maquetar. (Riesgo 4 del handoff.)
+   ¿tres columnas apretadas a 1fr, o el Resumen pasa a ancho completo? (Riesgo 4 del handoff.) **La
+   tanda 1 arrancó respetando D-060**: el Resumen dejó de ser la columna de lectura de 880 px y usa
+   el ancho de `page-content`, con las tres columnas de cortes a 1fr. Entra bien; si Willy quiere
+   más aire, es cambiar `--results-col-max` en `css/results.css`.
 5. **Las conclusiones de diagnóstico** (§2): cuáles frases se pueden calcular con una regla que
    Willy firme ("N legajos concentran el X %": aritmética) y cuáles no se generan todavía ("parece
-   un parámetro que no se aplicó": diagnóstico). Propuesta: tanda 1 sale sólo con las aritméticas,
-   y las de diagnóstico se definen viendo casos reales.
+   un parámetro que no se aplicó": diagnóstico). **La tanda 1 salió sólo con las aritméticas**: la
+   concentración, cuántos grupos están arriba del corte, la cobertura del corte por causa y la
+   comparación con el mes anterior. Las de diagnóstico se definen viendo casos reales.
+5 bis. **El rubro causante de Netos** (nuevo, salió al implementar el piloto): hoy sale de las
+   marcas que el propio control detecta y todo lo demás va a "Sin identificar". La alternativa es el
+   concepto de la cascada que más se movió en el mes — pero la cascada es lo EXPLICADO, así que esa
+   regla la tiene que firmar Willy. Detalle y por qué en D-089.
 6. **Agrupadores, bloque de lados**: ¿de más/de menos por legajo con su neta (un legajo compensado
    no aparece) o por agrupador (aparece en los dos)? La misma tensión que D-087 resolvió para el
    número grande de la ficha.
@@ -209,14 +222,17 @@ más duro:
    escala y la grilla de 3b **sin escribir una línea**, porque `unitsTotal`/`unitsWithDiff` ya son
    obligatorios. Lo único que puede faltarle son los bloques ricos (puente, lados, cortes) — y eso
    se ve como bloques omitidos, no como pantalla rota.
-2. **La receta.** La skill `.claude/skills/nuevo-control/` gana el **6º punto de integración**:
-   declarar `summary.resumen` vía `resumenStats()` (qué cortes aplican, de dónde sale el puente).
-   Todo control nuevo nace por esa receta, así que ninguno nace sin declararlo.
-3. **El candado de CI.** Un test **en la cadena de `package.json`** recorre el `CONTROL_REGISTRY` y
-   falla si un `summarize` no trae el sub-objeto `resumen` — aunque sea la declaración explícita de
-   qué no aplica (la lista de excepciones arranca con los 20 no migrados y cada tanda la achica;
-   termina vacía y protege a los futuros). Mismo patrón que `check-datos-sensibles.mjs`: si alguien
-   se olvida, **el PR sale en rojo** — no depende de memoria.
+2. **La receta.** ✅ **Hecho.** La skill `.claude/skills/nuevo-control/` tiene el **6º punto de
+   integración**: declarar `summary.resumen` vía `resumenStats()` (qué cortes aplican, de dónde sale
+   el puente), con el ejemplo del control que cruza y el del que no cruza nada. Todo control nuevo
+   nace por esa receta, así que ninguno nace sin declararlo.
+3. **El candado de CI.** ✅ **Hecho:** `tests/resumenContract.test.js`, en la cadena de
+   `package.json`. Recorre el `CONTROL_REGISTRY` y falla si un `summarize` no trae el sub-objeto
+   `resumen` — aunque sea la declaración explícita de qué no aplica (`notApplicable`). La lista de
+   excepciones arrancó con los 20 no migrados, cada uno con su tanda escrita, y **el test también
+   falla si una excepción ya no hace falta**: así se achica sola cuando una tanda migra su lote, sin
+   que nadie se acuerde de limpiarla. Termina vacía y protege a los futuros. Mismo patrón que
+   `check-datos-sensibles.mjs`: si alguien se olvida, **el PR sale en rojo**.
 
 ## 9. Cómo se verifica
 

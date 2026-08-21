@@ -1,26 +1,32 @@
-// resultsResumen.spec.js — La solapa Resumen de Resultados en un navegador real
-// (rediseño, pantalla 6 de docs/rediseno/README.md).
+// resultsResumen.spec.js — La solapa Resumen de Resultados en un navegador real:
+// el TABLERO del run (docs/handoff-resumen-netos.md, pantallas 3a y 3b).
 //
 // Corre sobre un fixture y no sobre la app entera a propósito: el fixture monta
-// el render real (hero + tarjetas + barra superior + solapas) con datos
-// inventados, sin IndexedDB ni los CDN de index.html.
+// el render real (tablero + barra superior + solapas) con datos inventados
+// —jugadores de Banfield—, sin IndexedDB ni los CDN de index.html.
 //
 // Lo que fija, en orden de qué cuesta más caro si se rompe:
 //   1. El veredicto y el contexto del cliente viven en la barra ÚNICA: si
 //      alguien vuelve a montar una segunda franja propia, el "volver" y el
 //      "Cliente · Período" se duplican.
-//   2. El control en rojo va primero y con borde de error — es el orden de
+//   2. El veredicto es una ACCIÓN en palabras y la escala se dibuja contra el
+//      umbral REAL del semáforo — no contra un 2 % cableado.
+//   3. El control en rojo va primero y con borde de error — es el orden de
 //      presentación que hace que el analista mire lo que hay que mirar.
-//   3. "Ver detalle →" lleva a la solapa Detalle (si no, el link no lleva a
-//      ningún lado y el Resumen es una pantalla muerta).
-//   4. El menú de export avisa que el archivo lleva datos personales
+//   4. "Ver los N →" lleva a la solapa Detalle **con el filtro puesto** (si el
+//      filtro no arranca, el analista cae en una tabla de 380 filas y tiene que
+//      volver a buscar los 19 que venía a ver).
+//   5. La banda rayada de "Sin identificar" está dibujada cuando la atribución
+//      es parcial: un corte que se muestra completo sin serlo es peor que no
+//      mostrarlo.
+//   6. El menú de export avisa que el archivo lleva datos personales
 //      (CLAUDE.md §Privacidad).
 
 import { test, expect } from '@playwright/test';
 
 const FIXTURE = '/tests/e2e/fixtures/resultsResumen.html';
 
-test('verde: el veredicto está en la barra única y el hero dice "Sin diferencias"', async ({ page }) => {
+test('verde: el veredicto está en la barra única y dice que se puede liberar', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=verde`);
 
   // Contexto y veredicto, en la barra superior — no en una franja propia.
@@ -29,40 +35,122 @@ test('verde: el veredicto está en la barra única y el hero dice "Sin diferenci
   await expect(header.locator('.results-header-ctx__verdict')).toContainText('1 de 1 control en verde');
   await expect(page.locator('.results-ctx-bar')).toHaveCount(0);
 
-  // Hero: icono de estado, título y KPIs.
-  await expect(page.locator('.results-hero__icon--ok')).toBeVisible();
-  await expect(page.locator('.results-hero__title')).toHaveText('Sin diferencias');
-  await expect(page.locator('.results-hero__kpi-value').first()).toHaveText('514');
-  await expect(page.locator('.results-hero')).toContainText('Legajos cruzados');
-  await expect(page.locator('.results-hero')).toContainText('Controles en verde');
+  // El veredicto es una ACCIÓN en palabras, no un número — y el círculo con "!"
+  // del hero anterior ya no existe.
+  await expect(page.locator('.rsm-verdict--ok')).toBeVisible();
+  await expect(page.locator('.rsm-verdict__title')).toHaveText('Listo para liberar');
+  await expect(page.locator('.results-hero__icon')).toHaveCount(0);
+  await expect(page.locator('.rsm-verdict')).toContainText('514 legajos evaluados');
+  await expect(page.locator('.rsm-verdict')).toContainText('Legajos cruzados');
+  await expect(page.locator('.rsm-kpi__value').first()).toHaveText('514');
 
-  // Una tarjeta por control, con su dot y su acción.
-  const card = page.locator('.results-ctrl-card');
-  await expect(card).toHaveCount(1);
-  await expect(card).toContainText('514 legajos evaluados');
-  await expect(card.locator('.results-ctrl-card__link')).toHaveText('Ver detalle →');
+  // Con cero diferencias, el marcador de la escala está en 0 y los cortes no se
+  // renderizan: no hay nada que cortar.
+  await expect(page.locator('.rsm-scale__marker-value')).toHaveText('0,0%');
+  await expect(page.locator('.rsm-cut')).toHaveCount(0);
 });
 
 test('rojo: el control con diferencias va primero, con borde de error', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=rojo`);
 
-  await expect(page.locator('.results-hero__icon--error')).toBeVisible();
-  await expect(page.locator('.results-hero__title')).toHaveText('23 legajos con diferencias');
-
-  // El KPI de diferencias sale en rojo, no en celeste.
-  const diffKpi = page.locator('.results-hero__kpi-value--diff').first();
-  await expect(diffKpi).toHaveText('23');
+  await expect(page.locator('.rsm-verdict--error')).toBeVisible();
+  await expect(page.locator('.rsm-verdict__title')).toHaveText('No liberar');
 
   const cards = page.locator('.results-ctrl-card');
   await expect(cards).toHaveCount(2);
   await expect(cards.nth(0)).toContainText('Brutos');
   await expect(cards.nth(0)).toHaveClass(/results-ctrl-card--error/);
-  await expect(cards.nth(0)).toContainText('23 legajos con diferencia (4,5%)');
-  await expect(cards.nth(0).locator('.results-ctrl-card__link')).toHaveText('Ver los 23 →');
+  await expect(cards.nth(0)).toContainText('23 de 514 legajos');
+  await expect(cards.nth(0).locator('.results-ctrl-card__pct')).toHaveText('4,5 %');
+  await expect(cards.nth(0).locator('.rsm-link')).toHaveText('Ver los 23 →');
   await expect(cards.nth(1)).toContainText('GS Pers');
 });
 
-test('"Ver detalle →" cambia a la solapa Detalle', async ({ page }) => {
+test('3a: el tablero completo del run de un control, bloque por bloque', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=3a`);
+
+  // 1 — el veredicto: la acción, y el múltiplo contra el umbral REAL (2 %).
+  await expect(page.locator('.rsm-verdict__title')).toHaveText('No liberar la liquidación');
+  await expect(page.locator('.rsm-verdict__subline')).toContainText('116 de 380 legajos con diferencia');
+  await expect(page.locator('.rsm-verdict__subline')).toContainText('El corte de rojo es 2 %');
+  await expect(page.locator('.rsm-verdict__subline')).toContainText('15 veces');
+  await expect(page.locator('.rsm-scale__marker-value')).toHaveText('30,5%');
+  // Los dos KPIs que el hero no tenía y son la primera pregunta del analista.
+  await expect(page.locator('.rsm-verdict')).toContainText('Sin comparar');
+  await expect(page.locator('.rsm-verdict')).toContainText('Tolerancia');
+
+  // 2 — el puente cierra, y lo sin comparar se dice APARTE (D-086).
+  const puente = page.locator('.rsm-card--bridge');
+  await expect(puente).toContainText('Neto teórico');
+  await expect(puente).toContainText('+ Sin explicar');
+  await expect(puente).toContainText('Neto liquidado');
+  await expect(puente.locator('.rsm-bridge__uncompared')).toContainText('sin neto liquidado');
+  await expect(puente.locator('.rsm-prop__note')).toContainText('% del neto teórico del mes');
+
+  // 2b — los dos lados, con el neto y el bruto al pie.
+  const lados = page.locator('.rsm-card--sides');
+  await expect(lados).toContainText('Pagamos de más');
+  await expect(lados).toContainText('Pagamos de menos');
+  await expect(lados).toContainText('Neto');
+  await expect(lados).toContainText('Bruto');
+
+  // 3 — los tres cortes, con la banda rayada de "Sin identificar".
+  await expect(page.locator('.rsm-cut')).toHaveCount(3);
+  await expect(page.locator('.rsm-cut__fill--unident')).toBeVisible();
+  await expect(page.locator('.rsm-cut__row--unident')).toContainText('Sin identificar');
+
+  // 4 y 5 — la evolución (6 barras: 5 períodos anteriores + el actual) y el top.
+  await expect(page.locator('.rsm-history__bar')).toHaveCount(6);
+  await expect(page.locator('.rsm-history__reading')).toContainText('Venía en 3,9 %');
+  await expect(page.locator('.rsm-top__table tr')).toHaveCount(5);
+  await expect(page.locator('.rsm-top__go .rsm-link').first()).toHaveText('ficha →');
+});
+
+test('3b: el veredicto se comprime, aparece la tira de semáforos y los verdes van juntos', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=3b`);
+
+  await expect(page.locator('.rsm-verdict--compact')).toBeVisible();
+  await expect(page.locator('.rsm-verdict__title')).toHaveText('No liberar');
+  await expect(page.locator('.rsm-verdict__subline')).toContainText('3 controles en rojo bloquean el cierre');
+
+  // La tira: un bloque por control, en el orden de severidad.
+  await expect(page.locator('.rsm-strip__block')).toHaveCount(9);
+  await expect(page.locator('.rsm-strip__block--error')).toHaveCount(3);
+  await expect(page.locator('.rsm-strip__block--warn')).toHaveCount(2);
+  await expect(page.locator('.rsm-strip__legend')).toHaveText('3 en rojo · 2 en amarillo · 4 en verde');
+
+  // "Tocados por algún rojo" es una UNIÓN de claves, jamás una suma de conteos:
+  // 116 + 44 + 31 = 191 sería más que los legajos que se cruzaron.
+  const tocados = page.locator('.rsm-kpi', { hasText: 'tocados por algún rojo' });
+  await expect(tocados).toBeVisible();
+  const n = Number((await tocados.locator('.rsm-kpi__value').innerText()).replace(/\./g, ''));
+  expect(n).toBeGreaterThan(0);
+  expect(n).toBeLessThan(191);
+
+  // Los 4 verdes no ocupan una card cada uno: van en una sola, con su cierre.
+  await expect(page.locator('.results-ctrl-card--group')).toContainText('4 controles en verde');
+  await expect(page.locator('.results-ctrl-card--group')).toContainText('No hay nada que revisar acá');
+  await expect(page.locator('.results-ctrl-card')).toHaveCount(6);
+
+  // Los dos cortes que sólo existen cruzando controles.
+  await expect(page.locator('.rsm-row--cross .rsm-card')).toHaveCount(2);
+  await expect(page.locator('.rsm-repeated')).toContainText('de 9');
+});
+
+test('"Ver los N →" cambia a la solapa Detalle CON el filtro puesto', async ({ page }) => {
+  await page.goto(`${FIXTURE}?caso=rojo`);
+
+  await expect(page.locator('#js-tab-resumen')).toBeVisible();
+  await page.locator('.results-ctrl-card').nth(0).locator('.rsm-link').click();
+
+  await expect(page.locator('#js-tab-detalle')).toBeVisible();
+  // El chip "Con diferencia" arranca activo, y el cartel dice por qué.
+  const chipActivo = page.locator('.control-card .results-chip--active');
+  await expect(chipActivo).toContainText('Con diferencia');
+  await expect(page.locator('[data-prefilter-hint]')).toContainText('venías del Resumen');
+});
+
+test('las solapas Resumen / Detalle siguen cambiando a mano', async ({ page }) => {
   await page.goto(`${FIXTURE}?caso=verde`);
 
   await expect(page.locator('#js-tab-resumen')).toBeVisible();
@@ -134,7 +222,7 @@ test('el menú Exportar ofrece Excel y JSON, y avisa que lleva datos personales'
   await expect(panel.locator('.export-menu__note')).toContainText('datos personales');
 
   // El listener de click-afuera que comparte con el menú "⋯" del home sigue vivo.
-  await page.locator('.results-hero__title').click();
+  await page.locator('.rsm-verdict__title').click();
   await expect(panel).toBeHidden();
 });
 

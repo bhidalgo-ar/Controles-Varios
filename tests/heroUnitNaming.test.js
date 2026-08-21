@@ -1,5 +1,11 @@
 // heroUnitNaming.test.js — El Resumen de resultados nombra la unidad que
 // realmente verificó cada control (no "legajos" para todo).
+//
+// El hero (círculo + título + 4 KPIs) es hoy el TABLERO del Resumen del run
+// (docs/handoff-resumen-netos.md): el copy cambió entero, las reglas son las
+// mismas. Un run de un control se dibuja con el layout 3a y uno de varios con
+// el 3b, donde el conteo por unidad vive en la tarjeta de cada control — que es
+// justo donde no se pueden mezclar dos unidades.
 // Correr desde la raíz del proyecto:
 //   node --input-type=module < tests/heroUnitNaming.test.js
 //
@@ -65,9 +71,9 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     [], THRESHOLD,
   );
   assert('sin diferencias: nombra los centros de costo, no legajos',
-    hero.html.includes('24 centros de costo verificados sin diferencias'));
-  assert('sin diferencias: no aparece la palabra "legajos verificados"',
-    !hero.html.includes('legajos verificados'));
+    hero.html.includes('24 centros de costo evaluados: ninguna diferencia arriba de la tolerancia'));
+  assert('sin diferencias: no aparece la palabra "legajos"',
+    !hero.html.includes('legajos'));
   assert('sin diferencias: no aparece un falso "0 legajos"',
     !hero.html.includes('0 legajo'));
 }
@@ -79,11 +85,12 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     [], THRESHOLD,
   );
   assert('con diferencias: cuenta los centros de costo con diferencia',
-    hero.html.includes('3 centros de costo con diferencia'));
+    hero.html.includes('<strong>3</strong> de <strong>24</strong> centros de costo con diferencia')
+    && hero.html.includes('>Ver 3 centros de costo →</button>'));
   assert('con diferencias: no dice "0 legajos con diferencia"',
     !hero.html.includes('legajos con diferencia') && !hero.html.includes('legajo con diferencia'));
   assert('con diferencias: sigue mostrando la diferencia total en pesos',
-    hero.html.includes('dif. total'));
+    hero.html.includes('Δ acumulada') && hero.html.includes('$ 1.500,00'));
 }
 
 // ── 3. Dos controles por centro de costo: el veredicto no miente en verde ────
@@ -95,18 +102,20 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('multi-control por CC: el título cuenta los CC con diferencia, no legajos',
-    hero.html.includes('5 centros de costo con diferencias'));
-  assert('multi-control por CC: NO dice "sin diferencias"',
-    !hero.html.includes('Sin diferencias'));
+  assert('multi-control por CC: el KPI del run cuenta los CC con diferencia, no legajos',
+    hero.html.includes('centros de costo con diferencia</span>'));
+  assert('multi-control por CC: NO dice que se puede liberar sin más',
+    !hero.html.includes('Listo para liberar'));
   // 5 sobre 24 (el control más grande), no sobre 24+16: sumar los universos de
   // los dos controles cuenta dos veces al mismo CC y parte el porcentaje al medio.
-  assert('multi-control por CC: suma las diferencias de los dos controles y su %',
-    hero.html.includes('5 centros de costo con diferencia (20,8%)'));
+  // 5 sobre 24 (el control más grande), no sobre 24+16: sumar los universos de
+  // los dos controles cuenta dos veces al mismo CC y parte el porcentaje al medio.
+  assert('multi-control por CC: suma las diferencias de los dos controles sobre el mayor universo',
+    hero.html.includes('>5<') && hero.html.includes('centros de costo con diferencia</span>'));
   assert('multi-control por CC: el % es el de los CC (5 de 24), no 0',
     !hero.html.includes('(0,0%)'));
-  assert('multi-control por CC: la leyenda del umbral también nombra la unidad',
-    hero.html.includes('de centros de costo c/dif'));
+  assert('multi-control por CC: cada tarjeta cuenta SU universo, sin mezclarlos',
+    hero.html.includes('3 de 24 centros de costo') && hero.html.includes('2 de 16 centros de costo'));
 }
 
 // ── 4. Corrida mixta: legajos y centros de costo no se suman en un % ─────────
@@ -118,15 +127,20 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('mixta: el título mide legajos (1 de 100), sin mezclar con los CC',
-    hero.html.includes('1 legajo con diferencia</h2>'));
+  assert('mixta: el KPI del run mide legajos, sin mezclar con los CC',
+    hero.html.includes('legajos con diferencia</span>'));
   assert('mixta: el KPI nombra los legajos, no los centros de costo',
-    hero.html.includes('legajos con diferencia<')
-    && !hero.html.includes('centros de costo con diferencia<'));
-  assert('mixta: el subtítulo enumera las dos unidades por separado',
-    hero.html.includes('1 legajo con diferencia') && hero.html.includes('3 centros de costo con diferencia'));
+    hero.html.includes('legajos con diferencia</span>')
+    && !hero.html.includes('centros de costo con diferencia</span>'));
+  assert('mixta: cada tarjeta enumera SU unidad por separado',
+    hero.html.includes('1 de 1 legajo') === false
+    && hero.html.includes('1 de 100 legajos') && hero.html.includes('3 de 24 centros de costo'));
+  // 1 legajo + 3 CC no son "4 unidades": cada tarjeta cuenta lo suyo contra su
+  // propio universo y en ningún lado aparece una suma de las dos unidades.
   assert('mixta: no aparece un total de 4 unidades sumadas',
-    !hero.html.includes('4 legajo') && !hero.html.includes('4 centros'));
+    !hero.html.includes('4 legajo')
+    && !hero.html.includes('4 de 124')
+    && !hero.html.includes('>4<'));
 }
 
 // ── 4b. Mixta sin diferencias: cada unidad con su propio conteo ──────────────
@@ -138,10 +152,13 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('mixta OK: enumera legajos y centros de costo, sin sumarlos',
-    hero.html.includes('100 legajos verificados · 24 centros de costo verificados, sin diferencias.'));
-  assert('mixta OK: el título es el veredicto, sin porcentajes inventados',
-    hero.html.includes('>Sin diferencias</h2>'));
+  // Los verdes van agrupados en una sola card, con su propio universo cada uno:
+  // "0 de 100" y "0 de 24", nunca "0 de 124".
+  assert('mixta OK: enumera los dos controles con su propio universo, sin sumarlos',
+    hero.html.includes('>0 de 100<') && hero.html.includes('>0 de 24<')
+    && !hero.html.includes('124'));
+  assert('mixta OK: el título es el veredicto en palabras, sin porcentajes inventados',
+    hero.html.includes('Listo para liberar</h2>'));
 }
 
 // ── 4c. Varios controles sobre los MISMOS empleados no los cuentan dos veces ──
@@ -154,8 +171,8 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('dos controles sobre 4 empleados: "4 legajos verificados en 2 controles"',
-    hero.html.includes('4 legajos verificados en 2 controles sin diferencias.'));
+  assert('dos controles sobre 4 empleados: cada tarjeta dice 0 de 4',
+    hero.html.split('0 de 4').length - 1 === 2);
   assert('dos controles sobre 4 empleados: NO dice "8 legajos"',
     !hero.html.includes('8 legajo'));
 }
@@ -169,8 +186,9 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('una unidad con un solo control: la frase queda sin "en 1 control"',
-    hero.html.includes('4 legajos verificados · 24 centros de costo verificados, sin diferencias.'));
+  assert('una unidad con un solo control: cada tarjeta con su propio universo',
+    hero.html.includes('>0 de 4<') && hero.html.includes('>0 de 24<')
+    && !hero.html.includes('>0 de 28<'));
 }
 
 // ── 4e. Tres controles por legajo, uno con menos empleados que los otros ─────
@@ -185,9 +203,8 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('tres controles: toma el mayor (100), no la suma (240)',
-    hero.html.includes('100 legajos verificados en 3 controles sin diferencias.')
-    && !hero.html.includes('240'));
+  assert('tres controles: el KPI de legajos cruzados toma el mayor (100), no la suma (240)',
+    hero.html.includes('>100<') && !hero.html.includes('240'));
 }
 
 // ── 5. Género y número de cada unidad ────────────────────────────────────────
@@ -197,35 +214,35 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     [], THRESHOLD,
   );
   assert('cuentas contables: concuerda en femenino plural',
-    cuentas.html.includes('18 cuentas contables verificadas sin diferencias'));
+    cuentas.html.includes('18 cuentas contables evaluadas: ninguna diferencia'));
 
   const unaCuenta = buildHeroHtml(
     [mkCtrl('finadietAsiento', 'Asiento de Remuneraciones', 'cuenta', 1, 0, 'ok')],
     [], THRESHOLD,
   );
   assert('una sola cuenta: femenino singular',
-    unaCuenta.html.includes('1 cuenta contable verificada sin diferencias'));
+    unaCuenta.html.includes('1 cuenta contable evaluada: ninguna diferencia'));
 
   const listas = buildHeroHtml(
     [mkCtrl('acreditaciones', 'Acreditaciones', 'lista', 6, 0, 'ok')],
     [], THRESHOLD,
   );
   assert('listados: masculino plural',
-    listas.html.includes('6 listados verificados sin diferencias'));
+    listas.html.includes('6 listados evaluados: ninguna diferencia'));
 
   const unCc = buildHeroHtml(
     [mkCtrl('rendVsTabu', 'Rendimiento vs Tabulado', 'cc', 1, 0, 'ok')],
     [], THRESHOLD,
   );
   assert('un solo centro de costo: singular',
-    unCc.html.includes('1 centro de costo verificado sin diferencias'));
+    unCc.html.includes('1 centro de costo evaluado: ninguna diferencia'));
 
   const unLegajo = buildHeroHtml(
     [mkCtrl('brutos', 'Brutos', 'legajo', 1, 0, 'ok')],
     [], THRESHOLD,
   );
-  assert('un solo legajo: sigue diciendo "1 legajo verificado"',
-    unLegajo.html.includes('1 legajo verificado sin diferencias'));
+  assert('un solo legajo: sigue diciendo "1 legajo evaluado"',
+    unLegajo.html.includes('1 legajo evaluado: ninguna diferencia'));
 }
 
 // ── 6. "Legajos cruzados" sigue saliendo del Tabulado ────────────────────────
@@ -242,7 +259,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     [tabFile], THRESHOLD,
   );
   assert('el KPI "Legajos cruzados" sigue saliendo del Tabulado',
-    hero.html.includes('>3<') && hero.html.includes('Legajos cruzados'));
+    hero.html.includes('>3</span>') && hero.html.includes('Legajos cruzados'));
 }
 
 // ── 7. Corrida sólo de generación de reporte: no inventa unidades ────────────
@@ -254,12 +271,12 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     ],
     [], THRESHOLD,
   );
-  assert('sólo reportes: el subtítulo lo dice y no nombra legajos',
+  assert('sólo reportes: la bajada lo dice y no nombra legajos',
     hero.html.includes('sólo incluye controles de generación de reporte') && !hero.html.includes('legajo'));
   // Sin unidad verificada no hay KPI de diferencias ni leyenda de umbral: el
   // veredicto no se atribuye una unidad que no verificó.
-  assert('sólo reportes: no aparece un conteo de unidades ni la leyenda del umbral',
-    !hero.html.includes('con diferencia') && !hero.html.includes('c/dif'));
+  assert('sólo reportes: no aparece un conteo de unidades ni la escala de severidad',
+    !hero.html.includes('con diferencia') && !hero.html.includes('rsm-scale'));
 }
 
 // ── 8. Una unidad nueva sin etiqueta no se disfraza de legajos ───────────────
@@ -269,7 +286,7 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     [], THRESHOLD,
   );
   assert('unidad sin etiqueta: usa su propio nombre, no "legajos"',
-    hero.html.includes('7 sucursals verificados') && !hero.html.includes('legajos verificados'));
+    hero.html.includes('7 sucursals evaluados') && !hero.html.includes('legajos'));
 }
 
 // ── 9. El nombre de la unidad se escapa antes de entrar al HTML ──────────────
@@ -297,9 +314,9 @@ function mkCtrl(controlId, label, unit, unitsTotal, unitsWithDiff, tier, extra =
     {}, true,
   );
   assert('tarjeta por legajo: cuenta legajos evaluados y con diferencia',
-    cards.includes('100 legajos evaluados') && cards.includes('1 legajo con diferencia (1,0%)'));
+    cards.includes('1 de 100 legajos') && cards.includes('1,0 %'));
   assert('tarjeta por CC: cuenta centros de costo, no legajos',
-    cards.includes('24 centros de costo evaluados') && cards.includes('3 centros de costo con diferencia (12,5%)'));
+    cards.includes('3 de 24 centros de costo') && cards.includes('12,5 %'));
   assert('tarjeta femenina: concuerda ("18 cuentas contables evaluadas")',
     cards.includes('18 cuentas contables evaluadas'));
   assert('tarjeta sin diferencias: el link va al detalle, no a un conteo',
