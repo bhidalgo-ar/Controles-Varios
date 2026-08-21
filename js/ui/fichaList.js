@@ -270,6 +270,12 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {{ value: string, label: string, match: (f: object) => boolean }[]} [opts.marcas]
  * @param {{ value: string, label: string, compare: (a: object, b: object) => number }[]} [opts.ordenes]
  * @param {(ficha: object) => string} [opts.getLabel] - texto buscable
+ * @param {string} [opts.searchLabel] - qué se puede buscar. Por default el
+ *   buscador dice "legajo o nombre", que es lo correcto en los controles cuya
+ *   unidad es el empleado; un control por cuenta contable, por centro de costo o
+ *   por lista de acreditación tiene que poder decir lo suyo — si no, la barra le
+ *   ofrece al analista buscar por algo que en esa pantalla no existe.
+ * @param {string} [opts.searchPlaceholder]
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
  * @param {string} [opts.unitLabel='fichas']
@@ -281,6 +287,7 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
 export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
+  searchLabel, searchPlaceholder,
   getAmount, amountLabel, unitLabel = 'fichas',
   onExport, onOpen, pageSize,
 } = {}) {
@@ -330,6 +337,8 @@ export function renderFichasPanel(panel, {
 
   initSearchCombobox(searchEl, {
     rows: fichas, trEls: els, getLabel,
+    ...(searchLabel !== undefined ? { label: searchLabel } : {}),
+    ...(searchPlaceholder !== undefined ? { placeholder: searchPlaceholder } : {}),
     pagination: { setFilter(s) { porBusqueda = s; aplicar(); } },
   });
 

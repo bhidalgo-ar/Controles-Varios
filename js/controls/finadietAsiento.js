@@ -30,12 +30,16 @@
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks } from '../ui/resultBlocks.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { renderFichasPanel } from '../ui/fichaList.js';
+import { conciliarCuenta, tiraDeCuenta, detalleDeConceptos, contextoDeCuenta, rotuloDeSaldo, concordancia }
+  from '../ui/fichaCuenta.js';
 import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet } from '../exports/contractSheet.js';
+import { acumularConcepto, conceptosEnOrden } from './cuentaConceptos.js';
 
 // Tolerancia de comparación de importes del proyecto (CLAUDE.md): los floats de
 // Excel no dan igualdad exacta. Un centavo de descuadre en un asiento ES un
@@ -198,11 +202,11 @@ export function runFinadietAsiento(primaryRows, _tabRows, mapping) {
         const centro = centrosPorClave.get(normKey(row.centro));
         if (!centro) { bumpCount(centrosSinClasificar, row.centro); continue; }
         cuentaFinal = `${centro.codigo}.${codigo}`;
-        bumpAmount(accResultado, centro.nombre, cuentaFinal, lado, row.importe, nombre);
+        bumpAmount(accResultado, centro.nombre, cuentaFinal, lado, row.importe, nombre, row, { conceptos: true });
       } else {
         cuentaFinal = `${PREFIJO_PATRIMONIAL}.${codigo}`;
         const categoria = ref.categoria || `SIN CATEGORÍA ASIGNADA (${codigo})`;
-        bumpAmount(accPatrimonial, categoria, cuentaFinal, lado, row.importe, nombre);
+        bumpAmount(accPatrimonial, categoria, cuentaFinal, lado, row.importe, nombre, row, { conceptos: true });
       }
 
       ladosClasificados++;
@@ -292,8 +296,18 @@ function bumpCount(map, key) {
   map.set(key, (map.get(key) || 0) + 1);
 }
 
-/** Suma `importe` al lado Debe/Haber de `grupo → clave`, creando lo que falte. */
-function bumpAmount(map, grupo, clave, lado, importe, nombre, row = null) {
+/**
+ * Suma `importe` al lado Debe/Haber de `grupo → clave`, creando lo que falte.
+ *
+ * Con `{ conceptos: true }` además va guardando QUÉ CONCEPTOS forman ese
+ * importe: es lo que abre la ficha por cuenta. El desglose se acumula ADENTRO de
+ * la entrada y no en una tabla aparte a propósito — una tabla aparte habría que
+ * cruzarla contra el asiento por una clave armada dos veces, y el día que el
+ * agrupamiento cambie de un lado y no del otro la ficha mostraría los conceptos
+ * de otra cuenta sumando a un saldo que no es el suyo. Sumando en el mismo lugar
+ * y en la misma pasada, el desglose no puede desalinearse del saldo que explica.
+ */
+function bumpAmount(map, grupo, clave, lado, importe, nombre, row = null, { conceptos = false } = {}) {
   if (!map.has(grupo)) map.set(grupo, new Map());
   const inner = map.get(grupo);
   let e = inner.get(clave);
@@ -304,6 +318,18 @@ function bumpAmount(map, grupo, clave, lado, importe, nombre, row = null) {
   e[lado] = round2(e[lado] + importe);
   if (!e.nombre && nombre) e.nombre = nombre;
   if (!e.concepto && row?.concepto) e.concepto = row.concepto;
+  if (conceptos) bumpConcepto(e, lado, importe, row);
+}
+
+/** Un concepto de liquidación adentro de una cuenta del asiento (cuentaConceptos.js). */
+function bumpConcepto(e, lado, importe, row) {
+  if (!e.conceptos) e.conceptos = new Map();
+  acumularConcepto(e.conceptos, {
+    nro:      row?.nro_concepto,
+    concepto: row?.concepto,
+    debe:     lado === 'debe'  ? importe : 0,
+    haber:    lado === 'haber' ? importe : 0,
+  });
 }
 
 /**
@@ -348,7 +374,7 @@ function conLineas(acc) {
     const lineas = [];
     for (const [cuenta, v] of inner) {
       if (Math.abs(v.debe) <= TOL && Math.abs(v.haber) <= TOL) continue;
-      lineas.push({ cuenta, nombre: v.nombre, debe: v.debe, haber: v.haber });
+      lineas.push({ cuenta, nombre: v.nombre, debe: v.debe, haber: v.haber, conceptos: conceptosEnOrden(v.conceptos) });
     }
     if (lineas.length === 0) continue;
     lineas.sort((a, b) => compareCodigos(a.cuenta, b.cuenta));
@@ -469,6 +495,7 @@ export function renderFinadietAsientoResults(results, container) {
     conDiferencias: !results.cierra
       || results.sinClasificar.cuentas.length > 0 || results.sinClasificar.centros.length > 0,
     resumen: (panel) => renderResumenTab(panel, results),
+    fichas: (panel) => renderFichasTab(panel, results),
     planilla: (panel) => renderDetalleTab(panel, results),
   });
 }
@@ -550,6 +577,271 @@ function renderResumenTab(panel, results) {
         ok: !!results.fechaEmision },
     ],
   });
+}
+
+// ── Solapa Fichas — una por cuenta contable ───────────────────────────────────
+//
+// La unidad de este control es la CUENTA, no el empleado: el archivo de FINADIET
+// no trae legajo, y dos filas del mismo empleado no se distinguen ni tienen por
+// qué distinguirse (§4 de la spec del control). Así que la ficha por legajo no
+// aplica — lo que sirve es abrir la cuenta y ver **qué conceptos la componen**,
+// que es justo lo que hoy no se puede ver sin bajar el .xlsx y filtrar a mano.
+//
+// Además de las líneas del asiento entran como ficha las cuentas y los centros
+// que quedaron SIN CLASIFICAR. Todavía no son una línea del asiento —y por eso
+// el semáforo las cuenta como una unidad con diferencia—, pero tienen que dejar
+// de no serlo: con su ficha, el analista las encuentra con el chip "Sin
+// comparar" en vez de tener que volver al Resumen a buscarlas.
+
+/**
+ * El único estado que no aplica acá. **Este control cuadra al centavo contra sí
+ * mismo** (Debe = Haber), no contra un umbral: no hay monto de diferencia del
+ * cliente que aflojar. El chip va igual, en gris y con su 0, y lo dice en el
+ * `title` — sacarlo movería los otros cuatro de lugar, que es justo lo que el
+ * estándar viene a arreglar (§3).
+ *
+ * "Sin comparar" no está acá, al revés que en la Planilla: en las fichas SÍ
+ * aplica, porque una cuenta que no está en la tabla del cliente es exactamente
+ * "falta un lado".
+ */
+const NO_APLICA_FICHA_ASIENTO = {
+  margen: 'el asiento cuadra al centavo contra sí mismo (Debe = Haber), no hay un umbral que medir',
+};
+
+/** Estado del caso → el gradiente del avatar (§4). */
+const SEVERIDAD_POR_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
+
+/**
+ * En qué estado cerró una cuenta. Cuenta lo mismo que el semáforo
+ * (`summarizeFinadietAsiento`), y eso no es una coincidencia que haya que
+ * mantener a mano: si el asiento cierra, lo único con diferencia son las cuentas
+ * y los centros sin clasificar; si no cierra, el entregable entero es sospechoso
+ * y quedan marcadas todas. Está escrito como assert en
+ * `tests/fichasCuentaContable.test.js`.
+ *
+ * @param {object} ficha - una de las que arma `fichasDeAsiento`
+ * @param {{ cierra: boolean }} corrida
+ * @returns {'conDif'|'centavo'|'sinComparar'}
+ */
+export function estadoDeCuentaAsiento(ficha, { cierra }) {
+  if (ficha.sinClasificar) return 'sinComparar';
+  // Los conceptos se acumulan en la misma pasada que el saldo, así que esto no
+  // puede pasar. Se mira igual: es el único lugar donde se vería si algún día se
+  // desalinean, y un desglose que no suma no puede salir en verde.
+  if (ficha.conciliacion && !ficha.conciliacion.cuadra) return 'conDif';
+  return cierra ? 'centavo' : 'conDif';
+}
+
+/**
+ * Una ficha por línea del asiento, más una por cuenta y por centro sin
+ * clasificar, **ya armadas** (tarjeta cerrada + cuerpo). Exportada así, entera,
+ * porque es lo que hay que poder afirmar sin abrir un navegador: que los estados
+ * cuentan lo mismo que el semáforo y que el desglose de cada cuenta suma exacto
+ * su saldo. Si el test mirara una versión intermedia, probaría otra cosa que la
+ * que se dibuja.
+ */
+export function fichasDeAsiento(results) {
+  const fichas = [];
+
+  for (const bloque of results.asiento.bloques) {
+    for (const l of bloque.lineas) {
+      fichas.push({
+        id:      `${bloque.label} ⋮ ${l.cuenta}`,
+        cuenta:  l.cuenta,
+        nombre:  l.nombre || '',
+        bloque:  { tipo: bloque.tipo, label: bloque.label },
+        conciliacion: conciliarCuenta(l),
+        conceptos:    l.conceptos || [],
+        sinClasificar: null,
+      });
+    }
+  }
+
+  for (const c of results.sinClasificar.cuentas) {
+    fichas.push({
+      id: `cuenta sin clasificar ⋮ ${c.codigo}`,
+      cuenta: c.codigo,
+      nombre: 'No está en la tabla de cuentas contables',
+      bloque: null,
+      conciliacion: null,
+      conceptos: [],
+      sinClasificar: { tipo: 'cuenta', lados: c.lados },
+    });
+  }
+
+  for (const c of results.sinClasificar.centros) {
+    fichas.push({
+      id: `centro sin clasificar ⋮ ${c.nombre}`,
+      cuenta: c.nombre,
+      nombre: 'Centro de costo que no está en la tabla',
+      bloque: null,
+      conciliacion: null,
+      conceptos: [],
+      sinClasificar: { tipo: 'centro', lados: c.lados },
+    });
+  }
+
+  return fichas.map(f => fichaDeCuenta(f, results));
+}
+
+const MARCAS_ASIENTO = [
+  { value: 'resultado',   label: 'Cuenta de resultado',
+    match: f => f.bloque?.tipo === 'centro' },
+  { value: 'patrimonial', label: 'Cuenta patrimonial',
+    match: f => f.bloque?.tipo === 'categoria' },
+  { value: 'dos_lados',   label: 'Con movimientos en los dos lados',
+    match: f => !!f.conciliacion
+      && Math.abs(f.conciliacion.debe) > TOL && Math.abs(f.conciliacion.haber) > TOL },
+  { value: 'sin_asentar', label: 'Quedó afuera del asiento',
+    match: f => !!f.sinClasificar },
+];
+
+function renderFichasTab(panel, results) {
+  renderFichasPanel(panel, {
+    fichas: fichasDeAsiento(results),
+    unitLabel: 'cuentas',
+    estadoDe: f => f.estado,
+    noAplica: NO_APLICA_FICHA_ASIENTO,
+    marcas: MARCAS_ASIENTO,
+    ordenes: [
+      { value: 'saldo',     label: 'Mayor saldo',
+        compare: (a, b) => (b.conciliacion?.monto ?? -1) - (a.conciliacion?.monto ?? -1) },
+      { value: 'cuenta',    label: 'Código de cuenta',
+        compare: (a, b) => compareCodigos(a.cuenta, b.cuenta) },
+      { value: 'conceptos', label: 'Más conceptos adentro',
+        compare: (a, b) => b.conceptos.length - a.conceptos.length },
+      { value: 'nombre',    label: 'Nombre de la cuenta',
+        compare: (a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es') },
+    ],
+    getLabel: f => `${f.cuenta} ${f.nombre} ${f.bloque?.label || ''}`,
+    // La unidad de este control es la cuenta: el buscador no puede ofrecer
+    // buscar por legajo, que en esta pantalla no existe.
+    searchLabel: 'Buscar cuenta, concepto o centro de costo',
+    searchPlaceholder: 'Código o nombre de cuenta…',
+    getAmount: f => f.conciliacion?.monto ?? null,
+    amountLabel: 'Σ saldo de las cuentas',
+    onExport: (exportEl) => mountExportMenu(exportEl, results),
+  });
+}
+
+/** El descriptor de la ficha: la tarjeta cerrada y lo que se dibuja al abrirla. */
+function fichaDeCuenta(f, results) {
+  const estado = estadoDeCuentaAsiento(f, results);
+  const sev = SEVERIDAD_POR_ESTADO[estado] || 'info';
+  const c = f.conciliacion;
+  const badge = badgeDeCuenta(f, results);
+
+  return {
+    ...f,
+    estado,
+    unit: f.cuenta,
+    severity: sev,
+    name: f.nombre || '(sin nombre de cuenta)',
+    tag: f.sinClasificar
+      ? { text: f.sinClasificar.tipo === 'cuenta' ? 'cuenta sin clasificar' : 'centro sin clasificar' }
+      : { text: f.bloque.label },
+    badge,
+    context: c
+      ? contextoDeCuenta(c, fmtNum)
+      : [`Aparece en ${f.sinClasificar.lados} movimiento${f.sinClasificar.lados === 1 ? '' : 's'}`,
+         'No entró al asiento'],
+    // La marca que ya dice lo mismo que el badge no se repite abajo: el badge es
+    // la causa principal y la marca es "qué MÁS le pasa" — verlo dos veces en la
+    // misma tarjeta no agrega nada. Sigue estando en "Marcas ▾" como filtro.
+    marks: MARCAS_ASIENTO
+      .filter(m => m.match(f) && m.label !== badge?.text)
+      .map(m => ({ text: m.label, tone: m.value === 'sin_asentar' ? 'neutral' : 'info' })),
+    amountLabel: c ? rotuloDeSaldo(c) : 'SIN ASENTAR',
+    // `null` y no `0`: la cuenta sin clasificar no tiene un saldo que valga cero,
+    // no tiene saldo. Sale como '—', que es lo que corresponde (CLAUDE.md).
+    amount: c ? c.monto : null,
+    amountTone: sev === 'error' ? 'error' : sev === 'warn' ? 'warn' : undefined,
+    body: c ? {
+      strip:  tiraDeCuenta(c),
+      detail: detalleDeConceptos(f.conceptos, c),
+      conclusion: conclusionDeCuenta(f, c, results),
+    } : {
+      strip: [
+        { label: 'Movimientos en el archivo', value: String(f.sinClasificar.lados) },
+        { label: f.sinClasificar.tipo === 'cuenta' ? 'Cuenta contable' : 'Centro de costo',
+          value: 'sin clasificar', invert: true },
+        { label: 'Asentado', value: 0, residuo: true },
+      ],
+      conclusion: conclusionSinClasificar(f),
+    },
+  };
+}
+
+/** La causa principal, en una línea. Sin causa no hay badge. */
+function badgeDeCuenta(f, results) {
+  if (f.sinClasificar) {
+    return { text: 'Quedó afuera del asiento', tone: 'warn' };
+  }
+  if (!f.conciliacion.cuadra) {
+    return { text: 'Los conceptos no suman al saldo', tone: 'error' };
+  }
+  if (!results.cierra) {
+    return {
+      text: 'El asiento no cierra',
+      title: `Debe ${fmtNum(results.asiento.totalDebe)} contra Haber ${fmtNum(results.asiento.totalHaber)}: `
+        + 'mientras no cierre, todas las cuentas quedan en revisión.',
+      tone: 'error',
+    };
+  }
+  return undefined;
+}
+
+/** No un resumen: una instrucción. Qué mirar, descartando lo que ya se explicó. */
+function conclusionDeCuenta(f, c, results) {
+  if (!c.cuadra) {
+    return {
+      tone: 'error',
+      title: `El desglose de esta cuenta no suma al saldo: sobran ${fmtNum(c.residuo)}`,
+      text: 'Los conceptos de la tabla de abajo se acumulan con el mismo importe que el saldo, así que esto no '
+        + 'debería pasar nunca. No mandes el asiento: avisá que el desglose por concepto de esta cuenta quedó '
+        + 'desalineado.',
+    };
+  }
+  if (!results.cierra) {
+    const { cuentas, centros } = results.sinClasificar;
+    const pendientes = cuentas.length + centros.length + (results.ladosSinCentro > 0 ? 1 : 0);
+    return {
+      tone: 'error',
+      title: `El asiento no cierra por ${fmtNum(Math.abs(results.diferencia))}`,
+      text: `Esta cuenta cuadra: ${concordancia(c.cantidad).sujetoSuyo} ${concordancia(c.cantidad).suman} exacto su saldo. `
+        + (pendientes > 0
+          ? 'La diferencia viene de lo que quedó afuera — filtrá por el chip "Sin comparar" para verlo y '
+            + 'resolvelo en el Paso 2 antes de mandar el asiento.'
+          : 'No hay nada sin clasificar, así que la diferencia está en los importes del archivo de origen: '
+            + 'revisalos antes de mandar el asiento.'),
+    };
+  }
+  return {
+    tone: 'ok',
+    title: `Cuadra al centavo: ${fmtNum(c.monto)} al ${c.lado || 'saldo cero'}`,
+    text: `${concordancia(c.cantidad).sujeto} de la tabla de abajo ${concordancia(c.cantidad).suman} `
+      + 'exactamente el saldo de esta cuenta, y el asiento cierra. No hay nada para revisar acá.',
+  };
+}
+
+function conclusionSinClasificar(f) {
+  if (f.sinClasificar.tipo === 'cuenta') {
+    return {
+      tone: 'warn',
+      title: `La cuenta ${f.cuenta} no está en la tabla de cuentas contables`,
+      text: `Su importe quedó afuera del asiento en ${f.sinClasificar.lados} movimiento(s), así que el asiento `
+        + 'no cierra por esa plata. Agregala en "Cuentas contables y centros de costo" del Paso 2, indicando '
+        + 'si es de Resultado o Patrimonial, y volvé a ejecutar. No la mandes sin eso.',
+    };
+  }
+  return {
+    tone: 'warn',
+    title: `El centro de costo "${f.cuenta}" no está en la tabla`,
+    text: `Las cuentas de Resultado de ${f.sinClasificar.lados} movimiento(s) quedaron afuera del asiento: el `
+      + 'prefijo de una cuenta de Resultado ES el código del centro, y sin código no hay cuenta final posible. '
+      + `Las Patrimoniales de esas mismas filas sí entraron (llevan prefijo ${PREFIJO_PATRIMONIAL}). Agregá el `
+      + 'centro con su código en el Paso 2 y volvé a ejecutar.',
+  };
 }
 
 // ── Solapa Planilla ───────────────────────────────────────────────────────────
