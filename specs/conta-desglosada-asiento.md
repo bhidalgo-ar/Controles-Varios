@@ -6,8 +6,10 @@ archivos reales de COTY del período 05/2026: reproduce **exactas** las cinco an
 (ver §7). **Gana su solapa Fichas por cuenta contable el 2026-08-21** (tanda 7 de
 `specs/vista-estandar-resultados.md`, D-081), cubierta por `tests/fichasCuentaContable.test.js`, y de
 paso se corrige un criterio de clasificación que había quedado mal en la tanda 3: una cuenta sin código
-pasa a leerse "Sin comparar" y no "Con diferencia" (D-082, ver §3 y §5). Ningún importe ni conteo
-existente cambió — se verificó corriendo el módulo anterior y el nuevo sobre la misma entrada sintética.
+pasa a leerse "Sin comparar" y no "Con diferencia" (D-082, ver §3 y §5). Ningún número que calcula el
+control cambió —lo que cambia es la etiqueta de pantalla—: se verificó corriendo el módulo anterior y el
+nuevo sobre la misma entrada sintética y comparando los balances, las filas del asiento, las cuentas
+patrimoniales, las líneas sin código y el semáforo completo.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza
 dos archivos, arma tres. A partir del reporte "Totales de Concepto" de Axton produce la Contabilidad

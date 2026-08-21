@@ -2875,7 +2875,7 @@ cuenta `unitsWithDiff` — verificado como assert en `tests/fichasCuentaContable
 
 **Dónde vive el detalle.** `js/controls/cuentaConceptos.js`, `js/ui/fichaCuenta.js`,
 `js/controls/finadietAsiento.js`, `js/controls/contaDesglosada.js`, `tests/fichasCuentaContable.test.js`
-(111 asserts).
+(123 asserts).
 
 ---
 
