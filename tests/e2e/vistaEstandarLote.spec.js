@@ -203,3 +203,82 @@ test('el buscador encuentra un legajo que quedó fuera de la primera página', a
   // Y el pie pasa a decir que está mostrando la SELECCIÓN, no el total general.
   await expect(page.locator('table.rb-rubro tfoot')).toContainText('TOTAL de la selección');
 });
+
+// ── El buscador y el chip son dos criterios sobre la MISMA selección ─────────
+//
+// Este es el punto de comportamiento que cambió al unificar las dos piezas de la
+// Planilla que las tandas 2 y 3 habían escrito por separado (D-088). La de la
+// tanda 3 re-dibujaba la tabla en cada filtro, y `initSearchCombobox()` reescribe
+// el buscador entero cada vez que se lo monta: en estas nueve pantallas, tocar un
+// chip le borraba al analista lo que había tipeado. La pieza unificada dibuja la
+// tabla UNA vez y el chip oculta filas, así que los dos criterios se cruzan — que
+// es lo que ya hacían las diez pantallas de la tanda 2.
+//
+// **Queda escrito como test porque es un criterio, no un detalle**: si Willy
+// prefiere que el chip limpie la búsqueda, este test se cae y ahí se decide.
+
+test('en la planilla larga, tocar un chip NO borra lo que está buscado', async ({ page }) => {
+  await page.goto('/tests/e2e/fixtures/planillaLarga.html');
+  await page.waitForFunction(() => window.__listo);
+  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+
+  const input = page.locator('.table-search__input');
+  await input.fill('CARRANZA 96');
+  await page.locator('.table-search__option').first().click();
+  const buscado = await input.inputValue();
+  expect(buscado).toContain('96');
+
+  // Al tocar otro chip, el texto sigue en el buscador: la tabla no se rehace.
+  await page.locator('.results-chip', { hasText: 'Al centavo' }).click();
+  await expect(input).toHaveValue(buscado);
+
+  // Y volviendo a "Todos" la fila buscada sigue siendo la única: el buscador
+  // nunca dejó de filtrar, así que limpiar el chip no trae la tabla entera.
+  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+  const visibles = page.locator('table.rb-rubro tbody tr:visible:not(.table-show-more-row)');
+  await expect(visibles).toHaveCount(1);
+  await expect(visibles.first()).toContainText('96');
+});
+
+// ── El orden por encabezado de la planilla de Variaciones ────────────────────
+//
+// Es la única de las diecinueve planillas que ordena clickeando el encabezado, y
+// se conservó a propósito: las tablas que reemplazó ya ordenaban, y "quién subió
+// más" es la lectura más frecuente del reporte (D-081). El `Orden ▾` del estándar
+// es de la solapa Fichas y de ninguna otra, así que esto no se sumó donde no
+// estaba.
+//
+// Al unificar las dos piezas de la Planilla (D-088) esto se reescribió: la de la
+// tanda 3 ordenaba re-dibujando la tabla, y la unificada **mueve las filas que ya
+// están** —y reordena en el mismo movimiento la lista que miran el buscador, la
+// paginación y el TOTAL— para no cortarles el hilo. Por eso se prueba acá.
+
+test('en Variaciones, clickear el encabezado ordena la planilla y el buscador sigue vivo', async ({ page }) => {
+  await abrirPlanilla(page, { fixture: 'variaciones.html' });
+
+  const legajos = () => page.locator('table.rb-rubro tbody tr:visible td:first-child');
+  await page.locator('.results-chip', { hasText: 'Todos' }).click();
+  const antes = await legajos().allInnerTexts();
+  expect(antes.length).toBeGreaterThan(2);
+
+  // La columna de variación: primer click descendente en los importes.
+  const th = page.locator('table.rb-rubro thead tr').nth(1).locator('th', { hasText: 'Variación' }).first();
+  await th.click();
+  const desc = await legajos().allInnerTexts();
+  expect(desc).not.toEqual(antes);
+  await expect(th).toHaveAttribute('aria-sort', 'descending');
+
+  // El segundo click invierte, y da exactamente el orden de vuelta.
+  await th.click();
+  await expect(th).toHaveAttribute('aria-sort', 'ascending');
+  const asc = await legajos().allInnerTexts();
+  expect(asc).toEqual([...desc].reverse());
+
+  // Y con la tabla reordenada el buscador sigue apuntando a las filas de verdad:
+  // si el reorden le hubiera cortado el hilo, no encontraría ninguna.
+  const legajo = asc[asc.length - 1].trim();
+  await page.fill('.table-search__input', legajo);
+  await page.locator('.table-search__option').first().click();
+  const visibles = await legajos().allInnerTexts();
+  expect(visibles.map(t => t.trim())).toEqual([legajo]);
+});
