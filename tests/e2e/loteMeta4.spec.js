@@ -43,28 +43,45 @@ const CONTROLES = [
 
 const PALABRAS = ['Todos', 'Con diferencia', 'Dentro del margen', 'Al centavo', 'Sin comparar'];
 
-/** Abre la pantalla de un control y deja la solapa Planilla activa. */
+/** Abre la pantalla de un control y deja la solapa Planilla activa.
+ *  Por NOMBRE y no por posición: EE x CATEG suma una cuarta solapa después de
+ *  la Planilla ("Por campo", la matriz campo × legajo), y lo que estos tests
+ *  miran es la Planilla, esté en la posición que esté. */
 async function abrirPlanilla(page, id) {
   page.__errores = [];
   page.on('pageerror', e => page.__errores.push(String(e)));
   await page.goto(`${FIXTURE}?control=${id}`);
-  await expect(page.locator('.rb-verdict')).toBeVisible();
-  await page.locator('[role="tab"]').last().click();
-  await expect(page.locator('.results-toolbar')).toBeVisible();
+  // Se espera a las solapas y no al veredicto: el panel de una solapa se dibuja
+  // recién cuando se la abre, y un control con Fichas ya no arranca en Resumen.
+  await expect(page.locator('[role="tab"]').first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Planilla', exact: true }).click();
+  await expect(panel(page).locator('.results-toolbar')).toBeVisible();
 }
 
 const numero = (txt) => Number(String(txt).replace(/[^\d-]/g, '') || 0);
 
+/**
+ * Lo que se está mirando: el panel de la solapa ACTIVA. Las otras solapas siguen
+ * en el DOM, ocultas, con su propio contenido — así que desde que un control
+ * tiene Fichas y Planilla a la vez (EE x CATEG es el primero), un locator suelto
+ * encuentra dos barras y diez chips. Todo lo de acá abajo se busca adentro de
+ * este panel.
+ */
+const panel = (page) => page.locator('.tabs__panel:not([hidden])');
+
 for (const ctrl of CONTROLES) {
-  test(`${ctrl.id} · la última solapa se llama Planilla`, async ({ page }) => {
+  test(`${ctrl.id} · la solapa de la tabla se llama Planilla`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    await expect(page.locator('[role="tab"]').last()).toHaveText('Planilla');
+    // La primera es siempre "Resumen" y la de la tabla, "Planilla": son las
+    // palabras del estándar, iguales en los 21 controles (§2).
+    await expect(page.locator('[role="tab"]').first()).toHaveText('Resumen');
+    await expect(page.getByRole('tab', { name: 'Planilla', exact: true })).toHaveCount(1);
     expect(page.__errores).toEqual([]);
   });
 
   test(`${ctrl.id} · los cinco chips, con esas palabras y en ese orden`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    const chips = page.locator('.results-toolbar .results-chip');
+    const chips = panel(page).locator('.results-toolbar .results-chip');
     await expect(chips).toHaveCount(5);
     for (const [i, palabra] of PALABRAS.entries()) {
       await expect(chips.nth(i)).toContainText(palabra);
@@ -73,7 +90,7 @@ for (const ctrl of CONTROLES) {
 
   test(`${ctrl.id} · los cuatro estados suman el total de "Todos"`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    const cuentas = await page.locator('.results-chip .results-chip__count').allTextContents();
+    const cuentas = await panel(page).locator('.results-chip .results-chip__count').allTextContents();
     const [todos, ...estados] = cuentas.map(numero);
     // Un control que genera un archivo no clasifica nada: sus cuatro chips van
     // en cero y con su porqué en el `title` — pero "Todos" sigue diciendo
@@ -87,48 +104,48 @@ for (const ctrl of CONTROLES) {
     await abrirPlanilla(page, ctrl.id);
     // El último hijo del grupo de la derecha, no el último botón: el menú lleva
     // su panel de ítems adentro y ésos también son botones.
-    const ultimo = page.locator('.results-toolbar .results-toolbar__right > *').last();
+    const ultimo = panel(page).locator('.results-toolbar .results-toolbar__right > *').last();
     await expect(ultimo.locator('.row-menu__trigger, button').first()).toContainText('Exportar');
   });
 
   test(`${ctrl.id} · la barra tiene el buscador`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    await expect(page.locator('.results-toolbar .table-search__input')).toBeVisible();
+    await expect(panel(page).locator('.results-toolbar .table-search__input')).toBeVisible();
   });
 
   if (ctrl.marcas) {
     test(`${ctrl.id} · el segundo eje va en "Marcas ▾" y no en la fila de chips`, async ({ page }) => {
       await abrirPlanilla(page, ctrl.id);
-      const marcas = page.locator('.results-toolbar [data-marca-filter]');
+      const marcas = panel(page).locator('.results-toolbar [data-marca-filter]');
       await expect(marcas).toBeVisible();
       await expect(marcas.locator('option').first()).toHaveText('Marcas ▾');
       // Y sigue habiendo cinco chips: las marcas no se cuelan ahí.
-      await expect(page.locator('.results-toolbar .results-chip')).toHaveCount(5);
+      await expect(panel(page).locator('.results-toolbar .results-chip')).toHaveCount(5);
     });
   }
 
   test(`${ctrl.id} · cada columna dice su base de cálculo`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    expect(await page.locator('table.rb-grid .rb-col__sub').count()).toBeGreaterThan(0);
+    expect(await panel(page).locator('table.rb-grid .rb-col__sub').count()).toBeGreaterThan(0);
   });
 
   if (ctrl.bandas) {
     test(`${ctrl.id} · las bandas van todas sobre el mismo fondo`, async ({ page }) => {
       await abrirPlanilla(page, ctrl.id);
-      const fondos = await page.locator('table.rb-grid tr.rb-rubro__bands > th')
+      const fondos = await panel(page).locator('table.rb-grid tr.rb-rubro__bands > th')
         .evaluateAll(ths => [...new Set(ths.map(th => getComputedStyle(th).backgroundColor))]);
       expect(fondos).toHaveLength(1);
     });
 
     test(`${ctrl.id} · la planilla cierra con una fila de TOTAL`, async ({ page }) => {
       await abrirPlanilla(page, ctrl.id);
-      await expect(page.locator('table.rb-grid tfoot')).toContainText('TOTAL');
+      await expect(panel(page).locator('table.rb-grid tfoot')).toContainText('TOTAL');
     });
   } else {
     test(`${ctrl.id} · sin bandas y sin TOTAL: no hay importes que agrupar ni totalizar`, async ({ page }) => {
       await abrirPlanilla(page, ctrl.id);
-      await expect(page.locator('table.rb-grid tr.rb-rubro__bands')).toHaveCount(0);
-      await expect(page.locator('table.rb-grid tfoot')).toHaveCount(0);
+      await expect(panel(page).locator('table.rb-grid tr.rb-rubro__bands')).toHaveCount(0);
+      await expect(panel(page).locator('table.rb-grid tfoot')).toHaveCount(0);
     });
   }
 }
@@ -147,8 +164,8 @@ for (const id of CON_TILE) {
     await page.goto(`${FIXTURE}?control=${id}`);
     const tile = await page.locator('.rb-tile', { hasText: 'Con diferencia' })
       .locator('.rb-tile__value').first().textContent();
-    await page.locator('[role="tab"]').last().click();
-    const chip = await page.locator('.results-chip', { hasText: 'Con diferencia' })
+    await page.getByRole('tab', { name: 'Planilla', exact: true }).click();
+    const chip = await panel(page).locator('.results-chip', { hasText: 'Con diferencia' })
       .locator('.results-chip__count').textContent();
     expect(numero(chip)).toBe(numero(tile));
   });
@@ -159,19 +176,19 @@ for (const id of CON_TILE) {
 test('el chip filtra la planilla, y el TOTAL pasa a ser el de la selección', async ({ page }) => {
   await abrirPlanilla(page, 'brutos');
   // Arranca en "Con diferencia" porque hay uno, y la barra dice por qué.
-  await expect(page.locator('.results-chip--active')).toContainText('Con diferencia');
-  await expect(page.locator('.results-toolbar__hint')).toContainText('arrancó activo');
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
-  await expect(page.locator('table.rb-grid tfoot')).toContainText('TOTAL de la selección');
+  await expect(panel(page).locator('.results-chip--active')).toContainText('Con diferencia');
+  await expect(panel(page).locator('.results-toolbar__hint')).toContainText('arrancó activo');
+  await expect(panel(page).locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
+  await expect(panel(page).locator('table.rb-grid tfoot')).toContainText('TOTAL de la selección');
 
-  await page.locator('.results-chip', { hasText: 'Todos' }).click();
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(5);
-  await expect(page.locator('table.rb-grid tfoot')).not.toContainText('de la selección');
+  await panel(page).locator('.results-chip', { hasText: 'Todos' }).click();
+  await expect(panel(page).locator('table.rb-grid tbody tr:visible')).toHaveCount(5);
+  await expect(panel(page).locator('table.rb-grid tfoot')).not.toContainText('de la selección');
 });
 
 test('un estado sin casos se muestra igual, apagado y diciendo por qué', async ({ page }) => {
   await abrirPlanilla(page, 'brutos_reporte');
-  const conDif = page.locator('.results-chip', { hasText: 'Con diferencia' });
+  const conDif = panel(page).locator('.results-chip', { hasText: 'Con diferencia' });
   await expect(conDif).toContainText('0');
   await expect(conDif).toBeDisabled();
   await expect(conDif).toHaveAttribute('title', /No aplica a este control/);
@@ -179,15 +196,15 @@ test('un estado sin casos se muestra igual, apagado y diciendo por qué', async 
 
 test('el buscador y el chip son dos criterios sobre la misma selección', async ({ page }) => {
   await abrirPlanilla(page, 'brutos');
-  await page.locator('.results-chip', { hasText: 'Todos' }).click();
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(5);
+  await panel(page).locator('.results-chip', { hasText: 'Todos' }).click();
+  await expect(panel(page).locator('table.rb-grid tbody tr:visible')).toHaveCount(5);
 
-  await page.locator('.table-search__input').fill('11');
-  await page.locator('.table-search__option').first().click();
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
+  await panel(page).locator('.table-search__input').fill('11');
+  await panel(page).locator('.table-search__option').first().click();
+  await expect(panel(page).locator('table.rb-grid tbody tr:visible')).toHaveCount(1);
 
   // Limpiar la búsqueda devuelve el filtro del chip, no la tabla entera.
-  await page.locator('.results-chip', { hasText: 'Al centavo' }).click();
-  await page.locator('.table-search__clear').click();
-  await expect(page.locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
+  await panel(page).locator('.results-chip', { hasText: 'Al centavo' }).click();
+  await panel(page).locator('.table-search__clear').click();
+  await expect(panel(page).locator('table.rb-grid tbody tr:visible')).toHaveCount(2);
 });

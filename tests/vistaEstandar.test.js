@@ -156,6 +156,19 @@ assert('el CUERPO no se dibuja al pintar la lista — queda vacío hasta el prim
   card.includes('<div class="ficha__body" data-ficha-body></div>')
   && !card.includes('Suma de componentes'));
 
+// El número grande no siempre es plata: EE x CATEG cuenta campos que no
+// coinciden. Un conteo se pasa como texto y sale tal cual; lo que no se pudo
+// saber va como `null` y sale '—', nunca 0 (D-073).
+
+assert('un control que cuenta en vez de sumar plata pone su número sin decimales',
+  fichaCardHtml({ id: '10', severity: 'error', name: 'ALBELLA GUSTAVO', amount: '2' })
+    .includes('>2</span>'),
+  fichaCardHtml({ id: '10', severity: 'error', name: 'ALBELLA GUSTAVO', amount: '2' }));
+
+assert('…y lo que no se pudo comparar sale "—", que no se lee como cero',
+  fichaCardHtml({ id: '10', severity: 'warn', name: 'ERVITI WALTER', amount: null })
+    .includes('>—</span>'));
+
 const body = fichaBodyHtml(fichaOk.body, { id: fichaOk.id });
 
 assert('la tira de conciliación es una cascada: la anteúltima invertida y el residuo en rojo',

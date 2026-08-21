@@ -57,7 +57,10 @@ function fmtCell(v) {
 //   marks       — [{ text, tone?: 'info'|'neutral', title? }]: el segundo eje —
 //                 qué MÁS le pasa al caso, que no es cómo cerró
 //   amountLabel — rótulo chico en mayúsculas ('RESIDUO', 'SAC TEÓRICO')
-//   amount      — el importe grande de la derecha
+//   amount      — el número grande de la derecha. Un importe se formatea con dos
+//                 decimales; un control que CUENTA en vez de sumar plata (EE x
+//                 CATEG cuenta campos que no coinciden) pasa el texto ya armado,
+//                 y lo que no se pudo saber va como `null` → '—', nunca 0.
 //   amountTone  — 'error' | 'warn' | 'ok' | undefined
 //   body        — lo de abajo (ver fichaBodyHtml)
 
@@ -88,7 +91,7 @@ export function fichaCardHtml(ficha) {
         </span>
         <span class="ficha__right">
           ${ficha.amountLabel ? `<span class="ficha__amount-label">${esc(ficha.amountLabel)}</span>` : ''}
-          <span class="ficha__amount${ficha.amountTone ? ` ficha__amount--${esc(ficha.amountTone)}` : ''}">${esc(fmtAmount(ficha.amount))}</span>
+          <span class="ficha__amount${ficha.amountTone ? ` ficha__amount--${esc(ficha.amountTone)}` : ''}">${esc(fmtCell(ficha.amount))}</span>
         </span>
         <span class="ficha__caret" aria-hidden="true">⌄</span>
       </summary>
@@ -268,6 +271,7 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
  * @param {(ficha: object) => string} [opts.getLabel] - texto buscable
  * @param {(ficha: object) => number|null} [opts.getAmount] - el importe que el control mide
  * @param {string} [opts.amountLabel]
+ * @param {number} [opts.amountDecimals] - 0 cuando esa Σ es un conteo y no plata
  * @param {string} [opts.unitLabel='fichas']
  * @param {(exportEl: HTMLElement) => void} [opts.onExport] - el control monta su
  *   `renderExportMenu()` acá: el exportar va último, siempre, y ningún control
@@ -277,11 +281,14 @@ export function renderFichaList(host, fichas, { onOpen } = {}) {
 export function renderFichasPanel(panel, {
   fichas, estadoDe, noAplica = {}, marcas = [], ordenes = [],
   getLabel = (f) => `${f.id} — ${f.name ?? ''}`,
-  getAmount, amountLabel, unitLabel = 'fichas',
+  getAmount, amountLabel, amountDecimals, unitLabel = 'fichas',
   onExport, onOpen, pageSize,
 } = {}) {
   if (fichas.length === 0) {
-    panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">No hay ninguna ${esc(unitLabel.replace(/s$/, ''))} para mostrar.</p>`;
+    // "Sin legajos" y no "No hay ningún legajo": la unidad la declara el control
+    // y puede ser femenina ('listas' de acreditación), así que la frase no puede
+    // llevar género.
+    panel.innerHTML = `<p class="text-muted" style="padding:var(--sp-4);">Sin ${esc(unitLabel)} para mostrar.</p>`;
     return null;
   }
 
@@ -308,6 +315,7 @@ export function renderFichasPanel(panel, {
 
   const tools = wireListTools(listEl, {
     rows: fichas, els, kpisEl, getAmount, amountLabel, unitLabel,
+    ...(amountDecimals !== undefined ? { amountDecimals } : {}),
     ...(pageSize !== undefined ? { pageSize } : {}),
   });
 
