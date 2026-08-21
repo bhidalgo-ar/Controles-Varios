@@ -58,7 +58,8 @@ control sin fichas muestra dos (`Resumen · Planilla`) — nunca un tercer nombr
 > (`extraTabs` en `renderResumenDetalle()`, con ese contrato en su propio JSDoc).
 
 - **Resumen** — lo que ya hay: tiles, casos, chequeos. Willy va a rehacerlo aparte; ese trabajo no
-  depende de este documento.
+  depende de este documento. **La propuesta de ese rediseño ya está escrita:
+  `specs/vista-estandar-resumen.md`** (2026-08-21, pendiente de aprobación).
 - **Fichas** — una tarjeta desplegable por unidad (legajo, centro de costo, cuenta o lista, según lo
   que el control declare en `unit`). Es donde se entiende **por qué** un caso no cierra.
 - **Planilla** — la tabla ancha, con los rubros agrupados en bandas, la base de cálculo abajo de
