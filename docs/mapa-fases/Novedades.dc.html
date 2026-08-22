@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap">
+  <style>
+    body { margin: 0; background: #EEF2F6; }
+    a { color: #0090B4; } a:hover { color: #007896; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1120px; background: #EEF2F6; font-family: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif; color: #15263D;">
+
+  <div style="height: 54px; background: #15263D; border-bottom: 3px solid #00ACD4; display: flex; align-items: center; gap: 12px; padding: 0 24px;">
+    <div style="width: 30px; height: 30px; border-radius: 9999px; background: #00ACD4; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: -0.02em;">H&amp;A</div>
+    <span style="font-size: 15px; font-weight: 700; color: #FFFFFF;">Controles Nómina</span>
+    <span style="width: 1px; height: 20px; background: rgba(255,255,255,0.22);"></span>
+    <span style="font-size: 13px; color: #C7D5E4;">B1 — Validador de novedades antes de importar</span>
+  </div>
+
+  <div style="padding: 30px 32px 40px;">
+
+    <div style="max-width: 780px; margin-bottom: 24px;">
+      <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 34px; line-height: 1.15; color: #15263D;">Tu pregunta: ¿qué necesito para el control de novedades previo a la carga?</div>
+      <div style="font-size: 14px; color: #4A6080; margin-top: 10px; line-height: 1.6;">Es el control B1 del catálogo. Tildá abajo lo que ya tenés y mirá qué queda funcionando.</div>
+    </div>
+
+    <!-- Las dos llaves en juego -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px;">
+      <sc-for list="{{switches}}" as="s" hint-placeholder-count="2">
+        <div onClick="{{s.toggle}}" style="{{s.css}}">
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            <div style="{{s.boxCss}}">
+              <sc-if value="{{s.on}}" hint-placeholder-val="{{true}}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </sc-if>
+            </div>
+            <div style="flex-grow: 1;">
+              <div style="display: flex; align-items: baseline; gap: 8px;">
+                <span style="{{s.chipCss}}">{{s.id}}</span>
+                <span style="font-size: 16px; font-weight: 700; color: #15263D;">{{s.title}}</span>
+              </div>
+              <div style="font-size: 12.5px; color: #4A6080; margin-top: 6px; line-height: 1.5;">{{s.detail}}</div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                <span style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 9999px; background: rgba(0,172,212,0.10); color: #0090B4;">{{s.owner}}</span>
+                <span style="font-size: 11px; color: #8FA3BA;">{{s.kind}}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- El veredicto -->
+    <div style="{{verdictCss}}">
+      <div style="display: flex; gap: 14px; align-items: flex-start;">
+        <div style="{{verdictIconCss}}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16.5v.01"></path></svg>
+        </div>
+        <div>
+          <div style="font-size: 16px; font-weight: 800; line-height: 1.3;">{{verdictTitle}}</div>
+          <div style="font-size: 13px; margin-top: 6px; line-height: 1.6; max-width: 860px;">{{verdictBody}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Las 6 validaciones -->
+    <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 20px 22px 22px; margin-top: 20px;">
+      <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px;">
+        <span style="font-family: 'DM Serif Display', Georgia, serif; font-size: 20px; color: #15263D;">Lo que mira el validador</span>
+        <span style="flex-grow: 1; height: 1px; background: #EFEEEC;"></span>
+        <span style="{{checkTallyCss}}">{{checkTally}}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+        <sc-for list="{{checks}}" as="c" hint-placeholder-count="6">
+          <div style="{{c.css}}">
+            <div style="display: flex; gap: 8px; align-items: flex-start;">
+              <div style="{{c.dotCss}}"></div>
+              <div style="flex-grow: 1;">
+                <div style="font-size: 13px; font-weight: 700; color: #15263D; line-height: 1.35;">{{c.name}}</div>
+                <div style="{{c.noteCss}}">{{c.note}}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- Escalones + efecto colateral -->
+    <div style="display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; margin-top: 20px; align-items: start;">
+
+      <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 20px 22px 22px;">
+        <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 20px; color: #15263D; margin-bottom: 4px;">Los tres escalones</div>
+        <div style="font-size: 12px; color: #4A6080; margin-bottom: 16px; line-height: 1.5;">Los definiste vos. Van de menos a más ambicioso — y sólo el de arriba de todo depende del template.</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <sc-for list="{{steps}}" as="st" hint-placeholder-count="3">
+            <div style="{{st.css}}">
+              <div style="display: flex; gap: 12px; align-items: flex-start;">
+                <span style="{{st.numCss}}">{{st.num}}</span>
+                <div style="flex-grow: 1;">
+                  <div style="font-size: 13.5px; font-weight: 700; color: #15263D; line-height: 1.35;">{{st.name}}</div>
+                  <div style="font-size: 12px; color: #4A6080; margin-top: 4px; line-height: 1.5;">{{st.detail}}</div>
+                </div>
+                <span style="{{st.stateCss}}">{{st.state}}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 6px 24px rgba(30,58,95,0.09); padding: 20px 22px 22px;">
+          <div style="font-family: 'DM Serif Display', Georgia, serif; font-size: 19px; color: #15263D; margin-bottom: 4px;">Lo que viene de arrastre</div>
+          <div style="font-size: 12px; color: #4A6080; margin-bottom: 14px; line-height: 1.5;">La misma llave no destraba sólo B1.</div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{spillover}}" as="sp" hint-placeholder-count="6">
+              <div style="{{sp.css}}">
+                <span style="{{sp.idCss}}">{{sp.id}}</span>
+                <span style="font-size: 12px; font-weight: 600; color: #15263D; flex-grow: 1;">{{sp.name}}</span>
+                <span style="{{sp.byCss}}">{{sp.by}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.32); border-radius: 14px; padding: 16px 18px;">
+          <div style="font-size: 13px; font-weight: 800; color: #9A5A0B; margin-bottom: 6px;">Antes de construirlo</div>
+          <div style="font-size: 12px; color: #9A5A0B; line-height: 1.55;">El criterio fino —qué es exactamente una falla, qué excepciones valen, qué hace el analista cuando salta— se captura control por control y se registra en el tablero de monday. Nada se construye sin eso escrito.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+const CHECKS = [
+  { name: 'Legajo inexistente o egresado',        needs: 'padron',   free: 'Necesita saber quién está activo en el cliente' },
+  { name: 'Concepto fuera del manual del cliente', needs: 'padron',   free: 'Necesita la lista de conceptos que existen en ese cliente' },
+  { name: 'Legajo + concepto duplicado en el período', needs: '',     free: 'Se ve en la planilla sola' },
+  { name: 'Requeridos vacíos en un alta',         needs: 'template', free: 'Sin template hay que declarar a mano qué campos son obligatorios' },
+  { name: 'Formato de CUIL y CBU',                needs: '',         free: 'Dígito verificador: se valida sin ningún archivo extra' },
+  { name: 'Valor fuera de rango contra el histórico', needs: '',     free: 'Usa las corridas que la app ya guarda' }
+];
+
+const SPILL = [
+  { id: 'A5',  name: 'Legajo fantasma',                 by: 'padron' },
+  { id: 'C2',  name: 'Cambio de categoría',             by: 'padron' },
+  { id: 'C3',  name: 'Sueldo sin novedad',              by: 'padron' },
+  { id: 'B2a', name: 'Planilla del cliente vs importador', by: 'ambas' },
+  { id: 'B2b', name: 'Importador vs tabulado',          by: 'template' },
+  { id: 'B2c', name: 'Registro de que se controló',     by: 'template' },
+  { id: 'A2',  name: 'Altas del mes',                   by: 'template' },
+  { id: 'A3',  name: 'Bajas del mes',                   by: 'template' }
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { padron: false, template: false };
+  }
+
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var padron = !!st.padron;
+    var template = !!st.template;
+
+    var have = { padron: padron, template: template };
+
+    var switches = [
+      {
+        id: 'PADRON',
+        title: 'Padrón y manual de conceptos',
+        detail: 'De cada cliente, en un formato único que los controles lean: quién está activo, quién egresó, y qué conceptos existen.',
+        owner: 'Guille + clientes',
+        kind: 'juntar datos',
+        on: padron,
+        toggle: function () { self.setState({ padron: !padron }); }
+      },
+      {
+        id: 'B0',
+        title: 'Template de novedades',
+        detail: 'La decisión pendiente: ¿un template único bajado a todos los clientes, o negociado cliente por cliente?',
+        owner: 'Guille + comercial',
+        kind: 'decisión',
+        on: template,
+        toggle: function () { self.setState({ template: !template }); }
+      }
+    ].map(function (s) {
+      return Object.assign({}, s, {
+        css: 'background:#FFFFFF; border-radius:14px; box-shadow:0 6px 24px rgba(30,58,95,0.09); padding:20px 22px; cursor:pointer; border:2px solid ' + (s.on ? '#22C55E' : 'transparent') + ';',
+        boxCss: 'width:24px; height:24px; border-radius:7px; flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; border:2px solid ' + (s.on ? '#22C55E' : '#C9D3DD') + '; background:' + (s.on ? '#22C55E' : '#FFFFFF') + ';',
+        chipCss: 'font-size:10px; font-weight:800; letter-spacing:0.04em; padding:2px 7px; border-radius:4px; background:' + (s.on ? 'rgba(34,197,94,0.14)' : 'rgba(21,38,61,0.07)') + '; color:' + (s.on ? '#177A50' : '#4A6080') + ';'
+      });
+    });
+
+    var verdictTitle, verdictBody, tone;
+    if (padron) {
+      tone = 'ok';
+      verdictTitle = template
+        ? 'B1 en escalón 1 — el estado deseado'
+        : 'Alcanza para arrancar: B1 se puede construir';
+      verdictBody = template
+        ? 'El archivo llega siempre con la misma forma, así que el validador no tiene que adivinar ni preguntar nada, y las 6 validaciones corren completas. Éste es el techo, no el piso: si el template tarda, con el padrón sólo ya tenés el control andando.'
+        : 'Con el padrón y el manual de conceptos, el validador corre en escalón 2 (detecta pestaña, fila de cabeceras y columnas solo) o en escalón 3 (le pregunta al liquidador una vez y guarda la respuesta por cliente). 5 de las 6 validaciones andan. La decisión del template no te traba: te sube un escalón.';
+    } else if (template) {
+      tone = 'warn';
+      verdictTitle = 'El template solo no alcanza';
+      verdictBody = 'Saber en qué columna viene cada cosa no te dice si el legajo 4821 existe, ni si el concepto 8805 está en el manual de ese cliente. Sin padrón y sin manual de conceptos, el validador queda en las 3 validaciones que se resuelven mirando la planilla sola.';
+    } else {
+      tone = 'neutral';
+      verdictTitle = 'Hoy B1 no se puede construir';
+      verdictBody = 'Las dos validaciones que más valor tienen —legajo que no existe o ya egresó, concepto que no está en el manual del cliente— necesitan datos que hoy no están en ningún lado en formato único. Tildá el padrón acá arriba: es la única llave que B1 realmente necesita.';
+    }
+
+    var TONES = {
+      ok:      { bg: 'rgba(34,197,94,0.10)',  bd: 'rgba(34,197,94,0.30)',  tx: '#177A50' },
+      warn:    { bg: 'rgba(245,158,11,0.12)', bd: 'rgba(245,158,11,0.32)', tx: '#9A5A0B' },
+      neutral: { bg: 'rgba(140,131,123,0.12)', bd: 'rgba(140,131,123,0.30)', tx: '#6B635C' }
+    };
+    var vt = TONES[tone];
+
+    var checks = CHECKS.map(function (c) {
+      var on = !c.needs || have[c.needs];
+      return {
+        name: c.name,
+        note: on ? c.free : (c.needs === 'padron' ? 'Espera el padrón y el manual de conceptos' : 'Espera la decisión del template'),
+        css: 'border:1px solid ' + (on ? 'rgba(34,197,94,0.30)' : '#E7E6E6') + '; background:' + (on ? 'rgba(34,197,94,0.10)' : '#FCFCFB') + '; border-radius:8px; padding:12px 14px;',
+        dotCss: 'width:9px; height:9px; border-radius:9999px; flex-shrink:0; margin-top:5px; background:' + (on ? '#22C55E' : '#C9D3DD') + ';',
+        noteCss: 'font-size:11px; margin-top:4px; line-height:1.4; color:' + (on ? '#177A50' : '#8FA3BA') + ';'
+      };
+    });
+
+    var checksOn = CHECKS.filter(function (c) { return !c.needs || have[c.needs]; }).length;
+
+    var stepDefs = [
+      { num: '3', name: 'Preguntarle al liquidador', detail: 'Pestaña, fila de cabeceras y columna de arranque. Se pregunta una vez y se guarda por cliente.', ready: padron },
+      { num: '2', name: 'Autoparseo', detail: 'La app detecta sola la pestaña, la fila de cabeceras y las columnas.', ready: padron },
+      { num: '1', name: 'Template único con el cliente', detail: 'El archivo llega siempre igual. Es el estado deseado.', ready: padron && template }
+    ];
+
+    var steps = stepDefs.map(function (s) {
+      return {
+        num: s.num,
+        name: s.name,
+        detail: s.detail,
+        state: s.ready ? 'al alcance' : 'trabado',
+        css: 'border:1px solid ' + (s.ready ? 'rgba(0,172,212,0.30)' : '#E7E6E6') + '; background:' + (s.ready ? 'rgba(0,172,212,0.10)' : '#FCFCFB') + '; border-radius:8px; padding:13px 15px;',
+        numCss: 'width:24px; height:24px; border-radius:9999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; background:' + (s.ready ? '#00ACD4' : '#E7E6E6') + '; color:' + (s.ready ? '#FFFFFF' : '#8FA3BA') + ';',
+        stateCss: 'flex-shrink:0; font-size:10px; font-weight:700; padding:3px 9px; border-radius:9999px; background:' + (s.ready ? 'rgba(0,172,212,0.10)' : 'rgba(140,131,123,0.12)') + '; color:' + (s.ready ? '#0090B4' : '#6B635C') + ';'
+      };
+    });
+
+    var spillover = SPILL.map(function (sp) {
+      var on = sp.by === 'padron' ? padron : (sp.by === 'template' ? template : (padron && template));
+      var label = sp.by === 'padron' ? 'padrón' : (sp.by === 'template' ? 'template' : 'las dos');
+      return {
+        id: sp.id,
+        name: sp.name,
+        by: label,
+        css: 'display:flex; align-items:center; gap:8px; padding:8px 11px; border-radius:8px; border:1px solid ' + (on ? 'rgba(34,197,94,0.30)' : '#EFEEEC') + '; background:' + (on ? 'rgba(34,197,94,0.10)' : '#FCFCFB') + ';',
+        idCss: 'font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; flex-shrink:0; background:' + (on ? 'rgba(34,197,94,0.14)' : 'rgba(21,38,61,0.07)') + '; color:' + (on ? '#177A50' : '#4A6080') + ';',
+        byCss: 'font-size:10px; font-weight:700; flex-shrink:0; color:' + (on ? '#177A50' : '#8FA3BA') + ';'
+      };
+    });
+
+    return {
+      switches: switches,
+      verdictTitle: verdictTitle,
+      verdictBody: verdictBody,
+      verdictCss: 'border-radius:14px; padding:18px 22px; background:' + vt.bg + '; border:1px solid ' + vt.bd + '; color:' + vt.tx + ';',
+      verdictIconCss: 'flex-shrink:0; margin-top:1px; color:' + vt.tx + ';',
+      checks: checks,
+      checkTally: checksOn + ' de 6 validaciones',
+      checkTallyCss: 'font-size:11px; font-weight:700; padding:3px 10px; border-radius:9999px; background:' + (checksOn === 6 ? 'rgba(34,197,94,0.10)' : 'rgba(0,172,212,0.10)') + '; color:' + (checksOn === 6 ? '#177A50' : '#0090B4') + ';',
+      steps: steps,
+      spillover: spillover
+    };
+  }
+}
+</script>
+</body>
+</html>
