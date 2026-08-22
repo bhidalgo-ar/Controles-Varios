@@ -35,13 +35,8 @@ function assert(desc, val, detalle) {
 // ── Los que todavía no publican `resumen`, con su tanda ─────────────────────
 // El orden es el del §6 de la spec. Cada tanda borra su bloque.
 const PENDIENTES = {
-  // Tanda 2 — cruce Meta4/Marval
-  brutos:                 'tanda 2',
-  gs_pers:                'tanda 2',
-  nr:                     'tanda 2',
-  rend_vs_tabu:           'tanda 2',
-  rend_x_ee:              'tanda 2',
-  rend_vs_asiento:        'tanda 2',
+  // Tanda 2 — cruce Meta4/Marval — migrada el 2026-08-22 (brutos, gs_pers, nr,
+  // rend_vs_tabu, rend_x_ee, rend_vs_asiento).
   // Tanda 3 — Axton / temporales
   agrupadores:            'tanda 3',
   novedades_liquidacion:  'tanda 3',

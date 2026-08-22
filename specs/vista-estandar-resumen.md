@@ -1,9 +1,11 @@
 # Vista estándar del Resumen — el veredicto del run y dónde están los errores, para los 21 controles
 
 **Estado:** **tanda 1 implementada el 2026-08-21** (el tablero 3a/3b + `resumenStats` + Control de
-Netos de piloto + los dos candados del §8) — ver **D-089**. Las tandas 2 a 6, que cablean los campos
-del `summarize` de los otros 20 controles, siguen pendientes y pueden correr en paralelo. El piloto
-espera que Willy lo mire en el navegador.
+Netos de piloto + los dos candados del §8) — ver **D-089**. **Tanda 2 implementada el 2026-08-22**
+(Cruce Meta4/Marval: brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento) — ver **D-090**.
+Las tandas 3 a 6, que cablean los campos del `summarize` de los otros 14 controles, siguen pendientes
+y pueden correr en paralelo. El piloto y esta tanda esperan que Willy los mire en el navegador (el
+entorno de desarrollo no llega al CDN de xlsx.js/Dexie, así que no se pudo verificar acá).
 Reescrita el mismo día al recibir el handoff completo del diseño
 (`docs/handoff-resumen-netos.md` — pantallas 3a y 3b del canvas de Netos): la primera versión de
 esta spec, escrita sin el handoff, asumía que el rediseño era de la solapa Resumen de adentro de
@@ -112,12 +114,12 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 | Control | S | Puente — la forma | byGroup | byCause | Nota |
 |---|---|---|---|---|---|
 | **Control de Netos** | ✅ hecho | ✅ **el del diseño**, agregado en el `run()` (`bridge`): entra sólo lo comparable y el legajo sin neto se informa aparte (D-086); el paso "Sin explicar" va **con signo** para que el puente cierre contra la fila TOTAL de la Planilla — el bruto lo dice "Para qué lado" | ✅ **empresa**, sólo si la corrida trae más de un Tabulado | ✅ **las marcas que el control detecta** (básico fuera de escala · tope sin declarar · perfil de jubilado sin confirmar) + sin identificar. **NO la cascada**: la cascada es lo explicado, y atribuirle la diferencia diría lo contrario de lo que pasó (D-089). Willy puede cambiar la regla en pantalla | el piloto |
-| Brutos — Controlar | sí | Total Tabulado → Diferencia comparada → Total Reporte | — | los 2 conceptos | |
-| GS Pers — Controlar | sí | ídem | — | los 2 conceptos | |
-| Control NR — Controlar | sí | dos totales con **D-086**: la diferencia suma sólo lo comparable, lo sin comparar se dice aparte | — | 18 conceptos o las 2 bandas (arrancar por banda; Willy elige en pantalla) | |
-| Rendimiento vs Tabulado | sí | Total Rendimiento → Diferencia comparada → Total Tabulado | — | las 5 categorías | unidad CC: el copy pasa por `unitNames()` |
-| Rendimiento vs Asiento | sí | ídem, contra el asiento | — | las 5 categorías | unidad CC |
-| Rendimiento x EE | sí | dos totales | — | — (un solo importe) | |
+| **Brutos — Controlar** | ✅ hecho | ✅ Total Tabulado → Diferencia comparada → Total Reporte (D-086) | — no aplica (una sola razón social) | ✅ los 2 conceptos (SAL_BASE, A_CTA_FUT_AUMEN), cada legajo se abre en hasta 2 instancias para que `byCause` los separe | tanda 2, D-090. Nombre viaja en `topUnits` |
+| **GS Pers — Controlar** | ✅ hecho | ✅ ídem (GTOS_PERSONALES, DTO_COCHERA) (D-086) | — no aplica | ✅ los 2 conceptos, mismo patrón que Brutos | tanda 2, D-090. **No trae nombre de legajo** (el archivo no lo trae): `topUnits` sale con `nombre: null`, no inventado |
+| **Control NR — Controlar** | ✅ hecho | ✅ dos totales con **D-086**: la diferencia suma sólo lo comparable, lo sin comparar se dice aparte — es el caso que motivó la decisión (un concepto liquidado de un solo lado) | — no aplica | ✅ **arranca por las 2 bandas** (Indemnizatorios / Otros NR), no por los 18 conceptos — resuelto §7.7: Willy elige en pantalla si conviene abrir a concepto | tanda 2, D-090 |
+| **Rendimiento vs Tabulado** | ✅ hecho | ✅ Total Rendimiento → Diferencia comparada → Total Tabulado (D-086). **Limitación preexistente**: no hay lista de CC del Tabulado sin Rendimiento (sólo la inversa, `sinTabData`), así que "sin comparar" del puente sólo informa esa única dirección | — no aplica (la unidad ya es el CC) | ✅ las 5 categorías (nunca COSTO TOTAL, que es la suma) | unidad `'cc'`: el copy pasa por `unitNames()`. Clave de unidad para el corte cruzado de 3b unificada con Rendimiento vs Asiento por nombre, código de respaldo (**D-090**) |
+| **Rendimiento vs Asiento** | ✅ hecho | ✅ ídem, contra el asiento (D-086). Acá SÍ hay las dos direcciones (`ccsSoloEnConta` ya existía): el puente informa "sin comparar" de los dos lados | — no aplica | ✅ las 5 categorías, mismo criterio que Rendimiento vs Tabulado | unidad `'cc'`. Misma clave de unidad que Rendimiento vs Tabulado, ver **D-090** |
+| **Rendimiento x EE** | ✅ hecho | ✅ dos totales, cubre las dos direcciones de "sin comparar" (el control ya traía `sinTabData`/`soloEnTab`) | — no aplica | — no aplica (un solo importe, Costo Total) | tanda 2, D-090 |
 | Cruce por Agrupadores | sí | Nómina → Diferencia → Resumen, con la **neta** y la **total** separadas (D-087) | — | agrupador | los conteos SIEMPRE en legajos, nunca en filas legajo × agrupador (el semáforo ya mintió en verde por eso). Lados: pendiente §7.6 |
 | Novedades vs Liquidación | sí | Pedido → Diferencia comparada → Liquidado, con las 4 bandas como conteos (D-073) | UO si viene | concepto | el legajo sin nada comparable cuenta para revisar |
 | Variación Sueldos | sí | **temporal**: Anterior → Variación → Actual; lados = "subieron / bajaron" | — | jornales / mensuales | |
@@ -136,7 +138,13 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 **El signo queda por verificar módulo por módulo:** el mapa asume que la diferencia por fila
 conserva el signo de la resta en todos los marcados con S. Cada tanda lo comprueba antes de
 cablear `diffSigned`; si un control guarda sólo el valor absoluto, el bloque se omite en ese
-control y se anota acá — no se recalcula la resta en el tablero.
+control y se anota acá — no se recalcula la resta en el tablero. **Ya verificado con assert sobre
+`diffSigned.over`/`diffSigned.under`** (`tests/resumenCruceMeta4.test.js`): Control de Netos
+(tanda 1), Brutos, NR, Rendimiento vs Tabulado y Rendimiento x EE (tanda 2). GS Pers y Rendimiento
+vs Asiento (tanda 2) conservan el signo por construcción —misma función (`diffOrNull`/resta
+directa) que sus pares ya verificados— y el test lo confirma indirectamente vía `byCause` (importes
+positivos en el sentido esperado), pero no traen un assert de `diffSigned` propio en este lote.
+Sigue pendiente de comprobar en las tandas 3 a 6.
 
 ## 5. Qué muere y qué queda
 
@@ -161,8 +169,10 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    pre-filtra el Detalle y "ficha →" abre la ficha, y Netos publica todos los campos. Los dos
    candados del §8 están puestos. **Lo único que falta de esta tanda es la mirada de Willy en el
    navegador.**
-2. **Cruce Meta4/Marval** (6): brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento.
-   Con éstos, el run del checklist de Marval es el primer 3b real.
+2. ~~**Cruce Meta4/Marval** (6): brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento.~~
+   **Hecha el 2026-08-22 (D-090).** Los seis publican `summary.resumen`; con éstos, un run del
+   checklist de Marval arma su primer tablero 3b real con datos en los seis. Queda pendiente que
+   Willy lo mire en el navegador (bloqueado acá por el CDN de xlsx.js/Dexie).
 3. **Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
    variaciones_sueldos, variaciones_conceptos, pop_variaciones.
 4. **Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
@@ -204,8 +214,9 @@ para unificar al integrar.
 6. **Agrupadores, bloque de lados**: ¿de más/de menos por legajo con su neta (un legajo compensado
    no aparece) o por agrupador (aparece en los dos)? La misma tensión que D-087 resolvió para el
    número grande de la ficha.
-7. **NR, el corte por causa**: ¿los 18 conceptos o las 2 bandas? Arranca por banda; se elige en
-   pantalla.
+7. ~~**NR, el corte por causa**: ¿los 18 conceptos o las 2 bandas?~~ **Implementado el 2026-08-22
+   (tanda 2, D-090) arrancando por las 2 bandas** (Indemnizatorios / Otros NR). Sigue pendiente que
+   Willy lo vea en pantalla y confirme si prefiere abrir directo a los 18 conceptos.
 8. **`touchedByRed` en controles que no exponen claves**: si algún summarize no puede dar las
    claves de sus unidades con diferencia, ese KPI sale del veredicto de 3b para ese run — no se
    aproxima sumando. (Riesgo 3 del handoff.) Verificarlo control por control en las tandas.

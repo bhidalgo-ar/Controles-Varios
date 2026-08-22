@@ -3492,3 +3492,51 @@ pide y no existía) y `resumen`. Un control que no los publica no muestra ese KP
 **Detalle:** `js/controls/resumenStats.js`, `js/ui/controlsResults.js`, `css/results.css`,
 `js/controls/controlNetos.js`, `tests/resumenStats.test.js`, `tests/resumenContract.test.js`,
 `specs/vista-estandar-resumen.md`, `docs/handoff-resumen-netos.md`, D-020, D-060, D-069, D-074, D-086.
+
+## D-090 — Tanda 2 del tablero del Resumen: la clave de unidad del centro de costo se unifica por nombre entre Rendimiento vs Tabulado y Rendimiento vs Asiento
+
+**2026-08-22.** Tanda 2 de `specs/vista-estandar-resumen.md` (Cruce Meta4/Marval): brutos, gs_pers,
+nr, rend_vs_tabu, rend_x_ee y rend_vs_asiento publican `summary.resumen`. La única decisión de esta
+tanda que no tenía una alternativa obvia es la clave de unidad de los dos controles con unidad `'cc'`.
+
+### El problema
+
+El corte cruzado de 3b (§4/§8 de la spec) necesita que dos controles que miden el mismo centro de
+costo armen la MISMA clave, igual que `makeLegajoKey(mapping.legajoKeyMode)` hace para legajo — pero
+no hay equivalente para CC: cada control matchea contra su propia fuente con su propio criterio.
+**Rendimiento vs Tabulado** matchea contra el Tabulado por código primero, nombre de respaldo,
+puertas adentro. **Rendimiento vs Asiento** matchea contra la CONTA sólo por nombre puertas adentro
+(no tiene código de CC propio del lado de la CONTA). Son dos motores de matching distintos y **eso no
+cambia** con esta tanda — lo único nuevo es la clave que cada uno expone hacia AFUERA, para el corte
+cruzado.
+
+### La decisión
+
+La clave externa (`unitKeys`, usada por `crossControl`) se arma igual en los dos controles:
+`normCCName(ccName) || normCCCode(ccCode)` — nombre primero, código como respaldo si el nombre viene
+vacío. `normCCName` ya existía en los dos módulos, sin cambios (saca acentos, minúsculas, espacios).
+`normCCCode` (quita ceros a la izquierda) ya existía en `rendVsTabu.js`; esta tanda le agregó el
+gemelo en `rendVsAsiento.js`, donde antes no hacía falta porque ese control nunca compara por código
+puertas adentro.
+
+Se eligió **nombre primero** porque es el único campo que las dos fuentes traen siempre parejo (la
+CONTA de Rendimiento vs Asiento no tiene código de CC); usar código primero hubiera dejado sin clave
+común a cualquier corrida donde ese control no lo tuviera. El costo es el que ya paga
+`rendVsAsiento.js` puertas adentro: dos CC con el mismo nombre normalizado (typo, sucursal repetida)
+matchean como uno solo en el corte cruzado. No se armó una tabla de equivalencias de CC porque no la
+pidió nadie todavía y no hay con qué poblarla.
+
+Test que fija el contrato: `tests/resumenCruceMeta4.test.js`, el assert "arman la MISMA clave" — arma
+el mismo CC con tilde de un lado ("Administración") y sin tilde del otro ("Administracion") y verifica
+que las dos claves coincidan.
+
+### Limitación que queda (no es un bug de esta tanda)
+
+`rendVsTabu.js` no guarda, hoy, la lista de centros de costo que están en el Tabulado y no aparecen en
+el Rendimiento — sólo la inversa (`sinTabData`, CC del Rendimiento sin Tabulado). Su puente del
+Resumen sólo puede informar "sin comparar" en esa única dirección. `rendVsAsiento.js` sí tiene las dos
+direcciones (`ccsSoloEnConta` ya existía de antes) y su puente cubre las dos. No se agregó la lista
+que falta: es una limitación preexistente del control, no algo que esta tanda tenía que resolver.
+
+**Detalle:** `js/controls/rendVsTabu.js`, `js/controls/rendVsAsiento.js`, `tests/resumenCruceMeta4.test.js`,
+`specs/vista-estandar-resumen.md` §4, D-086, D-089.

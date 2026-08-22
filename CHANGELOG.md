@@ -7,6 +7,37 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): el checklist de Marval arma su primer tablero real (Cruce Meta4) — 2026-08-22
+
+- **Tanda 2 de `specs/vista-estandar-resumen.md`** (D-090), sobre el tablero que construyó la tanda 1
+  (2026-08-21, Control de Netos de piloto). Los seis controles del Cruce Meta4/Marval —Brutos, GS
+  Pers, Control NR, Rendimiento vs Tabulado, Rendimiento vs Asiento y Rendimiento x EE— publican
+  `summary.resumen`.
+- **Lo que cambia para el analista.** El tablero del Resumen ya existía desde la tanda 1, pero para
+  estos seis controles se mostraba "en blanco" (los bloques ricos se omitían por falta de datos). Con
+  esta tanda, un run del checklist de Marval que corre los seis controles juntos arma su primer
+  tablero 3b real: el puente de cada control, para qué lado, los cortes por rubro causante y el top 5
+  aparecen con datos, y la grilla de 3b puede cruzar los seis por primera vez.
+- **El corte por causa de cada control**: Brutos y GS Pers separan sus dos conceptos (SAL_BASE /
+  A_CTA_FUT_AUMEN; GTOS_PERSONALES / DTO_COCHERA), NR arranca por las 2 bandas (Indemnizatorios /
+  Otros NR) y no por los 18 conceptos, Rendimiento vs Tabulado y Rendimiento vs Asiento —donde la
+  unidad es el centro de costo, no el legajo— abren en las 5 categorías de Rendimiento, y Rendimiento
+  x EE no tiene corte por causa (un solo importe, Costo Total).
+- **El corte cruzado por centro de costo ya funciona**: Rendimiento vs Tabulado y Rendimiento vs
+  Asiento arman la misma clave para el mismo centro de costo aunque uno lo escriba con tilde y el
+  otro sin tilde, así el corte que cruza los dos controles en 3b los puede unir (D-090).
+- **Ningún cálculo ni conteo existente se movió** en los seis controles — sólo se agregaron los
+  campos que el tablero necesita (`resumen`, `bridge`, `legajoKeyMode`). Los tests previos de cada
+  control siguen en verde.
+- **Limitación que queda, no resuelta por esta tanda**: Rendimiento vs Tabulado no tiene la lista de
+  centros de costo que están en el Tabulado y no en el Rendimiento (sólo la inversa), así que su
+  puente sólo informa "sin comparar" en una dirección. Rendimiento vs Asiento sí tiene las dos y su
+  puente cubre las dos.
+- `tests/resumenCruceMeta4.test.js` (nuevo, en la cadena), datos inventados y jugadores de Banfield.
+  Corrida completa de `test:unit`, 0 ✗.
+- No se pudo verificar el tablero en el navegador desde este entorno (CDN de xlsx.js/Dexie
+  bloqueado) — queda pendiente que Willy lo mire en los tres temas.
+
 ### feat(resumen): el hero del Resumen del run pasa a ser un tablero — 2026-08-21
 
 - **Es la tanda 1 de `specs/vista-estandar-resumen.md`** (D-089), sobre el handoff hi-fi de

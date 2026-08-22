@@ -1,6 +1,6 @@
 // brutos.js — Controles del Reporte de Brutos
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel, reporteColumns, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
@@ -11,6 +11,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -88,6 +89,7 @@ export function summarizeBrutos(results) {
     diffTotalAmount,
     worstCase,
     contextNote,
+    resumen: resumenDelBrutos(results),
   };
 }
 
@@ -149,7 +151,81 @@ export function runBrutos(brutosRows, tabRows, mapping) {
     summary: { total: rows.length, conDifSalario, conDifACuFutAumen, sinTabData },
     rows,
     period: mapping.period || '',
+    // El modo de clave de legajo del cliente (D-038): el `summarize` publica las
+    // claves de los legajos con diferencia para los cortes cruzados del Resumen
+    // (specs/vista-estandar-resumen.md §4), y ahí tiene que ser la MISMA clave
+    // que usan los otros controles del run.
+    legajoKeyMode: mapping.legajoKeyMode || null,
+    // El puente del Resumen: Total Tabulado → Diferencia comparada → Total
+    // Reporte. Se agrega ACÁ, desde los mismos `tabValSal`/`salBase`/`ctrlSalBase`
+    // (y su par de A_CTA_FUT_AUMEN) que ya calculó este `run()` — el tablero no
+    // recalcula nada (D-086: el lado sin contraparte se informa aparte).
+    bridge: bridgeDelRunBrutos(rows),
   };
+}
+
+/**
+ * El puente del Resumen: dos totales cruzados, sumando SAL_BASE y
+ * A_CTA_FUT_AUMEN juntos (son los dos conceptos que este control controla, y el
+ * mapa de la spec declara un solo puente por control, no uno por concepto).
+ *
+ * **Sólo entran los legajos con algún valor real** (`brutosHasAnyValue`): un
+ * legajo sin ningún dato en ninguna de las dos fuentes no aporta nada ni resta
+ * nada. Los totales de cada lado son los del archivo **tal cual** —incluyen los
+ * legajos que sólo tienen dato de ESE lado—; la diferencia comparada suma sólo
+ * los pares donde los DOS lados tienen dato (`ctrlSalBase`/`ctrlACuFutAumen` ya
+ * salen `null` cuando falta alguno). Lo que quedó de un solo lado se informa
+ * aparte, con su importe y su lado (D-086).
+ */
+function bridgeDelRunBrutos(rows) {
+  const relevantes = rows.filter(brutosHasAnyValue);
+  if (relevantes.length === 0) return null;
+
+  let totalTabulado = 0, totalReporte = 0, diffComparada = 0;
+  let tabSoloCount = 0, tabSoloAmount = 0, repSoloCount = 0, repSoloAmount = 0;
+
+  const acumular = (tabVal, repVal, ctrl) => {
+    if (tabVal !== null) totalTabulado += tabVal;
+    if (repVal !== null) totalReporte  += repVal;
+    if (ctrl !== null) {
+      diffComparada += ctrl;
+    } else if (tabVal !== null) {
+      tabSoloCount++; tabSoloAmount += tabVal;
+    } else if (repVal !== null) {
+      repSoloCount++; repSoloAmount += repVal;
+    }
+  };
+  for (const r of relevantes) {
+    acumular(r.tabValSal, r.salBase, r.ctrlSalBase);
+    acumular(r.tabValAcu, r.aCuFutAumen, r.ctrlACuFutAumen);
+  }
+
+  const soloCount = tabSoloCount + repSoloCount;
+  return {
+    steps: [
+      { label: 'Total Tabulado', amount: totalTabulado, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total Reporte', amount: totalReporte, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalTabulado), label: 'Total Tabulado' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: soloCount === 0 ? null : {
+      label: labelSoloUnLado(tabSoloCount, repSoloCount, 'el Reporte de Brutos'),
+      amount: tabSoloAmount + repSoloAmount,
+    },
+  };
+}
+
+/** El texto de "lo que quedó de un solo lado" (D-086), con ambos lados si hace falta. */
+function labelSoloUnLado(tabCount, repCount, repLabel) {
+  const bits = [];
+  if (tabCount > 0) bits.push(`${tabCount} sólo en el Tabulado`);
+  if (repCount > 0) bits.push(`${repCount} sólo en ${repLabel}`);
+  return `${bits.join(' y ')}, por`;
 }
 
 // Un legajo es "evaluable" si hay algún valor real de alguno de los dos
@@ -168,6 +244,44 @@ function brutosRowHasDiff(r) {
 }
 function brutosDiffAmount(r) {
   return Math.abs(r.ctrlSalBase ?? 0) + Math.abs(r.ctrlACuFutAumen ?? 0);
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Este control tiene DOS conceptos independientes por legajo (SAL_BASE y
+// A_CTA_FUT_AUMEN) que pueden diferir cada uno por su lado — hasta en sentido
+// contrario. `resumenStats` agrupa y suma sobre una lista de "casos", así que
+// acá se abre cada legajo en hasta dos instancias (una por concepto con
+// diferencia): es lo mismo que ya hace `renderIssues` al separar "SAL_BASE
+// $X · A_CTA_FUT_AUMEN $Y" en la misma fila, y es lo que permite que "byCause"
+// junte los dos conceptos por separado (§4 de la spec) en vez de uno solo por
+// legajo, que escondería el caso de un legajo con las dos diferencias.
+function instanciasPorConceptoBrutos(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (isDiff(r.ctrlSalBase))     out.push({ legajo: r.legajo, nombre: r.nombre, concepto: 'SAL_BASE',        dif: r.ctrlSalBase });
+    if (isDiff(r.ctrlACuFutAumen)) out.push({ legajo: r.legajo, nombre: r.nombre, concepto: 'A_CTA_FUT_AUMEN', dif: r.ctrlACuFutAumen });
+  }
+  return out;
+}
+
+function resumenDelBrutos(results) {
+  const legajoKey = makeLegajoKey(results.legajoKeyMode);
+  const instancias = instanciasPorConceptoBrutos(results.rows);
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: currentTolerance(),
+    rows: instancias,
+    diff: (i) => i.dif,
+    key: (i) => legajoKey(i.legajo),
+    unitLabel: (i) => i.nombre,
+    cause: (i) => ({ key: i.concepto, label: i.concepto }),
+    top: (i) => ({ legajo: i.legajo, nombre: i.nombre, rubro: i.concepto }),
+    bridge: results.bridge || null,
+    // Este control no trae empresa: una sola razón social por corrida.
+    notApplicable: ['group'],
+  });
 }
 
 export function renderBrutosResults(results, container) {

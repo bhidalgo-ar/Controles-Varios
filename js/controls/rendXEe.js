@@ -9,7 +9,7 @@
 
 import { DEFAULT_CONCEPT_CONFIG, leyendaDeConceptos } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
@@ -18,6 +18,7 @@ import { buildColByCode } from './tabCodes.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -89,6 +90,7 @@ export function summarizeRendXEe(results) {
     diffTotalAmount,
     worstCase,
     contextNote: null,
+    resumen: resumenDelRendXEe(results),
   };
 }
 
@@ -203,7 +205,54 @@ export function runRendXEe(ctRows, tabRows, mapping) {
     soloEnTab:  rows.filter(r => r.soloEnTab).length,
   };
 
-  return { summary, rows, period: mapping.period || '', meta: { conceptConfig, colByCode } };
+  return {
+    summary, rows, period: mapping.period || '', meta: { conceptConfig, colByCode },
+    // El modo de clave de legajo del cliente (D-038), para los cortes cruzados
+    // del Resumen.
+    legajoKeyMode: mapping.legajoKeyMode || null,
+    // El puente del Resumen: Total Calculado → Diferencia comparada → Total
+    // Reporte (D-086: `rows` ya trae los `sinTabData`/`soloEnTab` con `dif:
+    // null`, así que la diferencia comparada no los cuenta como cero del lado
+    // que falta).
+    bridge: bridgeDelRunRendXEe(rows),
+  };
+}
+
+/** El puente del Resumen (D-086), sobre los mismos `rows` que ya arma este `run()`. */
+function bridgeDelRunRendXEe(rows) {
+  if (rows.length === 0) return null;
+
+  const totalCalc = rows.reduce((s, r) => s + (r.calcTotal ?? 0), 0);
+  const totalRep  = rows.reduce((s, r) => s + (r.repTotal  ?? 0), 0);
+  const diffComparada = rows.reduce((s, r) => s + (r.dif ?? 0), 0);
+
+  const sinTabData = rows.filter(r => r.sinTabData);
+  const soloEnTab  = rows.filter(r => r.soloEnTab);
+  const soloCount  = sinTabData.length + soloEnTab.length;
+
+  return {
+    steps: [
+      { label: 'Total Calculado', amount: totalCalc, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total Reporte', amount: totalRep, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalCalc), label: 'Total Calculado' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: soloCount === 0 ? null : {
+      label: (() => {
+        const bits = [];
+        if (sinTabData.length > 0) bits.push(`${sinTabData.length} sólo en el Reporte`);
+        if (soloEnTab.length  > 0) bits.push(`${soloEnTab.length} sólo en el Tabulado`);
+        return `${bits.join(' y ')}, por`;
+      })(),
+      amount: sinTabData.reduce((s, r) => s + (r.repTotal ?? 0), 0)
+            + soloEnTab.reduce((s, r) => s + (r.calcTotal ?? 0), 0),
+    },
+  };
 }
 
 // ── renderRendXEeResults ──────────────────────────────────────────────────────
@@ -296,6 +345,31 @@ const MARCAS_REND_X_EE = [
   { value: 'sinTab',    label: 'Sin datos en el Tabulado', match: r => r.sinTabData },
   { value: 'soloEnTab', label: 'Sólo en el Tabulado',      match: r => r.soloEnTab },
 ];
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Este control compara UN solo importe (Costo Total) por legajo, así que no
+// hay causa que abrir en categorías (§4 de la spec: "un solo importe") — a
+// diferencia de Rendimiento vs Tabulado y Rendimiento vs Asiento, que sí
+// abren en las cinco categorías.
+function resumenDelRendXEe(results) {
+  const legajoKey = makeLegajoKey(results.legajoKeyMode);
+  const conDif = results.rows.filter(r => r.dif !== null && hasDiff(r.dif));
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: currentTolerance(),
+    rows: conDif,
+    diff: (r) => r.dif,
+    key: (r) => legajoKey(r.legajo),
+    unitLabel: (r) => r.nombre,
+    top: (r) => ({ legajo: r.legajo, nombre: r.nombre }),
+    bridge: results.bridge || null,
+    // Un solo importe: no hay concepto/categoría que atribuir, y este control
+    // no trae empresa.
+    notApplicable: ['cause', 'group'],
+  });
+}
 
 function renderRendXEePlanilla(container, { rows, totDif, results }) {
   const columns = [

@@ -1,6 +1,6 @@
 // nr.js — Control No Remunerativos (Control NR)
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
@@ -12,6 +12,7 @@ import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { writeGroupedContractSheet } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -100,6 +101,7 @@ export function summarizeNr(results) {
     diffTotalAmount,
     worstCase,
     contextNote,
+    resumen: resumenDelNr(results),
   };
 }
 
@@ -160,6 +162,71 @@ export function runNr(nrRows, tabRows, mapping) {
     rows,
     codigos,
     period: mapping.period || '',
+    // El modo de clave de legajo del cliente (D-038), para los cortes cruzados
+    // del Resumen (specs/vista-estandar-resumen.md §4).
+    legajoKeyMode: mapping.legajoKeyMode || null,
+    // El puente del Resumen: Total Tabulado → Diferencia comparada → Total
+    // Reporte NR. Es EL caso que motivó D-086: un concepto liquidado de un solo
+    // lado no resta contra cero del otro, se informa aparte.
+    bridge: bridgeDelRunNr(rows),
+  };
+}
+
+/**
+ * El puente del Resumen (D-086). Recorre, por legajo y por concepto, los
+ * mismos `valores[key] = { nrVal, tabVal, ctrl }` que ya calculó este `run()` —
+ * el mismo par que arma la ficha de cada legajo (`buildFichasNr`), acá sumado
+ * sobre TODA la corrida en vez de sobre un legajo.
+ *
+ * Un concepto que ningún legajo liquidó (`hasValor` falso en las dos fuentes)
+ * no entra ni a un total ni al otro: no es que esté "de un solo lado", es que
+ * no se liquidó en el período, y contarlo movería los totales sin motivo.
+ */
+function bridgeDelRunNr(rows) {
+  const relevantes = rows.filter(hasAnyNrValue);
+  if (relevantes.length === 0) return null;
+
+  let totalTabulado = 0, totalReporte = 0, diffComparada = 0;
+  let tabSoloCount = 0, tabSoloAmount = 0, repSoloCount = 0, repSoloAmount = 0;
+
+  for (const r of relevantes) {
+    for (const c of NR_CONCEPTS) {
+      const v = r.valores[c.key];
+      if (!hasValor(v)) continue;
+      if (v.tabVal !== null) totalTabulado += v.tabVal;
+      if (v.nrVal  !== null) totalReporte  += v.nrVal;
+      if (v.ctrl !== null) {
+        diffComparada += v.ctrl;
+      } else if (v.tabVal !== null) {
+        tabSoloCount++; tabSoloAmount += v.tabVal;
+      } else if (v.nrVal !== null) {
+        repSoloCount++; repSoloAmount += v.nrVal;
+      }
+    }
+  }
+
+  const soloCount = tabSoloCount + repSoloCount;
+  return {
+    steps: [
+      { label: 'Total Tabulado', amount: totalTabulado, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total Reporte NR', amount: totalReporte, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalTabulado), label: 'Total Tabulado' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: soloCount === 0 ? null : {
+      label: (() => {
+        const bits = [];
+        if (tabSoloCount > 0) bits.push(`${tabSoloCount} concepto${tabSoloCount === 1 ? '' : 's'} sólo en el Tabulado`);
+        if (repSoloCount > 0) bits.push(`${repSoloCount} concepto${repSoloCount === 1 ? '' : 's'} sólo en el Reporte NR`);
+        return `${bits.join(' y ')}, por`;
+      })(),
+      amount: tabSoloAmount + repSoloAmount,
+    },
   };
 }
 
@@ -188,6 +255,42 @@ const isDif = v => isDiff(v);
 // el resto. El tinte lo pone la pieza compartida (antes lo escribía este módulo
 // en verde y naranja, con su propio rgba).
 const BANDA = { indem: 'Indemnizatorios', otros: 'Otros NR' };
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// La causa arranca por las DOS BANDAS (indemnizatorios / otros NR), no por los
+// 18 conceptos: 18 cortes son una pared en un gráfico de causa igual que lo son
+// en la fila de chips (§7.7 de la spec — Willy elige en pantalla si conviene
+// abrir a concepto). Cada legajo se abre en una instancia por concepto CON
+// DIFERENCIA, para que la banda que más pesa sea la que más conceptos suma.
+function instanciasPorConceptoNr(rows) {
+  const out = [];
+  for (const r of rows) {
+    for (const c of NR_CONCEPTS) {
+      const v = r.valores[c.key];
+      if (v.ctrl !== null && isDif(v.ctrl)) out.push({ legajo: r.legajo, concepto: c, dif: v.ctrl });
+    }
+  }
+  return out;
+}
+
+function resumenDelNr(results) {
+  const legajoKey = makeLegajoKey(results.legajoKeyMode);
+  const instancias = instanciasPorConceptoNr(results.rows);
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: currentTolerance(),
+    rows: instancias,
+    diff: (i) => i.dif,
+    key: (i) => legajoKey(i.legajo),
+    cause: (i) => ({ key: i.concepto.group, label: BANDA[i.concepto.group] }),
+    top: (i) => ({ legajo: i.legajo, rubro: etiquetaConcepto(i.concepto, results.codigos) }),
+    bridge: results.bridge || null,
+    // Este control no trae empresa: una sola razón social por corrida.
+    notApplicable: ['group'],
+  });
+}
 
 export function renderNrResults(results, container) {
   const { rows } = results;

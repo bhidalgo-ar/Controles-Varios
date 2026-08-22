@@ -1,6 +1,6 @@
 // gsPers.js — Controles de Gastos Personales y Cochera (GS Pers)
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel, reporteColumns, NO_APLICA_REPORTE } from '../ui/planillaPanel.js';
@@ -11,6 +11,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -81,6 +82,7 @@ export function summarizeGsPers(results) {
     diffTotalAmount,
     worstCase,
     contextNote,
+    resumen: resumenDelGsPers(results),
   };
 }
 
@@ -131,7 +133,64 @@ export function runGsPers(gsRows, tabRows, mapping) {
     summary: { total: rows.length, conDifGtos, conDifDto, sinTabData },
     rows,
     period: mapping.period || '',
+    // Ver el comentario largo en brutos.js: misma clave (D-038), mismo puente
+    // (D-086), mismo motivo.
+    legajoKeyMode: mapping.legajoKeyMode || null,
+    bridge: bridgeDelRunGsPers(rows),
   };
+}
+
+/** El puente del Resumen: mismo criterio que `bridgeDelRunBrutos` (D-086),
+ *  sumando GTOS_PERSONALES y DTO_COCHERA juntos —un solo puente por control. */
+function bridgeDelRunGsPers(rows) {
+  const relevantes = rows.filter(gsPersHasAnyValue);
+  if (relevantes.length === 0) return null;
+
+  let totalTabulado = 0, totalReporte = 0, diffComparada = 0;
+  let tabSoloCount = 0, tabSoloAmount = 0, repSoloCount = 0, repSoloAmount = 0;
+
+  const acumular = (tabVal, repVal, ctrl) => {
+    if (tabVal !== null) totalTabulado += tabVal;
+    if (repVal !== null) totalReporte  += repVal;
+    if (ctrl !== null) {
+      diffComparada += ctrl;
+    } else if (tabVal !== null) {
+      tabSoloCount++; tabSoloAmount += tabVal;
+    } else if (repVal !== null) {
+      repSoloCount++; repSoloAmount += repVal;
+    }
+  };
+  for (const r of relevantes) {
+    acumular(r.tabValGtos, r.gtos, r.ctrlGtos);
+    acumular(r.tabValDto,  r.dto,  r.ctrlDto);
+  }
+
+  const soloCount = tabSoloCount + repSoloCount;
+  return {
+    steps: [
+      { label: 'Total Tabulado', amount: totalTabulado, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total Reporte', amount: totalReporte, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalTabulado), label: 'Total Tabulado' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: soloCount === 0 ? null : {
+      label: labelSoloUnLadoGsPers(tabSoloCount, repSoloCount),
+      amount: tabSoloAmount + repSoloAmount,
+    },
+  };
+}
+
+/** El texto de "lo que quedó de un solo lado" (D-086), con ambos lados si hace falta. */
+function labelSoloUnLadoGsPers(tabCount, repCount) {
+  const bits = [];
+  if (tabCount > 0) bits.push(`${tabCount} sólo en el Tabulado`);
+  if (repCount > 0) bits.push(`${repCount} sólo en el Reporte de GS Pers`);
+  return `${bits.join(' y ')}, por`;
 }
 
 // Un legajo es "evaluable" si hay algún valor real de GTOS_PERSONALES o
@@ -149,6 +208,40 @@ function gsPersRowHasDiff(r) {
 }
 function gsPersDiffAmount(r) {
   return Math.abs(r.ctrlGtos ?? 0) + Math.abs(r.ctrlDto ?? 0);
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Mismo criterio que brutos.js: dos conceptos independientes por legajo, así
+// que se abre cada legajo en hasta dos instancias (una por concepto con
+// diferencia) para que "byCause" los junte por separado.
+function instanciasPorConceptoGsPers(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (isDiff(r.ctrlGtos)) out.push({ legajo: r.legajo, concepto: 'GTOS_PERSONALES', dif: r.ctrlGtos });
+    if (isDiff(r.ctrlDto))  out.push({ legajo: r.legajo, concepto: 'DTO_COCHERA',      dif: r.ctrlDto });
+  }
+  return out;
+}
+
+function resumenDelGsPers(results) {
+  const legajoKey = makeLegajoKey(results.legajoKeyMode);
+  const instancias = instanciasPorConceptoGsPers(results.rows);
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: currentTolerance(),
+    rows: instancias,
+    diff: (i) => i.dif,
+    key: (i) => legajoKey(i.legajo),
+    // Este control no trae el nombre del legajo (ver COLS_GS_PERS): sin
+    // `unitLabel`, "Por dónde empezar" muestra sólo el número de legajo.
+    cause: (i) => ({ key: i.concepto, label: i.concepto }),
+    top: (i) => ({ legajo: i.legajo, rubro: i.concepto }),
+    bridge: results.bridge || null,
+    // Este control no trae empresa: una sola razón social por corrida.
+    notApplicable: ['group'],
+  });
 }
 
 export function renderGsPersResults(results, container) {
