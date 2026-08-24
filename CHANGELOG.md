@@ -7,6 +7,39 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): el tablero del Resumen llega a Agrupadores, Novedades vs Liquidación, las dos Variaciones y POP — 2026-08-22
+
+- **Es la tanda 3 de `specs/vista-estandar-resumen.md`** (D-091), sobre el tablero que construyó la
+  tanda 1 (D-089). Estos cinco controles ya mostraban el veredicto y la escala de severidad; ahora
+  también muestran el puente de la plata, para qué lado está la diferencia, los cortes (tamaño,
+  rubro causante) y el top 5, igual que Control de Netos.
+- **Cruce por Agrupadores**: el puente separa Nómina Maestra → Archivo Resumen → **diferencia neta**
+  (puede compensar un agrupador con otro) de la **diferencia total** (la misma que ya suma el
+  semáforo). El corte por rubro agrupa por agrupador. **El bloque "Para qué lado" no se muestra
+  todavía** — falta que Willy diga si el signo se lee por legajo o por agrupador (D-091).
+- **Novedades vs Liquidación**: el puente cuenta pares legajo × concepto (Pedido → Diferencia
+  comparada → Liquidado) con las cuatro bandas del cruce como proporción, y "Para qué lado" dice
+  "Liquidado de más" / "Liquidado de menos" en vez del genérico "De más/De menos" — para no leer el
+  signo al revés de lo que pasó.
+- **Variación Sueldos y Variación Conceptos**: el puente es temporal (Período anterior → Variación →
+  Período actual) y el signo se lee "Subieron" / "Bajaron". En Variación Sueldos, donde Jornales y
+  Mensuales van sumados en una sola columna, el corte por rubro ahora sabe distinguir cuál de los dos
+  se movió.
+- **Variación entre quincenas (POP)**: sin el reporte de Axton cargado no hay tablero (no hay nada
+  que cruzar, igual que los controles que sólo generan un archivo). Con Axton cargado, el puente
+  cuenta legajos (Comparados → Con alguna diferencia → Coinciden) — no hay un solo número en pesos
+  que resuma una comparación de valor hora, MOD, altas, bajas y neto sin inventar un criterio.
+- **Ningún cálculo ni conteo del semáforo se movió** en los cinco controles; lo que se agrega es sólo
+  el tablero. De paso se corrigió un enganche en el helper compartido (`resumenStats.js`): un control
+  que declara que no puede mostrar el signo ya no perdía, de yapa, el importe de los otros cortes
+  (rubro causante, tamaño de la diferencia, top 5) — afecta a cualquier control que use ese caso, no
+  sólo a los cinco de esta tanda.
+- 33 asserts nuevos en `tests/resumenTanda3.test.js` (en la cadena) + 3 en `tests/resumenStats.test.js`,
+  con datos inventados y jugadores de Banfield. **No verificado en el navegador ni contra ningún
+  archivo de cliente real.**
+- **Decisiones que esperan a Willy en pantalla**, todo en D-091: el signo de Agrupadores (§7.6), y si
+  la variación neta de Variación Conceptos —que compensa entre dos conceptos que se mueven en
+  direcciones opuestas— es el criterio correcto.
 ### feat(resumen): el checklist de Marval arma su primer tablero real (Cruce Meta4) — 2026-08-22
 
 - **Tanda 2 de `specs/vista-estandar-resumen.md`** (D-090), sobre el tablero que construyó la tanda 1

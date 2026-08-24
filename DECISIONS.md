@@ -3540,3 +3540,82 @@ que falta: es una limitación preexistente del control, no algo que esta tanda t
 
 **Detalle:** `js/controls/rendVsTabu.js`, `js/controls/rendVsAsiento.js`, `tests/resumenCruceMeta4.test.js`,
 `specs/vista-estandar-resumen.md` §4, D-086, D-089.
+---
+
+## D-091 — Tanda 3 del tablero del Resumen: Agrupadores deja abierto el signo (§7.6), Variación Conceptos no, y el puente de POP es de conteos
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 3 de `specs/vista-estandar-resumen.md` (§6): los cinco
+controles del lote Axton/temporales (agrupadores, novedades_liquidacion, variaciones_sueldos,
+variaciones_conceptos, pop_variaciones) publican `summary.resumen`. Willy no estaba disponible
+mientras se hizo el trabajo: las decisiones de abajo quedan tomadas y a la espera de que las
+confirme viéndolas en pantalla.
+
+**1. `resumenStats.js`: el Map interno de la diferencia con signo ya no se apaga cuando 'signed' es
+`notApplicable`.** Antes, `if (diff && aplica('signed'))` acoplaba el insumo compartido (`signedOf`)
+a la aplicabilidad del bloque "Para qué lado": un control que declara 'signed' no aplicable
+(Agrupadores, punto 2) se quedaba también sin importe real en `byCause`, `diffBuckets` y `topUnits`,
+aunque esos bloques se declaren aplicables por separado. Ahora el Map se llena si el control da
+`diff`, sin mirar `notApplicable`, y cada bloque sigue apagándose por su propio nombre
+(`aplica('signed')`, `aplica('buckets')`, …). Para Netos (D-089), que ya declara 'signed' aplicable,
+el comportamiento no cambia: es una corrección al contrato compartido de la tanda 1, no un cambio de
+contrato. Test nuevo en `tests/resumenStats.test.js` ("signed no aplicable no apaga la magnitud de
+los otros cortes").
+   - Alternativa descartada: que cada control que necesite esto arme su propio Map de diferencias por
+     fuera del helper. Se descarta porque reproduciría en varios controles la misma cuenta que
+     `resumenStats` ya hace una vez — exactamente lo que la tanda 1 quiso evitar.
+
+**2. Cruce por Agrupadores: 'signed' y 'topUnits' quedan `notApplicable` en el tablero del Resumen —
+el mismo dilema que D-087 dejó abierto para la ficha, ahora acá.** La spec (§7.6) deja pendiente de
+Willy si "de más/de menos" se lee por legajo con su diferencia NETA (un legajo compensado —un
+agrupador de más, otro de menos— no aparecería en ningún lado) o por agrupador (el mismo legajo
+aparecería en los dos lados); ninguna de las dos es "la cuenta", así que no se inventa una. `topUnits`
+queda afuera por la misma razón: pinta el importe con el signo a la vista (rojo "de más", ámbar "de
+menos") y la magnitud disponible —la diferencia TOTAL de cada legajo, D-087— no tiene ese signo sin
+la misma decisión pendiente. `diffBuckets` y `byCause: agrupador` sí se cablean porque son magnitud
+pura (cuánto, no de qué lado) y no dependen de esa decisión. Los conteos y las claves de
+`resumenStats` van siempre por LEGAJO, nunca legajo × agrupador — la misma regla que ya evitó el
+denominador inflado de este control (CLAUDE.md, "unitsTotal / unitsWithDiff").
+   - Alternativa descartada: leer el signo por agrupador (cada fila legajo × agrupador con su propio
+     signo) sólo para este bloque, aunque el resto del control cuente por legajo. Se descarta porque
+     mezclaría dos unidades distintas adentro del mismo `resumen` de un control, y el mismo legajo
+     aparecería en los dos lados de "Para qué lado" a la vez.
+
+**3. Variación Conceptos: la variación NETA de la fila sí se decide —compensa entre conceptos— y no
+queda pendiente como en Agrupadores.** Un legajo puede tener el concepto 2517 arriba y el 2519 abajo;
+la diferencia que alimenta el resumen es la suma con signo de los dos. Es la misma cuenta que ya usa
+la ficha de este control (D-086, "la variación queda última porque es el residuo") y no se vio una
+segunda lectura en pugna con esa, a diferencia de Agrupadores. **Es una lectura tomada al escribir el
+código, no algo que la spec haya resuelto explícitamente para este control.** PENDIENTE: confirmar
+con un caso real de dos conceptos moviéndose en direcciones opuestas antes de asentarla como
+definitiva.
+
+**4. Novedades vs Liquidación: el puente de conteos (ya previsto en el mapa del §4, D-073) usa
+etiquetas propias en `diffSigned`, no las genéricas "De más/De menos".** Como
+`difImporte = novImporte − liqImporte`, un positivo significa que se pidió más de lo que se liquidó
+("Liquidado de menos") y un negativo lo contrario ("Liquidado de más") — el genérico "De más/De
+menos" leería el signo al revés de lo que pasó. El legajo del que no se pudo comparar nada (D-073)
+entra igual al resumen, con causa `null`, y cae en `unidentifiedCause` en vez de un concepto
+inventado.
+
+**5. Variación entre quincenas (POP): sin el reporte de Axton no hay `resumen`; con Axton, el puente
+es de CONTEOS y no de plata — desvío de lo que el mapa del §4 preveía (un puente temporal).**
+Comparado contra Axton la diferencia es multi-campo (valor hora anterior/actual, MOD, MOD CBU, Alta,
+Baja, Neto) y no hay un solo número con signo que diga de qué lado está un legajo sin inventar un
+criterio; el valor hora, aunque lo hubiera, no se puede sumar entre legajos (D-081). Por eso el
+puente cuenta legajos (Comparados → Con alguna diferencia → Coinciden) y
+`signed`/`buckets`/`group`/`cause`/`top` quedan `notApplicable`.
+   - Alternativa descartada, dejada escrita en el código (`resumenDelControl`, comentario "PENDIENTE
+     DE WILLY"): un puente sobre la variación de NETO entre las dos quincenas, que sí es un número
+     real. No se implementó porque mide algo DISTINTO del chequeo contra Axton que pinta el semáforo
+     de este control — cerraría ese puente sin decir nada sobre si el legajo coincide con Axton.
+
+**Verificación.** 33 asserts nuevos en `tests/resumenTanda3.test.js` (en la cadena de
+`package.json`) + 3 en `tests/resumenStats.test.js`, con datos inventados y jugadores de Banfield.
+Los cinco controles de esta tanda salen de `PENDIENTES` en `tests/resumenContract.test.js`. **No
+verificado contra ningún archivo de cliente real** — no hay uno en el repo con el que llegar a estas
+cinco pantallas.
+
+**Detalle:** `js/controls/resumenStats.js`, `js/controls/agrupadores.js`,
+`js/controls/novedadesLiquidacion.js`, `js/controls/variaciones.js`, `js/controls/popVariaciones.js`,
+`tests/resumenStats.test.js`, `tests/resumenTanda3.test.js`, `tests/resumenContract.test.js`,
+`specs/vista-estandar-resumen.md`, D-070, D-073, D-081, D-086, D-087, D-089.

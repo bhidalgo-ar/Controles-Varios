@@ -124,7 +124,7 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 | Novedades vs Liquidación | sí | Pedido → Diferencia comparada → Liquidado, con las 4 bandas como conteos (D-073) | UO si viene | concepto | el legajo sin nada comparable cuenta para revisar |
 | Variación Sueldos | sí | **temporal**: Anterior → Variación → Actual; lados = "subieron / bajaron" | — | jornales / mensuales | |
 | Variación Conceptos | sí | temporal | — | concepto | |
-| Variación entre quincenas (POP) | sí | temporal | — | — | el valor hora fuera de todo total (D-081) |
+| Variación entre quincenas (POP) | sí | temporal | — | — | el valor hora fuera de todo total (D-081). **Implementado (tanda 3, D-091) distinto de lo previsto acá**: sin Axton no hay `resumen`; con Axton, el puente terminó siendo de **conteos** (legajos comparados/con diferencia/coinciden), no temporal, y S no aplica (no hay un número en pesos que resuma valor hora + MOD + altas/bajas + neto sin inventar un criterio) |
 | EE x CATEG | no | **conteos**: comparados → coinciden → difieren → sin comparar (D-082) | — | por campo — ya lo contesta su solapa "Por campo": el corte del tablero linkea, no duplica | sin signo ni buckets |
 | Acumuladores Ganancias | no | la reconciliación de D-077: TOTAL del crudo → componentes | — | — | sin unidades de cruce: sin escala; veredicto de la reconciliación |
 | Asiento de Remuneraciones | sí (DEBE > / < HABER) | DEBE → HABER → descuadre | — | centro de costo | unidad cuenta; cuadra al centavo, la escala muestra % de cuentas que no cuadran |
@@ -173,8 +173,14 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    **Hecha el 2026-08-22 (D-090).** Los seis publican `summary.resumen`; con éstos, un run del
    checklist de Marval arma su primer tablero 3b real con datos en los seis. Queda pendiente que
    Willy lo mire en el navegador (bloqueado acá por el CDN de xlsx.js/Dexie).
-3. **Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
-   variaciones_sueldos, variaciones_conceptos, pop_variaciones.
+3. ~~**Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
+   variaciones_sueldos, variaciones_conceptos, pop_variaciones.~~ **Hecha el 2026-08-22 (D-091).**
+   Las cinco publican `summary.resumen`. Agrupadores separa la diferencia NETA de la TOTAL en su
+   puente y deja el signo pendiente de Willy (§7.6); Novedades vs Liquidación lee el signo como
+   "Liquidado de más/de menos"; las dos Variaciones van con puente temporal ("Subieron"/"Bajaron");
+   POP publica `resumen` sólo con el reporte de Axton cargado y con un puente de **conteos**, no el
+   temporal que preveía el mapa del §4 (nota agregada ahí). Detalle en D-091. PR en borrador,
+   esperando la mirada de Willy sobre §7.6 y el punto 3 de D-091.
 4. **Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
    novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).
 5. **Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
