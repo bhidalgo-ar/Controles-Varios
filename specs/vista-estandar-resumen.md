@@ -1,8 +1,9 @@
 # Vista estándar del Resumen — el veredicto del run y dónde están los errores, para los 21 controles
 
-**Estado:** **las seis tandas están implementadas.** La tanda 1 el 2026-08-21 (el tablero 3a/3b +
-`resumenStats` + Control de Netos de piloto + los dos candados del §8, **D-089**, mergeada a `main`
-en el PR #193) y las tandas 2 a 6 el 2026-08-22, cada una en su chat en paralelo: tanda 2 Cruce
+**Estado:** **las seis tandas están implementadas y mergeadas a `main`.** La tanda 1 el 2026-08-21
+(el tablero 3a/3b + `resumenStats` + Control de Netos de piloto + los dos candados del §8, **D-089**,
+PR #193) y las tandas 2 a 6 el 2026-08-22, cada una en su chat en paralelo, integradas en una sola
+rama y mergeadas juntas el 2026-08-24 en el PR #195: tanda 2 Cruce
 Meta4/Marval (**D-090**), tanda 3 el lote Axton/temporales (**D-091**), tanda 4 los que generan
 archivo (**D-092**), tanda 5 contables + acreditaciones (**D-093**) y tanda 6 los dos sin cruce de
 importes (**D-094**). **Con la tanda 6 los 21 controles publican `summary.resumen` y el candado de
