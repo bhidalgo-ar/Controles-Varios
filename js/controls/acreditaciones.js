@@ -25,6 +25,7 @@ import { renderFichasPanel } from '../ui/fichaList.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 
 /**
  * Las columnas de cada hoja de detalle, en orden, tomadas del contrato — la
@@ -326,19 +327,25 @@ function buildReport(rows, cfg, descartadas, totalOrigen, period) {
     neto:    g.total,
   }));
 
+  const summary = {
+    listas:          listas.length,
+    pendingGroups:   pendingGroups.length,
+    acreditaciones:  rows.length,
+    descartadas,
+    totalAcreditado,
+    sinAsignarTotal,
+    totalOrigen,
+    diferencia,
+    listasConAlerta: listas.filter(l => l.alerts > 0).length,
+    bancos:          bancos.length,
+  };
+
   return {
-    summary: {
-      listas:          listas.length,
-      pendingGroups:   pendingGroups.length,
-      acreditaciones:  rows.length,
-      descartadas,
-      totalAcreditado,
-      sinAsignarTotal,
-      totalOrigen,
-      diferencia,
-      listasConAlerta: listas.filter(l => l.alerts > 0).length,
-      bancos:          bancos.length,
-    },
+    summary,
+    // El puente del Resumen: Total liquidación → Diferencia → Total
+    // acreditado. Se agrega ACÁ, con los mismos números del cierre — el
+    // tablero no recalcula nada.
+    bridge: bridgeDeAcreditaciones(summary),
     listas,
     sinAsignar: pendingGroups,
     bancos,
@@ -353,6 +360,33 @@ function buildReport(rows, cfg, descartadas, totalOrigen, period) {
     _descartadas: descartadas,
     _totalOrigen: totalOrigen,
     _cfg:         cfg,
+  };
+}
+
+/**
+ * Sólo entran al puente los listados YA asignados a una lista (D-086): lo que
+ * quedó "SIN ASIGNAR" se informa aparte, con su importe, y no se resta contra
+ * nada — la misma regla que Netos aplicó para el legajo sin neto. Con eso, el
+ * puente cierra exacto: Total liquidación (ya asignado) + Diferencia = Total
+ * acreditado, y `Diferencia` es el mismo número que el chequeo de cierre del
+ * control (`summary.diferencia`).
+ */
+function bridgeDeAcreditaciones(s) {
+  const totalLiquidacion = round2(s.totalOrigen - s.sinAsignarTotal);
+  return {
+    title: 'De dónde sale la diferencia',
+    steps: [
+      { label: 'Total liquidación', amount: totalLiquidacion, tone: 'ink' },
+      { label: 'Diferencia',        amount: s.diferencia,
+        tone: Math.abs(s.diferencia) <= CIERRE_EPS ? 'ink' : 'error' },
+      { label: 'Total acreditado',  amount: s.totalAcreditado, tone: 'ink' },
+    ],
+    uncompared: s.pendingGroups === 0 ? null : {
+      label: s.pendingGroups === 1
+        ? '1 listado sin fecha de acreditación, por'
+        : `${s.pendingGroups} listados sin fecha de acreditación, por`,
+      amount: s.sinAsignarTotal,
+    },
   };
 }
 
@@ -474,7 +508,83 @@ export function summarizeAcreditacionesReporte(results) {
     contextNote: cierraOk
       ? `cierra exacto contra el total del archivo de Axton (${fmtNum(s.totalOrigen)})`
       : `el total del archivo de Axton es ${fmtNum(s.totalOrigen)}`,
+    resumen: resumenDeAcreditaciones(results, cierraOk),
   };
+}
+
+/**
+ * El banco de un grupo de filas (una lista o un grupo pendiente), sólo si es
+ * el MISMO para todas: una lista no se arma por banco, así que puede juntar
+ * empleados de varios. Atribuirle uno solo inventaría un dato — un grupo
+ * mixto va a "Sin identificar" (la banda rayada de resumenStats.js), que es
+ * justo lo que corresponde cuando la atribución es parcial.
+ */
+function bancoDeGrupo(rows) {
+  const bancos = new Set(rows.map(r => r.banco).filter(Boolean));
+  return bancos.size === 1 ? [...bancos][0] : null;
+}
+
+/** Misma idea que `bancoDeGrupo`, para la empresa de un grupo pendiente. */
+function empresaDeGrupo(rows) {
+  const empresas = new Set(rows.map(r => r.empresa).filter(Boolean));
+  return empresas.size === 1 ? [...empresas][0] : null;
+}
+
+/**
+ * El sub-objeto del tablero del Resumen (resumenStats.js). La unidad es la
+ * LISTA (D-021): junto a las listas ya armadas entran los grupos "SIN
+ * ASIGNAR", que cuentan como una unidad más con diferencia — el mismo
+ * criterio que ya usa `estadoDeLista`/el semáforo, reusado acá para que este
+ * corte nunca cuente distinto.
+ *
+ * **`diffSigned` sólo lo tiene el grupo pendiente** (lo que todavía no se
+ * acreditó, plata "de menos" con signo negativo). Una lista con alertas de
+ * integridad (CBU inválido, duplicado, importe ≤ 0) no tiene un importe de
+ * diferencia propio — la alerta es de calidad de dato, no de cuadre — así que
+ * no se le inventa un signo (§4 de la spec: "si un control guarda sólo el
+ * valor absoluto, el bloque se omite para esa unidad").
+ *
+ * Nada de esto toca el .xlsx que recibe Finanzas: es sólo lo que pinta esta
+ * pantalla (D-020).
+ */
+function resumenDeAcreditaciones(results, cierraOk) {
+  const unidades = [
+    ...results.listas.map(l => ({
+      tipo: 'lista', label: listaLabel(l), rows: l.rows, empresa: l.empresa || null,
+      total: l.total, conDif: estadoDeLista(l, cierraOk) === 'conDif',
+    })),
+    ...results.sinAsignar.map(g => ({
+      tipo: 'pendiente', label: describeAnchorKey(g.key), rows: g.rows, empresa: null,
+      total: g.total, conDif: true,
+    })),
+  ];
+  const conDif = unidades.filter(u => u.conDif);
+
+  const causaDe = (u) => {
+    const banco = bancoDeGrupo(u.rows);
+    return banco ? { key: banco, label: banco } : null;
+  };
+  const empresaDe = (u) => (u.tipo === 'lista' ? u.empresa : empresaDeGrupo(u.rows));
+
+  return resumenStats({
+    unit: 'lista',
+    tolerance: CIERRE_EPS,
+    rows: conDif,
+    allRows: unidades,
+    diff: (u) => (u.tipo === 'pendiente' ? -u.total : null),
+    unitLabel: (u) => u.label,
+    group: results.splitByEmpresa ? { empresa: empresaDe } : null,
+    cause: causaDe,
+    top: (u) => ({ legajo: null, nombre: u.label, empresa: empresaDe(u), rubro: causaDe(u)?.label ?? null }),
+    bridge: results.bridge || null,
+    // No hay clave de legajo que ofrecerle a los cortes cruzados de 3b: la
+    // unidad acá es la lista, y no entra a "legajos repetidos" (§4 de la
+    // spec) — no se inventa una equivalencia.
+    notApplicable: ['keys'],
+    sideLabels: {
+      under: { label: 'Sin asignar', note: 'liquidado pero todavía sin fecha de acreditación' },
+    },
+  });
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────

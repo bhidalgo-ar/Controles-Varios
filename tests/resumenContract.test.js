@@ -42,10 +42,8 @@ const PENDIENTES = {
   // pop_variaciones).
   // Tanda 4 — los que generan archivo — migrada el 2026-08-22 (brutos_reporte,
   // gs_pers_reporte, nr_reporte, novedades_importador).
-  // Tanda 5 — contables + acreditaciones
-  finadiet_asiento:       'tanda 5',
-  conta_desglosada:       'tanda 5',
-  acreditaciones_reporte: 'tanda 5',
+  // Tanda 5 — contables + acreditaciones — migrada el 2026-08-22 (finadiet_asiento,
+  // conta_desglosada, acreditaciones_reporte).
   // Tanda 6 — los dos sin cruce de importes
   cat_x_empleados:        'tanda 6',
   acumuladores_ganancias: 'tanda 6',

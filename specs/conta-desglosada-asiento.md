@@ -9,7 +9,10 @@ paso se corrige un criterio de clasificación que había quedado mal en la tanda
 pasa a leerse "Sin comparar" y no "Con diferencia" (D-085, ver §3 y §5). Ningún número que calcula el
 control cambió —lo que cambia es la etiqueta de pantalla—: se verificó corriendo el módulo anterior y el
 nuevo sobre la misma entrada sintética y comparando los balances, las filas del asiento, las cuentas
-patrimoniales, las líneas sin código y el semáforo completo.
+patrimoniales, las líneas sin código y el semáforo completo. **Publica `summary.resumen` el
+2026-08-22** (tanda 5 de `specs/vista-estandar-resumen.md`, D-093): entra al tablero del Resumen del
+run con el puente DEBE → HABER → descuadre y el corte por tipo (Resultado/Patrimonial), reusando las
+mismas fichas — tampoco acá se movió ningún cálculo de `armarDesglosada`/`armarAsiento`.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza
 dos archivos, arma tres. A partir del reporte "Totales de Concepto" de Axton produce la Contabilidad

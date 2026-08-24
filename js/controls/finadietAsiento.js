@@ -40,6 +40,7 @@ import { periodToLabel, periodSuffix } from '../utils/dates.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet } from '../exports/contractSheet.js';
 import { acumularConcepto, conceptosEnOrden } from './cuentaConceptos.js';
+import { resumenStats } from './resumenStats.js';
 
 // Tolerancia de comparación de importes del proyecto (CLAUDE.md): los floats de
 // Excel no dan igualdad exacta. Un centavo de descuadre en un asiento ES un
@@ -241,6 +242,9 @@ export function runFinadietAsiento(primaryRows, _tabRows, mapping) {
     asiento,
     diferencia,
     cierra: Math.abs(diferencia) <= TOL,
+    // El puente del Resumen: DEBE → HABER → descuadre. Se agrega ACÁ, con los
+    // mismos totales que ya calculó el asiento — el tablero no recalcula nada.
+    bridge: bridgeDelAsiento(asiento, diferencia),
     ctasPorCentro: armarPlana(accPorCentro),
     ctasGral:      armarPlana(accGral),
     sinClasificar: {
@@ -250,6 +254,18 @@ export function runFinadietAsiento(primaryRows, _tabRows, mapping) {
     ladosSinCentro,
     ladosClasificados,
     filasOrigen: primaryRows.length,
+  };
+}
+
+function bridgeDelAsiento(asiento, diferencia) {
+  return {
+    title: 'De dónde sale el descuadre',
+    steps: [
+      { label: 'Debe',      amount: asiento.totalDebe,  tone: 'ink' },
+      { label: 'Haber',     amount: asiento.totalHaber, tone: 'ink' },
+      { label: 'Descuadre', amount: diferencia, note: 'Debe − Haber',
+        tone: Math.abs(diferencia) <= TOL ? 'ink' : 'error' },
+    ],
   };
 }
 
@@ -475,11 +491,56 @@ export function summarizeFinadietAsiento(results) {
     contextNote: results.cierra
       ? 'el asiento cierra: Debe = Haber'
       : `Debe ${fmtNum(results.asiento.totalDebe)} contra Haber ${fmtNum(results.asiento.totalHaber)}`,
+    resumen: resumenDelAsiento(results),
   };
 }
 
 function contarLineas(asiento) {
   return asiento.bloques.reduce((acc, b) => acc + b.lineas.length, 0);
+}
+
+/**
+ * El sub-objeto del tablero del Resumen (resumenStats.js). La unidad es la
+ * CUENTA: reusa exactamente las fichas y el estado que ya arma
+ * `fichasDeAsiento`/`estadoDeCuentaAsiento` (declaradas más abajo, function
+ * declarations — el orden en el archivo no importa), así este corte nunca
+ * puede contar distinto que el semáforo o que la solapa Fichas del mismo run.
+ *
+ * `diffSigned` se lee DEBE > / < HABER (`conciliacion.saldo`, que ya viene
+ * firmado así — ver fichaCuenta.js). Cuando el asiento cierra, las únicas
+ * unidades con diferencia son las sin clasificar, que no tienen importe
+ * cargado (el archivo no trae uno): el bloque sale `null` para ese caso, no
+ * en cero. `byCause` es el centro de costo — sólo lo tienen las cuentas de
+ * Resultado; las Patrimoniales y las sin clasificar van a "Sin identificar".
+ */
+function resumenDelAsiento(results) {
+  const fichas = fichasDeAsiento(results);
+  const conDif = fichas.filter(f => f.estado !== 'centavo');
+
+  const causaDe = (f) => (f.bloque?.tipo === 'centro'
+    ? { key: f.bloque.label, label: f.bloque.label }
+    : null);
+  const labelDe = (f) => (f.nombre ? `${f.cuenta} · ${f.nombre}` : f.cuenta);
+
+  return resumenStats({
+    unit: 'cuenta',
+    tolerance: TOL,
+    rows: conDif,
+    allRows: fichas,
+    diff: (f) => f.conciliacion?.saldo ?? null,
+    unitLabel: labelDe,
+    cause: causaDe,
+    top: (f) => ({ legajo: null, nombre: labelDe(f), empresa: null, rubro: causaDe(f)?.label ?? null }),
+    bridge: results.bridge || null,
+    // No hay empresa (un solo archivo, un solo cliente) ni una clave de
+    // legajo que ofrecerle a los cortes cruzados de 3b: la unidad acá es la
+    // cuenta, y no entra a "legajos repetidos" (§4 de la spec).
+    notApplicable: ['group', 'keys'],
+    sideLabels: {
+      over:  { label: 'Debe > Haber' },
+      under: { label: 'Haber > Debe' },
+    },
+  });
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────

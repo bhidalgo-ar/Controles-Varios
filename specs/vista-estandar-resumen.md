@@ -127,9 +127,9 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 | Variación entre quincenas (POP) | sí | temporal | — | — | el valor hora fuera de todo total (D-081). **Implementado (tanda 3, D-091) distinto de lo previsto acá**: sin Axton no hay `resumen`; con Axton, el puente terminó siendo de **conteos** (legajos comparados/con diferencia/coinciden), no temporal, y S no aplica (no hay un número en pesos que resuma valor hora + MOD + altas/bajas + neto sin inventar un criterio) |
 | EE x CATEG | no | **conteos**: comparados → coinciden → difieren → sin comparar (D-082) | — | por campo — ya lo contesta su solapa "Por campo": el corte del tablero linkea, no duplica | sin signo ni buckets |
 | Acumuladores Ganancias | no | la reconciliación de D-077: TOTAL del crudo → componentes | — | — | sin unidades de cruce: sin escala; veredicto de la reconciliación |
-| Asiento de Remuneraciones | sí (DEBE > / < HABER) | DEBE → HABER → descuadre | — | centro de costo | unidad cuenta; cuadra al centavo, la escala muestra % de cuentas que no cuadran |
-| Contabilidad Desglosada + Asiento | sí | DEBE → HABER → descuadre | — | tipo (resultado / patrimonial) | «Sin comparar» para la cuenta sin código (D-085); byCause por rubro no aplica: la unidad ya es la cuenta |
-| Acreditaciones | sí | Total liquidación → Diferencia → Total acreditado | empresa (si la config separa) | banco | unidad lista (D-021); el archivo de Finanzas no gana ni un dato (D-020) |
+| Asiento de Remuneraciones | sí (DEBE > / < HABER), sólo si no cierra — con el asiento cerrado las únicas unidades con diferencia (sin clasificar) no tienen importe cargado | DEBE → HABER → descuadre | — | centro de costo — sólo las cuentas de Resultado lo tienen; Patrimoniales y sin clasificar van a "Sin identificar" | unidad cuenta; cuadra al centavo, la escala muestra % de cuentas que no cuadran |
+| Contabilidad Desglosada + Asiento | sí (DEBE > / < HABER) | DEBE → HABER → descuadre | — | tipo (resultado / patrimonial); la cuenta sin código no tiene tipo asignable sin inventarlo → "Sin identificar" | «Sin comparar» para la cuenta sin código (D-085); byCause por rubro no aplica: la unidad ya es la cuenta |
+| Acreditaciones | sólo el grupo pendiente (D-093): lo que todavía no se acreditó, siempre "de menos" | Total liquidación → Diferencia → Total acreditado | empresa (si la config separa) — sólo si es la MISMA para toda la lista/grupo | banco — ídem, sólo si no es ambiguo (D-093) | unidad lista (D-021); el archivo de Finanzas no gana ni un dato (D-020) |
 | Brutos — Generar Reporte | no | no cruza: qué se generó | — | — | veredicto del archivo; entra a la grilla de 3b igual |
 | GS Pers — Generar Reporte | no | ídem | — | — | |
 | Control NR — Generar Reporte | no | ídem | — | — | |
@@ -188,8 +188,13 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    `buildGroupCardHtml` sumó el modo por unidades de D-092. El veredicto de un run de un solo control
    ahora reproduce el `headline` de ese control en vez del texto genérico fijo. Falta que Willy vea los
    textos exactos en pantalla (§7 punto 9).
-5. **Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
-   acreditaciones_reporte — D-084/D-085 y D-020/D-021 intocables.
+5. ~~**Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
+   acreditaciones_reporte.~~ **Hecha el 2026-08-22 (D-093).** Los dos contables reusan las fichas que
+   ya arman `fichasDeAsiento`/`fichasDeCuentas` para no volver a decidir quién tiene diferencia; el
+   puente es DEBE → HABER → descuadre en los dos. Acreditaciones reusa `estadoDeLista`; el puente es
+   Total liquidación → Diferencia → Total acreditado, con lo "SIN ASIGNAR" en `bridge.uncompared`
+   (D-086) — el .xlsx de Finanzas no ganó ninguna columna (D-020 sigue en verde). D-084/D-085 y
+   D-020/D-021 quedaron intocados: ningún cálculo ni conteo existente se movió.
 6. **Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.
 
 Las tandas 2 a 6 dependen sólo de la 1 y no comparten módulos entre sí — pueden correr en

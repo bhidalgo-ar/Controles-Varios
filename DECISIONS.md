@@ -3646,3 +3646,70 @@ al anterior.
 **Detalle:** `js/ui/controlsResults.js` (`buildGroupCardHtml`), `js/controls/novedadesImportador.js`
 (`novedadesImportadorBridge`, `resumen.byGroup` con la clave `empresa`), D-077, D-078,
 `specs/vista-estandar-resumen.md` §4 y §6.
+---
+
+## D-093 — Tanda 5 del tablero del Resumen: los dos contables reusan sus fichas; Acreditaciones sólo firma un signo donde no hay ambigüedad
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 5 de `specs/vista-estandar-resumen.md` §6 —
+`finadiet_asiento`, `conta_desglosada` y `acreditaciones_reporte` publican `summary.resumen`. Los tres
+comparten que su unidad no es el legajo (cuenta contable en los dos primeros, D-021 en el tercero), y
+que "quién tiene diferencia" ya lo decidieron piezas existentes del propio control (`fichasDeAsiento`,
+`fichasDeCuentas`, `estadoDeLista`) antes de que existiera el tablero del Resumen.
+
+**Los dos contables reusan sus fichas, no vuelven a decidir.** `resumenDelAsiento`/`resumenDelConta`
+llaman a `fichasDeAsiento(results)`/`fichasDeCuentas(results)` y filtran por `estado !== 'centavo'`:
+son exactamente las mismas fichas y el mismo estado que ya pinta la solapa Fichas y que ya cuenta
+`unitsWithDiff` en el `summarize`. La alternativa —recalcular "quién tiene diferencia" de nuevo en el
+helper del Resumen— es la que el propio `resumenStats.js` prohíbe en su comentario de cabecera ("esta
+pieza agrupa y suma; nunca decide"), y además abriría la puerta a que la solapa Fichas y el tablero
+del Resumen cuenten distinto en el mismo run.
+
+**`diffSigned` se lee `conciliacion.saldo`** (DEBE − HABER, firmado así desde `fichaCuenta.js`, D-084).
+En el Asiento de Remuneraciones sólo tiene datos cuando el asiento **no** cierra: con el asiento
+cerrado, las únicas unidades que cuentan como diferencia son las cuentas/centros sin clasificar, que no
+tienen un importe cargado en el archivo (el bloque sale `null`, no en cero). `byCause` es el centro de
+costo en el Asiento (sólo lo tienen las cuentas de Resultado) y el tipo Resultado/Patrimonial en la
+Desglosada (`esPatrimonial(numero)`); en los dos, lo que no puede atribuirse —incluida la cuenta sin
+código de D-085, que no tiene tipo asignable sin inventarlo— va a "Sin identificar", nunca a un rubro
+puesto por default.
+
+**Acreditaciones: `diffSigned`/`byCause`/`byGroup` no se le inventan a una lista.** La lista es un
+agregado de varios empleados y no se arma por banco ni por importe, así que no tiene un signo, un banco
+o una empresa propios de forma automática:
+1. **El único signo con datos ciertos es el del grupo "SIN ASIGNAR"** — plata liquidada que todavía no
+   se acreditó, siempre "de menos". Una lista con alertas de integridad (CBU inválido, duplicado,
+   importe ≤ 0) no tiene un importe de diferencia bien definido: la alerta es de calidad de dato, no de
+   cuadre, y firmarle un signo (por ejemplo, tratar un duplicado como "de más" por el importe repetido)
+   asumiría cuál de las dos filas es la real, cosa que el control no decide. Se descarta.
+2. **`byCause` (banco) y `byGroup.empresa`** se asignan sólo si son el **mismo valor para todas las
+   filas** de la lista o del grupo pendiente; una lista mixta va a "Sin identificar" en vez de que se le
+   pegue el banco de la primera fila que aparece, que sería inventar un dato sobre un agregado que no
+   lo tiene.
+3. El puente **Total liquidación → Diferencia → Total acreditado** deja afuera del "Total liquidación"
+   lo que está en `sinAsignar` (D-086, la misma regla que Netos aplicó al legajo sin neto): así
+   `Diferencia` es el mismo número que ya usa el chequeo de cierre del control (`summary.diferencia`) y
+   el puente cierra exacto. Lo "SIN ASIGNAR" va en `bridge.uncompared`, con su importe, y no se resta
+   contra nada.
+
+**Nada de esto agrega una columna a ningún export**: los tres controles siguen escribiendo lo mismo
+que escribían — verificado con el assert de D-020 (las 7 columnas del `.xlsx` de Acreditaciones) y sin
+tocar `armarDesglosada`/`armarAsiento` de `contaDesglosada.js`, `armarAsiento` de `finadietAsiento.js`
+ni `buildReport` de `acreditaciones.js` más que para agregar el campo `bridge` al lado de `summary`.
+Ningún cálculo ni conteo del semáforo se movió en los tres.
+
+**Alternativas descartadas:** firmarle a cada lista de Acreditaciones un signo derivado de sus alertas
+(ver punto 1); repartir `byCause`/`byGroup` sobre la fila "predominante" de una lista mixta en vez de
+"Sin identificar" (inventa una mayoría donde no se pidió ninguna); calcular `diffSigned`/`byCause` de
+los dos contables sobre las líneas planas de la desglosada/el asiento en vez de sobre las fichas ya
+armadas (duplica la decisión de "quién tiene diferencia" en dos lugares del mismo control).
+
+**Motivo:** Pedido de Willy, con la lista de campos por control ya relevada en el §4 de la spec
+(D-084/D-085 y D-020/D-021 declarados intocables). Las decisiones de Acreditaciones (puntos 1 y 2) no
+estaban en la spec y las tomó quien implementó la tanda — quedan para que Willy las confirme viendo el
+tablero, no para que se re-abran solas en la próxima tanda.
+
+**Dónde vive el detalle.** `js/controls/finadietAsiento.js` (`resumenDelAsiento`, `bridgeDelAsiento`),
+`js/controls/contaDesglosada.js` (`resumenDelConta`, `bridgeDelConta`), `js/controls/acreditaciones.js`
+(`resumenDeAcreditaciones`, `bridgeDeAcreditaciones`, `bancoDeGrupo`, `empresaDeGrupo`),
+`tests/resumenContract.test.js`, `specs/vista-estandar-resumen.md` §4 y §6, D-020, D-021, D-084, D-085,
+D-086, D-089.

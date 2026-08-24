@@ -7,6 +7,26 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): Asiento de Remuneraciones, Contabilidad Desglosada y Acreditaciones entran al tablero del Resumen — 2026-08-22
+
+- **Tanda 5 de `specs/vista-estandar-resumen.md`** (D-093). Estos tres controles ya tenían el tablero
+  disponible desde la tanda 1 (D-089) pero no publicaban los datos que lo llenan, así que su Resumen
+  seguía en blanco más allá del veredicto. Ahora, cuando el analista corre uno solo o los mezcla con
+  otros controles en el mismo run, ve el puente de la plata, para qué lado está la diferencia y el
+  corte por causa, igual que ya lo ve en Control de Netos.
+- **Asiento de Remuneraciones (FINADIET) y Contabilidad Desglosada + Asiento (COTY).** El puente es
+  DEBE → HABER → descuadre. Cuando el asiento no cierra, el corte "Para qué lado" muestra qué cuentas
+  empujan hacia el Debe y cuáles hacia el Haber, y el corte por causa agrupa por centro de costo (en el
+  Asiento) o por tipo Resultado/Patrimonial (en la Desglosada) — la cuenta sin código de D-085 sigue
+  sin tipo asignable, así que va a "Sin identificar" en vez de a un rubro inventado.
+- **Acreditaciones.** El puente es Total liquidación → Diferencia → Total acreditado, con lo que
+  todavía está "SIN ASIGNAR" mostrado aparte, sin restarse contra nada. El corte por banco y el de
+  empresa sólo se pintan cuando todos los empleados de una lista comparten el mismo valor — una lista
+  con varios bancos no se le atribuye a uno solo. El archivo que recibe Finanzas no ganó ninguna
+  columna (D-020 sigue en verde).
+- Ningún cálculo ni conteo del semáforo se movió en los tres controles: son campos nuevos y opcionales
+  (`resumen`, agregado al `summarize`; `bridge`, agregado al `run()`), no ediciones de lo que ya
+  calculaban. `tests/resumenContract.test.js` ya no los lista como pendientes.
 ### feat(resumen): Brutos, GS Pers, NR e Importador de Novedades entran al tablero del Resumen — 2026-08-22
 
 - **Es la tanda 4 de `specs/vista-estandar-resumen.md`** (D-092), sobre el tablero que puso la tanda 1
