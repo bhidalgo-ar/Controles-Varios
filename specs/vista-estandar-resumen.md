@@ -1,9 +1,14 @@
 # Vista estándar del Resumen — el veredicto del run y dónde están los errores, para los 21 controles
 
-**Estado:** **tanda 1 implementada el 2026-08-21** (el tablero 3a/3b + `resumenStats` + Control de
-Netos de piloto + los dos candados del §8) — ver **D-089**. Las tandas 2 a 6, que cablean los campos
-del `summarize` de los otros 20 controles, siguen pendientes y pueden correr en paralelo. El piloto
-espera que Willy lo mire en el navegador.
+**Estado:** **las seis tandas están implementadas.** La tanda 1 el 2026-08-21 (el tablero 3a/3b +
+`resumenStats` + Control de Netos de piloto + los dos candados del §8, **D-089**, mergeada a `main`
+en el PR #193) y las tandas 2 a 6 el 2026-08-22, cada una en su chat en paralelo: tanda 2 Cruce
+Meta4/Marval (**D-090**), tanda 3 el lote Axton/temporales (**D-091**), tanda 4 los que generan
+archivo (**D-092**), tanda 5 contables + acreditaciones (**D-093**) y tanda 6 los dos sin cruce de
+importes (**D-094**). **Con la tanda 6 los 21 controles publican `summary.resumen` y el candado de
+`tests/resumenContract.test.js` se queda sin excepciones.** Lo que falta de todo el frente es una
+sola cosa: que Willy mire el tablero en el navegador (el entorno de desarrollo no llega al CDN de
+xlsx.js/Dexie, así que no se pudo verificar acá), y que cierre los puntos abiertos del §7.
 Reescrita el mismo día al recibir el handoff completo del diseño
 (`docs/handoff-resumen-netos.md` — pantallas 3a y 3b del canvas de Netos): la primera versión de
 esta spec, escrita sin el handoff, asumía que el rediseño era de la solapa Resumen de adentro de
@@ -112,22 +117,22 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 | Control | S | Puente — la forma | byGroup | byCause | Nota |
 |---|---|---|---|---|---|
 | **Control de Netos** | ✅ hecho | ✅ **el del diseño**, agregado en el `run()` (`bridge`): entra sólo lo comparable y el legajo sin neto se informa aparte (D-086); el paso "Sin explicar" va **con signo** para que el puente cierre contra la fila TOTAL de la Planilla — el bruto lo dice "Para qué lado" | ✅ **empresa**, sólo si la corrida trae más de un Tabulado | ✅ **las marcas que el control detecta** (básico fuera de escala · tope sin declarar · perfil de jubilado sin confirmar) + sin identificar. **NO la cascada**: la cascada es lo explicado, y atribuirle la diferencia diría lo contrario de lo que pasó (D-089). Willy puede cambiar la regla en pantalla | el piloto |
-| Brutos — Controlar | sí | Total Tabulado → Diferencia comparada → Total Reporte | — | los 2 conceptos | |
-| GS Pers — Controlar | sí | ídem | — | los 2 conceptos | |
-| Control NR — Controlar | sí | dos totales con **D-086**: la diferencia suma sólo lo comparable, lo sin comparar se dice aparte | — | 18 conceptos o las 2 bandas (arrancar por banda; Willy elige en pantalla) | |
-| Rendimiento vs Tabulado | sí | Total Rendimiento → Diferencia comparada → Total Tabulado | — | las 5 categorías | unidad CC: el copy pasa por `unitNames()` |
-| Rendimiento vs Asiento | sí | ídem, contra el asiento | — | las 5 categorías | unidad CC |
-| Rendimiento x EE | sí | dos totales | — | — (un solo importe) | |
+| **Brutos — Controlar** | ✅ hecho | ✅ Total Tabulado → Diferencia comparada → Total Reporte (D-086) | — no aplica (una sola razón social) | ✅ los 2 conceptos (SAL_BASE, A_CTA_FUT_AUMEN), cada legajo se abre en hasta 2 instancias para que `byCause` los separe | tanda 2, D-090. Nombre viaja en `topUnits` |
+| **GS Pers — Controlar** | ✅ hecho | ✅ ídem (GTOS_PERSONALES, DTO_COCHERA) (D-086) | — no aplica | ✅ los 2 conceptos, mismo patrón que Brutos | tanda 2, D-090. **No trae nombre de legajo** (el archivo no lo trae): `topUnits` sale con `nombre: null`, no inventado |
+| **Control NR — Controlar** | ✅ hecho | ✅ dos totales con **D-086**: la diferencia suma sólo lo comparable, lo sin comparar se dice aparte — es el caso que motivó la decisión (un concepto liquidado de un solo lado) | — no aplica | ✅ **arranca por las 2 bandas** (Indemnizatorios / Otros NR), no por los 18 conceptos — resuelto §7.7: Willy elige en pantalla si conviene abrir a concepto | tanda 2, D-090 |
+| **Rendimiento vs Tabulado** | ✅ hecho | ✅ Total Rendimiento → Diferencia comparada → Total Tabulado (D-086). **Limitación preexistente**: no hay lista de CC del Tabulado sin Rendimiento (sólo la inversa, `sinTabData`), así que "sin comparar" del puente sólo informa esa única dirección | — no aplica (la unidad ya es el CC) | ✅ las 5 categorías (nunca COSTO TOTAL, que es la suma) | unidad `'cc'`: el copy pasa por `unitNames()`. Clave de unidad para el corte cruzado de 3b unificada con Rendimiento vs Asiento por nombre, código de respaldo (**D-090**) |
+| **Rendimiento vs Asiento** | ✅ hecho | ✅ ídem, contra el asiento (D-086). Acá SÍ hay las dos direcciones (`ccsSoloEnConta` ya existía): el puente informa "sin comparar" de los dos lados | — no aplica | ✅ las 5 categorías, mismo criterio que Rendimiento vs Tabulado | unidad `'cc'`. Misma clave de unidad que Rendimiento vs Tabulado, ver **D-090** |
+| **Rendimiento x EE** | ✅ hecho | ✅ dos totales, cubre las dos direcciones de "sin comparar" (el control ya traía `sinTabData`/`soloEnTab`) | — no aplica | — no aplica (un solo importe, Costo Total) | tanda 2, D-090 |
 | Cruce por Agrupadores | sí | Nómina → Diferencia → Resumen, con la **neta** y la **total** separadas (D-087) | — | agrupador | los conteos SIEMPRE en legajos, nunca en filas legajo × agrupador (el semáforo ya mintió en verde por eso). Lados: pendiente §7.6 |
 | Novedades vs Liquidación | sí | Pedido → Diferencia comparada → Liquidado, con las 4 bandas como conteos (D-073) | UO si viene | concepto | el legajo sin nada comparable cuenta para revisar |
 | Variación Sueldos | sí | **temporal**: Anterior → Variación → Actual; lados = "subieron / bajaron" | — | jornales / mensuales | |
 | Variación Conceptos | sí | temporal | — | concepto | |
-| Variación entre quincenas (POP) | sí | temporal | — | — | el valor hora fuera de todo total (D-081) |
+| Variación entre quincenas (POP) | sí | temporal | — | — | el valor hora fuera de todo total (D-081). **Implementado (tanda 3, D-091) distinto de lo previsto acá**: sin Axton no hay `resumen`; con Axton, el puente terminó siendo de **conteos** (legajos comparados/con diferencia/coinciden), no temporal, y S no aplica (no hay un número en pesos que resuma valor hora + MOD + altas/bajas + neto sin inventar un criterio) |
 | EE x CATEG | no | **conteos**: comparados → coinciden → difieren → sin comparar (D-082) | — | por campo — ya lo contesta su solapa "Por campo": el corte del tablero linkea, no duplica | sin signo ni buckets |
 | Acumuladores Ganancias | no | la reconciliación de D-077: TOTAL del crudo → componentes | — | — | sin unidades de cruce: sin escala; veredicto de la reconciliación |
-| Asiento de Remuneraciones | sí (DEBE > / < HABER) | DEBE → HABER → descuadre | — | centro de costo | unidad cuenta; cuadra al centavo, la escala muestra % de cuentas que no cuadran |
-| Contabilidad Desglosada + Asiento | sí | DEBE → HABER → descuadre | — | tipo (resultado / patrimonial) | «Sin comparar» para la cuenta sin código (D-085); byCause por rubro no aplica: la unidad ya es la cuenta |
-| Acreditaciones | sí | Total liquidación → Diferencia → Total acreditado | empresa (si la config separa) | banco | unidad lista (D-021); el archivo de Finanzas no gana ni un dato (D-020) |
+| Asiento de Remuneraciones | sí (DEBE > / < HABER), sólo si no cierra — con el asiento cerrado las únicas unidades con diferencia (sin clasificar) no tienen importe cargado | DEBE → HABER → descuadre | — | centro de costo — sólo las cuentas de Resultado lo tienen; Patrimoniales y sin clasificar van a "Sin identificar" | unidad cuenta; cuadra al centavo, la escala muestra % de cuentas que no cuadran |
+| Contabilidad Desglosada + Asiento | sí (DEBE > / < HABER) | DEBE → HABER → descuadre | — | tipo (resultado / patrimonial); la cuenta sin código no tiene tipo asignable sin inventarlo → "Sin identificar" | «Sin comparar» para la cuenta sin código (D-085); byCause por rubro no aplica: la unidad ya es la cuenta |
+| Acreditaciones | sólo el grupo pendiente (D-093): lo que todavía no se acreditó, siempre "de menos" | Total liquidación → Diferencia → Total acreditado | empresa (si la config separa) — sólo si es la MISMA para toda la lista/grupo | banco — ídem, sólo si no es ambiguo (D-093) | unidad lista (D-021); el archivo de Finanzas no gana ni un dato (D-020) |
 | Brutos — Generar Reporte | no | no cruza: qué se generó | — | — | veredicto del archivo; entra a la grilla de 3b igual |
 | GS Pers — Generar Reporte | no | ídem | — | — | |
 | Control NR — Generar Reporte | no | ídem | — | — | |
@@ -136,7 +141,21 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 **El signo queda por verificar módulo por módulo:** el mapa asume que la diferencia por fila
 conserva el signo de la resta en todos los marcados con S. Cada tanda lo comprueba antes de
 cablear `diffSigned`; si un control guarda sólo el valor absoluto, el bloque se omite en ese
-control y se anota acá — no se recalcula la resta en el tablero.
+control y se anota acá — no se recalcula la resta en el tablero. **Ya verificado con assert sobre
+`diffSigned.over`/`diffSigned.under`**: Control de Netos (tanda 1), Brutos, NR, Rendimiento vs
+Tabulado y Rendimiento x EE (tanda 2, `tests/resumenCruceMeta4.test.js`), Novedades vs Liquidación
+y Variación Sueldos (tanda 3, `tests/resumenTanda3.test.js`, que además asserta que Agrupadores y
+POP lo declaran no aplicable).
+
+**Lo que NO tiene assert propio de `diffSigned`, al cerrar las seis tandas:** GS Pers y Rendimiento
+vs Asiento (tanda 2) conservan el signo por construcción —misma función (`diffOrNull`/resta
+directa) que sus pares ya verificados— y el test lo confirma indirectamente vía `byCause` (importes
+positivos en el sentido esperado). Y **los tres controles de la tanda 5** —Asiento de Remuneraciones,
+Contabilidad Desglosada y Acreditaciones—: esa tanda no sumó test propio, así que su signo
+(`conciliacion.saldo` leído como DEBE > / < HABER en los dos contables, y el grupo pendiente en
+Acreditaciones) está apoyado en la lectura del código y no en un assert. Las tandas 4 y 6 no dejan
+nada por comprobar acá: sus controles declaran el bloque `signed` no aplicable, y eso sí está
+asserteado. **Es lo primero a cubrir con un test cuando se vuelva sobre este frente.**
 
 ## 5. Qué muere y qué queda
 
@@ -161,19 +180,43 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    pre-filtra el Detalle y "ficha →" abre la ficha, y Netos publica todos los campos. Los dos
    candados del §8 están puestos. **Lo único que falta de esta tanda es la mirada de Willy en el
    navegador.**
-2. **Cruce Meta4/Marval** (6): brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento.
-   Con éstos, el run del checklist de Marval es el primer 3b real.
-3. **Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
-   variaciones_sueldos, variaciones_conceptos, pop_variaciones.
-4. **Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
-   novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).
-5. **Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
-   acreditaciones_reporte — D-084/D-085 y D-020/D-021 intocables.
-6. **Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.
+2. ~~**Cruce Meta4/Marval** (6): brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento.~~
+   **Hecha el 2026-08-22 (D-090).** Los seis publican `summary.resumen`; con éstos, un run del
+   checklist de Marval arma su primer tablero 3b real con datos en los seis. Queda pendiente que
+   Willy lo mire en el navegador (bloqueado acá por el CDN de xlsx.js/Dexie).
+3. ~~**Cruce y temporales Axton/general** (5): agrupadores, novedades_liquidacion,
+   variaciones_sueldos, variaciones_conceptos, pop_variaciones.~~ **Hecha el 2026-08-22 (D-091).**
+   Las cinco publican `summary.resumen`. Agrupadores separa la diferencia NETA de la TOTAL en su
+   puente y deja el signo pendiente de Willy (§7.6); Novedades vs Liquidación lee el signo como
+   "Liquidado de más/de menos"; las dos Variaciones van con puente temporal ("Subieron"/"Bajaron");
+   POP publica `resumen` sólo con el reporte de Axton cargado y con un puente de **conteos**, no el
+   temporal que preveía el mapa del §4 (nota agregada ahí). Detalle en D-091. Espera la mirada de
+   Willy sobre §7.6 y el punto 3 de D-091.
+4. ~~**Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
+   novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).~~ **Hecha el
+   2026-08-22 (D-092).** Los tres primeros declaran sus siete bloques `notApplicable`; novedades_importador
+   publica `bridge` (qué entra al F2 → qué queda afuera, con motivo) y `byGroup` por UO — para lo cual
+   `buildGroupCardHtml` sumó el modo por unidades de D-092. El veredicto de un run de un solo control
+   ahora reproduce el `headline` de ese control en vez del texto genérico fijo. Falta que Willy vea los
+   textos exactos en pantalla (§7 punto 9).
+5. ~~**Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
+   acreditaciones_reporte.~~ **Hecha el 2026-08-22 (D-093).** Los dos contables reusan las fichas que
+   ya arman `fichasDeAsiento`/`fichasDeCuentas` para no volver a decidir quién tiene diferencia; el
+   puente es DEBE → HABER → descuadre en los dos. Acreditaciones reusa `estadoDeLista`; el puente es
+   Total liquidación → Diferencia → Total acreditado, con lo "SIN ASIGNAR" en `bridge.uncompared`
+   (D-086) — el .xlsx de Finanzas no ganó ninguna columna (D-020 sigue en verde). D-084/D-085 y
+   D-020/D-021 quedaron intocados: ningún cálculo ni conteo existente se movió.
+6. ~~**Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.~~ **Hecha el
+   2026-08-22 (D-094).** Los dos publican `summary.resumen`; ninguno tocó el tablero ni
+   `resumenStats.js`. Falta que Willy la mire en el navegador.
 
-Las tandas 2 a 6 dependen sólo de la 1 y no comparten módulos entre sí — pueden correr en
-paralelo, con la lección de D-088: un helper nuevo que dos tandas necesiten se declara en el PR
-para unificar al integrar.
+Las tandas 2 a 6 dependían sólo de la 1 y corrieron en paralelo. Al integrarlas en una sola pila
+aparecieron dos roces, ninguno de criterio: los tres módulos que traen dos variantes en el mismo
+archivo (`brutos.js`, `gsPers.js`, `nr.js`) los tocaron la tanda 2 y la tanda 4, y se unificó el
+import de `resumenStats` que las dos necesitaban —justo la lección de D-088—; y **las cinco tandas
+habían reservado el número D-090 para su entrada de DECISIONS**, así que al apilarlas se renumeraron
+en orden de tanda (D-090 a D-094). La próxima vez que salgan varios chats en paralelo del mismo
+commit, el número de la decisión se reparte antes de arrancar.
 
 ## 7. Lo que queda pendiente de que Willy lo mire — no se adivina
 
@@ -204,14 +247,18 @@ para unificar al integrar.
 6. **Agrupadores, bloque de lados**: ¿de más/de menos por legajo con su neta (un legajo compensado
    no aparece) o por agrupador (aparece en los dos)? La misma tensión que D-087 resolvió para el
    número grande de la ficha.
-7. **NR, el corte por causa**: ¿los 18 conceptos o las 2 bandas? Arranca por banda; se elige en
-   pantalla.
+7. ~~**NR, el corte por causa**: ¿los 18 conceptos o las 2 bandas?~~ **Implementado el 2026-08-22
+   (tanda 2, D-090) arrancando por las 2 bandas** (Indemnizatorios / Otros NR). Sigue pendiente que
+   Willy lo vea en pantalla y confirme si prefiere abrir directo a los 18 conceptos.
 8. **`touchedByRed` en controles que no exponen claves**: si algún summarize no puede dar las
    claves de sus unidades con diferencia, ese KPI sale del veredicto de 3b para ese run — no se
    aproxima sumando. (Riesgo 3 del handoff.) Verificarlo control por control en las tandas.
-9. **Los textos del veredicto de los "Generar Reporte"** (tanda 4): qué dice exactamente. Se
+9. ~~**Los textos del veredicto de los "Generar Reporte"** (tanda 4): qué dice exactamente. Se
    listan en el PR y se ajustan en pantalla, junto con las pendientes de D-077/D-078 que ya
-   esperan en ESTADO.
+   esperan en ESTADO.~~ **Resuelto por la tanda 4 (2026-08-22, D-092)**: cada control escribió su
+   propio `headline`/`contextNote` (qué se generó, cuántos registros, si está listo para descargar o
+   qué lo frena) y el veredicto de un run de un solo control lo reproduce. Son un default, no una
+   confirmación: los textos exactos siguen esperando que Willy los vea en pantalla.
 
 ## 8. Que salga por defecto en todo control nuevo — y cómo se asegura
 

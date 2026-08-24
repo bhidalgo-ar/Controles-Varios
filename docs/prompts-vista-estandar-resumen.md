@@ -5,13 +5,15 @@
 > aprobado, pixel por pixel, **`docs/handoff-resumen-netos.md`** (pantallas 3a y 3b) — leerlos es
 > lo primero que pide cada prompt.
 >
-> **La tanda 1 está hecha** (2026-08-21, D-089): el tablero existe entero en
-> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. Las tandas 2 a 6 cablean
-> los campos del `summarize` por lote y corren en paralelo entre sí, sin módulos compartidos — su
-> prompt sigue valiendo tal cual. Dos cosas que cambiaron y conviene saber antes de arrancar
-> cualquiera de ellas: el valor del pre-filtro del Detalle se pide como intención
-> (`data-hero-prefilter="conDif"`) y lo resuelve el tablero contra las opciones de cada control, y
-> `unitKeys` son objetos `{ key, label, amount, group }`, no strings.
+> **Las seis tandas están hechas.** La 1 el 2026-08-21 (D-089): el tablero existe entero en
+> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. Las tandas 2 a 6 el
+> 2026-08-22, cada una en su chat en paralelo — tanda 2 (D-090), tanda 3 (D-091), tanda 4 (D-092),
+> tanda 5 (D-093) y tanda 6 (D-094) —, y con la 6 los 21 controles publican `summary.resumen`.
+> **Los prompts de abajo quedan como registro de lo que se pidió, no como trabajo por hacer.** Dos
+> cosas que cambiaron sobre la marcha y siguen valiendo para cualquier control nuevo: el valor del
+> pre-filtro del Detalle se pide como intención (`data-hero-prefilter="conDif"`) y lo resuelve el
+> tablero contra las opciones de cada control, y `unitKeys` son objetos
+> `{ key, label, amount, group }`, no strings.
 
 ## Modelo y esfuerzo por chat
 
@@ -24,7 +26,7 @@ Elegilos con `/model` antes de mandar el prompt.
 | 3 | Campos del summarize — Axton/temporales (5) | **Opus 5** | **high** · thinking prendido | Agrupadores trae D-087 (neta vs total, denominador) y Novedades D-073: criterio fino |
 | 4 | Los que generan archivo (4) | **Sonnet 5** | **high** · thinking prendido | Semántica ya decidida en D-077/D-078; es aplicar |
 | 5 | Contables + Acreditaciones (3) | **Opus 5** | **high** · thinking prendido | Toca el asiento, que sale al cliente, y D-020/D-021 no se pueden pisar |
-| 6 | EE x CATEG + Acumuladores (2) | **Sonnet 5** | **high** · thinking prendido | Conteos y una reconciliación ya definida (D-077, D-082) |
+| ~~6~~ | ~~EE x CATEG + Acumuladores (2)~~ — **hecha** (D-094) | **Sonnet 5** | **high** · thinking prendido | Conteos y una reconciliación ya definida (D-077, D-082) |
 
 **Dependencias.** Los chats 2 a 6, todos después del 1; entre ellos no se pisan. Si dos necesitan
 un helper nuevo compartido, se declara en el PR para unificar al integrar — la lección de D-088.

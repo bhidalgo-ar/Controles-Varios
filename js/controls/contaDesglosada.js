@@ -58,6 +58,7 @@ import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet } from '../exports/contractSheet.js';
+import { resumenStats } from './resumenStats.js';
 
 // Tolerancia de comparación de importes del proyecto (CLAUDE.md). Un centavo de
 // descuadre en un asiento ES un descuadre: este número no se afloja para que
@@ -160,7 +161,26 @@ export function runContaDesglosada(primaryRows, _tabRows, mapping) {
     cuentaNeto: cfg.cuentaNeto,
     ...desglosada,
     asiento,
+    // El puente del Resumen: DEBE → HABER → descuadre. Mismos totales que ya
+    // calculó el asiento (o la desglosada, si el asiento no se armó) — el
+    // criterio es el mismo que usa el headline del semáforo más abajo.
+    bridge: bridgeDelConta(desglosada, asiento),
     filasOrigen: primaryRows.length,
+  };
+}
+
+function bridgeDelConta(desglosada, asiento) {
+  const debe      = asiento ? asiento.totalNetoDebe      : desglosada.totalDebe;
+  const haber     = asiento ? asiento.totalNetoHaber     : desglosada.totalHaber;
+  const descuadre = asiento ? asiento.diferenciaNeteada  : desglosada.diferencia;
+  return {
+    title: 'De dónde sale el descuadre',
+    steps: [
+      { label: 'Debe',      amount: debe,  tone: 'ink' },
+      { label: 'Haber',     amount: haber, tone: 'ink' },
+      { label: 'Descuadre', amount: descuadre, note: 'Debe − Haber',
+        tone: Math.abs(descuadre) <= TOL ? 'ink' : 'error' },
+    ],
   };
 }
 
@@ -571,7 +591,55 @@ export function summarizeContaDesglosada(results) {
     contextNote: cierraTodo
       ? (a ? 'la desglosada y el asiento cierran: DEBE = HABER' : 'la desglosada cierra: DEBE = HABER')
       : `DEBE ${fmtNum(results.totalDebe)} contra HABER ${fmtNum(results.totalHaber)}`,
+    resumen: resumenDelConta(results),
   };
+}
+
+/**
+ * El sub-objeto del tablero del Resumen (resumenStats.js). La unidad es la
+ * CUENTA: reusa exactamente las fichas y el estado que ya arma
+ * `fichasDeCuentas`/`estadoDeCuentaConta` (declaradas más abajo — function
+ * declarations, el orden en el archivo no importa), así este corte nunca
+ * puede contar distinto que el semáforo o que la solapa Fichas del mismo run.
+ *
+ * `diffSigned` se lee DEBE > / < HABER (`conciliacion.saldo`, firmado así en
+ * fichaCuenta.js). `byCause` es el TIPO (Resultado / Patrimonial) — por rubro
+ * no aplica acá, la unidad ya es la cuenta (D-084). Y la cuenta sin código
+ * sigue sin tipo asignable: no está en el Reporte de Cuentas, así que no hay
+ * cómo saber si es Resultado o Patrimonial sin inventarlo — va a "Sin
+ * identificar", que es lo mismo que dice su chip "Sin comparar" (D-085).
+ */
+function resumenDelConta(results) {
+  const fichas = fichasDeCuentas(results);
+  const conDif = fichas.filter(f => f.estado !== 'centavo');
+
+  const causaDe = (f) => {
+    if (!f.conAsiento || f.sinCodigo) return null;
+    return esPatrimonial(f.numero)
+      ? { key: 'patrimonial', label: 'Patrimonial' }
+      : { key: 'resultado', label: 'Resultado' };
+  };
+  const labelDe = (f) => (f.numero ? `${f.numero} · ${f.cuenta}` : f.cuenta);
+
+  return resumenStats({
+    unit: 'cuenta',
+    tolerance: TOL,
+    rows: conDif,
+    allRows: fichas,
+    diff: (f) => f.conciliacion.saldo,
+    unitLabel: labelDe,
+    cause: causaDe,
+    top: (f) => ({ legajo: null, nombre: labelDe(f), empresa: null, rubro: causaDe(f)?.label ?? null }),
+    bridge: results.bridge || null,
+    // No hay empresa (un solo archivo, un solo cliente) ni una clave de
+    // legajo para los cortes cruzados de 3b: la unidad acá es la cuenta, y no
+    // entra a "legajos repetidos" (§4 de la spec).
+    notApplicable: ['group', 'keys'],
+    sideLabels: {
+      over:  { label: 'Debe > Haber' },
+      under: { label: 'Haber > Debe' },
+    },
+  });
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────

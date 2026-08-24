@@ -1,11 +1,12 @@
 // rendVsAsiento.js — Control 6: Rendimiento vs Asiento (Contabilidad Desglosada)
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -97,6 +98,10 @@ const COLS = [
   { key: 'total',    label: 'COSTO TOTAL',    rKey: 'rTotal',    cKey: 'cTotal',    dKey: 'dTotal' },
 ];
 
+// Las cinco categorías componentes, sin COSTO TOTAL (que es la suma de esas
+// cinco): la comparten `summarizeRendVsAsiento`, la planilla y el resumen.
+const COMPONENT_COLS = COLS.filter(c => c.key !== 'total');
+
 // Mapa categoría → label legible
 const CAT_LABELS = {
   precio:   'PRECIO',
@@ -146,6 +151,17 @@ function normCCName(v) {
     || null;
 }
 
+// Normaliza código de CC: quita ceros iniciales → "0011" y "11" se comparan
+// igual. Gemelo de `normCCCode` de rendVsTabu.js — este control matchea CONTA
+// contra Rendimiento sólo por NOMBRE (no usa código), pero la clave de unidad
+// para los cortes cruzados de 3b (specs/vista-estandar-resumen.md §4) tiene que
+// coincidir byte a byte con la que arma Rendimiento vs Tabulado, el otro
+// control de este lote con unidad 'cc'.
+function normCCCode(v) {
+  const s = String(v ?? '').trim().replace(/^0+/, '');
+  return s || null;
+}
+
 // Qué cuenta como diferencia sale del monto del cliente (D-069). El chequeo de
 // que el desglose sume el valor de la celda NO usa ese monto: eso no es una
 // diferencia a revisar, es el control leyendo mal el archivo (ver más abajo).
@@ -153,6 +169,54 @@ const hasDiff = d => isDiff(d);
 
 /** El desglose contra el valor de la celda: cuadre interno, siempre al centavo. */
 const CUADRE_EPS = 0.01;
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// La unidad es el CENTRO DE COSTO, como en Rendimiento vs Tabulado. Cada CC se
+// abre en una instancia por CATEGORÍA con diferencia (§4 de la spec: "las 5
+// categorías"), nunca COSTO TOTAL —es la suma de esas cinco—, con el mismo
+// motivo que ya usa `summarizeRendVsAsiento`.
+function instanciasPorCategoriaRva(rows) {
+  const out = [];
+  for (const r of rows) {
+    for (const c of COMPONENT_COLS) {
+      const d = r[c.dKey];
+      if (d !== null && hasDiff(d)) out.push({ ccCode: r.ccCode, ccName: r.ccName, cat: c, dif: d });
+    }
+  }
+  return out;
+}
+
+/**
+ * La clave de unidad para los cortes cruzados de 3b. Igual criterio que
+ * `ccKeyRvt` de rendVsTabu.js: nombre primero (este control matchea CONTA
+ * contra Rendimiento sólo por nombre), código como respaldo — así las dos
+ * claves coinciden byte a byte para el mismo centro de costo.
+ */
+function ccKeyRva(i) {
+  return normCCName(i.ccName) || normCCCode(i.ccCode) || null;
+}
+
+function resumenDelRendVsAsiento(results) {
+  const instancias = instanciasPorCategoriaRva(results.rows);
+
+  return resumenStats({
+    unit: 'cc',
+    tolerance: currentTolerance(),
+    rows: instancias,
+    diff: (i) => i.dif,
+    key: ccKeyRva,
+    unitLabel: (i) => i.ccName || i.ccCode,
+    cause: (i) => ({ key: i.cat.key, label: i.cat.label }),
+    // `legajo` es el campo genérico del tablero para el buscador y el link
+    // "ficha →"; acá lleva el código de CC (este control no tiene ficha propia
+    // todavía, así que el link no se dibuja, pero el buscador lo usa igual).
+    top: (i) => ({ legajo: i.ccCode, nombre: i.ccName, rubro: i.cat.label }),
+    bridge: results.bridge || null,
+    // Este control no trae empresa: la unidad ya es el centro de costo.
+    notApplicable: ['group'],
+  });
+}
 
 // ── Drill-down (zoom de celdas CONTA) ────────────────────────────────────────
 
@@ -616,6 +680,52 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
       detalle,  // todas las filas clasificadas — usadas por las pestañas Detalle/Desglose del export
       config,   // config aplicada en este run (para que los Resultados puedan mostrar exactamente qué se usó)
     },
+    // El puente del Resumen: Total Rendimiento → Diferencia comparada → Total
+    // CONTA (D-086, "ídem" a Rendimiento vs Tabulado pero contra el asiento).
+    bridge: bridgeDelRunRendVsAsiento(rows, ccsSoloEnConta),
+  };
+}
+
+/**
+ * El puente del Resumen (D-086). A diferencia de Rendimiento vs Tabulado, acá
+ * SÍ hay una lista de CC que están sólo del otro lado (`ccsSoloEnConta`), así
+ * que "Total CONTA" es el de archivo tal cual —matched + huérfanos— y lo sin
+ * comparar puede venir de los dos lados: CC del Rendimiento sin CONTA
+ * (`sinContaData`) y CC de la CONTA sin Rendimiento (`ccsSoloEnConta`).
+ */
+function bridgeDelRunRendVsAsiento(rows, ccsSoloEnConta) {
+  if (rows.length === 0) return null;
+
+  const totalRend = rows.reduce((s, r) => s + (r.rTotal ?? 0), 0);
+  const totalConta = rows.reduce((s, r) => s + (r.cTotal ?? 0), 0)
+    + ccsSoloEnConta.reduce((s, o) => s + (o.cTotal ?? 0), 0);
+  const diffComparada = rows.reduce((s, r) => s + (r.dTotal ?? 0), 0);
+
+  const sinConta = rows.filter(r => r.sinContaData);
+  const soloCount = sinConta.length + ccsSoloEnConta.length;
+
+  return {
+    steps: [
+      { label: 'Total Rendimiento', amount: totalRend, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total CONTA', amount: totalConta, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalRend), label: 'Total Rendimiento' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: soloCount === 0 ? null : {
+      label: (() => {
+        const bits = [];
+        if (sinConta.length > 0) bits.push(`${sinConta.length} sin datos en la CONTA`);
+        if (ccsSoloEnConta.length > 0) bits.push(`${ccsSoloEnConta.length} sólo en la CONTA`);
+        return `${bits.join(' y ')}, por`;
+      })(),
+      amount: sinConta.reduce((s, r) => s + (r.rTotal ?? 0), 0)
+            + ccsSoloEnConta.reduce((s, o) => s + (o.cTotal ?? 0), 0),
+    },
   };
 }
 
@@ -657,6 +767,7 @@ export function summarizeRendVsAsiento(results) {
     diffTotalAmount,
     worstCase,
     contextNote: null,
+    resumen: resumenDelRendVsAsiento(results),
   };
 }
 

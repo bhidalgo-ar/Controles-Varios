@@ -27,7 +27,8 @@
 // Ver specs/reporte-variaciones-opmobility.md y D-022 / D-023 / D-026 en DECISIONS.md.
 
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
+import { resumenStats } from './resumenStats.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import {
   renderVerdict,
@@ -38,7 +39,7 @@ import {
 } from '../ui/resultBlocks.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
-import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
+import { formatAmount as fmtNum, toNum, redondear } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn } from './consolidate.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
@@ -470,10 +471,24 @@ function runVariaciones(prevRowsFile, tabRows, mapping, reporte) {
       valores[g.key] = { anterior, actual, diff, pct: calcularPct(anterior, actual ?? 0) };
     }
 
+    // El desglose por concepto ORIGINAL — sólo para el corte por causa del
+    // Resumen del run cuando el grupo combina más de uno (Variación Sueldos
+    // suma Jornales + Mensuales en una sola columna). No toca `valores`, que
+    // sigue siendo la cuenta combinada contra la que se mide la tolerancia.
+    const porConcepto = reporte.combinar
+      ? reporte.conceptos.map(c => {
+          const ant = sumEntradas(grupoPrev, colsPrev, [c]);
+          const act = sumEntradas(grupoAct, colsAct, [c]);
+          const diff = (ant === null && act === null) ? null : (act ?? 0) - (ant ?? 0);
+          return { codigo: c.codigo || c.label, label: c.label, anterior: ant, actual: act, diff };
+        })
+      : null;
+
     return {
       legajo,
       nombre,
       valores,
+      porConcepto,
       presenteAnterior: grupoPrev.length > 0,
       presenteActual:   grupoAct.length > 0,
       bruto: {
@@ -707,7 +722,92 @@ function summarizeVariaciones(results) {
     contextNote: results.tipoLiquidacion
       ? `liquidación: ${results.tipoLiquidacion}`
       : 'los dos períodos salen de los tabulados cargados',
+    resumen: resumenDelControl(results, relevantes, conDif),
   };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// El puente es TEMPORAL (Anterior → Variación → Actual, no un cruce de dos
+// archivos del mismo período), y el signo se lee "subieron / bajaron" en vez
+// de "de más / de menos" — es el mismo control, mirado de otro lado.
+
+/**
+ * El concepto que más aporta a la variación de una fila, en valor absoluto.
+ * En Variación Sueldos (`combinar: true`) mira el desglose por concepto
+ * ORIGINAL (`porConcepto`: Jornales vs. Mensuales), porque `valores` ya viene
+ * sumado y no distingue cuál de los dos se movió. En Variación Conceptos cada
+ * grupo YA es un concepto, así que mira `grupos` directo.
+ */
+function causaDeFila(row, grupos, reporte) {
+  const candidatos = reporte.combinar
+    ? (row.porConcepto || []).map(c => ({ key: c.codigo, label: c.label, diff: c.diff }))
+    : grupos.map(g => ({ key: g.key, label: g.label, diff: row.valores[g.key].diff }));
+  const conVariacion = candidatos.filter(c => isDif(c.diff));
+  if (conVariacion.length === 0) return null;
+  return conVariacion.reduce((m, c) => (!m || Math.abs(c.diff) > Math.abs(m.diff)) ? c : m, null);
+}
+
+/**
+ * El puente temporal: la suma de TODOS los grupos, sobre los empleados
+ * `relevantes` (los que tienen algún valor en alguno de los dos períodos —
+ * los mismos que cuenta `unitsTotal`). `null` en un lado cuenta como 0 en la
+ * suma: es exactamente el criterio con el que ya se computa `diff` por fila
+ * (una alta o una baja suman su valor entero, no se excluyen del total), así
+ * que "Variación" cierra solo contra "Actual" menos "Anterior".
+ */
+function bridgeTemporal(relevantes, grupos) {
+  if (relevantes.length === 0) return null;
+  let anterior = 0, actual = 0;
+  for (const r of relevantes) {
+    for (const g of grupos) {
+      const v = r.valores[g.key];
+      anterior += v.anterior ?? 0;
+      actual   += v.actual ?? 0;
+    }
+  }
+  anterior = redondear(anterior);
+  actual   = redondear(actual);
+  const variacion = redondear(actual - anterior);
+  return {
+    steps: [
+      { label: 'Período anterior', amount: anterior,  tone: 'ink' },
+      { label: 'Variación',        amount: variacion, tone: variacion >= 0 ? 'accent' : 'error',
+        note: 'actual menos anterior' },
+      { label: 'Período actual',   amount: actual,     tone: 'ink' },
+    ],
+  };
+}
+
+function resumenDelControl(results, relevantes, conDif) {
+  const { grupos, reporte } = results;
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: currentTolerance(),
+    rows: conDif,
+    allRows: relevantes,
+    // La variación NETA de la fila: la suma de los grupos, con signo. En
+    // Variación Sueldos hay un solo grupo (jornales + mensuales ya sumados);
+    // en Variación Conceptos puede haber dos, y un legajo con 2517 arriba y
+    // 2519 abajo neteria — se acepta, a diferencia de Agrupadores (D-087),
+    // porque acá no hay una segunda lectura en pugna: es la misma cuenta que
+    // ya hace la ficha (D-086, "la variación queda última porque es el residuo").
+    diff: (r) => grupos.reduce((s, g) => s + (r.valores[g.key].diff ?? 0), 0),
+    key: (r) => r.legajo,
+    unitLabel: (r) => r.nombre,
+    cause: (r) => {
+      const c = causaDeFila(r, grupos, reporte);
+      return c ? { key: String(c.key), label: c.label } : null;
+    },
+    top: (r) => ({ legajo: r.legajo, nombre: r.nombre, rubro: causaDeFila(r, grupos, reporte)?.label ?? null }),
+    bridge: bridgeTemporal(relevantes, grupos),
+    sideLabels: {
+      over:  { label: 'Subieron' },
+      under: { label: 'Bajaron' },
+    },
+    notApplicable: ['group'],
+  });
 }
 
 /** Etiquetas de los dos períodos comparados, con la quincena que declara cada archivo. */

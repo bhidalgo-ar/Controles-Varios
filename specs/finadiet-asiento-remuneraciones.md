@@ -5,8 +5,10 @@
 contable sale del foco por relación esfuerzo/valor. El control sigue construido y disponible para FINADIET;
 lo que se posterga es correrlo contra el archivo real y generalizarlo (ver §7). **Gana su solapa Fichas
 por cuenta contable el 2026-08-21** (tanda 7 de `specs/vista-estandar-resultados.md`, D-084), cubierta por
-`tests/fichasCuentaContable.test.js` — esto no mueve la postergación de arriba, es sobre el mismo control
-construido.
+`tests/fichasCuentaContable.test.js`. **Publica `summary.resumen` el 2026-08-22** (tanda 5 de
+`specs/vista-estandar-resumen.md`, D-093): entra al tablero del Resumen del run con el puente DEBE →
+HABER → descuadre y el corte por centro de costo, reusando las mismas fichas. Ninguno de estos dos
+cambios mueve la postergación de arriba, son sobre el mismo control construido.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza dos
 archivos, arma uno. A partir del excel mensual de conceptos liquidados de FINADIET ("FINADIET CONCEPTOS",

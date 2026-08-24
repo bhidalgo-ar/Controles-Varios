@@ -3492,3 +3492,276 @@ pide y no existía) y `resumen`. Un control que no los publica no muestra ese KP
 **Detalle:** `js/controls/resumenStats.js`, `js/ui/controlsResults.js`, `css/results.css`,
 `js/controls/controlNetos.js`, `tests/resumenStats.test.js`, `tests/resumenContract.test.js`,
 `specs/vista-estandar-resumen.md`, `docs/handoff-resumen-netos.md`, D-020, D-060, D-069, D-074, D-086.
+
+## D-090 — Tanda 2 del tablero del Resumen: la clave de unidad del centro de costo se unifica por nombre entre Rendimiento vs Tabulado y Rendimiento vs Asiento
+
+**2026-08-22.** Tanda 2 de `specs/vista-estandar-resumen.md` (Cruce Meta4/Marval): brutos, gs_pers,
+nr, rend_vs_tabu, rend_x_ee y rend_vs_asiento publican `summary.resumen`. La única decisión de esta
+tanda que no tenía una alternativa obvia es la clave de unidad de los dos controles con unidad `'cc'`.
+
+### El problema
+
+El corte cruzado de 3b (§4/§8 de la spec) necesita que dos controles que miden el mismo centro de
+costo armen la MISMA clave, igual que `makeLegajoKey(mapping.legajoKeyMode)` hace para legajo — pero
+no hay equivalente para CC: cada control matchea contra su propia fuente con su propio criterio.
+**Rendimiento vs Tabulado** matchea contra el Tabulado por código primero, nombre de respaldo,
+puertas adentro. **Rendimiento vs Asiento** matchea contra la CONTA sólo por nombre puertas adentro
+(no tiene código de CC propio del lado de la CONTA). Son dos motores de matching distintos y **eso no
+cambia** con esta tanda — lo único nuevo es la clave que cada uno expone hacia AFUERA, para el corte
+cruzado.
+
+### La decisión
+
+La clave externa (`unitKeys`, usada por `crossControl`) se arma igual en los dos controles:
+`normCCName(ccName) || normCCCode(ccCode)` — nombre primero, código como respaldo si el nombre viene
+vacío. `normCCName` ya existía en los dos módulos, sin cambios (saca acentos, minúsculas, espacios).
+`normCCCode` (quita ceros a la izquierda) ya existía en `rendVsTabu.js`; esta tanda le agregó el
+gemelo en `rendVsAsiento.js`, donde antes no hacía falta porque ese control nunca compara por código
+puertas adentro.
+
+Se eligió **nombre primero** porque es el único campo que las dos fuentes traen siempre parejo (la
+CONTA de Rendimiento vs Asiento no tiene código de CC); usar código primero hubiera dejado sin clave
+común a cualquier corrida donde ese control no lo tuviera. El costo es el que ya paga
+`rendVsAsiento.js` puertas adentro: dos CC con el mismo nombre normalizado (typo, sucursal repetida)
+matchean como uno solo en el corte cruzado. No se armó una tabla de equivalencias de CC porque no la
+pidió nadie todavía y no hay con qué poblarla.
+
+Test que fija el contrato: `tests/resumenCruceMeta4.test.js`, el assert "arman la MISMA clave" — arma
+el mismo CC con tilde de un lado ("Administración") y sin tilde del otro ("Administracion") y verifica
+que las dos claves coincidan.
+
+### Limitación que queda (no es un bug de esta tanda)
+
+`rendVsTabu.js` no guarda, hoy, la lista de centros de costo que están en el Tabulado y no aparecen en
+el Rendimiento — sólo la inversa (`sinTabData`, CC del Rendimiento sin Tabulado). Su puente del
+Resumen sólo puede informar "sin comparar" en esa única dirección. `rendVsAsiento.js` sí tiene las dos
+direcciones (`ccsSoloEnConta` ya existía de antes) y su puente cubre las dos. No se agregó la lista
+que falta: es una limitación preexistente del control, no algo que esta tanda tenía que resolver.
+
+**Detalle:** `js/controls/rendVsTabu.js`, `js/controls/rendVsAsiento.js`, `tests/resumenCruceMeta4.test.js`,
+`specs/vista-estandar-resumen.md` §4, D-086, D-089.
+---
+
+## D-091 — Tanda 3 del tablero del Resumen: Agrupadores deja abierto el signo (§7.6), Variación Conceptos no, y el puente de POP es de conteos
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 3 de `specs/vista-estandar-resumen.md` (§6): los cinco
+controles del lote Axton/temporales (agrupadores, novedades_liquidacion, variaciones_sueldos,
+variaciones_conceptos, pop_variaciones) publican `summary.resumen`. Willy no estaba disponible
+mientras se hizo el trabajo: las decisiones de abajo quedan tomadas y a la espera de que las
+confirme viéndolas en pantalla.
+
+**1. `resumenStats.js`: el Map interno de la diferencia con signo ya no se apaga cuando 'signed' es
+`notApplicable`.** Antes, `if (diff && aplica('signed'))` acoplaba el insumo compartido (`signedOf`)
+a la aplicabilidad del bloque "Para qué lado": un control que declara 'signed' no aplicable
+(Agrupadores, punto 2) se quedaba también sin importe real en `byCause`, `diffBuckets` y `topUnits`,
+aunque esos bloques se declaren aplicables por separado. Ahora el Map se llena si el control da
+`diff`, sin mirar `notApplicable`, y cada bloque sigue apagándose por su propio nombre
+(`aplica('signed')`, `aplica('buckets')`, …). Para Netos (D-089), que ya declara 'signed' aplicable,
+el comportamiento no cambia: es una corrección al contrato compartido de la tanda 1, no un cambio de
+contrato. Test nuevo en `tests/resumenStats.test.js` ("signed no aplicable no apaga la magnitud de
+los otros cortes").
+   - Alternativa descartada: que cada control que necesite esto arme su propio Map de diferencias por
+     fuera del helper. Se descarta porque reproduciría en varios controles la misma cuenta que
+     `resumenStats` ya hace una vez — exactamente lo que la tanda 1 quiso evitar.
+
+**2. Cruce por Agrupadores: 'signed' y 'topUnits' quedan `notApplicable` en el tablero del Resumen —
+el mismo dilema que D-087 dejó abierto para la ficha, ahora acá.** La spec (§7.6) deja pendiente de
+Willy si "de más/de menos" se lee por legajo con su diferencia NETA (un legajo compensado —un
+agrupador de más, otro de menos— no aparecería en ningún lado) o por agrupador (el mismo legajo
+aparecería en los dos lados); ninguna de las dos es "la cuenta", así que no se inventa una. `topUnits`
+queda afuera por la misma razón: pinta el importe con el signo a la vista (rojo "de más", ámbar "de
+menos") y la magnitud disponible —la diferencia TOTAL de cada legajo, D-087— no tiene ese signo sin
+la misma decisión pendiente. `diffBuckets` y `byCause: agrupador` sí se cablean porque son magnitud
+pura (cuánto, no de qué lado) y no dependen de esa decisión. Los conteos y las claves de
+`resumenStats` van siempre por LEGAJO, nunca legajo × agrupador — la misma regla que ya evitó el
+denominador inflado de este control (CLAUDE.md, "unitsTotal / unitsWithDiff").
+   - Alternativa descartada: leer el signo por agrupador (cada fila legajo × agrupador con su propio
+     signo) sólo para este bloque, aunque el resto del control cuente por legajo. Se descarta porque
+     mezclaría dos unidades distintas adentro del mismo `resumen` de un control, y el mismo legajo
+     aparecería en los dos lados de "Para qué lado" a la vez.
+
+**3. Variación Conceptos: la variación NETA de la fila sí se decide —compensa entre conceptos— y no
+queda pendiente como en Agrupadores.** Un legajo puede tener el concepto 2517 arriba y el 2519 abajo;
+la diferencia que alimenta el resumen es la suma con signo de los dos. Es la misma cuenta que ya usa
+la ficha de este control (D-086, "la variación queda última porque es el residuo") y no se vio una
+segunda lectura en pugna con esa, a diferencia de Agrupadores. **Es una lectura tomada al escribir el
+código, no algo que la spec haya resuelto explícitamente para este control.** PENDIENTE: confirmar
+con un caso real de dos conceptos moviéndose en direcciones opuestas antes de asentarla como
+definitiva.
+
+**4. Novedades vs Liquidación: el puente de conteos (ya previsto en el mapa del §4, D-073) usa
+etiquetas propias en `diffSigned`, no las genéricas "De más/De menos".** Como
+`difImporte = novImporte − liqImporte`, un positivo significa que se pidió más de lo que se liquidó
+("Liquidado de menos") y un negativo lo contrario ("Liquidado de más") — el genérico "De más/De
+menos" leería el signo al revés de lo que pasó. El legajo del que no se pudo comparar nada (D-073)
+entra igual al resumen, con causa `null`, y cae en `unidentifiedCause` en vez de un concepto
+inventado.
+
+**5. Variación entre quincenas (POP): sin el reporte de Axton no hay `resumen`; con Axton, el puente
+es de CONTEOS y no de plata — desvío de lo que el mapa del §4 preveía (un puente temporal).**
+Comparado contra Axton la diferencia es multi-campo (valor hora anterior/actual, MOD, MOD CBU, Alta,
+Baja, Neto) y no hay un solo número con signo que diga de qué lado está un legajo sin inventar un
+criterio; el valor hora, aunque lo hubiera, no se puede sumar entre legajos (D-081). Por eso el
+puente cuenta legajos (Comparados → Con alguna diferencia → Coinciden) y
+`signed`/`buckets`/`group`/`cause`/`top` quedan `notApplicable`.
+   - Alternativa descartada, dejada escrita en el código (`resumenDelControl`, comentario "PENDIENTE
+     DE WILLY"): un puente sobre la variación de NETO entre las dos quincenas, que sí es un número
+     real. No se implementó porque mide algo DISTINTO del chequeo contra Axton que pinta el semáforo
+     de este control — cerraría ese puente sin decir nada sobre si el legajo coincide con Axton.
+
+**Verificación.** 33 asserts nuevos en `tests/resumenTanda3.test.js` (en la cadena de
+`package.json`) + 3 en `tests/resumenStats.test.js`, con datos inventados y jugadores de Banfield.
+Los cinco controles de esta tanda salen de `PENDIENTES` en `tests/resumenContract.test.js`. **No
+verificado contra ningún archivo de cliente real** — no hay uno en el repo con el que llegar a estas
+cinco pantallas.
+
+**Detalle:** `js/controls/resumenStats.js`, `js/controls/agrupadores.js`,
+`js/controls/novedadesLiquidacion.js`, `js/controls/variaciones.js`, `js/controls/popVariaciones.js`,
+`tests/resumenStats.test.js`, `tests/resumenTanda3.test.js`, `tests/resumenContract.test.js`,
+`specs/vista-estandar-resumen.md`, D-070, D-073, D-081, D-086, D-087, D-089.
+## D-092 — Tanda 4 del tablero del Resumen: la tarjeta "En qué empresa" aprende a escalar por legajos, no sólo por plata
+
+**2026-08-22.** Tanda 4 de `specs/vista-estandar-resumen.md` (§6 punto 4): brutos_reporte,
+gs_pers_reporte, nr_reporte y novedades_importador publican `summary.resumen`. Los tres primeros
+declaran sus siete bloques `notApplicable` (no cruzan dos archivos, D-077/D-078); novedades_importador
+es el que sí tiene unidad (los legajos del archivo) y corte por grupo (la UO), y ahí aparece la
+decisión.
+
+`buildGroupCardHtml` —la tarjeta compartida "En qué empresa" que armó la tanda 1— sólo sabía escalar la
+barra por plata: si `maxAmount <= 0` no dibujaba nada. La spec (§4) ya declaraba
+`byGroup: UO` para novedades_importador, pero ese control no tiene magnitud en pesos: no compara dos
+totales, así que no hay "de más" ni "de menos" que pesar.
+
+**Se descartó no dibujar el corte para este control** —dejar que la spec dijera `byGroup: UO` pero que
+en pantalla nunca apareciera nada, porque `maxAmount` siempre da cero—. Quedaba una tarjeta declarada
+en el mapa que ningún run iba a mostrar jamás, y esa clase de brecha entre lo escrito y lo que se ve
+es la que después alguien lee como "está implementado" sin estarlo.
+
+**Se eligió** sumar un segundo modo a `buildGroupCardHtml`: si no hay plata (`maxAmount <= 0`) pero sí
+hay unidades (`maxUnits > 0`), la barra se escala por cantidad de legajos y el importe no se muestra —
+mostrar "$ 0,00" ahí sería un dato falso, no la ausencia del dato. Para todo control que sí tiene
+plata el comportamiento es idéntico a antes: `porMonto = maxAmount > 0` decide el modo, no reemplaza
+al anterior.
+
+**Detalle:** `js/ui/controlsResults.js` (`buildGroupCardHtml`), `js/controls/novedadesImportador.js`
+(`novedadesImportadorBridge`, `resumen.byGroup` con la clave `empresa`), D-077, D-078,
+`specs/vista-estandar-resumen.md` §4 y §6.
+---
+
+## D-093 — Tanda 5 del tablero del Resumen: los dos contables reusan sus fichas; Acreditaciones sólo firma un signo donde no hay ambigüedad
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 5 de `specs/vista-estandar-resumen.md` §6 —
+`finadiet_asiento`, `conta_desglosada` y `acreditaciones_reporte` publican `summary.resumen`. Los tres
+comparten que su unidad no es el legajo (cuenta contable en los dos primeros, D-021 en el tercero), y
+que "quién tiene diferencia" ya lo decidieron piezas existentes del propio control (`fichasDeAsiento`,
+`fichasDeCuentas`, `estadoDeLista`) antes de que existiera el tablero del Resumen.
+
+**Los dos contables reusan sus fichas, no vuelven a decidir.** `resumenDelAsiento`/`resumenDelConta`
+llaman a `fichasDeAsiento(results)`/`fichasDeCuentas(results)` y filtran por `estado !== 'centavo'`:
+son exactamente las mismas fichas y el mismo estado que ya pinta la solapa Fichas y que ya cuenta
+`unitsWithDiff` en el `summarize`. La alternativa —recalcular "quién tiene diferencia" de nuevo en el
+helper del Resumen— es la que el propio `resumenStats.js` prohíbe en su comentario de cabecera ("esta
+pieza agrupa y suma; nunca decide"), y además abriría la puerta a que la solapa Fichas y el tablero
+del Resumen cuenten distinto en el mismo run.
+
+**`diffSigned` se lee `conciliacion.saldo`** (DEBE − HABER, firmado así desde `fichaCuenta.js`, D-084).
+En el Asiento de Remuneraciones sólo tiene datos cuando el asiento **no** cierra: con el asiento
+cerrado, las únicas unidades que cuentan como diferencia son las cuentas/centros sin clasificar, que no
+tienen un importe cargado en el archivo (el bloque sale `null`, no en cero). `byCause` es el centro de
+costo en el Asiento (sólo lo tienen las cuentas de Resultado) y el tipo Resultado/Patrimonial en la
+Desglosada (`esPatrimonial(numero)`); en los dos, lo que no puede atribuirse —incluida la cuenta sin
+código de D-085, que no tiene tipo asignable sin inventarlo— va a "Sin identificar", nunca a un rubro
+puesto por default.
+
+**Acreditaciones: `diffSigned`/`byCause`/`byGroup` no se le inventan a una lista.** La lista es un
+agregado de varios empleados y no se arma por banco ni por importe, así que no tiene un signo, un banco
+o una empresa propios de forma automática:
+1. **El único signo con datos ciertos es el del grupo "SIN ASIGNAR"** — plata liquidada que todavía no
+   se acreditó, siempre "de menos". Una lista con alertas de integridad (CBU inválido, duplicado,
+   importe ≤ 0) no tiene un importe de diferencia bien definido: la alerta es de calidad de dato, no de
+   cuadre, y firmarle un signo (por ejemplo, tratar un duplicado como "de más" por el importe repetido)
+   asumiría cuál de las dos filas es la real, cosa que el control no decide. Se descarta.
+2. **`byCause` (banco) y `byGroup.empresa`** se asignan sólo si son el **mismo valor para todas las
+   filas** de la lista o del grupo pendiente; una lista mixta va a "Sin identificar" en vez de que se le
+   pegue el banco de la primera fila que aparece, que sería inventar un dato sobre un agregado que no
+   lo tiene.
+3. El puente **Total liquidación → Diferencia → Total acreditado** deja afuera del "Total liquidación"
+   lo que está en `sinAsignar` (D-086, la misma regla que Netos aplicó al legajo sin neto): así
+   `Diferencia` es el mismo número que ya usa el chequeo de cierre del control (`summary.diferencia`) y
+   el puente cierra exacto. Lo "SIN ASIGNAR" va en `bridge.uncompared`, con su importe, y no se resta
+   contra nada.
+
+**Nada de esto agrega una columna a ningún export**: los tres controles siguen escribiendo lo mismo
+que escribían — verificado con el assert de D-020 (las 7 columnas del `.xlsx` de Acreditaciones) y sin
+tocar `armarDesglosada`/`armarAsiento` de `contaDesglosada.js`, `armarAsiento` de `finadietAsiento.js`
+ni `buildReport` de `acreditaciones.js` más que para agregar el campo `bridge` al lado de `summary`.
+Ningún cálculo ni conteo del semáforo se movió en los tres.
+
+**Alternativas descartadas:** firmarle a cada lista de Acreditaciones un signo derivado de sus alertas
+(ver punto 1); repartir `byCause`/`byGroup` sobre la fila "predominante" de una lista mixta en vez de
+"Sin identificar" (inventa una mayoría donde no se pidió ninguna); calcular `diffSigned`/`byCause` de
+los dos contables sobre las líneas planas de la desglosada/el asiento en vez de sobre las fichas ya
+armadas (duplica la decisión de "quién tiene diferencia" en dos lugares del mismo control).
+
+**Motivo:** Pedido de Willy, con la lista de campos por control ya relevada en el §4 de la spec
+(D-084/D-085 y D-020/D-021 declarados intocables). Las decisiones de Acreditaciones (puntos 1 y 2) no
+estaban en la spec y las tomó quien implementó la tanda — quedan para que Willy las confirme viendo el
+tablero, no para que se re-abran solas en la próxima tanda.
+
+**Dónde vive el detalle.** `js/controls/finadietAsiento.js` (`resumenDelAsiento`, `bridgeDelAsiento`),
+`js/controls/contaDesglosada.js` (`resumenDelConta`, `bridgeDelConta`), `js/controls/acreditaciones.js`
+(`resumenDeAcreditaciones`, `bridgeDeAcreditaciones`, `bancoDeGrupo`, `empresaDeGrupo`),
+`tests/resumenContract.test.js`, `specs/vista-estandar-resumen.md` §4 y §6, D-020, D-021, D-084, D-085,
+D-086, D-089.
+---
+
+## D-094 — Tanda 6 de la vista estándar: los dos controles sin cruce de importes publican `summary.resumen`
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 6 de `specs/vista-estandar-resumen.md` (§6, punto 6): EE x
+CATEG y Acumuladores Ganancias, los dos únicos controles que no cruzan importes entre archivos. No
+tocan el tablero ni `resumenStats.js` — ya existían enteros desde la tanda 1 (D-089); esta tanda sólo
+cablea `summarize` de cada control. Willy no estaba disponible para las dos decisiones de abajo:
+quedan tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. EE x CATEG: el puente es de conteos, y no repite el corte por campo.** Compara texto (puesto,
+centro de costo, departamento), así que `diffSigned`/`diffBuckets` no aplican — no hay signo ni plata
+que agrupar. El puente reusa la misma cascada que ya tiene la ficha de cada legajo (D-082):
+**comparados → coinciden → difieren → sin comparar**, contada en legajos, no en campos. `byCause`
+("qué rubro la causa") queda `notApplicable` a propósito: ese corte por campo ya lo contesta la
+cuarta solapa "Por campo" de este control, y repetirlo en el tablero sería la misma cuenta dos veces
+con dos nombres distintos. `byGroup`/`topUnits`/`unitKeys` también quedan `notApplicable` — no hay
+empresa que agrupar ni una magnitud en pesos para rankear el top 5, y el corte cruzado de 3b
+(`unitKeys`) no se cableó en esta tanda: es una extensión posible pero no la pidió esta pasada.
+
+Una corrida guardada antes de la tanda 2 de `specs/vista-estandar-resultados.md` no trae
+`matchedCount` ni `byField` (`tieneDetalleDeCampos()` ya distinguía este caso para la ficha y la
+solapa "Por campo"): el puente del Resumen usa el mismo chequeo y no se dibuja para esas corridas en
+vez de inventar el número.
+
+**2. Acumuladores Ganancias: el puente reusa los mismos tres estados de la ficha, no un cruce de
+totales nuevo.** Es un control de generación (D-026): no hay un archivo de origen contra el que medir
+una diferencia, así que `unit`/`unitsTotal`/`unitsWithDiff` siguen en `null` (sin escala, como ya
+declaraba D-077) y `diffSigned`/`diffBuckets`/`byGroup`/`byCause`/`topUnits`/`unitKeys` quedan
+`notApplicable` enteros — no hay lados, ni empresa, ni rubro, ni unidad para rankear.
+
+**Alternativa descartada:** armar el puente como un cruce de dos totales en pesos (el TOTAL del crudo
+contra la suma de sus componentes, agregado sobre toda la corrida) — la forma que sí tienen los
+controles de cruce. Se descartó porque **ya existe** el chequeo correcto y probado: `estadoDeFicha()`
+(D-077/D-082) ya clasifica a cada legajo en exactamente los tres estados que la reconciliación y el
+SAC teórico pueden dar — `centavo` (cierra), `sinComparar` (sin doceava o SAC parcial) y `conDif` (no
+cierra o SAC negativo). Sumar un total en pesos aparte hubiera sido una segunda cuenta de lo mismo, con
+el riesgo de que algún día no diera lo mismo que el chip de la ficha — la clase de bug que D-089 ya
+nombra ("cuatro pantallas pintan el estado del mismo control"). El puente del Resumen cuenta legajos
+en esos tres estados, reusando `buildFichas()`/`estadoDeFicha()` tal cual.
+
+**3. La lista de excepciones de `tests/resumenContract.test.js` llega a cero, pero recién al
+integrar.** Mientras esta tanda corría sola, la lista bajaba de 20 a 18: sólo la tanda 1 (Control de
+Netos) estaba mergeada, y las tandas 2 a 5 corrían en paralelo en otros chats sin compartir módulos
+(spec §6), así que esta tanda no las podía adelantar. **Al apilar las cinco tandas juntas la lista
+queda efectivamente en cero: los 21 controles publican `summary.resumen`**, y el candado de CI pasa
+de "estos 18 declaran su excepción" a proteger a los controles que vengan — un `summarize` nuevo que
+no declare su `resumen` deja el PR en rojo, sin excepción posible.
+
+**Detalle:** `js/controls/catXEmpleados.js` (`resumenDeCatXEmpleados`, `bridgeDeCatXEmpleados`),
+`js/controls/acumuladoresGanancias.js` (`resumenDeAcumuladores`), `tests/resumenContract.test.js`,
+D-026, D-077, D-082, D-089.

@@ -7,6 +7,152 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### chore(resumen): las cinco tandas paralelas del tablero del Resumen se integran en una sola rama — 2026-08-24
+
+- **No cambia nada de lo que ve el analista**: es el trabajo de apilar las tandas 2, 3, 4, 5 y 6 —que
+  salieron cada una en su chat, en paralelo, todas partiendo del mismo commit de `main`— en una rama
+  única sobre `main`. Con las cinco juntas, **los 21 controles publican `summary.resumen`** y el
+  candado de `tests/resumenContract.test.js` se queda sin excepciones.
+- **Las cinco tandas habían reservado el mismo número de decisión, D-090.** Al apilarlas se
+  renumeraron en orden de tanda: tanda 2 = **D-090**, tanda 3 = **D-091**, tanda 4 = **D-092**,
+  tanda 5 = **D-093**, tanda 6 = **D-094**. Se actualizaron todas las referencias cruzadas
+  (DECISIONS, CHANGELOG, ESTADO, las specs y `docs/prompts-vista-estandar-resumen.md`).
+- **Un solo roce de código**, en los tres módulos que traen dos variantes en el mismo archivo
+  (`brutos.js`, `gsPers.js`, `nr.js`): la tanda 2 los tocó por la variante "Controlar" y la tanda 4
+  por la de "Generar Reporte", y las dos importaban de `resumenStats.js` — se unificó en un import
+  (`resumenStats` + `RESUMEN_BLOCKS`). Es exactamente la lección de D-088, anotada ahora en el §6 de
+  la spec.
+- Ningún cálculo, conteo ni umbral se movió al integrar. `npm run test:unit` pasa completo:
+  **4.446 asserts en 50 archivos, 0 ✗**, con `resumenCruceMeta4.test.js` y `resumenTanda3.test.js`
+  sumados a la cadena de `package.json`.
+- **Queda por hacer, y no lo puede hacer CI:** que Willy mire el tablero en el navegador. Detalle de
+  qué mirar y en qué orden, en `ESTADO.md`. También queda anotado en el §4 de la spec que el signo
+  de los tres controles de la tanda 5 no tiene assert propio — es lo primero a cubrir cuando se
+  vuelva sobre este frente.
+
+### feat(resumen): EE x CATEG y Acumuladores Ganancias publican el resumen del tablero — 2026-08-22
+
+- **Tanda 6 de `specs/vista-estandar-resumen.md`**: los dos únicos controles que no cruzan importes
+  entre archivos ahora alimentan el tablero del Resumen (D-094). No se tocó el tablero ni el helper
+  compartido — ya existían enteros desde la tanda 1 (D-089) — sólo el `summarize` de cada control.
+- **EE x CATEG**: el puente del Resumen es de conteos —comparados → coinciden → difieren → sin
+  comparar—, la misma cascada que ya usa la ficha de cada legajo. Sin signo ni plata (compara texto:
+  puesto, centro de costo, departamento), y el corte por campo no se repite en el tablero: ya lo
+  contesta la cuarta solapa "Por campo" de este control.
+- **Acumuladores Ganancias**: el puente cuenta legajos en los mismos tres estados que ya define
+  `estadoDeFicha()` para el chip de cada ficha (D-077/D-082) — cierra al centavo, sin comparar, con
+  diferencia —, sin inventar un cruce de totales en pesos aparte. Sin escala (control de generación,
+  D-026): sin unidad de cruce no hay semáforo que dibujar, y el veredicto sigue hablando de la
+  reconciliación, como ya declaraba D-077.
+- **Ningún conteo cambia.** `unitsWithDiff`/`unitsTotal` de los dos controles quedan exactamente
+  igual; lo único nuevo es el sub-objeto `summary.resumen`.
+- **La lista de excepciones de `tests/resumenContract.test.js` queda en cero** — los dos migrados
+  salen y, con las tandas 2 a 5 apiladas en la misma rama, no queda ningún control sin `resumen`:
+  **21 de 21**. El candado pasa de contar excepciones a proteger a los controles que vengan. Cuando
+  esta tanda corría sola la lista bajaba de 20 a 18; el detalle está en D-094 punto 3.
+### feat(resumen): Asiento de Remuneraciones, Contabilidad Desglosada y Acreditaciones entran al tablero del Resumen — 2026-08-22
+
+- **Tanda 5 de `specs/vista-estandar-resumen.md`** (D-093). Estos tres controles ya tenían el tablero
+  disponible desde la tanda 1 (D-089) pero no publicaban los datos que lo llenan, así que su Resumen
+  seguía en blanco más allá del veredicto. Ahora, cuando el analista corre uno solo o los mezcla con
+  otros controles en el mismo run, ve el puente de la plata, para qué lado está la diferencia y el
+  corte por causa, igual que ya lo ve en Control de Netos.
+- **Asiento de Remuneraciones (FINADIET) y Contabilidad Desglosada + Asiento (COTY).** El puente es
+  DEBE → HABER → descuadre. Cuando el asiento no cierra, el corte "Para qué lado" muestra qué cuentas
+  empujan hacia el Debe y cuáles hacia el Haber, y el corte por causa agrupa por centro de costo (en el
+  Asiento) o por tipo Resultado/Patrimonial (en la Desglosada) — la cuenta sin código de D-085 sigue
+  sin tipo asignable, así que va a "Sin identificar" en vez de a un rubro inventado.
+- **Acreditaciones.** El puente es Total liquidación → Diferencia → Total acreditado, con lo que
+  todavía está "SIN ASIGNAR" mostrado aparte, sin restarse contra nada. El corte por banco y el de
+  empresa sólo se pintan cuando todos los empleados de una lista comparten el mismo valor — una lista
+  con varios bancos no se le atribuye a uno solo. El archivo que recibe Finanzas no ganó ninguna
+  columna (D-020 sigue en verde).
+- Ningún cálculo ni conteo del semáforo se movió en los tres controles: son campos nuevos y opcionales
+  (`resumen`, agregado al `summarize`; `bridge`, agregado al `run()`), no ediciones de lo que ya
+  calculaban. `tests/resumenContract.test.js` ya no los lista como pendientes.
+### feat(resumen): Brutos, GS Pers, NR e Importador de Novedades entran al tablero del Resumen — 2026-08-22
+
+- **Es la tanda 4 de `specs/vista-estandar-resumen.md`** (D-092), sobre el tablero que puso la tanda 1
+  (D-089). Antes, el Resumen de un run de Brutos, GS Pers o NR en modo "Generar Reporte" —o de
+  Importador de Novedades— quedaba afuera del rediseño: no mostraba el tablero, sólo el aviso genérico
+  de "esta corrida sólo incluye controles de generación de reporte".
+- **Ahora el veredicto habla del archivo.** En Brutos, GS Pers y NR, el Resumen dice cuántos registros
+  se generaron y si el archivo está listo para descargar, o qué falta para que lo esté (por ejemplo,
+  que el Tabulado no tiene las columnas configuradas para ese reporte, o que ningún empleado tiene
+  valores NR en el período) — la misma información que ya mostraba la solapa Detalle, ahora también en
+  el Resumen. En un run de un solo control, el veredicto grande de arriba reproduce ese mismo texto en
+  vez de la frase fija que usaba antes para cualquier control sin cruce.
+- **Importador de Novedades suma el puente y el corte por empresa** que le faltaban al tablero: qué
+  novedades se leyeron de la planilla, cuántas quedan afuera del importador F2 (con el motivo: columna
+  sin código, valor no parseable, fila sin legajo) y cuántas entran; y una tarjeta con la Unidad
+  Organizativa del archivo. Para que esa tarjeta se dibuje sin un importe que pesar, la tarjeta
+  compartida "En qué empresa" aprendió a escalar su barra por cantidad de legajos cuando el control no
+  maneja montos (D-092) — el comportamiento con plata, en el resto de los controles, no cambia.
+- Verificado con la suite completa de tests unitarios y los 12 casos de `tests/e2e/resultsResumen.spec.js`.
+### feat(resumen): el tablero del Resumen llega a Agrupadores, Novedades vs Liquidación, las dos Variaciones y POP — 2026-08-22
+
+- **Es la tanda 3 de `specs/vista-estandar-resumen.md`** (D-091), sobre el tablero que construyó la
+  tanda 1 (D-089). Estos cinco controles ya mostraban el veredicto y la escala de severidad; ahora
+  también muestran el puente de la plata, para qué lado está la diferencia, los cortes (tamaño,
+  rubro causante) y el top 5, igual que Control de Netos.
+- **Cruce por Agrupadores**: el puente separa Nómina Maestra → Archivo Resumen → **diferencia neta**
+  (puede compensar un agrupador con otro) de la **diferencia total** (la misma que ya suma el
+  semáforo). El corte por rubro agrupa por agrupador. **El bloque "Para qué lado" no se muestra
+  todavía** — falta que Willy diga si el signo se lee por legajo o por agrupador (D-091).
+- **Novedades vs Liquidación**: el puente cuenta pares legajo × concepto (Pedido → Diferencia
+  comparada → Liquidado) con las cuatro bandas del cruce como proporción, y "Para qué lado" dice
+  "Liquidado de más" / "Liquidado de menos" en vez del genérico "De más/De menos" — para no leer el
+  signo al revés de lo que pasó.
+- **Variación Sueldos y Variación Conceptos**: el puente es temporal (Período anterior → Variación →
+  Período actual) y el signo se lee "Subieron" / "Bajaron". En Variación Sueldos, donde Jornales y
+  Mensuales van sumados en una sola columna, el corte por rubro ahora sabe distinguir cuál de los dos
+  se movió.
+- **Variación entre quincenas (POP)**: sin el reporte de Axton cargado no hay tablero (no hay nada
+  que cruzar, igual que los controles que sólo generan un archivo). Con Axton cargado, el puente
+  cuenta legajos (Comparados → Con alguna diferencia → Coinciden) — no hay un solo número en pesos
+  que resuma una comparación de valor hora, MOD, altas, bajas y neto sin inventar un criterio.
+- **Ningún cálculo ni conteo del semáforo se movió** en los cinco controles; lo que se agrega es sólo
+  el tablero. De paso se corrigió un enganche en el helper compartido (`resumenStats.js`): un control
+  que declara que no puede mostrar el signo ya no perdía, de yapa, el importe de los otros cortes
+  (rubro causante, tamaño de la diferencia, top 5) — afecta a cualquier control que use ese caso, no
+  sólo a los cinco de esta tanda.
+- 33 asserts nuevos en `tests/resumenTanda3.test.js` (en la cadena) + 3 en `tests/resumenStats.test.js`,
+  con datos inventados y jugadores de Banfield. **No verificado en el navegador ni contra ningún
+  archivo de cliente real.**
+- **Decisiones que esperan a Willy en pantalla**, todo en D-091: el signo de Agrupadores (§7.6), y si
+  la variación neta de Variación Conceptos —que compensa entre dos conceptos que se mueven en
+  direcciones opuestas— es el criterio correcto.
+### feat(resumen): el checklist de Marval arma su primer tablero real (Cruce Meta4) — 2026-08-22
+
+- **Tanda 2 de `specs/vista-estandar-resumen.md`** (D-090), sobre el tablero que construyó la tanda 1
+  (2026-08-21, Control de Netos de piloto). Los seis controles del Cruce Meta4/Marval —Brutos, GS
+  Pers, Control NR, Rendimiento vs Tabulado, Rendimiento vs Asiento y Rendimiento x EE— publican
+  `summary.resumen`.
+- **Lo que cambia para el analista.** El tablero del Resumen ya existía desde la tanda 1, pero para
+  estos seis controles se mostraba "en blanco" (los bloques ricos se omitían por falta de datos). Con
+  esta tanda, un run del checklist de Marval que corre los seis controles juntos arma su primer
+  tablero 3b real: el puente de cada control, para qué lado, los cortes por rubro causante y el top 5
+  aparecen con datos, y la grilla de 3b puede cruzar los seis por primera vez.
+- **El corte por causa de cada control**: Brutos y GS Pers separan sus dos conceptos (SAL_BASE /
+  A_CTA_FUT_AUMEN; GTOS_PERSONALES / DTO_COCHERA), NR arranca por las 2 bandas (Indemnizatorios /
+  Otros NR) y no por los 18 conceptos, Rendimiento vs Tabulado y Rendimiento vs Asiento —donde la
+  unidad es el centro de costo, no el legajo— abren en las 5 categorías de Rendimiento, y Rendimiento
+  x EE no tiene corte por causa (un solo importe, Costo Total).
+- **El corte cruzado por centro de costo ya funciona**: Rendimiento vs Tabulado y Rendimiento vs
+  Asiento arman la misma clave para el mismo centro de costo aunque uno lo escriba con tilde y el
+  otro sin tilde, así el corte que cruza los dos controles en 3b los puede unir (D-090).
+- **Ningún cálculo ni conteo existente se movió** en los seis controles — sólo se agregaron los
+  campos que el tablero necesita (`resumen`, `bridge`, `legajoKeyMode`). Los tests previos de cada
+  control siguen en verde.
+- **Limitación que queda, no resuelta por esta tanda**: Rendimiento vs Tabulado no tiene la lista de
+  centros de costo que están en el Tabulado y no en el Rendimiento (sólo la inversa), así que su
+  puente sólo informa "sin comparar" en una dirección. Rendimiento vs Asiento sí tiene las dos y su
+  puente cubre las dos.
+- `tests/resumenCruceMeta4.test.js` (nuevo, en la cadena), datos inventados y jugadores de Banfield.
+  Corrida completa de `test:unit`, 0 ✗.
+- No se pudo verificar el tablero en el navegador desde este entorno (CDN de xlsx.js/Dexie
+  bloqueado) — queda pendiente que Willy lo mire en los tres temas.
+
 ### feat(resumen): el hero del Resumen del run pasa a ser un tablero — 2026-08-21
 
 - **Es la tanda 1 de `specs/vista-estandar-resumen.md`** (D-089), sobre el handoff hi-fi de

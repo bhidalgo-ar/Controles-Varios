@@ -24,6 +24,7 @@ import { renderFichasPanel } from '../ui/fichaList.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum } from '../utils/currency.js';
 import { periodToLabel } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 
 // ── Códigos de acumulador (Nro) ───────────────────────────────────────────────
 // Matcheo por Nro, no por texto: el origen mezcla acentuación
@@ -587,6 +588,7 @@ export function summarizeAcumuladoresGanancias(results) {
       status: 'error', headline: results.error, insights: [],
       unit: null, unitsTotal: null, unitsWithDiff: null,
       diffTotalAmount: null, worstCase: null, contextNote: null,
+      resumen: null,
     };
   }
 
@@ -604,7 +606,40 @@ export function summarizeAcumuladoresGanancias(results) {
     insights,
     unit: null, unitsTotal: null, unitsWithDiff: null,
     diffTotalAmount: null, worstCase: null, contextNote: null,
+    resumen: resumenDeAcumuladores(results),
   };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Control de generación (D-026), sin unidades de cruce: no hay legajo "de más" o
+// "de menos" para medir con signo, ni una empresa contra otra, ni un rubro que
+// cause la diferencia — todo eso se declara `notApplicable`. Lo único que este
+// control verifica es la reconciliación del TOTAL del crudo contra sus
+// componentes y el SAC teórico (D-077), así que el puente cuenta eso: los
+// mismos tres estados que ya definió `estadoDeFicha()` para el chip de cada
+// ficha (D-082 aplicado acá) — un legajo no puede cerrar distinto en la ficha
+// y en el puente del Resumen.
+function resumenDeAcumuladores(results) {
+  const { datos, mes, periods, mesProceso, checks } = results;
+  const fichas = buildFichas({ mes, datos, issues: checks?.issues || [], periods, mesProceso });
+  const total = fichas.length;
+
+  return resumenStats({
+    unit: null,
+    rows: [],
+    bridge: total > 0 ? {
+      kind: 'counts',
+      title: 'La reconciliación de este reporte',
+      steps: [
+        { label: 'Legajos evaluados',  amount: total,                                                   tone: 'ink' },
+        { label: 'Cierran al centavo', amount: fichas.filter(f => f.estado === 'centavo').length,       tone: 'ink' },
+        { label: 'Sin comparar',       amount: fichas.filter(f => f.estado === 'sinComparar').length,   tone: 'warn' },
+        { label: 'Con diferencia',     amount: fichas.filter(f => f.estado === 'conDif').length,        tone: 'error' },
+      ],
+    } : null,
+    notApplicable: ['signed', 'buckets', 'group', 'cause', 'top', 'keys'],
+  });
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────

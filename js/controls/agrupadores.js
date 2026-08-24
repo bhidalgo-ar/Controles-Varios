@@ -15,6 +15,7 @@
 
 import { runMatching } from '../matching.js';
 import { computeInsights } from '../insights.js';
+import { resumenStats } from './resumenStats.js';
 import { formatAmount, formatDiff, formatDiffText, formatPct, redondear } from '../utils/currency.js';
 import {
   renderVerdict, renderTiles, renderChecks, renderIssues, renderResumenDetalle, diffBadgeHtml,
@@ -56,7 +57,41 @@ export function runAgrupadores(nominaRows, _tabRows, mapping) {
   // escribe abajo del título de cada columna de diferencia y que la ficha nombra
   // en su conclusión ("abajo del umbral de $ 1,00"). Una corrida vieja no
   // los trae y la pantalla cae en los del default (no se inventa otro número).
-  return { resultsPorGrupo, grouperDefs, thresholds, ...insights };
+  return {
+    resultsPorGrupo, grouperDefs, thresholds, ...insights,
+    // El puente del Resumen: Nómina Maestra → Archivo Resumen → diferencia NETA
+    // y TOTAL separadas (D-087), agregado sobre lo que ya calculó `computeInsights()`.
+    bridge: bridgeDelRun(insights.byGrouper, resultsPorGrupo, grouperDefs),
+  };
+}
+
+/**
+ * El puente del Resumen. Nómina Maestra y Archivo Resumen son la suma de
+ * `byGrouper` (cada agrupador, sobre TODOS los legajos del cruce — un legajo
+ * que falta de un lado suma 0 de ese lado, igual que hace `runMatching()`).
+ * La diferencia NETA es la resta simple de esos dos totales — puede compensar
+ * un agrupador con otro. La diferencia TOTAL es `legajoStats().diffTotalAmount`,
+ * la misma cuenta que ya suma el semáforo (D-087): no se vuelve a calcular acá,
+ * se toma de la fuente única para que el puente y el KPI nunca digan cosas
+ * distintas del mismo run.
+ */
+function bridgeDelRun(byGrouper, resultsPorGrupo, grouperDefs) {
+  if (!byGrouper || byGrouper.length === 0) return null;
+  const totalNomina  = redondear(byGrouper.reduce((s, g) => s + g.totalNomina, 0));
+  const totalResumen = redondear(byGrouper.reduce((s, g) => s + g.totalResumen, 0));
+  const neta = redondear(totalNomina - totalResumen);
+  const { diffTotalAmount } = legajoStats({ resultsPorGrupo, grouperDefs });
+
+  return {
+    steps: [
+      { label: 'Nómina Maestra',   amount: totalNomina,      tone: 'ink' },
+      { label: 'Archivo Resumen',  amount: totalResumen,     tone: 'ink' },
+      { label: 'Diferencia neta',  amount: neta,              tone: 'accent',
+        note: 'Nómina menos Resumen — compensa un agrupador con otro' },
+      { label: 'Diferencia total', amount: diffTotalAmount,  tone: 'error',
+        note: 'la que suma el semáforo — no compensa entre agrupadores' },
+    ],
+  };
 }
 
 /**
@@ -121,7 +156,64 @@ export function summarizeAgrupadores(results) {
     diffTotalAmount,
     worstCase,
     contextNote: null,
+    resumen: resumenDelControl(results),
   };
+}
+
+/**
+ * El sub-objeto que dibuja el tablero del Resumen (specs/vista-estandar-resumen.md
+ * §3, `resumenStats.js`).
+ *
+ * **Los conteos y las claves van SIEMPRE en legajo, nunca en fila legajo ×
+ * agrupador**: ese denominador inflado es el que ya hizo mentir en verde al
+ * semáforo antes de `legajoStats()` (ver el comentario de esa función). Por
+ * eso `rows`/`allRows` acá son las filas de `buildPlanillaRows()` — una por
+ * legajo —, no `resultsPorGrupo`.
+ *
+ * **`diffSigned` queda PENDIENTE DE WILLY** (spec §7.6): ¿de más/de menos por
+ * legajo con su diferencia NETA (un legajo compensado —un agrupador de más,
+ * otro de menos— no aparecería en ningún lado), o por agrupador (el mismo
+ * legajo aparecería en los dos lados)? Ninguna de las dos es "la cuenta", así
+ * que no se inventa una: 'signed' y 'top' quedan `notApplicable` — 'top'
+ * también, porque `topUnits` pinta el importe con el signo a la vista
+ * (rojo/ámbar según sea "de más" o "de menos"), y la diferencia TOTAL de un
+ * legajo (la suma en valor absoluto) no tiene ese signo sin la misma decisión
+ * pendiente.
+ *
+ * `diffBuckets` y `byCause: agrupador` SÍ se cablean: los dos miden magnitud
+ * (cuánto, no de qué lado), y la diferencia TOTAL de cada legajo —la misma
+ * de D-087, la que suma el semáforo— es una magnitud sin ambigüedad.
+ */
+function resumenDelControl(results) {
+  const defs = results.grouperDefs || [];
+
+  const filas = buildPlanillaRows(results).map(r => {
+    const porAgrupador = defs.map(g => ({ id: g.id, name: g.name, fila: r.porGrupo[g.id] || null }));
+    const conDif = porAgrupador.filter(a => a.fila?.tieneDiff);
+    const difTotal = conDif.reduce((acc, a) => acc + Math.abs(a.fila.diffAbs), 0);
+    // El agrupador que más aporta a la diferencia TOTAL de este legajo — la
+    // misma prioridad que usa `badgeDeLegajo()` para la ficha.
+    const peor = conDif.reduce((m, a) => (!m || Math.abs(a.fila.diffAbs) > Math.abs(m.fila.diffAbs)) ? a : m, null);
+    return { legajo: r.legajo, nombre: r.nombre, difTotal, peor };
+  });
+
+  const conDif = filas.filter(f => f.difTotal > 0);
+
+  return resumenStats({
+    unit: 'legajo',
+    tolerance: results.thresholds?.absoluteAmount ?? null,
+    rows: conDif,
+    allRows: filas,
+    // Magnitud, no signo (ver el JSDoc de arriba): la diferencia TOTAL de cada
+    // legajo alimenta los tramos y el corte por causa sin decidir de qué lado
+    // está.
+    diff: (f) => f.difTotal,
+    key: (f) => f.legajo,
+    unitLabel: (f) => f.nombre,
+    cause: (f) => (f.peor ? { key: String(f.peor.id), label: f.peor.name } : null),
+    bridge: results.bridge || null,
+    notApplicable: ['signed', 'group', 'top'],
+  });
 }
 
 export function renderAgrupadoresResults(results, container) {

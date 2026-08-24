@@ -1,6 +1,9 @@
 # Control Acreditaciones (Axton) — spec
 
-**Estado:** en implementación (modo "Generar Reporte").
+**Estado:** en implementación (modo "Generar Reporte"). **Publica `summary.resumen` el 2026-08-22**
+(tanda 5 de `specs/vista-estandar-resumen.md`, D-093): entra al tablero del Resumen del run con el
+puente Total liquidación → Diferencia → Total acreditado — sin agregar ninguna columna al `.xlsx` que
+recibe Finanzas (D-020 sigue en verde).
 **Origen del pedido:** Guillermo, 2026-08-05. Archivos de referencia: export
 `contacred` de Axton de Plastic Omnium Pilar 07-2026 (865 filas) y el
 `Control_Acredit.` armado a mano sobre ese mismo período (hoja `CONTROL` + 14

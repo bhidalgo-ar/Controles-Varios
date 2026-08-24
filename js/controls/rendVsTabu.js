@@ -1,6 +1,6 @@
 // rendVsTabu.js — Control 5: Rendimiento vs Tabulado (RendvsTabu)
 import { diffStats } from './semaforo.js';
-import { isDiff } from './tolerance.js';
+import { isDiff, currentTolerance } from './tolerance.js';
 import { renderExportMenu } from '../ui/exportMenu.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
@@ -9,6 +9,7 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { buildColByCode } from './tabCodes.js';
 import { formatAmount as fmt, diffOrNull, toNum } from '../utils/currency.js';
 import { periodSuffix, periodToLabel } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -144,6 +145,7 @@ export function summarizeRendVsTabu(results) {
     diffTotalAmount,
     worstCase,
     contextNote: null,
+    resumen: resumenDelRendVsTabu(results),
   };
 }
 
@@ -276,7 +278,49 @@ export function runRendVsTabu(rendRows, tabRows, mapping) {
     difTotal:    rows.filter(r => hasDiff(r.dTotal)).length,
   };
 
-  return { summary, rows, period: mapping.period || '', meta: { conceptConfig, colByCode } };
+  return {
+    summary, rows, period: mapping.period || '', meta: { conceptConfig, colByCode },
+    // El puente del Resumen: Total Rendimiento → Diferencia comparada → Total
+    // Tabulado. Reutiliza `dTotal` (ya D-086: `diffOrNull` sale `null` si falta
+    // un lado, así que la suma de esta corrida NO cuenta como cero al CC que no
+    // está en el Tabulado — ver `sinTabData`) y es EL MISMO número que ya
+    // totaliza la tile "Dif. COSTO TOTAL" del Resumen (`totalsAll.dTotal`).
+    bridge: bridgeDelRunRendVsTabu(rows),
+  };
+}
+
+/**
+ * El puente del Resumen (D-086). Este control no guarda, hoy, los centros de
+ * costo que están en el Tabulado y no aparecen en el Rendimiento (no hay una
+ * lista tipo `ccsSoloEnConta` de rend_vs_asiento) — así que "Total Tabulado" es
+ * el de los CC que SÍ están en el Rendimiento, y el único lado que se informa
+ * aparte es el de los CC del Rendimiento sin contraparte (`sinTabData`).
+ */
+function bridgeDelRunRendVsTabu(rows) {
+  if (rows.length === 0) return null;
+
+  const totalRend = rows.reduce((s, r) => s + (r.rTotal ?? 0), 0);
+  const totalTab  = rows.reduce((s, r) => s + (r.tTotal ?? 0), 0);
+  const diffComparada = rows.reduce((s, r) => s + (r.dTotal ?? 0), 0);
+  const sinTab = rows.filter(r => r.sinTabData);
+
+  return {
+    steps: [
+      { label: 'Total Rendimiento', amount: totalRend, tone: 'ink' },
+      { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
+      { label: 'Total Tabulado', amount: totalTab, tone: 'ink' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'neutral', amount: Math.abs(totalRend), label: 'Total Rendimiento' },
+        { tone: 'error',   amount: Math.abs(diffComparada), label: 'Diferencia comparada' },
+      ],
+    },
+    uncompared: sinTab.length === 0 ? null : {
+      label: `${sinTab.length} centro${sinTab.length === 1 ? '' : 's'} de costo sin datos en el Tabulado, por`,
+      amount: sinTab.reduce((s, r) => s + (r.rTotal ?? 0), 0),
+    },
+  };
 }
 
 // ── renderRendVsTabuResults ───────────────────────────────────────────────────
@@ -375,6 +419,57 @@ const CENTAVO = 0.01;
 
 const COMPONENT_COLS = COLS.filter(c => c.key !== 'total');
 const COL_TOTAL = COLS[COLS.length - 1];
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// La unidad es el CENTRO DE COSTO, no el legajo. Cada CC se abre en una
+// instancia por CATEGORÍA con diferencia (las cinco de `COMPONENT_COLS`, nunca
+// COSTO TOTAL: es la suma de esas cinco y contaría dos veces la misma
+// diferencia, el mismo motivo que ya usa `summarizeRendVsTabu`) — es lo que
+// permite que "byCause" junte las cinco categorías por separado (§4) en vez de
+// un solo número por CC, que escondería un CC con dos categorías compensadas.
+function instanciasPorCategoriaRvt(rows) {
+  const out = [];
+  for (const r of rows) {
+    for (const c of COMPONENT_COLS) {
+      const d = r[c.dKey];
+      if (d !== null && hasDiff(d)) out.push({ ccCode: r.ccCode, ccName: r.ccName, cat: c, dif: d });
+    }
+  }
+  return out;
+}
+
+/**
+ * La clave de unidad para los cortes cruzados de 3b. Rendimiento vs Tabulado y
+ * Rendimiento vs Asiento son los dos controles de este lote con unidad 'cc', y
+ * el segundo sólo matchea por NOMBRE (no tiene código de CC propio, ver
+ * `rendVsAsiento.js`) — así que la clave común entre los dos es el nombre, con
+ * el código como respaldo cuando el nombre viniera vacío.
+ */
+function ccKeyRvt(i) {
+  return normCCName(i.ccName) || normCCCode(i.ccCode) || null;
+}
+
+function resumenDelRendVsTabu(results) {
+  const instancias = instanciasPorCategoriaRvt(results.rows);
+
+  return resumenStats({
+    unit: 'cc',
+    tolerance: currentTolerance(),
+    rows: instancias,
+    diff: (i) => i.dif,
+    key: ccKeyRvt,
+    unitLabel: (i) => i.ccName || i.ccCode,
+    cause: (i) => ({ key: i.cat.key, label: i.cat.label }),
+    // `legajo` es genérico en `resumenStats`/el tablero: acá lleva el código de
+    // CC, que es lo que arma el link "ficha →" y el buscador de la solapa
+    // Fichas de este control.
+    top: (i) => ({ legajo: i.ccCode, nombre: i.ccName, rubro: i.cat.label }),
+    bridge: results.bridge || null,
+    // Este control no trae empresa: la unidad ya es el centro de costo.
+    notApplicable: ['group'],
+  });
+}
 
 const SEVERIDAD_DE_ESTADO = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
 

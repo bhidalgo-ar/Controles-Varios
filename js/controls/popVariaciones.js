@@ -30,6 +30,7 @@ import { formatAmount as fmtNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { periodSuffix } from '../utils/dates.js';
+import { resumenStats } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderChecks, renderMinorObservations,
   renderResumenDetalle, mvClass, mvArrow, fmtSigned,
@@ -505,6 +506,10 @@ export function summarizePopVariaciones(results) {
       ],
       unit: null, unitsTotal: null, unitsWithDiff: null, diffTotalAmount: null, worstCase: null,
       contextNote: 'reporte generado — subí el reporte de Axton para controlarlo',
+      // Sin el reporte de Axton no hay nada que cruzar (mismo criterio que
+      // brutos_reporte/gs_pers_reporte/nr_reporte, D-077/D-078): el tablero no
+      // tiene semáforo del que colgar ningún bloque.
+      resumen: null,
     };
   }
 
@@ -528,7 +533,52 @@ export function summarizePopVariaciones(results) {
     contextNote: sueltos > 0
       ? `${sueltos} legajo(s) en un solo archivo`
       : `concepto ${results.conceptCode} · Puesto no se controla`,
+    resumen: resumenDelControl(c),
   };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Lo que este control mide contra Axton no es una diferencia de plata: son
+// campos de distinta naturaleza (valor hora, MOD, MOD CBU, Alta, Baja, Neto) y
+// no hay un solo número con signo que diga "de qué lado está" un legajo sin
+// inventar un criterio que nadie pidió. Y el valor hora, aunque fuera uno de
+// los campos, no se puede sumar entre legajos (D-081: "no da un número que
+// signifique algo"). Por eso el puente es de CONTEOS —comparados, con alguna
+// diferencia, coinciden—, fiel a lo que este control realmente hizo, y
+// diffSigned/diffBuckets/byGroup/byCause/topUnits quedan `notApplicable`: no
+// se aproximan con un signo inventado.
+//
+// PENDIENTE DE WILLY: si prefiere en cambio un puente sobre la variación de
+// NETO entre las dos quincenas (un número real, pero que mediría algo
+// DISTINTO del chequeo contra Axton que pinta el semáforo) — a confirmar en
+// pantalla, spec §7.
+
+function bridgeDeConteos(c) {
+  if (!c || c.comparados === 0) return null;
+  return {
+    kind: 'counts',
+    steps: [
+      { label: 'Legajos comparados',    amount: c.comparados,   tone: 'ink' },
+      { label: 'Con alguna diferencia', amount: c.difs.length,  tone: 'error',
+        note: 'contra el reporte de variaciones de Axton' },
+      { label: 'Coinciden',             amount: c.coinciden,    tone: 'accent' },
+    ],
+  };
+}
+
+function resumenDelControl(c) {
+  const rows = c.difs;
+
+  return resumenStats({
+    unit: 'legajo',
+    rows,
+    allRows: rows,
+    key: (d) => d.legajo,
+    unitLabel: (d) => d.nombre,
+    bridge: bridgeDeConteos(c),
+    notApplicable: ['signed', 'buckets', 'group', 'cause', 'top'],
+  });
 }
 
 // ── Pantalla de resultados ────────────────────────────────────────────────────

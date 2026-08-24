@@ -183,6 +183,27 @@ assert('unitKeys trae clave, nombre, importe y grupo',
   assert('los bloques declarables están enumerados', RESUMEN_BLOCKS.includes('cause'));
 }
 
+// ── 'signed' no aplicable no apaga la magnitud de los otros cortes ─────────
+// Cruce por Agrupadores (tanda 3) necesita byCause con importe real aunque
+// diffSigned quede omitido (PENDIENTE DE WILLY, spec §7.6): el Map compartido
+// se llena si el control da `diff`, y cada bloque se apaga por su propio
+// nombre, no todos juntos por el de 'signed'.
+{
+  const sinLados = resumenStats({
+    unit: 'legajo', tolerance: 100, rows: FILAS, allRows: TODAS,
+    diff: (f) => f.dif,
+    cause: (f) => RUBROS_TEST[f.rubro] || null,
+    top: (f) => ({ legajo: f.legajo, nombre: f.nombre, empresa: f.empresa, rubro: null }),
+    notApplicable: ['signed', 'buckets', 'group'],
+  });
+  assert('diffSigned queda null cuando el control lo declara no aplicable',
+    sinLados.diffSigned === null);
+  assert('byCause sigue con el importe real (no se apaga con "signed")',
+    sinLados.byCause.length === 1 && casi(sinLados.byCause[0].amount, 950000));
+  assert('topUnits también sigue con el importe real',
+    sinLados.topUnits[0].amount === 700000);
+}
+
 // ── null no es 0 ────────────────────────────────────────────────────────────
 {
   const sinDiff = resumenStats({ unit: 'legajo', tolerance: 1, rows: FILAS });

@@ -35,31 +35,18 @@ function assert(desc, val, detalle) {
 // ── Los que todavía no publican `resumen`, con su tanda ─────────────────────
 // El orden es el del §6 de la spec. Cada tanda borra su bloque.
 const PENDIENTES = {
-  // Tanda 2 — cruce Meta4/Marval
-  brutos:                 'tanda 2',
-  gs_pers:                'tanda 2',
-  nr:                     'tanda 2',
-  rend_vs_tabu:           'tanda 2',
-  rend_x_ee:              'tanda 2',
-  rend_vs_asiento:        'tanda 2',
-  // Tanda 3 — Axton / temporales
-  agrupadores:            'tanda 3',
-  novedades_liquidacion:  'tanda 3',
-  variaciones_sueldos:    'tanda 3',
-  variaciones_conceptos:  'tanda 3',
-  pop_variaciones:        'tanda 3',
-  // Tanda 4 — los que generan archivo
-  brutos_reporte:         'tanda 4',
-  gs_pers_reporte:        'tanda 4',
-  nr_reporte:             'tanda 4',
-  novedades_importador:   'tanda 4',
-  // Tanda 5 — contables + acreditaciones
-  finadiet_asiento:       'tanda 5',
-  conta_desglosada:       'tanda 5',
-  acreditaciones_reporte: 'tanda 5',
-  // Tanda 6 — los dos sin cruce de importes
-  cat_x_empleados:        'tanda 6',
-  acumuladores_ganancias: 'tanda 6',
+  // Tanda 2 — cruce Meta4/Marval — migrada el 2026-08-22 (brutos, gs_pers, nr,
+  // rend_vs_tabu, rend_x_ee, rend_vs_asiento).
+  // Tanda 3 — Axton / temporales — migrada el 2026-08-22 (agrupadores,
+  // novedades_liquidacion, variaciones_sueldos, variaciones_conceptos,
+  // pop_variaciones).
+  // Tanda 4 — los que generan archivo — migrada el 2026-08-22 (brutos_reporte,
+  // gs_pers_reporte, nr_reporte, novedades_importador).
+  // Tanda 5 — contables + acreditaciones — migrada el 2026-08-22 (finadiet_asiento,
+  // conta_desglosada, acreditaciones_reporte).
+  // Tanda 6 — los dos sin cruce de importes — migrada el 2026-08-22 (cat_x_empleados,
+  // acumuladores_ganancias). Con ésta no queda ninguna excepción: los 21 controles
+  // publican `summary.resumen`.
 };
 
 // ── Dónde está escrito cada `summarize` ─────────────────────────────────────
