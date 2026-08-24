@@ -11,7 +11,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
-import { resumenStats } from './resumenStats.js';
+import { resumenStats, RESUMEN_BLOCKS } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -448,16 +448,29 @@ export function runGsPersReporte(_primaryRows, tabRows, mapping) {
 }
 
 export function summarizeGsPersReporte(results) {
+  // Mismo criterio que `renderGsPersReporteResults`: sin columnas mapeadas el
+  // reporte sale vacío salvo lo fijo y no hay nada para descargar.
+  const sinColumnas = !Object.values(results.cols).some(Boolean);
+  const total = results.summary.total;
+
   return {
-    status:   'info',
-    headline: `${results.summary.total} registros — Reporte de GS Pers generado del Tabulado`,
+    status:   sinColumnas ? 'warning' : 'info',
+    headline: sinColumnas
+      ? 'No hay columnas configuradas en el Tabulado para el Reporte de GS Pers — no se puede descargar.'
+      : `Reporte de GS Pers generado — ${total} registro${total === 1 ? '' : 's'}, listo para descargar.`,
     insights: [],
     unit:            null,
     unitsTotal:      null,
     unitsWithDiff:   null,
     diffTotalAmount: null,
     worstCase:       null,
-    contextNote:     null,
+    contextNote:     sinColumnas
+      ? 'Volvé al paso de Controles y completá los campos de la sección "GS Pers".'
+      : null,
+    // No cruza dos archivos: no hay escala, puente, lados ni cortes que
+    // dibujar. La declaración explícita es lo que el candado de CI reconoce
+    // como migrado (specs/vista-estandar-resumen.md §4).
+    resumen: resumenStats({ unit: null, rows: [], notApplicable: RESUMEN_BLOCKS }),
   };
 }
 

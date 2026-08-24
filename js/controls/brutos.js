@@ -11,7 +11,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet, writeGroupedContractSheet, contractColDefs } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
-import { resumenStats } from './resumenStats.js';
+import { resumenStats, RESUMEN_BLOCKS } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -499,18 +499,32 @@ export function runBrutosReporte(_primaryRows, tabRows, mapping) {
 }
 
 export function summarizeBrutosReporte(results) {
+  // Mismo criterio que `renderBrutosReporteResults`: sin ninguna columna del
+  // Tabulado mapeada, el reporte sale vacío salvo por lo fijo (FECHA_INI/FIN e
+  // ID_EMPLEADO) y no hay nada para descargar todavía.
+  const sinColumnas = !Object.values(results.cols).some(Boolean);
+  const total = results.summary.total;
+
   return {
-    status:   'info',
-    headline: `${results.summary.total} registros — Reporte generado del Tabulado`,
+    status:   sinColumnas ? 'warning' : 'info',
+    headline: sinColumnas
+      ? 'No hay columnas configuradas en el Tabulado para el Reporte de Brutos — no se puede descargar.'
+      : `Reporte de Brutos generado — ${total} registro${total === 1 ? '' : 's'}, listo para descargar.`,
     insights: [],
     // Genera el reporte desde el Tabulado — no hay una segunda fuente contra
-    // la cual cruzar, así que no aplica un semáforo de diferencias.
+    // la cual cruzar, así que no aplica un semáforo de diferencias (D-077/D-078).
     unit:            null,
     unitsTotal:      null,
     unitsWithDiff:   null,
     diffTotalAmount: null,
     worstCase:       null,
-    contextNote:     null,
+    contextNote:     sinColumnas
+      ? 'Volvé a cargar el Tabulado y completá los campos de la sección "Brutos".'
+      : null,
+    // No cruza dos archivos: no hay escala, puente, lados ni cortes que
+    // dibujar. La declaración explícita es lo que el candado de CI reconoce
+    // como migrado (specs/vista-estandar-resumen.md §4).
+    resumen: resumenStats({ unit: null, rows: [], notApplicable: RESUMEN_BLOCKS }),
   };
 }
 

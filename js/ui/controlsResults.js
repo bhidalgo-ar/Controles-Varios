@@ -1131,7 +1131,12 @@ function buildBucketsCardHtml(buckets, unit, controlId) {
 function buildGroupCardHtml(groups, unit, thresholdPct, controlId) {
   if (!Array.isArray(groups) || groups.length === 0) return '';
   const maxAmount = groups.reduce((m, g) => Math.max(m, g.amount), 0);
-  if (maxAmount <= 0) return '';
+  const maxUnits  = groups.reduce((m, g) => Math.max(m, g.units), 0);
+  if (maxAmount <= 0 && maxUnits <= 0) return '';
+  // Sin signo (S=no del mapa, ej. novedades_importador) no hay plata que pesar:
+  // la barra se escala por UNIDADES y el importe no se muestra — mostrar "$
+  // 0,00" ahí sería un dato falso, no la ausencia del dato.
+  const porMonto = maxAmount > 0;
 
   const enRojo = groups.filter(g => g.unitsTotal
     && computeSemaforoStatus(g.units, g.unitsTotal, thresholdPct) === 'error').length;
@@ -1149,11 +1154,11 @@ function buildGroupCardHtml(groups, unit, thresholdPct, controlId) {
             ${pct === null ? '' : `<span class="rsm-cut__value rsm-cut__value--${esc(tier)}">${fmtPct1(pct)} %</span>`}
           </div>
           <div class="rsm-cut__track">
-            <div class="rsm-cut__fill" style="width:${fmtPct2((g.amount / maxAmount) * 100)}%;"></div>
+            <div class="rsm-cut__fill" style="width:${fmtPct2((porMonto ? g.amount / maxAmount : g.units / maxUnits) * 100)}%;"></div>
           </div>
           <div class="rsm-cut__sub">
             ${g.unitsTotal ? esc(`${fmtInt(g.units)} de ${fmtUnitCount(g.unitsTotal, unit)}`) : esc(fmtUnitCount(g.units, unit))}
-            · ${formatAmount(g.amount)}
+            ${porMonto ? ` · ${formatAmount(g.amount)}` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -1371,7 +1376,13 @@ function verdictEyebrow(totalChecked, totalControls) {
 function verdict3aSubline(ctx) {
   const { mainGroup, thresholdPct, overallTier, totalChecked, controlSummaries } = ctx;
   if (totalChecked === 0) {
-    return 'Esta corrida sólo incluye controles de generación de reporte (sin cruce de diferencias).';
+    // Un control que genera un archivo en vez de cruzar (D-077/D-078): el
+    // veredicto habla DEL ARCHIVO —qué se generó, con cuántos registros, y si
+    // está listo para descargar o qué lo frena—, y ese texto ya lo arma el
+    // propio `summarize` en `headline`. El genérico es sólo el resguardo por
+    // si un control nuevo llega sin headline.
+    return esc(controlSummaries[0]?.summary?.headline
+      || 'Esta corrida sólo incluye controles de generación de reporte (sin cruce de diferencias).');
   }
   if (!mainGroup) {
     // El control terminó en error sin unidades que contar (falló el cruce).

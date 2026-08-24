@@ -12,7 +12,7 @@ import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { writeGroupedContractSheet } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
-import { resumenStats } from './resumenStats.js';
+import { resumenStats, RESUMEN_BLOCKS } from './resumenStats.js';
 import {
   renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
@@ -859,16 +859,31 @@ export function runNrReporte(_primaryRows, tabRows, mapping) {
 }
 
 export function summarizeNrReporte(results) {
+  // Mismo criterio que `renderNrReporteResults`: sólo importan los empleados
+  // con algún valor NR distinto de cero — un concepto sin ninguna celda
+  // cargada es normal (D-036) y no entra al reporte.
+  const relevantRows = results.rows.filter(reporteRowHasValue);
+  const conceptsWithValue = NR_CONCEPTS.filter(c => relevantRows.some(r => tieneValor(r[c.key])));
+  const hayValores = relevantRows.length > 0;
+
   return {
-    status:   'info',
-    headline: `${results.summary.total} registros — Reporte de NR generado del Tabulado`,
+    status:   hayValores ? 'info' : 'warning',
+    headline: hayValores
+      ? `Reporte de NR generado — ${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores, listo para descargar.`
+      : 'Ningún empleado tiene valores NR distintos de cero en este período — no hay nada para descargar.',
     insights: [],
     unit:            null,
     unitsTotal:      null,
     unitsWithDiff:   null,
     diffTotalAmount: null,
     worstCase:       null,
-    contextNote:     null,
+    contextNote:     hayValores
+      ? `${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor.`
+      : null,
+    // No cruza dos archivos: no hay escala, puente, lados ni cortes que
+    // dibujar. La declaración explícita es lo que el candado de CI reconoce
+    // como migrado (specs/vista-estandar-resumen.md §4).
+    resumen: resumenStats({ unit: null, rows: [], notApplicable: RESUMEN_BLOCKS }),
   };
 }
 

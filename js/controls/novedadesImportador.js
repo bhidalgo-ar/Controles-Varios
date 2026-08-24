@@ -45,6 +45,7 @@
 
 import { groupRowsByLegajo } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
+import { resumenStats, RESUMEN_BLOCKS } from './resumenStats.js';
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, diffBadgeHtml }
   from '../ui/resultBlocks.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
@@ -598,6 +599,7 @@ export function summarizeNovedadesImportador(results) {
       status: 'warning', headline: results.error, insights: [],
       unit: null, unitsTotal: null, unitsWithDiff: null,
       diffTotalAmount: null, worstCase: null, contextNote: null,
+      resumen: resumenStats({ unit: null, rows: [], notApplicable: RESUMEN_BLOCKS }),
     };
   }
 
@@ -637,6 +639,22 @@ export function summarizeNovedadesImportador(results) {
   const unitsTotal    = s.legajos;
   const unitsWithDiff = cuadra ? s.legajosParaRevisar : unitsTotal;
 
+  // Los legajos que hay que mirar, como filas y no sólo como conteo: es lo que
+  // `resumenStats` necesita para el corte de la escala y para las claves
+  // cruzadas de 3b. Mismo criterio que `unitsWithDiff` de arriba: si el
+  // archivo no cuadra contra la planilla leída, TODOS los legajos se marcan.
+  //
+  // Deuda conocida: un legajo cuya ÚNICA novedad cayó en una columna sin
+  // código nunca llega a tener fila en `results.filas` (esa lista sale de
+  // `celdas`, que sólo trae lo que YA tiene concepto resuelto) — cuenta para
+  // `unitsWithDiff` pero no aparece en el corte por UO ni en el top: no hay
+  // fila con nombre que ofrecerle. No se inventa una.
+  const marcados = legajosMarcados(results);
+  const paraRevisarKeys = new Set([...marcados.conAfuera, ...marcados.conDifF2]);
+  const rowsParaRevisar = cuadra
+    ? results.filas.filter(f => paraRevisarKeys.has(f.clave))
+    : results.filas;
+
   return {
     status:   (cuadra && unitsWithDiff === 0 && results.uo.origen !== 'sin_declarar') ? 'success' : 'warning',
     headline: `${s.legajos} legajo${s.legajos === 1 ? '' : 's'} · ${s.conceptos} concepto${s.conceptos === 1 ? '' : 's'} · importador F2 generado`,
@@ -649,6 +667,53 @@ export function summarizeNovedadesImportador(results) {
     contextNote: cuadra
       ? `entran ${s.celdasEnF2} novedades de las ${s.celdasLeidas} leídas en la planilla`
       : 'el importador no cuadra contra la planilla leída — no lo subas sin revisar',
+    // El puente de este control no es un cruce de dos totales: es qué entró al
+    // F2 y qué quedó afuera, con motivo — ya lo calcula `run()` (afuera[]).
+    // byGroup es la UO del archivo: la tarjeta compartida del tablero ("En qué
+    // empresa") sólo lee la clave `empresa` de `byGroup` — se declara con ese
+    // nombre a propósito, aunque acá el grupo es la UO y no una razón social.
+    // Con un único valor por corrida se dibuja como una sola barra al 100 %:
+    // es cierto y no estorba (mismo criterio que Netos con un solo Tabulado).
+    // Sin signo ni magnitud (S=no del mapa): no hay "para qué lado" ni tramos
+    // que declarar, y la barra de este corte se escala por legajos, no por
+    // plata (ver `porMonto` en `buildGroupCardHtml`).
+    resumen: resumenStats({
+      unit: 'legajo',
+      rows: rowsParaRevisar,
+      allRows: results.filas,
+      key: (f) => f.clave,
+      unitLabel: (f) => f.nombre,
+      group: { empresa: () => results.uo.nombre || results.uo.nro || null },
+      bridge: novedadesImportadorBridge(results),
+      notApplicable: ['signed', 'buckets', 'cause', 'top'],
+    }),
+  };
+}
+
+/**
+ * El puente de este control: qué entró al importador y qué quedó afuera, con
+ * motivo. No es un cruce de dos totales —no hay una segunda fuente contra la
+ * cual medir una diferencia— así que no cierra al centavo como el de Netos: son
+ * tres conteos informativos que ya calculó `run()` (D-070).
+ */
+function novedadesImportadorBridge(results) {
+  const s = results.summary;
+  const motivos = [];
+  if (s.celdasSinCodigo > 0) motivos.push(`${s.celdasSinCodigo} en columnas sin código`);
+  if (s.celdasAfuera > 0)    motivos.push(`${s.celdasAfuera} con un valor que no se pudo leer`);
+  if (s.filasSinLegajo > 0)  motivos.push(`${s.filasSinLegajo} en filas sin legajo`);
+  const afueraTotal = s.celdasSinCodigo + s.celdasAfuera + s.filasSinLegajo;
+
+  return {
+    kind: 'counts',
+    title: 'Qué entra al importador',
+    steps: [
+      { label: 'Novedades leídas en la planilla', amount: s.celdasLeidas, tone: 'ink' },
+      ...(afueraTotal > 0
+        ? [{ label: 'Quedan afuera', amount: afueraTotal, tone: 'warn', note: motivos.join(' · ') }]
+        : []),
+      { label: 'Entran al importador F2', amount: s.celdasEnF2, tone: 'accent' },
+    ],
   };
 }
 

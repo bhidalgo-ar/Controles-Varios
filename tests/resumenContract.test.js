@@ -40,11 +40,8 @@ const PENDIENTES = {
   // Tanda 3 — Axton / temporales — migrada el 2026-08-22 (agrupadores,
   // novedades_liquidacion, variaciones_sueldos, variaciones_conceptos,
   // pop_variaciones).
-  // Tanda 4 — los que generan archivo
-  brutos_reporte:         'tanda 4',
-  gs_pers_reporte:        'tanda 4',
-  nr_reporte:             'tanda 4',
-  novedades_importador:   'tanda 4',
+  // Tanda 4 — los que generan archivo — migrada el 2026-08-22 (brutos_reporte,
+  // gs_pers_reporte, nr_reporte, novedades_importador).
   // Tanda 5 — contables + acreditaciones
   finadiet_asiento:       'tanda 5',
   conta_desglosada:       'tanda 5',
