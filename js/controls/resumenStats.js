@@ -89,9 +89,15 @@ export function resumenStats(spec = {}) {
   const universe = Array.isArray(allRows) ? allRows : diffRows;
 
   // La diferencia de cada fila, una sola vez: la piden los lados, los cortes de
-  // magnitud, el corte por causa y el top.
+  // magnitud, el corte por causa y el top. Se calcula si el control da `diff`,
+  // AUNQUE 'signed' esté declarado no aplicable: un control puede no tener un
+  // criterio cerrado para "de más/de menos" (Cruce por Agrupadores, PENDIENTE
+  // DE WILLY en el legajo vs. agrupador, spec §7.6) y aun así necesitar la
+  // magnitud para los tramos, la causa o el top. Cada bloque se apaga por su
+  // propio nombre más abajo (`aplica('signed')`, `aplica('buckets')`, …) — este
+  // Map es sólo el insumo compartido, no una salida.
   const signedOf = new Map();
-  if (diff && aplica('signed')) {
+  if (diff) {
     for (const row of diffRows) {
       const v = diff(row);
       if (isNum(v)) signedOf.set(row, v);

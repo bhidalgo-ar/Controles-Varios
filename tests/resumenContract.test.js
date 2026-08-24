@@ -37,12 +37,9 @@ function assert(desc, val, detalle) {
 const PENDIENTES = {
   // Tanda 2 — cruce Meta4/Marval — migrada el 2026-08-22 (brutos, gs_pers, nr,
   // rend_vs_tabu, rend_x_ee, rend_vs_asiento).
-  // Tanda 3 — Axton / temporales
-  agrupadores:            'tanda 3',
-  novedades_liquidacion:  'tanda 3',
-  variaciones_sueldos:    'tanda 3',
-  variaciones_conceptos:  'tanda 3',
-  pop_variaciones:        'tanda 3',
+  // Tanda 3 — Axton / temporales — migrada el 2026-08-22 (agrupadores,
+  // novedades_liquidacion, variaciones_sueldos, variaciones_conceptos,
+  // pop_variaciones).
   // Tanda 4 — los que generan archivo
   brutos_reporte:         'tanda 4',
   gs_pers_reporte:        'tanda 4',

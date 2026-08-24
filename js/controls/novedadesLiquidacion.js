@@ -39,6 +39,7 @@ import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { isDiff } from './tolerance.js';
 import { diffStats } from './semaforo.js';
+import { resumenStats } from './resumenStats.js';
 import { renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, diffBadgeHtml, fmtSigned }
   from '../ui/resultBlocks.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
@@ -685,7 +686,134 @@ export function summarizeNovedadesLiquidacion(results) {
     contextNote: `se comparó ${s.paresComparados} de ${s.pares} novedades`
       + (s.noComparable > 0 ? `: ${s.noComparable} no comparables` : '')
       + (s.sinContraparte > 0 ? `${s.noComparable > 0 ? ' y' : ':'} ${s.sinContraparte} sin contraparte` : ''),
+    resumen: resumenDelControl(results),
   };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Los conteos y las claves van en LEGAJO (la unidad del control, D-070), nunca
+// en la fila legajo × concepto del cruce: se arma una fila por legajo,
+// agregando sus pares.
+
+/**
+ * Junta los pares de un legajo en una sola fila. `difImporte` es la suma CON
+ * SIGNO de los pares en banda "difiere" (`null`, no `0`, si el legajo no tiene
+ * ninguno — su problema es "sin contraparte" o "no comparable", no un importe).
+ * `peor` es el concepto que más aporta a esa suma en valor absoluto: la misma
+ * prioridad que usa el resto del repo para elegir UNA causa por unidad.
+ */
+function filasLegajoParaResumen(results) {
+  const porLegajo = new Map();
+  const get = (clave) => {
+    let r = porLegajo.get(clave);
+    if (!r) {
+      r = { clave, legajo: clave, nombre: '', difImporte: null, peor: null };
+      porLegajo.set(clave, r);
+    }
+    return r;
+  };
+
+  for (const f of results.filas) {
+    const r = get(f.clave);
+    r.legajo = f.legajo;
+    r.nombre = f.nombre;
+    if (f.banda === 'difiere' && f.difImporte !== null) {
+      r.difImporte = (r.difImporte ?? 0) + f.difImporte;
+      if (!r.peor || Math.abs(f.difImporte) > Math.abs(r.peor.difImporte)) {
+        r.peor = { claveConcepto: f.claveConcepto, codigo: f.codigo, rotulo: f.rotulo || f.codigo, difImporte: f.difImporte };
+      }
+    }
+  }
+  // El legajo del que no se pudo comparar nada (D-073) igual entra, sin causa:
+  // el problema no es un concepto puntual, es que no hubo con qué comparar.
+  for (const clave of results.legajosSinNadaComparado) get(clave);
+
+  return [...porLegajo.values()];
+}
+
+/**
+ * El puente: no hay un total en pesos único de "Pedido" y "Liquidado" que
+ * cierre limpio (un legajo puede pedir en un concepto y liquidar en otro, o
+ * pedir cantidad y liquidar importe) — por eso el puente cuenta PARES legajo ×
+ * concepto (`kind: 'counts'`), no plata, con las 4 bandas del cruce como la
+ * franja de proporción del medio (D-073).
+ */
+function bridgeDelRun(results) {
+  const s = results.summary;
+  if (s.pares === 0) return null;
+
+  const pedido = results.filas.filter(f => f.novCantidad !== null || f.novImporte !== null).length;
+  const liquidado = results.filas.filter(f => f.liqCantidad !== null || f.liqImporte !== null).length;
+  const pctCoincide = Math.round((s.coincide / s.pares) * 100);
+
+  return {
+    kind: 'counts',
+    steps: [
+      { label: 'Pedido',              amount: pedido,     tone: 'ink',
+        note: 'pares legajo × concepto con novedad cargada' },
+      { label: 'Diferencia comparada', amount: s.difiere, tone: 'error',
+        note: 'de los pares que se pudieron comparar' },
+      { label: 'Liquidado',           amount: liquidado,  tone: 'ink',
+        note: 'pares con algo liquidado' },
+    ],
+    proportion: {
+      parts: [
+        { tone: 'accent',  amount: s.coincide,        label: 'Coincide' },
+        { tone: 'error',   amount: s.difiere,         label: 'Con diferencia' },
+        { tone: 'neutral', amount: s.noComparable,    label: 'No comparable' },
+        { tone: 'warn',    amount: s.sinContraparte,  label: 'Sin contraparte' },
+      ],
+      note: `El ${pctCoincide} % de los ${s.pares} pares legajo × concepto coincide.`,
+    },
+  };
+}
+
+/**
+ * Si esta fila es de las que hacen que SU legajo cuente para revisar (la misma
+ * regla de `legajosConDif` en `runNovedadesLiquidacion()`, reconstruida sobre
+ * `banda`/`lado`/`motivo` porque el `run()` no expone el Set): "difiere"
+ * siempre, y "sin contraparte" salvo la excepción de D-070 (todo lo que el
+ * analista declaró que no llega a la liquidación).
+ */
+function filaEsParaRevisar(f) {
+  if (f.banda === 'difiere') return true;
+  if (f.banda === 'sin_contraparte') return !(f.lado === 'solo_novedad' && f.motivo === 'sin_liquidacion_esperada');
+  return false;
+}
+
+function resumenDelControl(results) {
+  const filas = filasLegajoParaResumen(results);
+  // El mismo universo que cuenta `unitsWithDiff` (D-073): con diferencia real,
+  // MÁS el legajo del que no se pudo comparar nada — ese tampoco es "aprobado".
+  const legajosParaRevisar = new Set([
+    ...results.filas.filter(filaEsParaRevisar).map(f => f.clave),
+    ...results.legajosSinNadaComparado,
+  ]);
+  const conDif = filas.filter(f => legajosParaRevisar.has(f.clave));
+
+  return resumenStats({
+    unit: 'legajo',
+    rows: conDif,
+    allRows: filas,
+    diff: (f) => f.difImporte,
+    key: (f) => f.clave,
+    unitLabel: (f) => f.nombre,
+    // Una sola UO por corrida (D-070): con una sola, el corte sale en una
+    // barra al 100 % — cierto y no estorba, aporta el día que el importador
+    // traiga más de una.
+    group: { uo: () => results.unidadOrganizativa },
+    cause: (f) => (f.peor ? { key: f.peor.claveConcepto, label: f.peor.rotulo, code: f.peor.codigo } : null),
+    top: (f) => ({ legajo: f.legajo, nombre: f.nombre, rubro: f.peor?.rotulo ?? null }),
+    bridge: bridgeDelRun(results),
+    // `difImporte = novImporte − liqImporte`: positivo es "se pidió más de lo
+    // que se liquidó" (liquidado de menos), negativo es lo contrario. "De
+    // más/De menos" genérico leería esto al revés de lo que pasó.
+    sideLabels: {
+      over:  { label: 'Liquidado de menos', note: 'lo pedido no llegó completo a la liquidación' },
+      under: { label: 'Liquidado de más',   note: 'se liquidó más de lo que se pidió' },
+    },
+  });
 }
 
 // ── Pantalla ─────────────────────────────────────────────────────────────────
