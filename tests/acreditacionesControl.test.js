@@ -124,6 +124,26 @@ const results = ctrl.run(acredRows, [], { period: '2026-07' });
 // ── Qué filas entran ─────────────────────────────────────────────────────────
 
 assert('descarta la fila de provisiones (sin importe y sin listado)', results.summary.descartadas === 1);
+
+// ── El signo del tablero del Resumen (§4 de specs/vista-estandar-resumen.md) ──
+// Acá el signo NO puede estar invertido por construcción: lo pendiente es plata
+// liquidada que todavía no se acreditó, así que siempre va del lado "de menos" y
+// no existe un lado "de más". Lo que sí puede romperse —y es lo que fija este
+// bloque— es que a una lista con alerta de integridad se le invente un importe
+// de diferencia: la alerta es de calidad de dato, no de cuadre.
+{
+  const sr = ctrl.summarize(results).resumen;
+  assert('diffSigned: no hay lado "de más" — nada se acreditó por encima de lo liquidado',
+    sr.diffSigned.over === null);
+  assert('diffSigned: los dos grupos pendientes van del lado "Sin asignar" con su total',
+    sr.diffSigned.under.label === 'Sin asignar'
+    && sr.diffSigned.under.units === 2
+    && sr.diffSigned.under.amount === 2400);
+  // 3 unidades con diferencia, pero sólo 2 aportan importe: la tercera es una
+  // lista con alerta de integridad, y a ésa no se le firma un signo.
+  assert('a la lista con alerta de integridad no se le inventa un importe de diferencia',
+    ctrl.summarize(results).unitsWithDiff === 3 && sr.diffSigned.under.units === 2);
+}
 assert('las 10 filas restantes entran al reporte', results.summary.acreditaciones === 10);
 
 // ── Agrupación ───────────────────────────────────────────────────────────────

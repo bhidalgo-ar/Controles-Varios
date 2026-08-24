@@ -129,6 +129,26 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   const s = summarizeContaDesglosada(r);
   assert('…y el descuadre sale como aviso, no como corrida en verde',
     s.status === 'warning' && s.insights.some(i => i.label.includes('no cierra')));
+
+  // El signo del tablero del Resumen (§4 de specs/vista-estandar-resumen.md): el
+  // saldo de CADA cuenta cae del lado que le toca. Acá 'Sueldos Ventas' juntó
+  // 1.100 al DEBE y 'Sueldos a pagar' 1.000 al HABER.
+  const sd = s.resumen.diffSigned;
+  assert('diffSigned: la cuenta con más DEBE cae en "Debe > Haber" con su importe',
+    sd.over.label === 'Debe > Haber' && sd.over.amount === 1100);
+  assert('diffSigned: la cuenta con más HABER cae en "Haber > Debe" con su importe',
+    sd.under.label === 'Haber > Debe' && sd.under.amount === 1000);
+
+  // El espejo: si el que falta es el DEBE en vez del HABER, se dan vuelta los
+  // lados. Prueba que el signo se lee del saldo y no está cableado.
+  const espejo = summarizeContaDesglosada(runContaDesglosada([
+    fila({ legajo: '1', nro: '100', concepto: 'Sueldo', importe: '1.000,00',
+           debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '200', concepto: 'Presentismo', importe: '100,00',
+           debe: 'Nada al asiento', haber: 'Sueldos a pagar' }),
+  ], [], MAPPING)).resumen.diffSigned;
+  assert('diffSigned: el caso espejo intercambia los importes entre los dos lados',
+    espejo.over.amount === 1000 && espejo.under.amount === 1100);
 }
 
 // ── 1b. Con todos los movimientos completos, la desglosada cierra ────────────

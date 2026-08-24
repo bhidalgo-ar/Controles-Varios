@@ -148,15 +148,21 @@ Tabulado y Rendimiento x EE (tanda 2, `tests/resumenCruceMeta4.test.js`), Noveda
 y Variación Sueldos (tanda 3, `tests/resumenTanda3.test.js`, que además asserta que Agrupadores y
 POP lo declaran no aplicable).
 
-**Lo que NO tiene assert propio de `diffSigned`, al cerrar las seis tandas:** GS Pers y Rendimiento
-vs Asiento (tanda 2) conservan el signo por construcción —misma función (`diffOrNull`/resta
-directa) que sus pares ya verificados— y el test lo confirma indirectamente vía `byCause` (importes
-positivos en el sentido esperado). Y **los tres controles de la tanda 5** —Asiento de Remuneraciones,
-Contabilidad Desglosada y Acreditaciones—: esa tanda no sumó test propio, así que su signo
-(`conciliacion.saldo` leído como DEBE > / < HABER en los dos contables, y el grupo pendiente en
-Acreditaciones) está apoyado en la lectura del código y no en un assert. Las tandas 4 y 6 no dejan
-nada por comprobar acá: sus controles declaran el bloque `signed` no aplicable, y eso sí está
-asserteado. **Es lo primero a cubrir con un test cuando se vuelva sobre este frente.**
+**La tanda 5 también quedó cubierta** (2026-08-24, en los tests que ya tenía cada control): en
+**Asiento de Remuneraciones** (`tests/finadietAsientoControl.test.js`) y **Contabilidad Desglosada**
+(`tests/contaDesglosadaControl.test.js`) el saldo de cada cuenta cae del lado que le toca, y **el caso
+espejo intercambia los importes entre los dos lados** — que es lo que prueba que el signo se lee del
+saldo y no está cableado; además, con el asiento cerrado `diffSigned` sale `null` y no en cero. En
+**Acreditaciones** (`tests/acreditacionesControl.test.js`) el signo no puede invertirse por
+construcción —lo pendiente es plata liquidada que todavía no se acreditó, así que no existe un lado
+"de más"—, y lo que el test fija es lo que sí podía romperse: que a una lista con alerta de
+integridad **no** se le invente un importe de diferencia (3 unidades con diferencia, 2 con importe).
+
+**Lo único que sigue sin assert propio de `diffSigned`:** GS Pers y Rendimiento vs Asiento (tanda 2).
+Conservan el signo por construcción —misma función (`diffOrNull`/resta directa) que sus pares ya
+verificados— y el test lo confirma indirectamente vía `byCause` (importes positivos en el sentido
+esperado), pero no traen un assert propio. Las tandas 4 y 6 no dejan nada por comprobar acá: sus
+controles declaran el bloque `signed` no aplicable, y eso sí está asserteado.
 
 ## 5. Qué muere y qué queda
 

@@ -7,6 +7,36 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(tests): un e2e que fallaba la mitad de las veces, y el signo de la tanda 5 pasa a estar asserteado — 2026-08-24
+
+- **`tests/e2e/fichasLegajoConcepto.spec.js` flakeaba desde antes de todo el frente del Resumen.**
+  Contaba las filas del detalle con `expect(await filas.count())` —una foto sin reintento— justo
+  después de abrir la ficha, pero el cuerpo de la ficha se dibuja *al abrirla* (lo asserta el test
+  anterior en el mismo archivo), así que la foto salía antes de que existiera la grilla y contaba
+  cero. Medido en tres versiones, 9 corridas cada una: **6 fallas en `d9cfe9d` (antes de las tandas),
+  5 con las tandas mergeadas, 4 en la rama de docs** — nunca estuvo sano; el reintento de CI lo venía
+  tapando. Las dos afirmaciones pasan a la forma que espera. **702 corridas seguidas en verde.**
+- **Un caso peor en el mismo archivo:** el test de "el legajo del que no se comparó nada no queda
+  aprobado" (D-073) contaba fichas justo después de clickear un chip que re-filtra la lista, y su
+  assert es una **ausencia** (`ninguna en verde`). Con la lista todavía sin dibujar, ese test **pasaba
+  en vacío**, sin haber mirado ninguna ficha. Ahora espera la lista nueva antes de afirmar.
+- **`tests/e2e/loteMeta4.spec.js`** tenía el mismo `count()` crudo tras abrir la Planilla (su helper
+  espera la barra, que puede dibujarse antes que la grilla). Endurecido igual, por la misma razón.
+  Los otros seis `count()` crudos de la suite ya tienen un assert que espera antes y quedan como
+  están.
+- **El signo de la tanda 5 pasa a estar asserteado**, en los tests que ya tenía cada control: en
+  Asiento de Remuneraciones y Contabilidad Desglosada, el saldo de cada cuenta cae del lado que le
+  toca y **el caso espejo intercambia los importes** —lo que prueba que el signo se lee del saldo y
+  no está cableado—, y con el asiento cerrado `diffSigned` sale `null` y no en cero. En
+  Acreditaciones, donde el signo no puede invertirse por construcción, lo que se fija es que a una
+  lista con alerta de integridad **no** se le invente un importe de diferencia. 10 asserts nuevos.
+- **`CLAUDE.md` gana tres trampas del entorno remoto** que costaron trabajo en esta sesión: que el
+  e2e necesita `PLAYWRIGHT_CHROMIUM_PATH` para arrancar el navegador (sin eso una corrida puede
+  terminar sin ejercitar nada — y se reportó una vez como "e2e en verde" sin que fuera cierto); que
+  aun con eso los ~17 tests que abren la app real fallan siempre acá porque `index.html` trae Dexie y
+  SheetJS por CDN; y la regla del `count()` crudo.
+- `npm run test:unit`: **4.456 asserts, 0 ✗**. `npm run check:datos`: limpio.
+
 ### chore(resumen): las cinco tandas paralelas del tablero del Resumen se integran en una sola rama — 2026-08-24
 
 - **No cambia nada de lo que ve el analista**: es el trabajo de apilar las tandas 2, 3, 4, 5 y 6 —que
@@ -26,9 +56,9 @@
   **4.446 asserts en 50 archivos, 0 ✗**, con `resumenCruceMeta4.test.js` y `resumenTanda3.test.js`
   sumados a la cadena de `package.json`.
 - **Queda por hacer, y no lo puede hacer CI:** que Willy mire el tablero en el navegador. Detalle de
-  qué mirar y en qué orden, en `ESTADO.md`. También queda anotado en el §4 de la spec que el signo
-  de los tres controles de la tanda 5 no tiene assert propio — es lo primero a cubrir cuando se
-  vuelva sobre este frente.
+  qué mirar y en qué orden, en `ESTADO.md`. (El signo de los tres controles de la tanda 5, que esta
+  entrada dejaba anotado como deuda, quedó cubierto con asserts el 2026-08-24 — ver la entrada de
+  esa fecha.)
 
 ### feat(resumen): EE x CATEG y Acumuladores Ganancias publican el resumen del tablero — 2026-08-22
 

@@ -198,6 +198,26 @@ Cuando una regla se puede escribir como assert, escribila como assert: `tests/gs
 documenta la consolidación por legajo mejor que cualquier párrafo de acá, y falla solo si alguien la
 rompe.
 
+**Para correr el e2e en una sesión remota hay que setear `PLAYWRIGHT_CHROMIUM_PATH`.** El contenedor
+trae un Chromium más nuevo que el que espera esta versión de Playwright, así que sin esa variable el
+navegador no arranca. La config ya tiene la puerta —`launchOptions` la lee— pero nadie la setea sola:
+`export PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium` antes de `npx playwright test`. En CI la
+variable no existe y no hace falta. Sin ella, una corrida puede terminar sin ejercitar nada y **eso ya
+se reportó una vez como "e2e en verde" sin que fuera cierto**: si vas a afirmar que el e2e pasó, mirá
+el conteo de tests, no el código de salida.
+
+**Y aun con la variable puesta, en una sesión remota el e2e no pasa completo: los ~17 tests que abren
+la app real (`goto('/')`) fallan siempre.** `index.html` trae Dexie y SheetJS por CDN y el contenedor
+no llega. Los que cargan un fixture de `tests/e2e/fixtures/` sí corren y son los que sirven para
+verificar acá; lo que toca la app de verdad lo prueba CI o nadie. No es un bug del código y no se
+"arregla" volviendo a correrlo.
+
+Un `count()` crudo (`expect(await loc.count()).toBe...`) es una foto sin reintento: puesto justo
+después de un click o de abrir una ficha, saca la foto antes de que el DOM nuevo exista. Usá las
+formas que esperan (`toHaveCount`, `toBeVisible` sobre `.first()`). Cuando lo que se afirma es una
+ausencia (`toHaveCount(0)`), primero esperá que lo nuevo esté dibujado: si no, el test pasa en vacío
+sin haber mirado nada. Costó un CI en rojo (`tests/e2e/fichasLegajoConcepto.spec.js`, ~50 % de fallas).
+
 ---
 
 ## Git

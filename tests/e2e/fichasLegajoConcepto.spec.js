@@ -147,9 +147,13 @@ test('Novedades vs Liquidación: el legajo del que no se comparó nada no queda 
   await abrirFichas(page, '/tests/e2e/fixtures/novedadesLiquidacion.html');
   await page.locator('.results-chip', { hasText: 'Sin comparar' }).click();
   const fichas = page.locator('.ficha:visible');
-  expect(await fichas.count()).toBeGreaterThan(0);
+  // El chip re-filtra la lista, así que hay que esperar la lista nueva antes de
+  // contar. Y acá no alcanza con que no flakee: el assert de abajo es "ninguna
+  // está en verde", que con la lista todavía sin dibujar pasaría en vacío, sin
+  // haber mirado ninguna ficha.
+  await expect(fichas.first()).toBeVisible();
   // Ninguna de las que caen en "Sin comparar" puede estar pintada de verde.
-  expect(await fichas.locator('.ficha__avatar--ok').count()).toBe(0);
+  await expect(fichas.locator('.ficha__avatar--ok')).toHaveCount(0);
   // Y el motivo se lee, no queda detrás de un guión.
   const primera = fichas.first();
   await primera.locator('summary').click();
