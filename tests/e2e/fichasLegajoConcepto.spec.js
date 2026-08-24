@@ -85,15 +85,18 @@ for (const p of PANTALLAS) {
     const primera = page.locator('.ficha:visible').first();
     await primera.locator('summary').click();
     const filas = primera.locator('.ficha-detail__grid tbody tr');
-    expect(await filas.count()).toBeGreaterThan(0);
+    // El cuerpo de la ficha se dibuja al abrirla, no al pintar la lista (lo
+    // asserta el test de más arriba), así que hay que esperarlo: un count()
+    // crudo acá saca la foto antes de que exista la grilla y devuelve 0.
+    await expect(filas.first()).toBeVisible();
     for (let i = 0; i < await filas.count(); i++) {
       // El código va adelante: el Tabulado trae '4899-COCHERA_IG' y
       // '8805-DTO_COCHERA', y matchear por nombre agarra el equivocado.
       await expect(filas.nth(i).locator('td').first()).toHaveText(/^\d/);
     }
     // Verde suave lo que suma, rojo suave lo que resta.
-    expect(await primera.locator('.ficha-detail__row--pos, .ficha-detail__row--neg').count())
-      .toBeGreaterThan(0);
+    await expect(primera.locator('.ficha-detail__row--pos, .ficha-detail__row--neg').first())
+      .toBeVisible();
   });
 
   test(`${p.nombre}: el detalle scrollea adentro de la tarjeta, la página no`, async ({ page }) => {
