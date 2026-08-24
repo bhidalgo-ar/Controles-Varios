@@ -7,6 +7,25 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): EE x CATEG y Acumuladores Ganancias publican el resumen del tablero — 2026-08-22
+
+- **Tanda 6 de `specs/vista-estandar-resumen.md`**: los dos únicos controles que no cruzan importes
+  entre archivos ahora alimentan el tablero del Resumen (D-094). No se tocó el tablero ni el helper
+  compartido — ya existían enteros desde la tanda 1 (D-089) — sólo el `summarize` de cada control.
+- **EE x CATEG**: el puente del Resumen es de conteos —comparados → coinciden → difieren → sin
+  comparar—, la misma cascada que ya usa la ficha de cada legajo. Sin signo ni plata (compara texto:
+  puesto, centro de costo, departamento), y el corte por campo no se repite en el tablero: ya lo
+  contesta la cuarta solapa "Por campo" de este control.
+- **Acumuladores Ganancias**: el puente cuenta legajos en los mismos tres estados que ya define
+  `estadoDeFicha()` para el chip de cada ficha (D-077/D-082) — cierra al centavo, sin comparar, con
+  diferencia —, sin inventar un cruce de totales en pesos aparte. Sin escala (control de generación,
+  D-026): sin unidad de cruce no hay semáforo que dibujar, y el veredicto sigue hablando de la
+  reconciliación, como ya declaraba D-077.
+- **Ningún conteo cambia.** `unitsWithDiff`/`unitsTotal` de los dos controles quedan exactamente
+  igual; lo único nuevo es el sub-objeto `summary.resumen`.
+- **La lista de excepciones de `tests/resumenContract.test.js` baja de 20 a 18** — los dos migrados
+  salen. No llega a cero: las tandas 2 a 5 (18 controles) corren en paralelo y todavía no están
+  integradas a `main` cuando se escribe esta entrada. Detalle de por qué en D-094.
 ### feat(resumen): Asiento de Remuneraciones, Contabilidad Desglosada y Acreditaciones entran al tablero del Resumen — 2026-08-22
 
 - **Tanda 5 de `specs/vista-estandar-resumen.md`** (D-093). Estos tres controles ya tenían el tablero

@@ -19,6 +19,7 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { periodSuffix } from '../utils/dates.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { renderVerdict, renderTiles, renderResumenDetalle, renderRubroGrid } from '../ui/resultBlocks.js';
+import { resumenStats } from './resumenStats.js';
 
 // ── Los campos que este control cruza ────────────────────────────────────────
 //
@@ -104,6 +105,49 @@ export function summarizeCatXEmpleados(results) {
     diffTotalAmount: null,
     worstCase:       null,
     contextNote,
+    resumen:         resumenDeCatXEmpleados(results),
+  };
+}
+
+// ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
+//
+// Este control compara CAMPOS DE TEXTO, no importes: sin signo y sin plata, así
+// que `diffSigned`/`diffBuckets` no aplican, y tampoco hay una empresa contra
+// otra que agrupar. El puente es de CONTEOS — comparados → coinciden → difieren
+// → sin comparar, la misma tira que ya usa la ficha de cada legajo (D-082) —, y
+// el corte por campo NO se repite acá: eso ya lo contesta la cuarta solapa
+// "Por campo", no un bloque nuevo del tablero.
+function resumenDeCatXEmpleados(results) {
+  return resumenStats({
+    unit: 'legajo',
+    rows: [],
+    bridge: bridgeDeCatXEmpleados(results),
+    notApplicable: ['signed', 'buckets', 'group', 'cause', 'top', 'keys'],
+  });
+}
+
+/**
+ * Comparados → coinciden → difieren → sin comparar, la misma tira que ya usa
+ * la ficha de cada legajo (D-082). Una corrida guardada antes de esta versión
+ * no trae `matchedCount` ni `byField` (ver `tieneDetalleDeCampos` más abajo):
+ * sin ellos no se puede armar el puente sin inventar el número, así que no se
+ * dibuja — igual que esa corrida ya no ofrece la ficha ni la solapa "Por campo".
+ */
+function bridgeDeCatXEmpleados(results) {
+  if (!tieneDetalleDeCampos(results)) return null;
+  const { matchedCount, fieldDiscrepancies, missingInTab, missingInCat } = results;
+  const sinComparar = missingInTab.length + missingInCat.length;
+  if (matchedCount + sinComparar === 0) return null;
+
+  return {
+    kind: 'counts',
+    title: 'Cuántos legajos se pudieron comparar',
+    steps: [
+      { label: 'Comparados',   amount: matchedCount,                            tone: 'ink' },
+      { label: 'Coinciden',    amount: matchedCount - fieldDiscrepancies.length, tone: 'ink' },
+      { label: 'Difieren',     amount: fieldDiscrepancies.length,               tone: 'error' },
+      { label: 'Sin comparar', amount: sinComparar,                             tone: 'warn' },
+    ],
   };
 }
 

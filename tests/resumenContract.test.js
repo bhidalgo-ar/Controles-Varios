@@ -44,9 +44,9 @@ const PENDIENTES = {
   // gs_pers_reporte, nr_reporte, novedades_importador).
   // Tanda 5 — contables + acreditaciones — migrada el 2026-08-22 (finadiet_asiento,
   // conta_desglosada, acreditaciones_reporte).
-  // Tanda 6 — los dos sin cruce de importes
-  cat_x_empleados:        'tanda 6',
-  acumuladores_ganancias: 'tanda 6',
+  // Tanda 6 — los dos sin cruce de importes — migrada el 2026-08-22 (cat_x_empleados,
+  // acumuladores_ganancias). Con ésta no queda ninguna excepción: los 21 controles
+  // publican `summary.resumen`.
 };
 
 // ── Dónde está escrito cada `summarize` ─────────────────────────────────────

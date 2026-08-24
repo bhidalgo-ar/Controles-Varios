@@ -6,10 +6,11 @@
 > lo primero que pide cada prompt.
 >
 > **La tanda 1 está hecha** (2026-08-21, D-089): el tablero existe entero en
-> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. Las tandas 2 a 6 cablean
-> los campos del `summarize` por lote y corren en paralelo entre sí, sin módulos compartidos — su
-> prompt sigue valiendo tal cual. Dos cosas que cambiaron y conviene saber antes de arrancar
-> cualquiera de ellas: el valor del pre-filtro del Detalle se pide como intención
+> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. **La tanda 6 también está
+> hecha** (2026-08-22, D-094): EE x CATEG y Acumuladores Ganancias publican `summary.resumen`. Las
+> tandas 2 a 5 cablean los campos del `summarize` por lote y corren en paralelo entre sí, sin módulos
+> compartidos — su prompt sigue valiendo tal cual. Dos cosas que cambiaron y conviene saber antes de
+> arrancar cualquiera de ellas: el valor del pre-filtro del Detalle se pide como intención
 > (`data-hero-prefilter="conDif"`) y lo resuelve el tablero contra las opciones de cada control, y
 > `unitKeys` son objetos `{ key, label, amount, group }`, no strings.
 
@@ -24,7 +25,7 @@ Elegilos con `/model` antes de mandar el prompt.
 | 3 | Campos del summarize — Axton/temporales (5) | **Opus 5** | **high** · thinking prendido | Agrupadores trae D-087 (neta vs total, denominador) y Novedades D-073: criterio fino |
 | 4 | Los que generan archivo (4) | **Sonnet 5** | **high** · thinking prendido | Semántica ya decidida en D-077/D-078; es aplicar |
 | 5 | Contables + Acreditaciones (3) | **Opus 5** | **high** · thinking prendido | Toca el asiento, que sale al cliente, y D-020/D-021 no se pueden pisar |
-| 6 | EE x CATEG + Acumuladores (2) | **Sonnet 5** | **high** · thinking prendido | Conteos y una reconciliación ya definida (D-077, D-082) |
+| ~~6~~ | ~~EE x CATEG + Acumuladores (2)~~ — **hecha** (D-094) | **Sonnet 5** | **high** · thinking prendido | Conteos y una reconciliación ya definida (D-077, D-082) |
 
 **Dependencias.** Los chats 2 a 6, todos después del 1; entre ellos no se pisan. Si dos necesitan
 un helper nuevo compartido, se declara en el PR para unificar al integrar — la lección de D-088.

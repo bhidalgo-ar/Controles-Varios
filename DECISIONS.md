@@ -3713,3 +3713,55 @@ tablero, no para que se re-abran solas en la próxima tanda.
 (`resumenDeAcreditaciones`, `bridgeDeAcreditaciones`, `bancoDeGrupo`, `empresaDeGrupo`),
 `tests/resumenContract.test.js`, `specs/vista-estandar-resumen.md` §4 y §6, D-020, D-021, D-084, D-085,
 D-086, D-089.
+---
+
+## D-094 — Tanda 6 de la vista estándar: los dos controles sin cruce de importes publican `summary.resumen`
+
+**Fecha:** 2026-08-22. **Contexto:** tanda 6 de `specs/vista-estandar-resumen.md` (§6, punto 6): EE x
+CATEG y Acumuladores Ganancias, los dos únicos controles que no cruzan importes entre archivos. No
+tocan el tablero ni `resumenStats.js` — ya existían enteros desde la tanda 1 (D-089); esta tanda sólo
+cablea `summarize` de cada control. Willy no estaba disponible para las dos decisiones de abajo:
+quedan tomadas y a la espera de que las confirme viéndolas en pantalla.
+
+**1. EE x CATEG: el puente es de conteos, y no repite el corte por campo.** Compara texto (puesto,
+centro de costo, departamento), así que `diffSigned`/`diffBuckets` no aplican — no hay signo ni plata
+que agrupar. El puente reusa la misma cascada que ya tiene la ficha de cada legajo (D-082):
+**comparados → coinciden → difieren → sin comparar**, contada en legajos, no en campos. `byCause`
+("qué rubro la causa") queda `notApplicable` a propósito: ese corte por campo ya lo contesta la
+cuarta solapa "Por campo" de este control, y repetirlo en el tablero sería la misma cuenta dos veces
+con dos nombres distintos. `byGroup`/`topUnits`/`unitKeys` también quedan `notApplicable` — no hay
+empresa que agrupar ni una magnitud en pesos para rankear el top 5, y el corte cruzado de 3b
+(`unitKeys`) no se cableó en esta tanda: es una extensión posible pero no la pidió esta pasada.
+
+Una corrida guardada antes de la tanda 2 de `specs/vista-estandar-resultados.md` no trae
+`matchedCount` ni `byField` (`tieneDetalleDeCampos()` ya distinguía este caso para la ficha y la
+solapa "Por campo"): el puente del Resumen usa el mismo chequeo y no se dibuja para esas corridas en
+vez de inventar el número.
+
+**2. Acumuladores Ganancias: el puente reusa los mismos tres estados de la ficha, no un cruce de
+totales nuevo.** Es un control de generación (D-026): no hay un archivo de origen contra el que medir
+una diferencia, así que `unit`/`unitsTotal`/`unitsWithDiff` siguen en `null` (sin escala, como ya
+declaraba D-077) y `diffSigned`/`diffBuckets`/`byGroup`/`byCause`/`topUnits`/`unitKeys` quedan
+`notApplicable` enteros — no hay lados, ni empresa, ni rubro, ni unidad para rankear.
+
+**Alternativa descartada:** armar el puente como un cruce de dos totales en pesos (el TOTAL del crudo
+contra la suma de sus componentes, agregado sobre toda la corrida) — la forma que sí tienen los
+controles de cruce. Se descartó porque **ya existe** el chequeo correcto y probado: `estadoDeFicha()`
+(D-077/D-082) ya clasifica a cada legajo en exactamente los tres estados que la reconciliación y el
+SAC teórico pueden dar — `centavo` (cierra), `sinComparar` (sin doceava o SAC parcial) y `conDif` (no
+cierra o SAC negativo). Sumar un total en pesos aparte hubiera sido una segunda cuenta de lo mismo, con
+el riesgo de que algún día no diera lo mismo que el chip de la ficha — la clase de bug que D-089 ya
+nombra ("cuatro pantallas pintan el estado del mismo control"). El puente del Resumen cuenta legajos
+en esos tres estados, reusando `buildFichas()`/`estadoDeFicha()` tal cual.
+
+**3. La lista de excepciones de `tests/resumenContract.test.js` NO llega a cero con esta tanda.** El
+pedido original era achicarla a cero porque para cuando esta tanda corriera las tandas 2 a 5 (18
+controles) ya iban a estar integradas a `main` — no fue así: sólo la tanda 1 (Control de Netos) estaba
+mergeada cuando arrancó esta tanda. Las tandas 2 a 5 corren en paralelo, en otros chats, y no
+comparten módulos entre sí (spec §6), así que esta tanda no las adelanta. La lista queda con los 18
+controles de esas cuatro tandas, cada uno con la suya anotada; el candado de CI sigue en verde porque
+esos 18 son exactamente los que declaran su excepción, ni uno de más ni de menos.
+
+**Detalle:** `js/controls/catXEmpleados.js` (`resumenDeCatXEmpleados`, `bridgeDeCatXEmpleados`),
+`js/controls/acumuladoresGanancias.js` (`resumenDeAcumuladores`), `tests/resumenContract.test.js`,
+D-026, D-077, D-082, D-089.

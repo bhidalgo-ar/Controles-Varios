@@ -195,9 +195,11 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    Total liquidación → Diferencia → Total acreditado, con lo "SIN ASIGNAR" en `bridge.uncompared`
    (D-086) — el .xlsx de Finanzas no ganó ninguna columna (D-020 sigue en verde). D-084/D-085 y
    D-020/D-021 quedaron intocados: ningún cálculo ni conteo existente se movió.
-6. **Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.
+6. ~~**Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.~~ **Hecha el
+   2026-08-22 (D-094).** Los dos publican `summary.resumen`; ninguno tocó el tablero ni
+   `resumenStats.js`. Falta que Willy la mire en el navegador.
 
-Las tandas 2 a 6 dependen sólo de la 1 y no comparten módulos entre sí — pueden correr en
+Las tandas 2 a 5 dependen sólo de la 1 y no comparten módulos entre sí — pueden correr en
 paralelo, con la lección de D-088: un helper nuevo que dos tandas necesiten se declara en el PR
 para unificar al integrar.
 
