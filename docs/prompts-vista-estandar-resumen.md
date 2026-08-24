@@ -5,14 +5,15 @@
 > aprobado, pixel por pixel, **`docs/handoff-resumen-netos.md`** (pantallas 3a y 3b) — leerlos es
 > lo primero que pide cada prompt.
 >
-> **La tanda 1 está hecha** (2026-08-21, D-089): el tablero existe entero en
-> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. **La tanda 6 también está
-> hecha** (2026-08-22, D-094): EE x CATEG y Acumuladores Ganancias publican `summary.resumen`. Las
-> tandas 2 a 5 cablean los campos del `summarize` por lote y corren en paralelo entre sí, sin módulos
-> compartidos — su prompt sigue valiendo tal cual. Dos cosas que cambiaron y conviene saber antes de
-> arrancar cualquiera de ellas: el valor del pre-filtro del Detalle se pide como intención
-> (`data-hero-prefilter="conDif"`) y lo resuelve el tablero contra las opciones de cada control, y
-> `unitKeys` son objetos `{ key, label, amount, group }`, no strings.
+> **Las seis tandas están hechas.** La 1 el 2026-08-21 (D-089): el tablero existe entero en
+> `js/ui/controlsResults.js` y el helper es `js/controls/resumenStats.js`. Las tandas 2 a 6 el
+> 2026-08-22, cada una en su chat en paralelo — tanda 2 (D-090), tanda 3 (D-091), tanda 4 (D-092),
+> tanda 5 (D-093) y tanda 6 (D-094) —, y con la 6 los 21 controles publican `summary.resumen`.
+> **Los prompts de abajo quedan como registro de lo que se pidió, no como trabajo por hacer.** Dos
+> cosas que cambiaron sobre la marcha y siguen valiendo para cualquier control nuevo: el valor del
+> pre-filtro del Detalle se pide como intención (`data-hero-prefilter="conDif"`) y lo resuelve el
+> tablero contra las opciones de cada control, y `unitKeys` son objetos
+> `{ key, label, amount, group }`, no strings.
 
 ## Modelo y esfuerzo por chat
 

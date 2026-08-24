@@ -1,11 +1,14 @@
 # Vista estándar del Resumen — el veredicto del run y dónde están los errores, para los 21 controles
 
-**Estado:** **tanda 1 implementada el 2026-08-21** (el tablero 3a/3b + `resumenStats` + Control de
-Netos de piloto + los dos candados del §8) — ver **D-089**. **Tanda 2 implementada el 2026-08-22**
-(Cruce Meta4/Marval: brutos, gs_pers, nr, rend_vs_tabu, rend_x_ee, rend_vs_asiento) — ver **D-090**.
-Las tandas 3 a 6, que cablean los campos del `summarize` de los otros 14 controles, siguen pendientes
-y pueden correr en paralelo. El piloto y esta tanda esperan que Willy los mire en el navegador (el
-entorno de desarrollo no llega al CDN de xlsx.js/Dexie, así que no se pudo verificar acá).
+**Estado:** **las seis tandas están implementadas.** La tanda 1 el 2026-08-21 (el tablero 3a/3b +
+`resumenStats` + Control de Netos de piloto + los dos candados del §8, **D-089**, mergeada a `main`
+en el PR #193) y las tandas 2 a 6 el 2026-08-22, cada una en su chat en paralelo: tanda 2 Cruce
+Meta4/Marval (**D-090**), tanda 3 el lote Axton/temporales (**D-091**), tanda 4 los que generan
+archivo (**D-092**), tanda 5 contables + acreditaciones (**D-093**) y tanda 6 los dos sin cruce de
+importes (**D-094**). **Con la tanda 6 los 21 controles publican `summary.resumen` y el candado de
+`tests/resumenContract.test.js` se queda sin excepciones.** Lo que falta de todo el frente es una
+sola cosa: que Willy mire el tablero en el navegador (el entorno de desarrollo no llega al CDN de
+xlsx.js/Dexie, así que no se pudo verificar acá), y que cierre los puntos abiertos del §7.
 Reescrita el mismo día al recibir el handoff completo del diseño
 (`docs/handoff-resumen-netos.md` — pantallas 3a y 3b del canvas de Netos): la primera versión de
 esta spec, escrita sin el handoff, asumía que el rediseño era de la solapa Resumen de adentro de
@@ -139,12 +142,20 @@ La unidad viene del §8 de la spec madre; los datos disponibles se relevaron sob
 conserva el signo de la resta en todos los marcados con S. Cada tanda lo comprueba antes de
 cablear `diffSigned`; si un control guarda sólo el valor absoluto, el bloque se omite en ese
 control y se anota acá — no se recalcula la resta en el tablero. **Ya verificado con assert sobre
-`diffSigned.over`/`diffSigned.under`** (`tests/resumenCruceMeta4.test.js`): Control de Netos
-(tanda 1), Brutos, NR, Rendimiento vs Tabulado y Rendimiento x EE (tanda 2). GS Pers y Rendimiento
+`diffSigned.over`/`diffSigned.under`**: Control de Netos (tanda 1), Brutos, NR, Rendimiento vs
+Tabulado y Rendimiento x EE (tanda 2, `tests/resumenCruceMeta4.test.js`), Novedades vs Liquidación
+y Variación Sueldos (tanda 3, `tests/resumenTanda3.test.js`, que además asserta que Agrupadores y
+POP lo declaran no aplicable).
+
+**Lo que NO tiene assert propio de `diffSigned`, al cerrar las seis tandas:** GS Pers y Rendimiento
 vs Asiento (tanda 2) conservan el signo por construcción —misma función (`diffOrNull`/resta
 directa) que sus pares ya verificados— y el test lo confirma indirectamente vía `byCause` (importes
-positivos en el sentido esperado), pero no traen un assert de `diffSigned` propio en este lote.
-Sigue pendiente de comprobar en las tandas 3 a 6.
+positivos en el sentido esperado). Y **los tres controles de la tanda 5** —Asiento de Remuneraciones,
+Contabilidad Desglosada y Acreditaciones—: esa tanda no sumó test propio, así que su signo
+(`conciliacion.saldo` leído como DEBE > / < HABER en los dos contables, y el grupo pendiente en
+Acreditaciones) está apoyado en la lectura del código y no en un assert. Las tandas 4 y 6 no dejan
+nada por comprobar acá: sus controles declaran el bloque `signed` no aplicable, y eso sí está
+asserteado. **Es lo primero a cubrir con un test cuando se vuelva sobre este frente.**
 
 ## 5. Qué muere y qué queda
 
@@ -179,8 +190,8 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    puente y deja el signo pendiente de Willy (§7.6); Novedades vs Liquidación lee el signo como
    "Liquidado de más/de menos"; las dos Variaciones van con puente temporal ("Subieron"/"Bajaron");
    POP publica `resumen` sólo con el reporte de Axton cargado y con un puente de **conteos**, no el
-   temporal que preveía el mapa del §4 (nota agregada ahí). Detalle en D-091. PR en borrador,
-   esperando la mirada de Willy sobre §7.6 y el punto 3 de D-091.
+   temporal que preveía el mapa del §4 (nota agregada ahí). Detalle en D-091. Espera la mirada de
+   Willy sobre §7.6 y el punto 3 de D-091.
 4. ~~**Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
    novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).~~ **Hecha el
    2026-08-22 (D-092).** Los tres primeros declaran sus siete bloques `notApplicable`; novedades_importador
@@ -199,9 +210,13 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    2026-08-22 (D-094).** Los dos publican `summary.resumen`; ninguno tocó el tablero ni
    `resumenStats.js`. Falta que Willy la mire en el navegador.
 
-Las tandas 2 a 5 dependen sólo de la 1 y no comparten módulos entre sí — pueden correr en
-paralelo, con la lección de D-088: un helper nuevo que dos tandas necesiten se declara en el PR
-para unificar al integrar.
+Las tandas 2 a 6 dependían sólo de la 1 y corrieron en paralelo. Al integrarlas en una sola pila
+aparecieron dos roces, ninguno de criterio: los tres módulos que traen dos variantes en el mismo
+archivo (`brutos.js`, `gsPers.js`, `nr.js`) los tocaron la tanda 2 y la tanda 4, y se unificó el
+import de `resumenStats` que las dos necesitaban —justo la lección de D-088—; y **las cinco tandas
+habían reservado el número D-090 para su entrada de DECISIONS**, así que al apilarlas se renumeraron
+en orden de tanda (D-090 a D-094). La próxima vez que salgan varios chats en paralelo del mismo
+commit, el número de la decisión se reparte antes de arrancar.
 
 ## 7. Lo que queda pendiente de que Willy lo mire — no se adivina
 

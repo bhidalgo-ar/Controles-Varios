@@ -3754,13 +3754,13 @@ el riesgo de que algún día no diera lo mismo que el chip de la ficha — la cl
 nombra ("cuatro pantallas pintan el estado del mismo control"). El puente del Resumen cuenta legajos
 en esos tres estados, reusando `buildFichas()`/`estadoDeFicha()` tal cual.
 
-**3. La lista de excepciones de `tests/resumenContract.test.js` NO llega a cero con esta tanda.** El
-pedido original era achicarla a cero porque para cuando esta tanda corriera las tandas 2 a 5 (18
-controles) ya iban a estar integradas a `main` — no fue así: sólo la tanda 1 (Control de Netos) estaba
-mergeada cuando arrancó esta tanda. Las tandas 2 a 5 corren en paralelo, en otros chats, y no
-comparten módulos entre sí (spec §6), así que esta tanda no las adelanta. La lista queda con los 18
-controles de esas cuatro tandas, cada uno con la suya anotada; el candado de CI sigue en verde porque
-esos 18 son exactamente los que declaran su excepción, ni uno de más ni de menos.
+**3. La lista de excepciones de `tests/resumenContract.test.js` llega a cero, pero recién al
+integrar.** Mientras esta tanda corría sola, la lista bajaba de 20 a 18: sólo la tanda 1 (Control de
+Netos) estaba mergeada, y las tandas 2 a 5 corrían en paralelo en otros chats sin compartir módulos
+(spec §6), así que esta tanda no las podía adelantar. **Al apilar las cinco tandas juntas la lista
+queda efectivamente en cero: los 21 controles publican `summary.resumen`**, y el candado de CI pasa
+de "estos 18 declaran su excepción" a proteger a los controles que vengan — un `summarize` nuevo que
+no declare su `resumen` deja el PR en rojo, sin excepción posible.
 
 **Detalle:** `js/controls/catXEmpleados.js` (`resumenDeCatXEmpleados`, `bridgeDeCatXEmpleados`),
 `js/controls/acumuladoresGanancias.js` (`resumenDeAcumuladores`), `tests/resumenContract.test.js`,

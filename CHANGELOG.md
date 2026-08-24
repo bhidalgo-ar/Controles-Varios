@@ -7,6 +7,29 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### chore(resumen): las cinco tandas paralelas del tablero del Resumen se integran en una sola rama — 2026-08-24
+
+- **No cambia nada de lo que ve el analista**: es el trabajo de apilar las tandas 2, 3, 4, 5 y 6 —que
+  salieron cada una en su chat, en paralelo, todas partiendo del mismo commit de `main`— en una rama
+  única sobre `main`. Con las cinco juntas, **los 21 controles publican `summary.resumen`** y el
+  candado de `tests/resumenContract.test.js` se queda sin excepciones.
+- **Las cinco tandas habían reservado el mismo número de decisión, D-090.** Al apilarlas se
+  renumeraron en orden de tanda: tanda 2 = **D-090**, tanda 3 = **D-091**, tanda 4 = **D-092**,
+  tanda 5 = **D-093**, tanda 6 = **D-094**. Se actualizaron todas las referencias cruzadas
+  (DECISIONS, CHANGELOG, ESTADO, las specs y `docs/prompts-vista-estandar-resumen.md`).
+- **Un solo roce de código**, en los tres módulos que traen dos variantes en el mismo archivo
+  (`brutos.js`, `gsPers.js`, `nr.js`): la tanda 2 los tocó por la variante "Controlar" y la tanda 4
+  por la de "Generar Reporte", y las dos importaban de `resumenStats.js` — se unificó en un import
+  (`resumenStats` + `RESUMEN_BLOCKS`). Es exactamente la lección de D-088, anotada ahora en el §6 de
+  la spec.
+- Ningún cálculo, conteo ni umbral se movió al integrar. `npm run test:unit` pasa completo:
+  **4.446 asserts en 50 archivos, 0 ✗**, con `resumenCruceMeta4.test.js` y `resumenTanda3.test.js`
+  sumados a la cadena de `package.json`.
+- **Queda por hacer, y no lo puede hacer CI:** que Willy mire el tablero en el navegador. Detalle de
+  qué mirar y en qué orden, en `ESTADO.md`. También queda anotado en el §4 de la spec que el signo
+  de los tres controles de la tanda 5 no tiene assert propio — es lo primero a cubrir cuando se
+  vuelva sobre este frente.
+
 ### feat(resumen): EE x CATEG y Acumuladores Ganancias publican el resumen del tablero — 2026-08-22
 
 - **Tanda 6 de `specs/vista-estandar-resumen.md`**: los dos únicos controles que no cruzan importes
@@ -23,9 +46,10 @@
   reconciliación, como ya declaraba D-077.
 - **Ningún conteo cambia.** `unitsWithDiff`/`unitsTotal` de los dos controles quedan exactamente
   igual; lo único nuevo es el sub-objeto `summary.resumen`.
-- **La lista de excepciones de `tests/resumenContract.test.js` baja de 20 a 18** — los dos migrados
-  salen. No llega a cero: las tandas 2 a 5 (18 controles) corren en paralelo y todavía no están
-  integradas a `main` cuando se escribe esta entrada. Detalle de por qué en D-094.
+- **La lista de excepciones de `tests/resumenContract.test.js` queda en cero** — los dos migrados
+  salen y, con las tandas 2 a 5 apiladas en la misma rama, no queda ningún control sin `resumen`:
+  **21 de 21**. El candado pasa de contar excepciones a proteger a los controles que vengan. Cuando
+  esta tanda corría sola la lista bajaba de 20 a 18; el detalle está en D-094 punto 3.
 ### feat(resumen): Asiento de Remuneraciones, Contabilidad Desglosada y Acreditaciones entran al tablero del Resumen — 2026-08-22
 
 - **Tanda 5 de `specs/vista-estandar-resumen.md`** (D-093). Estos tres controles ya tenían el tablero
