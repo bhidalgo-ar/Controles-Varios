@@ -96,6 +96,8 @@ assert('entra en "Seleccionar todos" como variante primaria', ctrl.group?.primar
   assert('summarize: la unidad es la cuenta', s.unit === 'cuenta');
   assert('summarize: unitsTotal cuenta las líneas del asiento', s.unitsTotal === 2);
   assert('summarize: sin unidades con diferencia', s.unitsWithDiff === 0);
+  assert('summarize: con el asiento cerrado no hay lado — diffSigned es null, no cero',
+    s.resumen.diffSigned === null);
 }
 
 // ── 3 · Consolidación por cuenta + centro (y grafías del centro) ──────────────
@@ -200,6 +202,24 @@ assert('entra en "Seleccionar todos" como variante primaria', ctrl.group?.primar
     mov({ importe: 99.98,  debe: null,     haber: '213111' }),
   ]);
   assert('2 centavos de diferencia NO cierran', r.cierra === false && r.diferencia === 0.02);
+
+  // El signo del tablero del Resumen (§4 de specs/vista-estandar-resumen.md): el
+  // saldo de CADA cuenta cae del lado que le toca. Acá 521101 quedó sólo con
+  // Debe y 213111 sólo con Haber, así que uno va a cada lado con su importe.
+  const sd = summarizeFinadietAsiento(r).resumen.diffSigned;
+  assert('diffSigned: la cuenta con Debe solo cae en "Debe > Haber" con su importe',
+    sd.over.label === 'Debe > Haber' && sd.over.units === 1 && sd.over.amount === 100);
+  assert('diffSigned: la cuenta con Haber solo cae en "Haber > Debe" con su importe',
+    sd.under.label === 'Haber > Debe' && sd.under.units === 1 && sd.under.amount === 99.98);
+
+  // Y el espejo: dando vuelta los importes, se dan vuelta los lados. Es lo que
+  // prueba que el signo se lee del saldo de cada cuenta y no está cableado.
+  const espejo = summarizeFinadietAsiento(run([
+    mov({ importe: 99.98,  debe: '521101', haber: null }),
+    mov({ importe: 100.00, debe: null,     haber: '213111' }),
+  ])).resumen.diffSigned;
+  assert('diffSigned: el caso espejo intercambia los importes entre los dos lados',
+    espejo.over.amount === 99.98 && espejo.under.amount === 100);
 
   const r2 = run([
     mov({ importe: 100.00, debe: '521101', haber: null }),

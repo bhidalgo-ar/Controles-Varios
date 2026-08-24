@@ -126,7 +126,10 @@ for (const ctrl of CONTROLES) {
 
   test(`${ctrl.id} · cada columna dice su base de cálculo`, async ({ page }) => {
     await abrirPlanilla(page, ctrl.id);
-    expect(await panel(page).locator('table.rb-grid .rb-col__sub').count()).toBeGreaterThan(0);
+    // `abrirPlanilla` espera la barra, que puede dibujarse antes que la grilla:
+    // un count() crudo acá es la misma foto temprana que flakeaba en
+    // fichasLegajoConcepto.
+    await expect(panel(page).locator('table.rb-grid .rb-col__sub').first()).toBeVisible();
   });
 
   if (ctrl.bandas) {
