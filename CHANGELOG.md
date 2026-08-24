@@ -7,6 +7,25 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(resumen): Brutos, GS Pers, NR e Importador de Novedades entran al tablero del Resumen — 2026-08-22
+
+- **Es la tanda 4 de `specs/vista-estandar-resumen.md`** (D-092), sobre el tablero que puso la tanda 1
+  (D-089). Antes, el Resumen de un run de Brutos, GS Pers o NR en modo "Generar Reporte" —o de
+  Importador de Novedades— quedaba afuera del rediseño: no mostraba el tablero, sólo el aviso genérico
+  de "esta corrida sólo incluye controles de generación de reporte".
+- **Ahora el veredicto habla del archivo.** En Brutos, GS Pers y NR, el Resumen dice cuántos registros
+  se generaron y si el archivo está listo para descargar, o qué falta para que lo esté (por ejemplo,
+  que el Tabulado no tiene las columnas configuradas para ese reporte, o que ningún empleado tiene
+  valores NR en el período) — la misma información que ya mostraba la solapa Detalle, ahora también en
+  el Resumen. En un run de un solo control, el veredicto grande de arriba reproduce ese mismo texto en
+  vez de la frase fija que usaba antes para cualquier control sin cruce.
+- **Importador de Novedades suma el puente y el corte por empresa** que le faltaban al tablero: qué
+  novedades se leyeron de la planilla, cuántas quedan afuera del importador F2 (con el motivo: columna
+  sin código, valor no parseable, fila sin legajo) y cuántas entran; y una tarjeta con la Unidad
+  Organizativa del archivo. Para que esa tarjeta se dibuje sin un importe que pesar, la tarjeta
+  compartida "En qué empresa" aprendió a escalar su barra por cantidad de legajos cuando el control no
+  maneja montos (D-092) — el comportamiento con plata, en el resto de los controles, no cambia.
+- Verificado con la suite completa de tests unitarios y los 12 casos de `tests/e2e/resultsResumen.spec.js`.
 ### feat(resumen): el tablero del Resumen llega a Agrupadores, Novedades vs Liquidación, las dos Variaciones y POP — 2026-08-22
 
 - **Es la tanda 3 de `specs/vista-estandar-resumen.md`** (D-091), sobre el tablero que construyó la

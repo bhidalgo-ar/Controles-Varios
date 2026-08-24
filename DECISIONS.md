@@ -3619,3 +3619,30 @@ cinco pantallas.
 `js/controls/novedadesLiquidacion.js`, `js/controls/variaciones.js`, `js/controls/popVariaciones.js`,
 `tests/resumenStats.test.js`, `tests/resumenTanda3.test.js`, `tests/resumenContract.test.js`,
 `specs/vista-estandar-resumen.md`, D-070, D-073, D-081, D-086, D-087, D-089.
+## D-092 — Tanda 4 del tablero del Resumen: la tarjeta "En qué empresa" aprende a escalar por legajos, no sólo por plata
+
+**2026-08-22.** Tanda 4 de `specs/vista-estandar-resumen.md` (§6 punto 4): brutos_reporte,
+gs_pers_reporte, nr_reporte y novedades_importador publican `summary.resumen`. Los tres primeros
+declaran sus siete bloques `notApplicable` (no cruzan dos archivos, D-077/D-078); novedades_importador
+es el que sí tiene unidad (los legajos del archivo) y corte por grupo (la UO), y ahí aparece la
+decisión.
+
+`buildGroupCardHtml` —la tarjeta compartida "En qué empresa" que armó la tanda 1— sólo sabía escalar la
+barra por plata: si `maxAmount <= 0` no dibujaba nada. La spec (§4) ya declaraba
+`byGroup: UO` para novedades_importador, pero ese control no tiene magnitud en pesos: no compara dos
+totales, así que no hay "de más" ni "de menos" que pesar.
+
+**Se descartó no dibujar el corte para este control** —dejar que la spec dijera `byGroup: UO` pero que
+en pantalla nunca apareciera nada, porque `maxAmount` siempre da cero—. Quedaba una tarjeta declarada
+en el mapa que ningún run iba a mostrar jamás, y esa clase de brecha entre lo escrito y lo que se ve
+es la que después alguien lee como "está implementado" sin estarlo.
+
+**Se eligió** sumar un segundo modo a `buildGroupCardHtml`: si no hay plata (`maxAmount <= 0`) pero sí
+hay unidades (`maxUnits > 0`), la barra se escala por cantidad de legajos y el importe no se muestra —
+mostrar "$ 0,00" ahí sería un dato falso, no la ausencia del dato. Para todo control que sí tiene
+plata el comportamiento es idéntico a antes: `porMonto = maxAmount > 0` decide el modo, no reemplaza
+al anterior.
+
+**Detalle:** `js/ui/controlsResults.js` (`buildGroupCardHtml`), `js/controls/novedadesImportador.js`
+(`novedadesImportadorBridge`, `resumen.byGroup` con la clave `empresa`), D-077, D-078,
+`specs/vista-estandar-resumen.md` §4 y §6.

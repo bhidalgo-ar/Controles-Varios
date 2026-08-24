@@ -181,8 +181,13 @@ son cablear los campos del `summarize` por lote — mucho más chicas que las de
    POP publica `resumen` sólo con el reporte de Axton cargado y con un puente de **conteos**, no el
    temporal que preveía el mapa del §4 (nota agregada ahí). Detalle en D-091. PR en borrador,
    esperando la mirada de Willy sobre §7.6 y el punto 3 de D-091.
-4. **Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
-   novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).
+4. ~~**Los que generan archivo** (4): brutos_reporte, gs_pers_reporte, nr_reporte,
+   novedades_importador — veredicto del archivo, sin puente de cruce (D-077/D-078).~~ **Hecha el
+   2026-08-22 (D-092).** Los tres primeros declaran sus siete bloques `notApplicable`; novedades_importador
+   publica `bridge` (qué entra al F2 → qué queda afuera, con motivo) y `byGroup` por UO — para lo cual
+   `buildGroupCardHtml` sumó el modo por unidades de D-092. El veredicto de un run de un solo control
+   ahora reproduce el `headline` de ese control en vez del texto genérico fijo. Falta que Willy vea los
+   textos exactos en pantalla (§7 punto 9).
 5. **Al centavo y unidades contables/lista** (3): finadiet_asiento, conta_desglosada,
    acreditaciones_reporte — D-084/D-085 y D-020/D-021 intocables.
 6. **Los dos sin cruce de importes** (2): cat_x_empleados, acumuladores_ganancias.
@@ -226,9 +231,12 @@ para unificar al integrar.
 8. **`touchedByRed` en controles que no exponen claves**: si algún summarize no puede dar las
    claves de sus unidades con diferencia, ese KPI sale del veredicto de 3b para ese run — no se
    aproxima sumando. (Riesgo 3 del handoff.) Verificarlo control por control en las tandas.
-9. **Los textos del veredicto de los "Generar Reporte"** (tanda 4): qué dice exactamente. Se
+9. ~~**Los textos del veredicto de los "Generar Reporte"** (tanda 4): qué dice exactamente. Se
    listan en el PR y se ajustan en pantalla, junto con las pendientes de D-077/D-078 que ya
-   esperan en ESTADO.
+   esperan en ESTADO.~~ **Resuelto por la tanda 4 (2026-08-22, D-092)**: cada control escribió su
+   propio `headline`/`contextNote` (qué se generó, cuántos registros, si está listo para descargar o
+   qué lo frena) y el veredicto de un run de un solo control lo reproduce. Son un default, no una
+   confirmación: los textos exactos siguen esperando que Willy los vea en pantalla.
 
 ## 8. Que salga por defecto en todo control nuevo — y cómo se asegura
 
