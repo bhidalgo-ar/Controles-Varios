@@ -1,0 +1,75 @@
+{
+  "_comentario": [
+    "Config del paralelo de OPmobility C-Power Argentina (Florida, Meta4 -> Axton).",
+    "Verificado contra la 1ra Quincena de Agosto 2026: con esta clasificacion, las 78",
+    "filas de Meta4 y las 70 de Axton cierran su propia aritmetica, y el Excel reproduce",
+    "exacto el 'Total Netos' del PDF de la liqui.",
+    "Los codigos son SEMILLA, no identidad: si el cliente renumera, se corrige aca.",
+    "Ningun dato de empleado vive en este archivo: son codigos de concepto, que son",
+    "configuracion."
+  ],
+  "cliente": "OPmobility C-Power Argentina S.A. (Florida)",
+  "modoLegajo": "sinCeros",
+
+  "meta4": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "APPELIDO Y NOMBRE",
+    "columnaNeto": "NETO",
+    "columnaTotalDescuento": "TOTAL_DESCUENTO",
+
+    "_descuentos": "Lo que resta del neto. El resto de los conceptos suma, incluido el redondeo (8999).",
+    "descuentos": [
+      "5010", "6005", "6018", "6041",
+      "8500", "8510", "8522", "8537", "8540", "8541"
+    ],
+
+    "_noSonConceptos": [
+      "Dias, unidades y porcentajes (no son importes liquidados) y acumuladores/totales.",
+      "Si alguno de estos entra al cruce, infla el denominador y ensucia el detalle."
+    ],
+    "noSonConceptos": [
+      "401", "450", "465", "500", "520", "540",
+      "616", "618", "624", "626", "628", "630", "631", "638", "644", "685", "686", "740",
+      "1019", "1061", "1175", "1331", "1334", "1345",
+      "3550", "3551", "4115", "4420", "4430", "4808", "6090",
+      "4050", "5810", "5815", "5820", "5825", "5840", "5850", "5911", "5921", "8900"
+    ]
+  },
+
+  "axton": {
+    "_retenciones": "Lo que Axton descuenta. La columna 'Retenciones' del archivo tiene que dar esta suma.",
+    "retenciones": [
+      "600000", "600005", "600050",
+      "605110", "605120", "605130",
+      "605694", "605701", "605710", "605712", "605715",
+      "609995", "609996"
+    ],
+    "_exentos": "Van al neto pero no al bruto: la columna 'Exento' tiene que dar esta suma.",
+    "exentos": ["502003", "502018", "599999"],
+    "_prefijosDeBase": [
+      "Los codigos 8xxxxx y 9xxxxx son bases y acumuladores de calculo: no entran al neto.",
+      "Verificado con la aritmetica del propio archivo. Los 88xxxx son patronales (ART, seguros)."
+    ],
+    "prefijosDeBase": ["8", "9"]
+  },
+
+  "_mapeosDeclarados": [
+    "Un concepto de Meta4 contra DOS columnas de Axton. No esta en la tabla de",
+    "equivalencias: se declara aca y sale listado en el Excel para que el analista lo",
+    "confirme y corrija la tabla. Cada uno de estos aparecio porque Axton estreno una",
+    "columna nueva a mitad del paralelo, con el importe exacto de Meta4 del otro lado.",
+    "La clave es el codigo que declara la tabla; la lista, los codigos que Axton usa."
+  ],
+  "mapeosDeclarados": {
+    "609995": ["609996"],
+    "2250": ["2255"],
+    "3513": ["3515"],
+    "605710": ["605715"]
+  },
+
+  "_pendientesDeLaTabla": [
+    "El par de redondeo (8999 de Meta4 y 599999 de Axton) NO esta en la tabla de",
+    "equivalencias. No se empareja a mano porque son centavos y emparejarlo taparia una",
+    "diferencia real si algun dia crece: sale en 'Sin comparar' y se informa."
+  ]
+}
