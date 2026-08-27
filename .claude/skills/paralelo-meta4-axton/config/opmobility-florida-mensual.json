@@ -1,0 +1,58 @@
+{
+  "_comentario": [
+    "Config del paralelo MENSUAL de OPmobility C-Power Argentina (Florida, Meta4 -> Axton).",
+    "Derivado del config de la 1ra Quincena: la mensual trae otro juego de conceptos",
+    "(provisiones contables, contribuciones patronales y aportes sindicales que la quincena",
+    "no tiene), asi que necesita su propia clasificacion.",
+    "Verificado contra el Mensual de Agosto 2026: con esta clasificacion las 63 filas de",
+    "Meta4 cierran sus dos identidades (suma de descuentos = TOTAL_DESCUENTO y",
+    "haberes - descuentos = NETO), las 55 de Axton cierran bruto - retenciones + exento =",
+    "Neto, y el Excel de Meta4 reproduce exacto el 'Total Netos' del PDF de la liqui",
+    "(153.443.230,00 en las 63 fichas, cero legajos con diferencia).",
+    "Los codigos son SEMILLA, no identidad: si el cliente renumera, se corrige aca.",
+    "Ningun dato de empleado vive en este archivo: son codigos de concepto, que son",
+    "configuracion."
+  ],
+  "cliente": "OPmobility C-Power Argentina S.A. (Florida) - Mensual",
+  "modoLegajo": "sinCeros",
+
+  "meta4": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "APPELIDO Y NOMBRE",
+    "columnaNeto": "NETO",
+    "columnaTotalDescuento": "TOTAL_DESCUENTO",
+
+    "_descuentos": "Lo que resta del neto. Verificado: suma exacta contra TOTAL_DESCUENTO en las 63 filas.",
+    "descuentos": ["5010","6005","6018","6041","7005","7007","8500","8522","8530","8534"],
+
+    "_noSonConceptos": [
+      "Dias, unidades y porcentajes; acumuladores; provisiones contables (35xx/36xx);",
+      "contribuciones patronales (6050/6105/6142/7093) y 6039 Plan de Salud a/c Empresa,",
+      "que no entra ni a TOTAL_DESCUENTO ni al NETO."
+    ],
+    "noSonConceptos": [
+      "401","430","450","465","480","490","500","520","540",
+      "616","618","619","623","624","626","628","630","631","638","644","685","686","740",
+      "1019","1061","1175","1177","1281","1331","1334","1345","4806",
+      "3550","3551","4115","4420","4430","4808","6090",
+      "3570","3572","3574","3576","3670","3672","3674","3676",
+      "4050","5810","5815","5820","5825","5840","5850","5911","5921","8900",
+      "6039","6050","6105","6142","7093"
+    ]
+  },
+
+  "axton": {
+    "_retenciones": "605700 (Descuento Anticipo) es nuevo en la mensual: no estaba en el config de la quincena.",
+    "retenciones": [
+      "600000","600005","600050",
+      "605110","605120","605130",
+      "605694","605700","605701","605710","605712","605715",
+      "609995","609996"
+    ],
+    "_exentos": "Van al neto pero no al bruto.",
+    "exentos": ["502003","502018","599999"],
+    "prefijosDeBase": ["8","9"]
+  },
+
+  "mapeosDeclarados": {}
+}
