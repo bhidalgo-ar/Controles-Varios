@@ -54,5 +54,34 @@
     "prefijosDeBase": ["8","9"]
   },
 
+  "_contribuciones": [
+    "El cruce de las contribuciones patronales: el control de cargas sociales de Meta4",
+    "(que nombra sus columnas por nombre y no por codigo) contra las columnas 88xxxx de",
+    "Axton. 'columnaBase' es la remuneracion sobre la que Meta4 contribuye, y se compara",
+    "contra el Bruto de Axton para saber si una diferencia viene de la base o del calculo.",
+    "'aportesDeControl' es el ancla del archivo: los aportes del empleado tienen que dar",
+    "identicos a los del Tabulado, si no los dos archivos son de corridas distintas."
+  ],
+  "contribuciones": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "NOMBRE",
+    "columnaBase": "TOT_HAB_CON_AP",
+    "aportesDeControl": [
+      { "meta4": "TOT_JUB", "tabulado": "6005" },
+      { "meta4": "TOT_LEY", "tabulado": "6018" },
+      { "meta4": "TOT_OS",  "tabulado": "6041" }
+    ],
+    "pares": [
+      { "meta4": "TOT_CONT_JUB",   "axton": ["880011"], "nombre": "Contribución Jubilación" },
+      { "meta4": "TOT_CONT_OS",    "axton": ["880015"], "nombre": "Contribución Obra Social" },
+      { "meta4": "TOT_CONT_LEY",   "axton": ["880012"], "nombre": "Contribución Ley 19032" },
+      { "meta4": "TOT_CONT_ANSES", "axton": ["880013"], "nombre": "Contribución ANSES" },
+      { "meta4": "TOT_CONT_FNE",   "axton": ["880014"], "nombre": "Contribución F.N.E." },
+      { "meta4": "APORTE_ART",     "axton": ["880021"], "nombre": "Aporte A.R.T. (fijo)" },
+      { "meta4": "SEGURO_VIDA",    "axton": ["880025"], "nombre": "Seguro de vida obligatorio" },
+      { "meta4": "TOT_ART_VARI",   "axton": ["880022"], "nombre": "A.R.T. variable" }
+    ]
+  },
+
   "mapeosDeclarados": {}
 }

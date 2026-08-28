@@ -22,6 +22,7 @@ siguientes**, no la primera.
 | PDF "Control de liquidación" de Meta4 | Una ficha por liquidación + total general | **El ancla**: prueba que el Excel es el del período |
 | Tabulado de Axton (`.xls`, en realidad HTML) | "Resumen de Liquidación" | El lado que se controla |
 | Tabla de equivalencias (`.xlsx`) | 3 columnas: código Axton, código Meta4, nombre | Qué concepto es cuál |
+| Control de cargas sociales de Meta4 (`.xlsx`) | Una fila por liquidación, columnas por **nombre** | Las contribuciones patronales (opcional) |
 
 Si falta el PDF se puede correr igual, pero decilo: sin el ancla no hay forma de probar que el
 Excel de Meta4 es del período y del tipo de liquidación correctos, y un cruce sobre el archivo
@@ -46,7 +47,8 @@ python3 .claude/skills/paralelo-meta4-axton/scripts/paralelo.py \
   --salida FLORIDA_paralelo_1raQ_082026.xlsx
 ```
 
-`--sin-excel` corre sólo las validaciones y el resumen por consola: es lo que conviene en la
+`--cargas control_de_cargas.xlsx` suma el cruce de las **contribuciones patronales** y una
+hoja aparte en el Excel — ver más abajo. `--sin-excel` corre sólo las validaciones y el resumen por consola: es lo que conviene en la
 primera pasada de un cliente nuevo, mientras se acomoda el config. `--ruido` cambia el umbral
 de comentario (default `$1`). `--forzar` sigue aunque las validaciones fallen — usalo sólo
 sabiendo qué se pierde, y decíselo al analista.
@@ -97,6 +99,36 @@ existen.
 **Las diferencias de menos de $1 no llevan comentario.** Son centavos de redondeo. Comentarlas
 ensucia el archivo y hace que el analista deje de leer la columna que importa. Se ven en la
 columna de diferencia con la etiqueta "Difiere $1 o menos", y ahí termina.
+
+## Las contribuciones patronales
+
+Van por `--cargas` y salen en su propia hoja, porque **no se leen como el resto**: una
+contribución se calcula sobre la base, así que casi nunca es un error propio. Cada diferencia
+sale clasificada por su causa, y esa columna es lo único que hay que leer:
+
+| De dónde viene | Qué significa | Qué hacer |
+|---|---|---|
+| **Remuneración** | La base de contribuciones difiere y el neto del legajo también | Nada: se cierra sola cuando se corrija el haber |
+| **Base** | El neto coincide pero la base no | Un concepto que un sistema toma para contribuir y el otro no. Es un hallazgo |
+| **Contribución** | La base coincide en los dos | Alícuota, tope o detracción. Es el hallazgo más puro |
+| **Redondeo** | Centavos | Nada |
+
+**Lo que decide la clasificación es la base, no el neto.** Un legajo puede tener el neto
+distinto por Ganancias sin que se mueva un peso de la base: ahí arreglar el neto no cierra la
+contribución, y decir "es consecuencia" manda al implementador a buscar donde no está. Costó
+una pasada: la primera versión clasificaba por el neto y mandaba a "Remuneración" cuatro líneas
+que eran de alícuota.
+
+Cuando la causa es **Contribución**, el comentario dice además **a qué porcentaje de la base
+contribuye cada sistema**. Es lo que separa de un vistazo una alícuota distinta (los dos
+porcentajes casi iguales, diferencia de pesos) de una base armada distinta puertas adentro (uno
+de los dos se va lejos: 14,62 % contra 10,76 % en un caso real fue Meta4 contribuyendo sin
+descontar las vacaciones).
+
+**El archivo de cargas tiene su propia ancla**: sus columnas de aportes del empleado
+(`TOT_JUB`, `TOT_LEY`, `TOT_OS`) tienen que dar idénticas a los conceptos del Tabulado. Si no,
+los dos archivos son de corridas distintas y el script corta: se declara en `aportesDeControl`
+del config.
 
 ## Cuando aparece un código nuevo
 

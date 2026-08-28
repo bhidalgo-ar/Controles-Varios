@@ -303,3 +303,50 @@ def leerEquivalencias(path):
     return {'pares': pares, 'sinAxton': sinAx, 'sinMeta4': sinM4,
             'porAxton': dict(porAxton),
             'porMeta4': {p['meta4']: p for p in pares}}
+
+
+# ------------------------------- Meta4: control de cargas sociales
+
+def leerCargas(path, cfg, modoLegajo='sinCeros'):
+    """Export 'Control de cargas sociales' de Meta4 (.xlsx).
+
+    Fila 1 encabezados y una columna por concepto de carga, con el NOMBRE del
+    concepto y no su codigo: es otro export, no el Tabulado. Igual que el
+    Tabulado trae UNA FILA POR LIQUIDACION, asi que no consolidar aca.
+
+    Ademas de las contribuciones trae los aportes del empleado (TOT_JUB,
+    TOT_LEY, TOT_OS). Esos no se cruzan contra Axton —ya viajan en el
+    Tabulado— pero sirven de ancla: si no dan iguales a los del Tabulado, el
+    archivo es de otra corrida y no se puede cruzar nada.
+    """
+    ws = openpyxl.load_workbook(path, data_only=True).active
+    hdr = [('' if c.value is None else str(c.value).strip()) for c in ws[1]]
+
+    def idx(nombre):
+        if nombre not in hdr:
+            raise SystemExit(
+                f"El control de cargas sociales no trae la columna '{nombre}'.\n"
+                f"Encontre estos encabezados: {', '.join(h for h in hdr if h)}\n"
+                "Corregir el nombre en el bloque 'contribuciones' del config."
+            )
+        return hdr.index(nombre)
+
+    iLeg = idx(cfg['columnaLegajo'])
+    iNom = hdr.index(cfg['columnaNombre']) if cfg.get('columnaNombre') in hdr else None
+    columnas = [h for h in hdr if h and h != cfg['columnaLegajo'] and h != cfg.get('columnaNombre')]
+
+    rows = []
+    for r in ws.iter_rows(min_row=2, values_only=True):
+        if all(v is None or str(v).strip() == '' for v in r):
+            continue
+        leg = legajoKey(r[iLeg], modoLegajo)
+        if not leg:
+            continue
+        rows.append({
+            'legajo': leg,
+            'nombre': '' if iNom is None else str(r[iNom] or '').strip(),
+            'valores': {h: toNum(r[hdr.index(h)]) for h in columnas},
+        })
+    if not rows:
+        raise SystemExit("El control de cargas sociales no trajo ninguna fila de datos.")
+    return {'rows': rows, 'columnas': columnas, 'headers': hdr}

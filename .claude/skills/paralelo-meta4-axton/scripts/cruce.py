@@ -251,3 +251,150 @@ def cruzar(m, a, e, cfg, tol=0.01):
                           'patronales': sorted(patronales)},
         'labels': {'meta4': m['labels'], 'axton': a['labels']},
     }
+
+
+# ------------------------------------------------ contribuciones patronales
+
+def anclarCargas(cg, m, cfg, tol=0.01):
+    """Los aportes del empleado del control de cargas contra los del Tabulado.
+
+    Es el ancla del archivo de cargas: si TOT_JUB/TOT_LEY/TOT_OS no dan
+    exactamente lo mismo que sus conceptos del Tabulado, los dos archivos no
+    son de la misma corrida y las contribuciones no se pueden cruzar.
+    """
+    porCargas = collections.defaultdict(lambda: collections.defaultdict(float))
+    for r in cg['rows']:
+        for h, v in r['valores'].items():
+            if v is not None:
+                porCargas[r['legajo']][h] += v
+    porTab = collections.defaultdict(lambda: collections.defaultdict(float))
+    for r in m['rows']:
+        for c, v in r['conceptos'].items():
+            if v is not None:
+                porTab[r['legajo']][c] += v
+
+    fallas = []
+    for par in cfg.get('aportesDeControl', []):
+        for leg in porCargas:
+            a = porCargas[leg].get(par['meta4'], 0.0)
+            b = porTab.get(leg, {}).get(par['tabulado'], 0.0)
+            if abs(round(a - b, 2)) > tol:
+                fallas.append((leg, f"{par['meta4']} vale {a:,.2f} en el control de cargas "
+                                    f"y el concepto {par['tabulado']} del Tabulado dice {b:,.2f}"))
+    faltan = sorted(set(porTab) - set(porCargas), key=lambda x: int(x) if x.isdigit() else 0)
+    sobran = sorted(set(porCargas) - set(porTab), key=lambda x: int(x) if x.isdigit() else 0)
+    return {'fallas': fallas, 'soloTabulado': faltan, 'soloCargas': sobran,
+            'legajos': len(porCargas)}
+
+
+def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
+    """Las contribuciones patronales de Meta4 contra las de Axton, por legajo.
+
+    Una contribucion se calcula sobre la base, asi que casi nunca es un error
+    propio: si el bruto del legajo no coincide, las contribuciones salen mal
+    solas y se arreglan solas cuando se arregla el haber. Por eso cada
+    diferencia sale clasificada por SU CAUSA y no sola:
+
+    - 'Remuneración'  el neto del legajo ya difiere en el paralelo. Primero se
+                      corrigen los haberes; esta linea se cierra sola.
+    - 'Base'          el neto coincide pero la base no: un concepto que un
+                      sistema toma para contribuir y el otro no (tipico de un
+                      no remunerativo tratado como exento).
+    - 'Contribución'  el neto y la base coinciden: la diferencia es del calculo
+                      de la contribucion en si. Es la unica que es un hallazgo
+                      propio.
+    """
+    difNeto = {v['legajo']: v['difNeto'] for v in porLegajo}
+    nombres = {v['legajo']: v['nombre'] for v in porLegajo}
+
+    CG = collections.defaultdict(lambda: collections.defaultdict(float))
+    for r in cg['rows']:
+        nombres.setdefault(r['legajo'], r['nombre'])
+        for h, v in r['valores'].items():
+            if v is not None:
+                CG[r['legajo']][h] += v
+    AX = collections.defaultdict(lambda: collections.defaultdict(float))
+    BRUTO = collections.defaultdict(float)
+    for r in a['rows']:
+        BRUTO[r['legajo']] += r['bruto'] or 0.0
+        for c, v in r['conceptos'].items():
+            if v is not None:
+                AX[r['legajo']][c] += v
+
+    colBase = cfg.get('columnaBase')
+    legajos = sorted(set(CG) & set(AX), key=lambda x: int(x) if x.isdigit() else 0)
+    cols = set(a['codigos'])
+
+    filas, porConcepto = [], []
+    for par in cfg.get('pares', []):
+        codigos = [c for c in par['axton'] if c in cols]
+        tm = ta = 0.0
+        n = 0
+        for leg in legajos:
+            vm = CG[leg].get(par['meta4'], 0.0)
+            va = sum(AX[leg].get(c, 0.0) for c in codigos)
+            tm += vm; ta += va
+            dif = round(va - vm, 2)
+            if abs(dif) <= tol:
+                continue
+            n += 1
+            difBase = round(BRUTO[leg] - CG[leg].get(colBase, 0.0), 2) if colBase else None
+            dn = difNeto.get(leg)
+            # Lo que decide NO es el neto sino la BASE: el neto puede diferir
+            # por una retencion (Ganancias) sin mover un peso de la base, y
+            # entonces arreglar el neto no cierra la contribucion.
+            baseDifiere = difBase is not None and abs(difBase) > ruido
+            netoDifiere = dn is not None and abs(dn) > ruido
+            if abs(dif) <= ruido:
+                causa, coment = 'Redondeo', 'Diferencia de centavos, no es un hallazgo'
+            elif baseDifiere and netoDifiere:
+                causa = 'Remuneración'
+                coment = (f"Viene de la remuneración: la base de contribuciones difiere en "
+                          f"{difBase:+,.2f} y el neto de este legajo también difiere "
+                          f"({dn:+,.2f}). Se corrige sola cuando se corrijan los haberes; "
+                          f"no es un error de la contribución.")
+            elif baseDifiere:
+                causa = 'Base'
+                coment = (f"El neto coincide pero la base no: Axton contribuye sobre "
+                          f"{BRUTO[leg]:,.2f} y Meta4 sobre {CG[leg].get(colBase, 0.0):,.2f} "
+                          f"({difBase:+,.2f}). Hay un concepto que un sistema toma para "
+                          f"contribuir y el otro no.")
+            else:
+                causa = 'Contribución'
+                coment = ("La base coincide en los dos sistemas: la diferencia está en el "
+                          "cálculo de la contribución (alícuota, tope o detracción).")
+                # Decir a que porcentaje de la base contribuye cada uno separa de un
+                # vistazo una alicuota distinta de una base armada distinta puertas
+                # adentro: si los dos porcentajes son casi iguales es la alicuota, y
+                # si uno se va lejos es que ese sistema contribuye sobre otra cosa.
+                base = CG[leg].get(colBase, 0.0) if colBase else 0.0
+                if abs(base) > 1:
+                    coment += (f" Sobre una base de {base:,.2f}, Meta4 contribuye el "
+                               f"{vm / base * 100:.4f}% y Axton el {va / base * 100:.4f}%.")
+                if netoDifiere:
+                    coment += (f" Ojo: el neto de este legajo difiere en {dn:+,.2f}, pero por "
+                               f"una retención que no toca la base, así que arreglar el neto "
+                               f"no cierra esta línea.")
+            filas.append({'legajo': leg, 'nombre': nombres.get(leg, ''),
+                          'concepto': par['nombre'], 'colM4': par['meta4'],
+                          'codAx': "+".join(par['axton']),
+                          'existeAx': bool(codigos),
+                          'meta4': round(vm, 2), 'axton': round(va, 2), 'dif': dif,
+                          'baseM4': round(CG[leg].get(colBase, 0.0), 2) if colBase else None,
+                          'baseAx': round(BRUTO[leg], 2),
+                          'difBase': difBase, 'difNeto': dn,
+                          'causa': causa, 'comentario': coment})
+        porConcepto.append({'concepto': par['nombre'], 'colM4': par['meta4'],
+                            'codAx': "+".join(par['axton']), 'existeAx': bool(codigos),
+                            'meta4': round(tm, 2), 'axton': round(ta, 2),
+                            'dif': round(ta - tm, 2), 'legajos': n})
+
+    sinPar = sorted((c for c in a['codigos']
+                     if c.startswith('88')
+                     and c not in {x for p in cfg.get('pares', []) for x in p['axton']}
+                     and any((r['conceptos'].get(c) or 0) != 0 for r in a['rows'])),
+                    key=int)
+    return {'filas': filas, 'porConcepto': porConcepto, 'legajos': legajos,
+            'sinPar': [(c, a['labels'][c],
+                        round(sum(r['conceptos'].get(c) or 0.0 for r in a['rows']), 2))
+                       for c in sinPar]}
