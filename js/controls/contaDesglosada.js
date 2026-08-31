@@ -7,17 +7,24 @@
 //
 //   1. **Contabilidad Desglosada** — una línea por cada lado del movimiento
 //      (DEBE con la cuenta de "Cuenta Debe", HABER con la de "Cuenta Haber"),
-//      10 columnas. Es el papel de trabajo del analista y el drill-down del
-//      asiento: cada peso del asiento se puede rastrear hasta el legajo y el
-//      concepto que lo generó.
+//      12 columnas. La recibe Contaduría del cliente y es a la vez el
+//      drill-down del asiento: cada peso del asiento se puede rastrear hasta el
+//      legajo y el concepto que lo generó.
 //   2. **Asiento Contable** — la desglosada agrupada por código de cuenta, con
 //      el neteo Debe/Haber de cada línea. Necesita el "Reporte de Cuentas de
 //      Redefinición" del cliente, que es de donde sale el código de cada cuenta.
 //      Sin ese archivo la desglosada se genera igual y el asiento se informa
 //      como no armado (nunca se completa con códigos inventados).
-//   3. **Desglosada con Código** — la desglosada completa, sin agrupar, con la
-//      columna de código agregada. Es la que permite auditar el asiento línea
-//      por línea.
+//
+// **Las tres cosas que pidió Contaduría del cliente** (reunión de agosto de
+// 2026, D-095) están las tres en la desglosada, y por eso ya no hay un tercer
+// archivo "Desglosada con Código": el número de cuenta va al lado del nombre en
+// la desglosada misma, así que la segunda tabla sería idéntica.
+//   · el **legajo sin los ceros de relleno** ('007' → '7'), como lo venía
+//     recibiendo (config `legajoSinCeros`);
+//   · el **número de cuenta** junto al nombre de cuenta (columna Nro Cuenta);
+//   · el **número de concepto de Meta4**, el sistema anterior del cliente
+//     (columna Nro Meta4, ver `meta4Codes.js`).
 //
 // Viene de un prototipo HTML que el equipo armó en Claude Chat
 // (`docs/traspaso-controles-equipo.md`); las reglas están verificadas contra los
@@ -54,8 +61,9 @@ import { initTabs } from '../ui/tabs.js';
 import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from '../utils/exportData.js';
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { periodToLabel, periodSuffix } from '../utils/dates.js';
-import { makeLegajoKey } from '../utils/legajo.js';
+import { makeLegajoKey, legajoKey, LEGAJO_KEY_MODES } from '../utils/legajo.js';
 import { groupRowsByLegajo } from './consolidate.js';
+import { DEFAULT_META4_EQUIVALENCIAS, buildMeta4Map, conceptCodeKey } from './meta4Codes.js';
 import { EXPORT_CONTRACTS } from '../exports/contracts.js';
 import { writeContractSheet } from '../exports/contractSheet.js';
 import { resumenStats } from './resumenStats.js';
@@ -88,6 +96,20 @@ export const DEFAULT_CONTA_DESGLOSADA_CONFIG = {
    * Nace vacía: ver el comentario del encabezado.
    */
   excepciones: [],
+  /**
+   * El legajo se escribe sin los ceros de relleno ('007' → '7'), que es como lo
+   * venía recibiendo Contaduría del cliente y como lo pidió (D-095). Sólo
+   * cambia cómo se ESCRIBE: quién es el mismo empleado lo sigue decidiendo la
+   * clave del cliente (`legajoKeyMode`, D-038/D-042).
+   */
+  legajoSinCeros: true,
+  /**
+   * Equivalencia código de Axton → código de Meta4, para la columna "Nro Meta4".
+   * La semilla son los 96 pares del "Reporte de conceptos AFIP" del cliente
+   * (ver `meta4Codes.js`); un concepto que no esté sale con la celda vacía y el
+   * control lo avisa.
+   */
+  equivalenciasMeta4: DEFAULT_META4_EQUIVALENCIAS,
 };
 
 const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -111,6 +133,14 @@ function resolveConfig(cfgIn) {
     nroConceptoNeto: cfg.nroConceptoNeto ?? DEFAULT_CONTA_DESGLOSADA_CONFIG.nroConceptoNeto,
     conceptoNeto:    cfg.conceptoNeto    ?? DEFAULT_CONTA_DESGLOSADA_CONFIG.conceptoNeto,
     excepciones:     Array.isArray(cfg.excepciones) ? cfg.excepciones : [],
+    legajoSinCeros:  cfg.legajoSinCeros ?? DEFAULT_CONTA_DESGLOSADA_CONFIG.legajoSinCeros,
+    // Una tabla de equivalencias VACÍA es una decisión del analista (la columna
+    // de Meta4 sale en blanco y el control lo avisa); una config guardada ANTES
+    // de que existiera la columna no dice nada al respecto, así que esa cae a la
+    // semilla. Si las dos cayeran igual, vaciar la tabla no se podría guardar.
+    equivalenciasMeta4: Array.isArray(cfg.equivalenciasMeta4)
+      ? cfg.equivalenciasMeta4
+      : DEFAULT_CONTA_DESGLOSADA_CONFIG.equivalenciasMeta4,
   };
 }
 
@@ -166,6 +196,11 @@ export function runContaDesglosada(primaryRows, _tabRows, mapping) {
     // criterio es el mismo que usa el headline del semáforo más abajo.
     bridge: bridgeDelConta(desglosada, asiento),
     filasOrigen: primaryRows.length,
+    // Escribir el legajo sin ceros cuando el cliente declaró que '007' y '7' son
+    // empleados DISTINTOS los volvería indistinguibles en el archivo. No se
+    // decide por el control: se avisa (D-095).
+    legajoSinCerosEnConflicto: !!cfg.legajoSinCeros
+      && mapping.legajoKeyMode === LEGAJO_KEY_MODES.TRIM,
   };
 }
 
@@ -204,8 +239,13 @@ function bridgeDelConta(desglosada, asiento) {
  */
 function armarDesglosada(rows, cfg, keyFn) {
   const cuentaNeto = norm(cfg.cuentaNeto);
+  const meta4 = buildMeta4Map(cfg.equivalenciasMeta4);
   const lineas = [];
   const cuentas = new Set();
+  // Conceptos que Axton liquidó y la tabla de equivalencias no traduce: la celda
+  // de Meta4 queda vacía y salen listados. Se agrupan por código de concepto
+  // porque lo que hay que resolver es una línea de la tabla del Paso 2.
+  const sinMeta4 = new Map();
 
   let filasAnuladas = 0;      // regla 3: las dos cuentas iguales
   let filasSinCuenta = 0;     // regla 2, los dos lados
@@ -233,13 +273,19 @@ function armarDesglosada(rows, cfg, keyFn) {
         : lado;
       const monto = importe === null ? null : Math.abs(importe);
       lineas.push({
-        legajo:       row.legajo,
+        legajo:       formatLegajo(row.legajo, cfg),
         ingreso:      row.ingreso ?? null,
         nro:          row.nro_concepto ?? null,
+        nro_meta4:    nroMeta4(row.nro_concepto, row.concepto, meta4, sinMeta4),
         concepto:     row.concepto ?? null,
         importe,
         centro_costo: row.centro_costo ?? null,
         cuenta:       String(cuenta).trim(),
+        // El código de cuenta lo resuelve el Paso 2 (`armarAsiento`), que escribe
+        // acá mismo. Nace en `null` para que la línea tenga siempre la misma
+        // forma: sin el reporte de cuentas del cliente la columna sale vacía, no
+        // ausente.
+        codigo:       null,
         debe_haber:   ladoFinal,
         debe:         ladoFinal === 'DEBE'  ? monto : null,
         haber:        ladoFinal === 'HABER' ? monto : null,
@@ -250,7 +296,7 @@ function armarDesglosada(rows, cfg, keyFn) {
     }
   }
 
-  const netos = armarNetos(rows, cfg, keyFn);
+  const netos = armarNetos(rows, cfg, keyFn, meta4);
   // Las líneas de neto van al final, como en el armado que el equipo verificó
   // contra el sistema del cliente: el archivo se lee por legajo (el reporte ya
   // viene ordenado así) y las de neto son el cierre de la planilla.
@@ -271,8 +317,47 @@ function armarDesglosada(rows, cfg, keyFn) {
     filasAnuladas,
     filasSinCuenta,
     filasSinImporte,
+    // Los conceptos sin equivalencia, con cuántas líneas quedaron sin número de
+    // Meta4. Ordenados por líneas: el que más pesa en el archivo va primero.
+    sinMeta4: [...sinMeta4.values()].sort((a, b) => b.lineas - a.lineas),
+    lineasSinMeta4: [...sinMeta4.values()].reduce((a, c) => a + c.lineas, 0),
+    equivalenciasMeta4: meta4.size,
     ...netos.stats,
   };
+}
+
+/**
+ * El legajo tal como se ESCRIBE en la desglosada. Con `legajoSinCeros` sale sin
+ * los ceros de relleno ('007' → '7'), que es como lo pidió Contaduría del
+ * cliente (D-095).
+ *
+ * Reusa `legajoKey` en modo `sin_ceros` para no dejar un cuarto criterio de "sin
+ * ceros" en el repo (D-038): un legajo con letras o guiones ('0A12', '12-B')
+ * sale tal cual, porque ahí el cero puede ser parte del identificador y no
+ * relleno. Quién es el mismo empleado no lo decide esto: lo decide `keyFn`.
+ */
+function formatLegajo(legajo, cfg) {
+  const s = legajo === null || legajo === undefined ? '' : String(legajo).trim();
+  if (!s) return null;
+  return cfg.legajoSinCeros ? legajoKey(s, LEGAJO_KEY_MODES.SIN_CEROS) : s;
+}
+
+/**
+ * El número con el que este concepto salía de Meta4, el sistema anterior del
+ * cliente. `null` cuando la tabla de equivalencias no lo traduce: la celda sale
+ * vacía y el concepto se acumula en `sinMeta4` para avisarlo. Un código parecido
+ * NO se deduce por analogía (D-039) — un número de concepto mal pero coherente
+ * no lo detecta nadie.
+ */
+function nroMeta4(nro, concepto, meta4, sinMeta4) {
+  const clave = conceptCodeKey(nro);
+  const equiv = clave ? meta4.get(clave) : null;
+  if (equiv) return equiv;
+  const previo = sinMeta4.get(clave)
+    || { nro: nro ?? null, concepto: concepto ?? null, lineas: 0 };
+  previo.lineas++;
+  sinMeta4.set(clave, previo);
+  return null;
 }
 
 /**
@@ -284,7 +369,7 @@ function armarDesglosada(rows, cfg, keyFn) {
  * `trim` a mano, un cliente que rellena legajos con ceros emitiría dos líneas
  * de neto para el mismo empleado.
  */
-function armarNetos(rows, cfg, keyFn) {
+function armarNetos(rows, cfg, keyFn, meta4) {
   const cuentaNeto = norm(cfg.cuentaNeto);
   const lineas = [];
   let legajosMultiCeco = 0;
@@ -317,13 +402,20 @@ function armarNetos(rows, cfg, keyFn) {
     const neto = round2(haber - debe);
     const lado = neto >= 0 ? 'HABER' : 'DEBE';
     lineas.push({
-      legajo:       ficha?.legajo ?? null,
+      legajo:       formatLegajo(ficha?.legajo, cfg),
       ingreso:      ficha?.ingreso ?? null,
       nro:          cfg.nroConceptoNeto,
+      // El neto no existe como concepto en la liquidación —lo inventa el
+      // asiento—, así que tampoco tiene un número de Meta4 que traducir: se
+      // repite el mismo, salvo que el analista le haya cargado una equivalencia
+      // (decisión de Willy, 2026-08-31). Una celda vacía en las líneas de neto
+      // se leería como una equivalencia que falta, y no falta ninguna.
+      nro_meta4:    meta4.get(conceptCodeKey(cfg.nroConceptoNeto)) || cfg.nroConceptoNeto,
       concepto:     cfg.conceptoNeto,
       importe:      neto,
       centro_costo: ficha?.centro_costo ?? null,
       cuenta:       String(cfg.cuentaNeto).trim(),
+      codigo:       null,
       debe_haber:   lado,
       debe:         lado === 'DEBE'  ? Math.abs(neto) : null,
       haber:        lado === 'HABER' ? neto : null,
@@ -425,11 +517,14 @@ function armarAsiento(lineas, cuentasRef, cfg) {
   const index = indexarCuentas(cuentasRef);
   const grupos = new Map();
   const sinCodigo = new Map();
-  const conCodigo = [];
 
   for (const l of lineas) {
     const codigo = buscarCodigo(l.cuenta, l.centro_costo, index, cfg.excepciones);
-    conCodigo.push({ ...l, codigo: codigo || null });
+    // El código se escribe **en la línea de la desglosada**, no en una copia:
+    // desde el pedido de Contaduría (D-095) la desglosada lleva el número de
+    // cuenta al lado del nombre, así que hay un solo archivo y una sola tabla.
+    // Antes esto duplicaba las 5.300 líneas en `desglosadaConCodigo`.
+    l.codigo = codigo || null;
 
     if (!codigo) {
       const clave = `${l.cuenta} ⋮ ${l.centro_costo ?? ''}`;
@@ -483,7 +578,6 @@ function armarAsiento(lineas, cuentasRef, cfg) {
 
   return {
     filas,
-    desglosadaConCodigo: conCodigo,
     totalDebe,
     totalHaber,
     totalNetoDebe,
@@ -494,7 +588,7 @@ function armarAsiento(lineas, cuentasRef, cfg) {
     cierraNeteado: Math.abs(round2(totalNetoDebe - totalNetoHaber)) <= TOL,
     cuentasPatrimoniales: new Set(filas.filter(f => esPatrimonial(f.nro)).map(f => f.nro)).size,
     sinCodigo: [...sinCodigo.values()],
-    lineasSinCodigo: conCodigo.filter(l => !l.codigo).length,
+    lineasSinCodigo: lineas.filter(l => !l.codigo).length,
     empatesReferencia: index.empates,
     cuentasReferencia: cuentasRef.length,
   };
@@ -573,6 +667,16 @@ export function summarizeContaDesglosada(results) {
   }
   if (results.legajosMultiCeco > 0) {
     insights.push({ type: 'warning', label: 'legajos que netean en más de un centro de costo', value: results.legajosMultiCeco });
+  }
+  // El número de Meta4 que falta NO mueve el semáforo: este control mide que el
+  // asiento CIERRE, y una equivalencia que falta no descuadra un peso (D-036 —
+  // que un dato no exista es resultado válido y se informa). Se avisa acá y se
+  // lista abajo, con el código de concepto, que es lo que hay que cargar.
+  if (results.sinMeta4?.length > 0) {
+    insights.push({ type: 'warning', label: 'conceptos sin equivalencia en Meta4', value: results.sinMeta4.length });
+  }
+  if (results.legajoSinCerosEnConflicto) {
+    insights.push({ type: 'warning', label: 'el legajo sale sin ceros', value: 'y el cliente los distingue' });
   }
 
   const headline = a
@@ -745,6 +849,31 @@ function renderResumenTab(panel, results) {
         + 'de costo de la primera. Revisá si contabilidad necesita el neto partido por centro.',
     });
   }
+  if (results.sinMeta4?.length > 0) {
+    const top = results.sinMeta4.slice(0, 5)
+      .map(c => `${c.nro || '(sin número)'}${c.concepto ? ` ${c.concepto}` : ''}`).join(', ');
+    items.push({
+      sev: 'mid', who: 'Números de concepto de Meta4',
+      what: `${results.sinMeta4.length} concepto(s) de Axton no están en la tabla de equivalencias, `
+        + `así que ${results.lineasSinMeta4} línea(s) salen con la columna "Nro Meta4" vacía: ${top}`
+        + `${results.sinMeta4.length > 5 ? ' y otros más' : ''}.`,
+      why: results.equivalenciasMeta4 === 0
+        ? 'La tabla de equivalencias está vacía. Cargala en "Contabilidad Desglosada" del Paso 2 '
+          + '(código de Axton ⇥ código de Meta4) si Contaduría del cliente espera esa columna.'
+        : 'El número no se deduce por parecido: pedile al cliente el "Reporte de conceptos AFIP" '
+          + 'actualizado y cargá los que falten en "Contabilidad Desglosada" del Paso 2.',
+    });
+  }
+  if (results.legajoSinCerosEnConflicto) {
+    items.push({
+      sev: 'mid', who: 'Legajo sin ceros a la izquierda',
+      what: 'La desglosada escribe el legajo sin los ceros de relleno, pero este cliente está '
+        + 'configurado con «007» y «7» como empleados distintos.',
+      why: 'En el archivo los dos van a salir como «7» y no se van a poder distinguir. Sacá la opción '
+        + 'en "Contabilidad Desglosada" del Paso 2, o revisá la clave de legajo del cliente en '
+        + 'Administración.',
+    });
+  }
   if (a?.empatesReferencia > 0) {
     items.push({
       sev: 'mid', who: 'Reporte de cuentas del cliente',
@@ -780,13 +909,13 @@ function renderResumenTab(panel, results) {
 // sirve es abrir la cuenta y ver **qué conceptos la componen**, que es justo lo
 // que hoy no se puede ver sin bajar el .xlsx y filtrar a mano.
 //
-// **Lo que la ficha muestra y el archivo no lleva.** La desglosada trae legajo y
-// fecha de ingreso porque es papel de trabajo del analista, y está pendiente que
-// Willy confirme si ese archivo sale del estudio (D-066 §4, §8 de la spec del
-// control). Esta ficha **no agrega ni un dato del empleado a ningún archivo**: es
-// pantalla, la ve el analista, y su desglose es por CONCEPTO —código y nombre de
-// concepto, que son configuración, no información de HR—. Los tres `.xlsx` y el
-// CSV salen exactamente con las columnas que ya tenían.
+// **Lo que la ficha muestra y el archivo no lleva.** La desglosada sale del
+// estudio: la recibe Contaduría del cliente, y lleva legajo y fecha de ingreso
+// porque Willy confirmó que la fecha se queda (D-095 — es el mismo archivo que
+// el cliente venía recibiendo). Esta ficha **no agrega ni un dato del empleado a
+// ningún archivo**: es pantalla, la ve el analista, y su desglose es por CONCEPTO
+// —código y nombre de concepto, que son configuración, no información de HR—.
+// Los dos `.xlsx` y el CSV salen exactamente con las columnas de su contrato.
 
 /**
  * El único estado que no aplica acá. **Este control cuadra al centavo contra sí
@@ -1068,7 +1197,7 @@ function conclusionDeCuenta(f, c, results, cierraTodo) {
   };
 }
 
-// Las tres tablas de la Planilla son los tres archivos que se descargan: lo que
+// Las dos tablas de la Planilla son los dos archivos que se descargan: lo que
 // se ve en pantalla es lo que sale en el .xlsx, sin una segunda lista de
 // columnas. Cada una con la barra estándar completa (§3) y las columnas de
 // importe agrupadas en las dos bandas naturales de un asiento: DEBE y HABER.
@@ -1091,24 +1220,19 @@ function renderDetalleTab(panel, results) {
       render: (p) => vistaAsiento(p, results, cierraTodo) });
   }
   tabs.push({ id: 'desglosada', label: 'Contabilidad Desglosada',
-    render: (p) => vistaDesglosada(p, results, results.lineas, false, cierraTodo,
-      'Una línea por cada lado del movimiento. El "Neto a pagar" de cada legajo va al final: es la '
-      + 'cuenta de sueldos a pagar neteada por empleado.') });
-  if (results.asiento) {
-    tabs.push({ id: 'codigo', label: 'Desglosada con Código',
-      render: (p) => vistaDesglosada(p, results, results.asiento.desglosadaConCodigo, true, cierraTodo,
-        'La desglosada completa con el código de cuenta de cada línea: es la que permite auditar el '
-        + 'asiento línea por línea.') });
-  }
+    render: (p) => vistaDesglosada(p, results, lineasDeLaDesglosada(results), !!results.asiento, cierraTodo,
+      'Una línea por cada lado del movimiento, con el número de cuenta al lado del nombre. El '
+      + '"Neto a pagar" de cada legajo va al final: es la cuenta de sueldos a pagar neteada por '
+      + 'empleado.') });
 
   initTabs(panel, { tabs });
 }
 
-/** El mismo menú en las tres tablas: los tres archivos más lo que está en pantalla. */
+/** El mismo menú en las dos tablas: los dos archivos más lo que está en pantalla. */
 function mountExportMenu(exportEl, results, vistaId) {
   const items = [
     { key: 'desglosada', label: '📊 Contabilidad Desglosada (.xlsx)',
-      desc: 'Una línea por cada lado del movimiento, con legajo y concepto.',
+      desc: 'Una línea por cada lado del movimiento, con el número de cuenta y el de Meta4.',
       action: () => exportDesglosadaToXlsx(results) },
   ];
   if (results.asiento) {
@@ -1116,9 +1240,6 @@ function mountExportMenu(exportEl, results, vistaId) {
       { key: 'asiento', label: '📊 Asiento Contable (.xlsx)',
         desc: 'Agrupado por cuenta y centro de costo, con el neteo de cada línea.',
         action: () => exportAsientoToXlsx(results) },
-      { key: 'codigo', label: '📊 Desglosada con Código (.xlsx)',
-        desc: 'La desglosada completa, sin agrupar, con el código de cada cuenta.',
-        action: () => exportConCodigoToXlsx(results) },
     );
   }
   items.push(
@@ -1132,7 +1253,7 @@ function mountExportMenu(exportEl, results, vistaId) {
 
   renderExportMenu(exportEl, {
     items,
-    note: 'La Contabilidad Desglosada lleva legajo y fecha de ingreso: es papel de trabajo del analista.',
+    note: 'La Contabilidad Desglosada lleva legajo, fecha de ingreso y el número de concepto de Meta4.',
   });
 }
 
@@ -1190,16 +1311,22 @@ function vistaDesglosada(panel, results, lineas, conCodigo, cierraTodo, nota) {
     { key: 'ingreso', label: 'Ingreso', sub: 'fecha de ingreso', band: 'Identificación', close: true,
       cell: l => esc(l.ingreso || '—') },
 
-    { key: 'nro',      label: 'Nro',      sub: 'código de concepto', band: 'Concepto',
+    { key: 'nro',       label: 'Nro',       sub: 'concepto en Axton', band: 'Concepto',
       cell: l => esc(l.nro || '—') },
+    // La columna que pidió Contaduría del cliente (D-095): con qué número salía
+    // este mismo concepto del sistema anterior.
+    { key: 'nro_meta4', label: 'Nro Meta4', sub: 'el del sistema anterior', band: 'Concepto',
+      cell: l => esc(l.nro_meta4 || '—') },
     { key: 'concepto', label: 'Concepto', band: 'Concepto', cell: l => esc(l.concepto || '—') },
     { key: 'importe',  label: 'Importe',  sub: 'lo liquidado', num: true, band: 'Concepto', close: true },
 
     { key: 'centro_costo', label: 'Centro de Costo', band: 'Imputación',
       cell: l => esc(l.centro_costo || '—') },
-    { key: 'cuenta', label: 'Cuenta', band: 'Imputación' },
-    ...(conCodigo ? [{ key: 'codigo', label: 'Código', sub: 'el de la cuenta', band: 'Imputación',
+    // El número de cuenta va ANTES del nombre, como en el asiento: es el orden en
+    // el que lo lee Contaduría.
+    ...(conCodigo ? [{ key: 'codigo', label: 'Nro Cuenta', sub: 'código contable', band: 'Imputación',
       cell: l => esc(l.codigo || 'sin código') }] : []),
+    { key: 'cuenta', label: 'Cuenta', band: 'Imputación' },
     { key: 'debe_haber', label: 'D/H', sub: 'de qué lado va', band: 'Imputación', close: true },
 
     { key: 'debe',  label: 'DEBE',  sub: 'lo que se asienta', num: true, band: 'DEBE',  close: true },
@@ -1217,34 +1344,38 @@ function vistaDesglosada(panel, results, lineas, conCodigo, cierraTodo, nota) {
       { value: 'haber', label: 'Sólo el HABER', match: l => l.debe_haber === 'HABER' },
       ...(conCodigo ? [{ value: 'sin_codigo', label: 'Sin código de cuenta', match: l => !l.codigo }] : []),
     ],
-    getLabel: l => `${l.legajo} ${l.concepto || ''} ${l.cuenta}`,
-    searchLabel: 'Buscar legajo, concepto o cuenta',
-    searchPlaceholder: 'Legajo, concepto o cuenta…',
+    getLabel: l => `${l.legajo} ${l.nro || ''} ${l.nro_meta4 || ''} ${l.concepto || ''} `
+      + `${l.codigo || ''} ${l.cuenta}`,
+    searchLabel: 'Buscar legajo, concepto, cuenta o número (de Axton o de Meta4)',
+    searchPlaceholder: 'Legajo, concepto, cuenta o número…',
     stickyCols: 2,
-    onExport: (exportEl) => mountExportMenu(exportEl, results, conCodigo ? 'codigo' : 'desglosada'),
+    onExport: (exportEl) => mountExportMenu(exportEl, results, 'desglosada'),
     emptyText: 'Ninguna línea quedó con los filtros puestos.',
     footnote: (shown) => `Mostrando ${shown.length} de ${lineas.length} línea${lineas.length === 1 ? '' : 's'}. ${nota}`,
   });
 }
 
-// ── Los tres archivos ─────────────────────────────────────────────────────────
+// ── Los dos archivos ─────────────────────────────────────────────────────────
+
+/**
+ * Las líneas de la desglosada, con su número de cuenta adentro.
+ *
+ * En una corrida **vieja** —guardada antes de que la desglosada llevara el
+ * número de cuenta (D-095)— el código vivía en una segunda tabla del asiento
+ * (`desglosadaConCodigo`). Se lee de ahí cuando está, para que un run guardado no
+ * se descargue con la columna de cuenta vacía.
+ */
+export function lineasDeLaDesglosada(results) {
+  return results.asiento?.desglosadaConCodigo || results.lineas;
+}
 
 async function exportDesglosadaToXlsx(results) {
   await loadExcelJS();
   const wb = new window.ExcelJS.Workbook();
-  writeContractSheet(wb, EXPORT_CONTRACTS.conta_desglosada, results.lineas, {
+  writeContractSheet(wb, EXPORT_CONTRACTS.conta_desglosada, lineasDeLaDesglosada(results), {
     totalRow: { legajo: 'TOTAL', debe: results.totalDebe, haber: results.totalHaber },
   });
   await downloadWorkbook(wb, `Contabilidad_Desglosada_${periodSuffix(results.period)}.xlsx`);
-}
-
-async function exportConCodigoToXlsx(results) {
-  await loadExcelJS();
-  const wb = new window.ExcelJS.Workbook();
-  writeContractSheet(wb, EXPORT_CONTRACTS.conta_desglosada_codigo, results.asiento.desglosadaConCodigo, {
-    totalRow: { legajo: 'TOTAL', debe: results.totalDebe, haber: results.totalHaber },
-  });
-  await downloadWorkbook(wb, `Contabilidad_Desglosada_con_Codigo_${periodSuffix(results.period)}.xlsx`);
 }
 
 async function exportAsientoToXlsx(results) {
@@ -1274,15 +1405,14 @@ function filasDeVista(results, vistaId) {
       fmtNum(f.debe), fmtNum(f.haber), fmtNum(f.neto_debe), fmtNum(f.neto_haber)]);
     nombre = `Asiento_Contable_${suf}.csv`;
   } else {
-    const conCodigo = vistaId === 'codigo';
-    const lineas = conCodigo ? results.asiento.desglosadaConCodigo : results.lineas;
-    headers = ['Legajo', 'Ingreso', 'Nro', 'Concepto', 'Importe', 'Centro de Costo', 'Cuenta',
-      ...(conCodigo ? ['Código'] : []), 'DEBE_HABER', 'DEBE', 'HABER'];
-    rows = lineas.map(l => [l.legajo, l.ingreso, l.nro, l.concepto,
-      l.importe === null ? '' : fmtNum(l.importe), l.centro_costo, l.cuenta,
-      ...(conCodigo ? [l.codigo || ''] : []), l.debe_haber,
+    const lineas = lineasDeLaDesglosada(results);
+    headers = ['Legajo', 'Ingreso', 'Nro', 'Nro Meta4', 'Concepto', 'Importe', 'Centro de Costo',
+      'Nro Cuenta', 'Cuenta', 'DEBE_HABER', 'DEBE', 'HABER'];
+    rows = lineas.map(l => [l.legajo, l.ingreso, l.nro, l.nro_meta4 || '', l.concepto,
+      l.importe === null ? '' : fmtNum(l.importe), l.centro_costo, l.codigo || '', l.cuenta,
+      l.debe_haber,
       l.debe === null ? '' : fmtNum(l.debe), l.haber === null ? '' : fmtNum(l.haber)]);
-    nombre = `${conCodigo ? 'Contabilidad_Desglosada_con_Codigo' : 'Contabilidad_Desglosada'}_${suf}.csv`;
+    nombre = `Contabilidad_Desglosada_${suf}.csv`;
   }
 
   return {

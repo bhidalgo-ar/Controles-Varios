@@ -7,6 +7,37 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(conta): la desglosada de COTY sale como la pide Contaduría del cliente — legajo sin ceros, número de cuenta y número de concepto de Meta4 — 2026-08-31
+
+- **Qué cambia para el analista:** la Contabilidad Desglosada de COTY ahora sale con **12 columnas** en
+  vez de 10 y es **un solo archivo** (antes eran dos: la desglosada y la "Desglosada con Código"). Las
+  tres cosas que pidió Contaduría del cliente en la reunión de agosto están las tres adentro:
+  - el **legajo sin los ceros de la izquierda** («007» sale «7»), que es como lo venía recibiendo;
+  - el **número de cuenta al lado del nombre de cuenta** (columna nueva `Nro Cuenta`, antes de
+    `Cuenta`, en el mismo orden en el que lo lee el asiento);
+  - el **número de concepto de Meta4**, el sistema anterior del cliente (columna nueva `Nro Meta4`,
+    después de `Nro`).
+- **De dónde sale el número de Meta4:** de la equivalencia código de Axton → código de Meta4 que
+  mandó el cliente ("Reporte de conceptos AFIP"), **96 conceptos**, sembrada en
+  `js/controls/meta4Codes.js` y editable desde el Paso 2 como cualquier otra configuración del cliente
+  (D-035). Un concepto que Axton liquide y no esté en la tabla **sale con la celda vacía y avisado en
+  resultados, con su código y su nombre** — el número no se deduce por parecido (D-039). La línea de
+  "Neto a pagar", que no existe en la liquidación porque la inventa el asiento, repite su propio número.
+- **El legajo sin ceros cambia sólo cómo se ESCRIBE el archivo**, no con quién matchea: quién es el
+  mismo empleado lo sigue decidiendo la clave de legajo del cliente (D-038/D-042). Y si el cliente
+  declara «007» y «7» como empleados **distintos**, escribirlos sin ceros los volvería
+  indistinguibles: eso no se decide solo, se avisa en resultados.
+- **La "Desglosada con Código" deja de generarse.** Existía porque la desglosada no llevaba el número
+  de cuenta; ahora lo lleva, así que era el mismo archivo dos veces. De paso, el código pasa a
+  escribirse en la línea de la desglosada en vez de en una copia: **5.300 líneas menos** por corrida
+  guardada. Una corrida vieja se sigue descargando con su columna de cuenta completa.
+- **Willy confirmó que la fecha de ingreso se queda** en el archivo, aunque ahora se sepa que la
+  desglosada sale del estudio: es el mismo archivo que el cliente venía recibiendo. Con eso se cierra
+  el pendiente que arrastraba la spec desde el 2026-08-19.
+- 108 asserts en `tests/contaDesglosadaControl.test.js` (26 nuevos) y `npm run test:unit` completo en
+  **5.299 asserts, 0 ✗**. E2E de las pantallas del lote Axton y de las fichas por cuenta: 62 tests en
+  verde con fixture, y la pantalla revisada en navegador en tema claro y oscuro. Ver **D-095**.
+
 ### fix(tests): un e2e que fallaba la mitad de las veces, y el signo de la tanda 5 pasa a estar asserteado — 2026-08-24
 
 - **`tests/e2e/fichasLegajoConcepto.spec.js` flakeaba desde antes de todo el frente del Resumen.**

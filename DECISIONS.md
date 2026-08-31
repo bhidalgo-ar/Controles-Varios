@@ -3765,3 +3765,76 @@ no declare su `resumen` deja el PR en rojo, sin excepción posible.
 **Detalle:** `js/controls/catXEmpleados.js` (`resumenDeCatXEmpleados`, `bridgeDeCatXEmpleados`),
 `js/controls/acumuladoresGanancias.js` (`resumenDeAcumuladores`), `tests/resumenContract.test.js`,
 D-026, D-077, D-082, D-089.
+
+---
+
+## D-095 — La desglosada de COTY es el entregable de Contaduría del cliente: legajo sin ceros, número de cuenta adentro y número de concepto de Meta4
+
+**Fecha:** 2026-08-31
+**Contexto:** COTY cambió de sistema (Meta4 → Axton) y, aprovechando el cambio, Contaduría del
+cliente pidió tres cosas sobre la Contabilidad Desglosada que recibe: (1) el legajo **sin el cero al
+principio**, como lo venía recibiendo del analista anterior; (2) el **número de cuenta junto al nombre
+de cuenta**; (3) que se vea el **número de concepto que salía de Meta4**. Para lo tercero el cliente
+mandó el "Reporte de conceptos AFIP": 96 filas con "Código AXTON", "Concepto" y "Código META4".
+
+El pedido, además, contesta una pregunta que la spec del control arrastraba desde el 2026-08-19: **la
+desglosada sale del estudio.** Hasta ahora estaba tratada como papel de trabajo del analista, y por eso
+llevaba legajo y fecha de ingreso (§8 de `specs/conta-desglosada-asiento.md`, D-020).
+
+**Decisión:**
+
+**1. Las tres columnas van en la desglosada, y la "Desglosada con Código" deja de existir.** El
+número de cuenta se escribe en la desglosada misma (columna `Nro Cuenta`, **antes** de `Cuenta`, en el
+mismo orden en el que lo lee el asiento), así que el tercer archivo —que existía sólo para agregar esa
+columna— sería el mismo archivo dos veces. De paso, el código pasa a escribirse **en la línea** de la
+desglosada en vez de en una copia (`asiento.desglosadaConCodigo`), lo que ahorra 5.300 líneas
+duplicadas por corrida guardada; una corrida vieja se sigue leyendo desde la copia, para que no se
+descargue con la columna vacía.
+
+**2. La fecha de ingreso se queda** (decisión de Willy, consultada explícitamente). Saber que el
+archivo sale del estudio no cambia el archivo: es el mismo que el cliente venía recibiendo, y quien lo
+recibe es Contaduría, no Finanzas. Por eso el contrato sigue siendo `audience: 'payroll'` y el filtro
+de `FINANZAS_ALLOWED_KEYS` no aplica acá. El que va con `audience: 'finanzas'` sigue siendo el asiento,
+que no lleva ni legajo (D-020).
+
+**3. El legajo sin ceros es cómo se ESCRIBE, no con quién matchea.** Config nueva `legajoSinCeros`
+(semilla `true`), y la escritura reusa `legajoKey()` en modo `sin_ceros` para no dejar un cuarto
+criterio de "sin ceros" en el repo (D-038): un legajo con letras o guiones («12-B») sale tal cual.
+Quién es el mismo empleado lo sigue decidiendo `mapping.legajoKeyMode`. **Si el cliente declara «007» y
+«7» como empleados distintos y la opción está prendida, el control lo avisa** en vez de resolverlo
+solo: en el archivo los dos saldrían como «7» y no se podrían distinguir.
+
+**4. La equivalencia Axton → Meta4 es configuración sembrada, no un archivo más para subir.** Los 96
+pares viven en `js/controls/meta4Codes.js` y entran a la config del control (`equivalenciasMeta4`),
+editable en el Paso 2 como cualquier otra cosa del cliente (D-035). Un concepto que Axton liquide y no
+esté en la tabla **sale con la celda vacía y avisado, con su código y su nombre**, nunca con un número
+deducido por analogía (D-039). Y la falta de una equivalencia **no mueve el semáforo**: este control
+mide que el asiento **cierre**, y un número de concepto que falta no descuadra un peso (D-036).
+
+**5. La línea de "Neto a pagar" repite su número** en la columna de Meta4 (decisión de Willy). Ese
+concepto no existe en la liquidación —lo inventa el asiento (9000)—, así que no tiene equivalencia que
+buscar: una celda vacía en las ~130 líneas de neto se leería como una equivalencia que falta, y no
+falta ninguna. Si el analista carga una equivalencia para ese código, gana la que cargó.
+
+**Alternativas descartadas:**
+- **Subir el "Reporte de conceptos AFIP" como tercer archivo del control**, en vez de sembrar la
+  tabla: la equivalencia es una tabla fija del cambio de sistema, no un dato del período. Pedirla todos
+  los meses sería fricción para un archivo que no cambia — y el que la quiera cambiar la edita en el
+  Paso 2.
+- **Matchear la equivalencia por nombre de concepto** (que el reporte del cliente también trae): se
+  busca por **código**, como en todo el repo — el Tabulado trae `'4899-COCHERA_IG'` y
+  `'8805-DTO_COCHERA'` y matchear por nombre agarra el equivocado.
+- **Sacar la fecha de ingreso** por ser información de HR: se le preguntó a Willy y decidió dejarla.
+- **Dejar los dos archivos** (desglosada y desglosada con código): con el número de cuenta adentro
+  serían idénticos, y dos entregables iguales con nombres distintos es una fuente de "cuál mandé".
+- **Deducir los 8 conceptos que el reporte del cliente no traduce**: no hay ninguno — el reporte cubre
+  los 96 que el cliente usa. Si aparece uno nuevo, sale avisado y lo carga el analista.
+
+**Motivo:** es un entregable que va al cliente y las tres cosas son de forma, no de cálculo: ningún
+número de la desglosada ni del asiento cambia con este PR (los balances, las filas del asiento y el
+semáforo dan exactamente lo mismo). Lo que cambia es cómo se lee el archivo del otro lado.
+
+**Detalle:** `js/controls/contaDesglosada.js`, `js/controls/meta4Codes.js`,
+`js/ui/contaDesglosadaConfigEditor.js`, `js/exports/contracts.js`,
+`tests/contaDesglosadaControl.test.js`, `specs/conta-desglosada-asiento.md`, D-020, D-035, D-036,
+D-038, D-039, D-042, D-066.

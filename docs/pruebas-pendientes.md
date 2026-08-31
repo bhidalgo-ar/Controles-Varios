@@ -29,8 +29,11 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
    y un bug de unidades que afectaba a 263 legajos. Más el tilde de jubilado, que nadie vio funcionando
    en pantalla. §1
 2. **Contabilidad Desglosada + Asiento (COTY)** — el cálculo cierra al centavo contra el prototipo,
-   pero **nadie abrió nunca los tres Excel que descarga la app**. Es el riesgo más silencioso de la
-   lista: un archivo que sale mal formateado no lo detecta ningún test. §2
+   pero **nadie abrió nunca los Excel que descarga la app**. Es el riesgo más silencioso de la
+   lista: un archivo que sale mal formateado no lo detecta ningún test. Y ahora hay algo más para
+   mirar ahí: las **tres columnas que pidió Contaduría del cliente** (legajo sin ceros, número de
+   cuenta y número de concepto de Meta4), que se probaron con datos inventados y no todavía con el
+   archivo real. §2
 3. **Novedades N1 + N2 (SIASA / Merz)** — dos controles nuevos, completos y en el registry, que
    **no vieron un solo archivo real**. El layout del importador está deducido de un relevamiento, no
    confirmado. §4 y §5
@@ -105,15 +108,16 @@ migrarlas. Cuando pase, la pantalla tiene que seguir viéndose igual.
 
 ## 2 · Contabilidad Desglosada + Asiento (COTY, Axton)
 
-**Qué es.** Convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER, el asiento
-agrupado por cuenta y la desglosada con código, y controla que cierre.
+**Qué es.** Convierte el "Totales de Concepto" de Axton en la desglosada DEBE/HABER y en el asiento
+agrupado por cuenta, y controla que cierre. Desde el 2026-08-31 son **dos** archivos y no tres: la
+"Desglosada con Código" dejó de existir porque la desglosada ahora lleva el número de cuenta adentro.
 
 **Cómo llegó hasta acá.** Verificado contra los dos archivos reales de COTY de 05/2026: reproduce
 **exactas** las cinco anclas del prototipo. La pantalla se recorrió en los tres temas.
 
 ### Lo que hay que probar
 
-**Abrir los tres `.xlsx` que descarga la app y compararlos con los del prototipo.** Esto no se pudo
+**Abrir los dos `.xlsx` que descarga la app y compararlos con los del prototipo.** Esto no se pudo
 hacer en el entorno de desarrollo porque la librería que arma los Excel viene por CDN y la red la
 bloquea. Los cinco números que tienen que aparecer, y que ya se sabe que el cálculo produce bien:
 
@@ -125,17 +129,28 @@ bloquea. Los cinco números que tienen que aparecer, y que ya se sabe que el cá
 
 **Qué mirar en los archivos**, más allá de los números: que los importes salgan como número y no como
 texto (si salen como texto, no podés sumarlos en Excel y no se ve a simple vista), que la coma
-decimal sea la que espera tu Excel, que los encabezados estén en la primera fila, y que las tres
-hojas/archivos tengan el nombre que el contador espera.
+decimal sea la que espera tu Excel, que los encabezados estén en la primera fila, y que los dos
+archivos tengan el nombre que el contador espera.
 
-### Decisión tuya pendiente
+### Lo nuevo: las tres cosas que pidió Contaduría del cliente (2026-08-31, D-095)
 
-**¿La Contabilidad Desglosada sale del estudio?** Hoy lleva legajo y fecha de ingreso, que son papel
-de trabajo del analista. Si el archivo va a Finanzas del cliente, esas dos columnas no pueden ir
-(D-020: lo que va a Finanzas lleva sólo lo necesario para pagar). Si se queda adentro, está bien como
-está. Nadie puede contestar esto sin vos.
+Están las tres en la desglosada, se probaron con datos inventados y en la pantalla del navegador, y
+**ninguna se corrió todavía contra el "Totales de Concepto" real de COTY**. Qué mirar en el archivo:
 
-**Detalle:** `specs/conta-desglosada-asiento.md`, D-066.
+| Qué pidió Contaduría | Cómo tiene que verse | Qué mirar si está mal |
+| --- | --- | --- |
+| El legajo **sin el cero del principio** | La columna Legajo dice «7» donde el reporte de Axton dice «007» | Un legajo con letras o guiones («12-B») sale tal cual **a propósito**: ahí el cero puede ser parte del número. Si querés que salgan con los ceros, se apaga desde el Paso 2 |
+| El **número de cuenta** junto al nombre | Columna `Nro Cuenta` **antes** de `Cuenta`, igual que en el asiento | Una celda que diga "sin código" es una cuenta que no está en el Reporte de Cuentas del cliente: sale listada en la pantalla, no se inventa |
+| El **número de concepto de Meta4** | Columna `Nro Meta4` después de `Nro` | **Es lo más probable que aparezca:** un concepto que COTY liquide y no esté en los 96 pares del reporte que mandó el cliente sale con la celda **vacía**, y la pantalla lo lista con su código y su nombre. Cargalo en el Paso 2 (código de Axton ⇥ código de Meta4) y volvé a ejecutar |
+
+La línea de **"Neto a pagar"** repite su propio número (9000) en la columna de Meta4: ese concepto no
+existe en la liquidación, lo inventa el asiento, así que no tiene equivalencia que buscar.
+
+**Lo que ya está decidido y no te vuelve a preguntar:** la **fecha de ingreso se queda** en el archivo,
+aunque ahora se sepa que la desglosada la recibe Contaduría del cliente — es el mismo archivo que el
+cliente venía recibiendo (D-095).
+
+**Detalle:** `specs/conta-desglosada-asiento.md`, D-066, D-095.
 
 ---
 

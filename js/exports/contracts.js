@@ -566,10 +566,14 @@ const finadietAsientoGral = {
 
 // ── COTY · Contabilidad Desglosada + Asiento ─────────────────────────────────
 //
-// Los tres archivos que genera el control (ver `js/controls/contaDesglosada.js`).
-// Todos nacen sobre `writeContractSheet`: son tablas planas de "encabezado + N
+// Los dos archivos que genera el control (ver `js/controls/contaDesglosada.js`).
+// Los dos nacen sobre `writeContractSheet`: son tablas planas de "encabezado + N
 // filas iguales" con una fila de TOTAL, que es exactamente lo que el writer
 // describe.
+//
+// **Eran tres.** La "Desglosada con Código" existía porque la desglosada no
+// llevaba el número de cuenta; desde que Contaduría del cliente lo pidió al lado
+// del nombre (D-095) la desglosada lo lleva, y la segunda tabla sería idéntica.
 //
 // **`from: []` en todas las columnas**: el reporte "Totales de Concepto" es de
 // formato fijo y sus columnas se resuelven por nombre de encabezado dentro del
@@ -577,23 +581,32 @@ const finadietAsientoGral = {
 // derivar obligatoriedad (mismo caso que Acreditaciones y que el asiento de
 // FINADIET).
 
-/** `audience: 'payroll'`: la desglosada es el papel de trabajo del analista —
- * lleva legajo y fecha de ingreso, que es información de HR, y por eso NO es un
- * entregable de Finanzas (D-020). El que va a Contaduría del cliente es el
- * asiento, más abajo, que no lleva ni legajo. */
-const contaDesglosadaColumns = ({ conCodigo = false } = {}) => ([
+/** `audience: 'payroll'`: la desglosada lleva legajo y fecha de ingreso, que es
+ * información de HR, y por eso no pasa por el filtro de un entregable de
+ * Finanzas (D-020). La recibe **Contaduría del cliente**, que es quien pidió
+ * estas columnas, y Willy confirmó que la fecha de ingreso se queda: es el mismo
+ * archivo que el cliente venía recibiendo (D-095). El asiento, más abajo, sí es
+ * `finanzas` y no lleva ni legajo. */
+const contaDesglosadaColumns = () => ([
   { label: 'Legajo',          key: 'legajo',       from: [], necessity: NECESSITY.CLAVE,       type: 'txt', width: 10 },
   { label: 'Ingreso',         key: 'ingreso',      from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 12, dataAlign: 'center' },
   { label: 'Nro',             key: 'nro',          from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 10 },
+  // El número con el que el concepto salía de Meta4, el sistema anterior del
+  // cliente (D-095). Va como texto: hay códigos de Meta4 que terminan en letra.
+  // OPCIONAL porque sale de la tabla de equivalencias del Paso 2 y un concepto
+  // que la tabla no traduce sale con la celda vacía y avisado, nunca con un
+  // número deducido por parecido.
+  { label: 'Nro Meta4',       key: 'nro_meta4',    from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 12 },
   { label: 'Concepto',        key: 'concepto',     from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 45 },
   { label: 'Importe',         key: 'importe',      from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 16 },
   // El centro de costo va como texto y no como número: en algunos clientes trae
   // ceros a la izquierda, y como número Excel se los come.
   { label: 'Centro de Costo', key: 'centro_costo', from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14, dataAlign: 'center' },
+  // El número de cuenta ANTES del nombre, como en el asiento: es el orden en el
+  // que lo lee Contaduría. OPCIONAL porque sin el "Reporte de Cuentas de
+  // Redefinición" del cliente no hay código que poner y la columna sale vacía.
+  { label: 'Nro Cuenta',      key: 'codigo',       from: [], necessity: NECESSITY.OPCIONAL,    type: 'txt', width: 14 },
   { label: 'Cuenta',          key: 'cuenta',       from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 40 },
-  ...(conCodigo
-    ? [{ label: 'Código', key: 'codigo', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 14 }]
-    : []),
   { label: 'DEBE_HABER',      key: 'debe_haber',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 12, dataAlign: 'center' },
   { label: 'DEBE',            key: 'debe',         from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
   { label: 'HABER',           key: 'haber',        from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
@@ -603,13 +616,6 @@ const contaDesglosada = {
   exportId: 'conta_desglosada', sheet: 'Contabilidad Desglosada',
   layout: LAYOUT_FIJO, audience: 'payroll',
   columns: contaDesglosadaColumns(),
-};
-
-/** La misma tabla, sin agrupar, con el código de cuenta de cada línea. */
-const contaDesglosadaConCodigo = {
-  exportId: 'conta_desglosada_codigo', sheet: 'Desglosada con Codigo',
-  layout: LAYOUT_FIJO, audience: 'payroll',
-  columns: contaDesglosadaColumns({ conCodigo: true }),
 };
 
 /** `audience: 'finanzas'`: el asiento lo recibe Contaduría del cliente, así que
@@ -655,7 +661,6 @@ export const EXPORT_CONTRACTS = {
   finadiet_asiento_gral:  finadietAsientoGral,
   // COTY · Contabilidad Desglosada + Asiento
   conta_desglosada:        contaDesglosada,
-  conta_desglosada_codigo: contaDesglosadaConCodigo,
   conta_asiento:           contaAsiento,
 };
 
@@ -685,9 +690,9 @@ export const CON_WRITER = [
   // Una hoja, 11 columnas planas, sin grupos ni fila de TOTAL: nació sobre
   // `writeContractSheet` y no necesita nada que el writer no tenga.
   'pop_variaciones',
-  // Los 3 de la Contabilidad Desglosada: tablas planas con fila de TOTAL, todo
+  // Los 2 de la Contabilidad Desglosada: tablas planas con fila de TOTAL, todo
   // lo que el writer ya sabe hacer.
-  'conta_desglosada', 'conta_desglosada_codigo', 'conta_asiento',
+  'conta_desglosada', 'conta_asiento',
 ];
 
 /**
