@@ -13,6 +13,13 @@ patrimoniales, las líneas sin código y el semáforo completo. **Publica `summa
 2026-08-22** (tanda 5 de `specs/vista-estandar-resumen.md`, D-093): entra al tablero del Resumen del
 run con el puente DEBE → HABER → descuadre y el corte por tipo (Resultado/Patrimonial), reusando las
 mismas fichas — tampoco acá se movió ningún cálculo de `armarDesglosada`/`armarAsiento`.
+**El 2026-08-31 la desglosada pasa a ser el entregable de Contaduría del cliente** (D-095): sale con
+las tres cosas que pidió —legajo sin los ceros de relleno, número de cuenta al lado del nombre y
+número de concepto de Meta4—, y por eso deja de generarse la "Desglosada con Código", que con el
+número de cuenta adentro sería el mismo archivo dos veces. **Ningún número cambia**: los balances, las
+filas del asiento, las cuentas patrimoniales y el semáforo dan exactamente lo mismo; lo que cambia es
+cómo se lee el archivo del otro lado. Con eso se cierra el pendiente de §8 sobre si la desglosada sale
+del estudio: **sale, y la fecha de ingreso se queda** (decisión de Willy).
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza
 dos archivos, arma tres. A partir del reporte "Totales de Concepto" de Axton produce la Contabilidad
@@ -78,7 +85,16 @@ Por cada fila del reporte, en este orden:
 5. **Negativos** — un importe negativo invierte el lado y va en positivo en la columna opuesta; la
    columna **Importe conserva el signo original**, que es lo que permite reconocer la fila en el
    archivo de origen.
-6. **Formato** — la fecha de ingreso y el centro de costo salen tal como vienen del reporte.
+6. **Formato** — la fecha de ingreso y el centro de costo salen tal como vienen del reporte. El
+   **legajo** sale sin los ceros de relleno («007» → «7») si está prendido `legajoSinCeros`, que es
+   cómo lo pidió Contaduría del cliente (D-095): cambia sólo cómo se **escribe**, no con quién
+   matchea. Un legajo con letras o guiones («12-B») sale tal cual, y si el cliente declara «007» y
+   «7» como empleados distintos el control **avisa** en vez de resolverlo solo.
+7. **Número de concepto de Meta4** — la columna `Nro Meta4` sale de la tabla de equivalencias código
+   de Axton → código de Meta4 (`js/controls/meta4Codes.js`, editable en el Paso 2). Un concepto que
+   la tabla no traduce sale con la **celda vacía y avisado**, con su código y su nombre — nunca con un
+   número deducido por parecido (D-039). La línea de "Neto a pagar" repite su propio número: no existe
+   en la liquidación, así que no tiene equivalencia que buscar.
 
 **Consolidación por legajo.** La unidad del entregable es la línea contable, así que la desglosada
 emite todas las líneas de todas las liquidaciones de un legajo (en COTY, la mensual y la de
@@ -132,26 +148,37 @@ ni en el Tabulado ni en el reporte de cuentas. Sembrarlas sería inventar un có
 
 ---
 
-## 4. Los tres archivos que salen
+## 4. Los dos archivos que salen
 
 | Archivo | Columnas | Quién lo recibe |
 |---|---|---|
-| `Contabilidad_Desglosada_<período>.xlsx` | 10: Legajo · Ingreso · Nro · Concepto · Importe · Centro de Costo · Cuenta · DEBE_HABER · DEBE · HABER | El analista (papel de trabajo) |
+| `Contabilidad_Desglosada_<período>.xlsx` | 12: Legajo · Ingreso · Nro · **Nro Meta4** · Concepto · Importe · Centro de Costo · **Nro Cuenta** · Cuenta · DEBE_HABER · DEBE · HABER | Contaduría del cliente (y es el papel de trabajo del analista) |
 | `Asiento_Contable_<período>.xlsx` | 7: Nro Cuenta · Nombre de cuenta · Centro de costo · DEBE · HABER · NETO DEBE · NETO HABER | Contaduría del cliente |
-| `Contabilidad_Desglosada_con_Codigo_<período>.xlsx` | 11: las 10 de la desglosada + Código después de Cuenta | El analista (auditar el asiento línea por línea) |
 
-Los tres salen por `writeContractSheet` (contratos `conta_desglosada`, `conta_asiento` y
-`conta_desglosada_codigo` en `js/exports/contracts.js`), así que las columnas del archivo y las de la
-pantalla son la misma lista.
+Los dos salen por `writeContractSheet` (contratos `conta_desglosada` y `conta_asiento` en
+`js/exports/contracts.js`), así que las columnas del archivo y las de la pantalla son la misma lista.
 
-**La solapa Fichas (tanda 7, D-084) no agrega una cuarta columna a ninguno de los tres.** Es pantalla,
-la ve el analista, y su desglose es por concepto de liquidación —código y nombre, que son
-configuración, no información de HR—. Los tres `.xlsx` y el CSV siguen saliendo exactamente con las
-columnas de la tabla de arriba.
+**Eran tres.** La `Contabilidad_Desglosada_con_Codigo` existía sólo para agregarle a la desglosada la
+columna del código de cuenta; desde que Contaduría pidió ese número al lado del nombre (D-095) la
+desglosada lo lleva adentro y el tercer archivo sería el mismo dos veces. El código, además, pasó a
+escribirse **en la línea** de la desglosada en vez de en una copia: son 5.300 líneas menos por corrida
+guardada. Una corrida vieja se sigue leyendo desde la copia (`lineasDeLaDesglosada`), para que no se
+descargue con la columna vacía.
+
+**Las dos columnas nuevas pueden salir vacías, y eso es resultado y no error** (D-036): `Nro Cuenta`
+si no se subió el Reporte de Cuentas de Redefinición del cliente (o si esa cuenta no está en él), y
+`Nro Meta4` si el concepto no está en la tabla de equivalencias. Las dos cosas salen listadas en
+resultados con qué hacer; ninguna se completa con un número deducido.
+
+**La solapa Fichas (tanda 7, D-084) no agrega una columna a ninguno de los dos.** Es pantalla, la ve
+el analista, y su desglose es por concepto de liquidación —código y nombre, que son configuración, no
+información de HR—. Los dos `.xlsx` y el CSV salen exactamente con las columnas de la tabla de arriba.
 
 **El asiento es `audience: 'finanzas'` y la desglosada no** (D-020): el asiento no lleva legajo ni
 nada del empleado —un asiento se lee por cuenta contable—, mientras que la desglosada lleva legajo y
-fecha de ingreso y es papel de trabajo del analista. Con el asiento se agregaron a
+fecha de ingreso. **La desglosada sale del estudio** —la recibe Contaduría del cliente— y **la fecha
+de ingreso se queda igual** (decisión de Willy, D-095): es el mismo archivo que el cliente venía
+recibiendo, y quien lo recibe es Contaduría y no Finanzas. Con el asiento se agregaron a
 `FINANZAS_ALLOWED_KEYS` el centro de costo (imputación contable, no atributo del empleado) y los dos
 netos.
 
@@ -168,6 +195,11 @@ distinta de la desglosada, y el estado es `warning` con el aviso de que el asien
 una cuenta sin código se lee "Sin comparar", no "Con diferencia" (D-085) — es una etiqueta de pantalla,
 no el cálculo de `unitsWithDiff`, que sigue contándola igual que antes.
 
+**El número de concepto de Meta4 que falta tampoco lo mueve** (D-095): este control mide que el
+asiento **cierre**, y una equivalencia que falta no descuadra un peso. Sale como aviso en el resumen y
+listado en "Para revisar antes de mandarlo", con el código y el nombre de cada concepto que hay que
+cargar en el Paso 2.
+
 La solapa Fichas (`fichasDeCuentas`, tanda 7, D-084) muestra una ficha por línea del asiento con su
 desglose por concepto —cada uno con su código— y su conciliación contra el saldo. Sin el reporte de
 cuentas la unidad es la cuenta distinta de la desglosada, agrupada con la misma clave normalizada que usa
@@ -177,12 +209,20 @@ el semáforo, para que los chips no cuenten un número y el semáforo otro.
 
 ## 6. Configuración por cliente (Paso 2)
 
-Panel "Contabilidad Desglosada · cuenta del neto y excepciones de código"
+Panel "Contabilidad Desglosada · neto, legajo, números de Meta4 y excepciones de código"
 (`js/ui/contaDesglosadaConfigEditor.js`, clave `conta_desglosada_config`):
 
 - **Cuenta del neto** — cuál es la cuenta que se netea por empleado. Semilla: `Sueldos a pagar`.
 - **Nro y nombre del concepto de neto** — no existen en la liquidación, los inventa el asiento.
   Semilla: `9000` / `Neto a pagar`.
+- **Legajo sin ceros a la izquierda** — cómo se escribe el legajo en el archivo («007» → «7»).
+  Semilla: **prendido**, que es como lo pidió Contaduría del cliente (D-095). No cambia con quién
+  matchea un legajo: eso es `clients.legajoKeyMode` (D-038/D-042).
+- **Números de concepto de Meta4** — la tabla de equivalencias código de Axton → código de Meta4, una
+  por línea (`código de Axton ⇥ código de Meta4`). Semilla: los **96 pares** del "Reporte de conceptos
+  AFIP" que mandó el cliente (`js/controls/meta4Codes.js`). Una tabla vacía es válida —la columna sale
+  en blanco y se avisa—; una config guardada de antes de que la columna existiera cae a la semilla.
+  El código de Meta4 **no** se valida como número: hay conceptos cuyo código termina en letra.
 - **Excepciones** de nombre de cuenta → código, una por línea (`nombre ⇥ centro ⇥ código`, con `*`
   para cualquier centro). Nace vacía (ver §3).
 
@@ -211,16 +251,23 @@ La otra ancla de la ficha (1.148.768.944,20 con 4.851 filas) es de **otro export
 del que se verificó.
 
 **Lo que no se pudo probar en este entorno:** la descarga de los `.xlsx`. ExcelJS se carga por CDN y
-la red del entorno de desarrollo lo bloquea; la pantalla de resultados y las tres tablas sí se
+la red del entorno de desarrollo lo bloquea; la pantalla de resultados y las tablas sí se
 verificaron en el navegador, en los tres temas, sin errores de consola.
+
+**Lo que las tres columnas nuevas de D-095 NO cambiaron:** los 80 asserts que ya tenía este test
+—balances, filas del asiento, cuentas patrimoniales, líneas sin código, semáforo y el signo del
+Resumen— pasan **sin tocarles una línea**. Es un cambio de forma del entregable, no de cálculo.
 
 ---
 
 ## 8. Pendientes
 
-- **Confirmar con Willy si la desglosada sale del estudio.** Hoy está tratada como papel de trabajo
-  del analista, y por eso lleva legajo y fecha de ingreso. Si el archivo se le manda a Contaduría del
-  cliente, la fecha de ingreso tiene que salir (D-020).
+- **Que Willy abra la desglosada nueva y la mande.** Las tres columnas del pedido de Contaduría
+  (D-095) se verificaron con datos inventados y en la pantalla del navegador, pero **el `.xlsx` no se
+  pudo descargar en este entorno** (ExcelJS viene por CDN) y **la tabla de equivalencias no se corrió
+  todavía contra el "Totales de Concepto" real**: recién ahí se va a ver si algún concepto que COTY
+  liquida quedó fuera de los 96 pares del reporte del cliente. Si aparece alguno, sale avisado con su
+  código y se carga en el Paso 2.
 - **Las dos excepciones del prototipo**, si alguna vez se disparan: SAC en el centro 60 va a salir
   como "sin código" hasta que alguien confirme el código y lo cargue en el Paso 2.
 - **Un `.xlsx` real de este reporte**, para verificar esa rama del parser contra un archivo de verdad

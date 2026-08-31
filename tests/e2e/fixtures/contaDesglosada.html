@@ -1,10 +1,12 @@
 <!doctype html>
 <!-- Fixture de tests/e2e/vistaEstandarLote.spec.js — NO es una pantalla de la app.
      Monta la pantalla de resultados de "Contabilidad Desglosada + Asiento" con la
-     vista estándar (specs/vista-estandar-resultados.md): las tres tablas, cada
+     vista estándar (specs/vista-estandar-resultados.md): las dos tablas, cada
      una con la barra de los cinco chips y las columnas de importe en las bandas
      DEBE y HABER. Este control cuadra al centavo contra sí mismo, así que el chip
      "Dentro del margen" tiene que salir deshabilitado y con su motivo, no oculto.
+     Desde D-095 son DOS tablas y no tres: la desglosada lleva adentro el número de
+     cuenta y el número de concepto de Meta4.
      Datos 100% inventados. -->
 <html lang="es"><head><meta charset="utf-8">
 <link rel="stylesheet" href="../../../css/tokens.css">
@@ -45,9 +47,17 @@ const cuentasRef = [
   // "Cargas sociales a pagar" NO está: queda sin código y se lista.
 ];
 
+// Equivalencias Axton → Meta4 inventadas, para que la columna "Nro Meta4" se vea
+// con datos. El concepto 120 queda a propósito FUERA de la tabla: sale con la
+// celda vacía y el control lo avisa.
+const equivalenciasMeta4 = [
+  { axton: '100', meta4: '9100' },
+  { axton: '110', meta4: '9110' },
+];
+
 const results = runContaDesglosada(rows, [], {
   period: '2026-05', legajoKeyMode: 'sin_ceros',
-  contaDesglosadaConfig: null, cuentas_refRows: cuentasRef,
+  contaDesglosadaConfig: { equivalenciasMeta4 }, cuentas_refRows: cuentasRef,
 });
 window.__results = results;
 window.__summary = summarizeContaDesglosada(results);

@@ -23,6 +23,10 @@
 //      archivo cerraría igual.
 //   6. Un reporte al que le falta una columna contable corta con un error que
 //      dice cuál, en vez de generar una desglosada incompleta.
+//   7. **Las tres cosas que pidió Contaduría del cliente** (D-095): el legajo
+//      escrito sin los ceros de relleno, el número de cuenta al lado del nombre
+//      y el número de concepto de Meta4. Y lo que NO puede pasar: que un
+//      concepto sin equivalencia salga con un número deducido por parecido.
 
 globalThis.document = { addEventListener: () => {} };
 
@@ -44,7 +48,10 @@ const {
 
 const { parseTotalesConcepto, detectHeaders } = await import('./js/parsers/totalesConceptoParser.js');
 const { parseCuentasRedefinicion } = await import('./js/parsers/cuentasRedefinicionParser.js');
-const { textoAExcepciones } = await import('./js/ui/contaDesglosadaConfigEditor.js');
+const { textoAExcepciones, textoAEquivalencias, equivalenciasATexto } =
+  await import('./js/ui/contaDesglosadaConfigEditor.js');
+const { DEFAULT_META4_EQUIVALENCIAS, buildMeta4Map, conceptCodeKey } =
+  await import('./js/controls/meta4Codes.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { DEFAULT_SIN_ARCHIVO } = await import('./js/ui/controlsWizard.js');
 const { EXPORT_CONTRACTS } = await import('./js/exports/contracts.js');
@@ -211,6 +218,25 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
     trim.lineas.filter(l => l.nro === '9000').length === 2);
   assert('las dos formas cierran igual', sinCeros.cierra && trim.cierra
     && sinCeros.totalDebe === trim.totalDebe);
+
+  // Con quién matchea un legajo y cómo se ESCRIBE en el archivo son dos cosas
+  // distintas (D-095): lo segundo lo decide `legajoSinCeros` del Paso 2.
+  assert("por default el legajo se escribe sin los ceros de relleno: '007' sale '7'",
+    sinCeros.lineas.every(l => l.legajo === '7'));
+
+  const conCeros = runContaDesglosada(rows, [], {
+    ...MAPPING, contaDesglosadaConfig: { legajoSinCeros: false },
+  });
+  assert('…y con la opción apagada sale tal cual viene del reporte',
+    conCeros.lineas.some(l => l.legajo === '007') && conCeros.lineas.some(l => l.legajo === '7'));
+
+  // El cliente que declara '007' y '7' como empleados DISTINTOS: escribirlos sin
+  // ceros los volvería indistinguibles en el archivo. No se decide solo, se avisa.
+  assert('modo trim + legajo sin ceros: el control lo avisa en vez de decidirlo',
+    trim.legajoSinCerosEnConflicto === true
+    && summarizeContaDesglosada(trim).insights.some(i => i.label.includes('sin ceros')));
+  assert('…y en modo sin_ceros no hay nada que avisar',
+    sinCeros.legajoSinCerosEnConflicto === false);
 }
 
 // ── 4. Importe vacío: no se completa con 0 en silencio ───────────────────────
@@ -470,17 +496,132 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   assert('el renglón del reporte de cuentas dice qué se pierde sin él', !!sinArchivo);
   assert('…y nombra el asiento, que es lo que no se arma', /asiento/i.test(sinArchivo || ''));
 
-  for (const id of ['conta_desglosada', 'conta_desglosada_codigo', 'conta_asiento']) {
+  for (const id of ['conta_desglosada', 'conta_asiento']) {
     assert(`${id}: tiene contrato de export`, !!EXPORT_CONTRACTS[id]);
   }
-  assert('la desglosada son 10 columnas', EXPORT_CONTRACTS.conta_desglosada.columns.length === 10);
-  assert('la desglosada con código son 11', EXPORT_CONTRACTS.conta_desglosada_codigo.columns.length === 11);
+  assert('la desglosada son 12 columnas', EXPORT_CONTRACTS.conta_desglosada.columns.length === 12);
+  // La "Desglosada con Código" dejó de existir: desde que la desglosada lleva el
+  // número de cuenta al lado del nombre (D-095) sería el mismo archivo dos veces.
+  assert('ya no hay un tercer archivo con el código aparte',
+    !EXPORT_CONTRACTS.conta_desglosada_codigo);
   assert('el asiento son 7', EXPORT_CONTRACTS.conta_asiento.columns.length === 7);
   assert('el asiento va a Contaduría del cliente y no lleva legajo (D-020)',
     EXPORT_CONTRACTS.conta_asiento.audience === 'finanzas'
     && !EXPORT_CONTRACTS.conta_asiento.columns.some(c => c.key === 'legajo'));
   assert('la desglosada es papel de trabajo del analista (lleva legajo e ingreso)',
     EXPORT_CONTRACTS.conta_desglosada.audience === 'payroll');
+}
+
+// ── 13. Las tres cosas que pidió Contaduría del cliente (D-095) ─────────────
+{
+  const cuentasRef = [
+    { nombre: 'Sueldos Ventas',  codigo: '710100110', centro_costo: '10' },
+    { nombre: 'Sueldos a pagar', codigo: '215100100', centro_costo: null },
+    // 'Descuentos varios' NO está: su línea queda sin número de cuenta.
+  ];
+  const rows = [
+    fila({ legajo: '0012', nro: '100', concepto: 'Sueldo', importe: '1.000,00',
+           debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+    // Un concepto que la tabla de equivalencias no traduce.
+    fila({ legajo: '0012', nro: '250', concepto: 'Premio inventado', importe: '100,00',
+           debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '0012', nro: '500', concepto: 'Devolución', importe: '30,00',
+           debe: 'Descuentos varios', haber: 'Sueldos a pagar' }),
+  ];
+  const cfg = {
+    // Códigos inventados, no son de ningún cliente.
+    equivalenciasMeta4: [{ axton: '100', meta4: '9100' }, { axton: '500', meta4: '9500X' }],
+  };
+  const r = runContaDesglosada(rows, [], { ...MAPPING, contaDesglosadaConfig: cfg, cuentas_refRows: cuentasRef });
+
+  // 1. El legajo, sin los ceros de relleno.
+  assert('el legajo sale sin los ceros de relleno en todas las líneas, la de neto incluida',
+    r.lineas.every(l => l.legajo === '12'));
+
+  // 2. El número de cuenta, en la misma línea de la desglosada.
+  const sueldo = r.lineas.find(l => l.nro === '100' && l.cuenta === 'Sueldos Ventas');
+  assert('la línea de la desglosada trae el número de cuenta adentro',
+    sueldo.codigo === '710100110');
+  assert('la cuenta que no está en el reporte del cliente deja el número vacío, no inventado',
+    r.lineas.find(l => l.cuenta === 'Descuentos varios').codigo === null);
+  assert('la línea de neto también trae el número de su cuenta',
+    r.lineas.find(l => l.nro === '9000').codigo === '215100100');
+  assert('ya no se duplican las líneas en una segunda tabla con código',
+    r.asiento.desglosadaConCodigo === undefined);
+
+  // Sin el reporte de cuentas del cliente la columna sale VACÍA, no ausente: la
+  // línea tiene siempre la misma forma.
+  const sinRef = runContaDesglosada(rows, [], { ...MAPPING, contaDesglosadaConfig: cfg });
+  assert('sin el reporte de cuentas, la columna de número de cuenta sale vacía',
+    sinRef.asiento === null && sinRef.lineas.every(l => l.codigo === null));
+
+  // 3. El número de concepto de Meta4.
+  assert('el concepto que está en la tabla sale con su número de Meta4', sueldo.nro_meta4 === '9100');
+  assert('un código de Meta4 puede terminar en letra (se maneja como texto)',
+    r.lineas.find(l => l.nro === '500').nro_meta4 === '9500X');
+  assert('el concepto que la tabla no traduce sale con la celda vacía, no con un número parecido',
+    r.lineas.find(l => l.nro === '250').nro_meta4 === null);
+  assert('…y se lista con su código y su nombre para poder cargarlo en el Paso 2',
+    r.sinMeta4.length === 1 && r.sinMeta4[0].nro === '250'
+    && r.sinMeta4[0].concepto === 'Premio inventado');
+  // Se cuentan las líneas que salen en el archivo con la celda vacía: la del
+  // DEBE. El lado que iba a la cuenta del neto no genera línea (regla 4).
+  assert('…con cuántas líneas del archivo quedaron sin número',
+    r.sinMeta4[0].lineas === 1 && r.lineasSinMeta4 === 1);
+  assert('…y llega como aviso al resumen del control',
+    summarizeContaDesglosada(r).insights.some(i => i.label.includes('equivalencia en Meta4')));
+  // La línea de neto no existe en la liquidación: no hay equivalencia que
+  // buscarle, así que repite el número y NO se cuenta como faltante.
+  assert('la línea de neto repite su número en la columna de Meta4',
+    r.lineas.find(l => l.nro === '9000').nro_meta4 === '9000');
+  assert('…y no se cuenta como concepto sin equivalencia',
+    !r.sinMeta4.some(c => c.nro === '9000'));
+
+  // El semáforo mide que el asiento CIERRE: una equivalencia que falta no
+  // descuadra un peso y no puede pintar de rojo un asiento que cuadra.
+  assert('el asiento cierra igual con un concepto sin número de Meta4',
+    r.cierra && r.asiento.cierraBruto && r.asiento.cierraNeteado);
+
+  // El archivo: el orden de las columnas es el que lee Contaduría, y cada una
+  // tiene su dato en la línea. Una clave mal escrita en el contrato no rompe
+  // nada: saldría una columna en blanco en el .xlsx y nadie se enteraría.
+  const cols = EXPORT_CONTRACTS.conta_desglosada.columns;
+  assert('el orden de las columnas del archivo es el que lee Contaduría',
+    cols.map(c => c.label).join(' · ') === 'Legajo · Ingreso · Nro · Nro Meta4 · Concepto · '
+      + 'Importe · Centro de Costo · Nro Cuenta · Cuenta · DEBE_HABER · DEBE · HABER');
+  assert('…y cada columna del contrato tiene su dato en la línea',
+    cols.every(c => c.key in r.lineas[0]) && cols.every(c => c.key in r.lineas.at(-1)));
+}
+
+// ── 14. La semilla de equivalencias y la tabla del Paso 2 ───────────────────
+{
+  assert('la semilla trae los 96 pares del reporte del cliente',
+    DEFAULT_META4_EQUIVALENCIAS.length === 96);
+  assert('…todos con código de Axton y de Meta4, y los dos como texto',
+    DEFAULT_META4_EQUIVALENCIAS.every(e => typeof e.axton === 'string' && e.axton
+      && typeof e.meta4 === 'string' && e.meta4));
+  const mapa = buildMeta4Map(DEFAULT_META4_EQUIVALENCIAS);
+  assert('…y ninguno se pierde al armar el mapa (ningún código de Axton repetido)',
+    mapa.size === 96);
+
+  // Un export que rellena con ceros no puede cambiar de concepto.
+  assert("el código de concepto se compara sin los ceros de la izquierda",
+    conceptCodeKey('01000') === '1000' && conceptCodeKey(' 1191x ') === '1191X'
+    && conceptCodeKey('0') === '0');
+
+  // La tabla del editor: ida y vuelta, y qué NO se aplica.
+  const texto = '100\t9100\n500\t9500X\n';
+  const { equivalencias, errores } = textoAEquivalencias(texto);
+  assert('la tabla del Paso 2 se lee del texto (código de Axton ⇥ código de Meta4)',
+    errores.length === 0 && equivalencias.length === 2 && equivalencias[1].meta4 === '9500X');
+  assert('…y vuelve a texto igual', equivalenciasATexto(equivalencias) === '100\t9100\n500\t9500X');
+  assert('una línea con un solo dato no se aplica: se dice cuál',
+    textoAEquivalencias('100').errores.length === 1);
+  assert('el mismo código de Axton dos veces no se resuelve solo: se avisa',
+    textoAEquivalencias('100\t9100\n100\t9200').errores.some(e => e.includes('dos veces')));
+  assert('una tabla vacía es válida: la columna de Meta4 sale vacía',
+    textoAEquivalencias('').equivalencias.length === 0
+    && textoAEquivalencias('').errores.length === 0);
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
