@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",      "title": "El tablero",              "x": 0,    "y": 0,    "w": 1440, "h": 1960 },
+    { "file": "Novedades.dc.html", "title": "Tu caso — novedades",     "x": 1540, "y": 0,    "w": 1120, "h": 1300 },
+    { "file": "Orden.dc.html",     "title": "Por dónde seguir",        "x": 1540, "y": 1400, "w": 1120, "h": 1620 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -190,
+      "w": 520,
+      "text": "Los 42 controles del catálogo maestro, y las 11 llaves que los destraban.\n\nEmpezá por el tablero: tildá una llave y mirá cuántos controles se encienden. El número al lado de cada llave es lo que suma AHORA, con lo que ya tildaste — por eso cambia a medida que vas tildando.\n\nLo que hay que corregir del modelo, dejámelo anotado acá al lado."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

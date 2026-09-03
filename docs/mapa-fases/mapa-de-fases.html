@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de fases — Controles Nómina</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='30' fill='%2300ACD4'/><text x='50%25' y='53%25' text-anchor='middle' dominant-baseline='middle' font-family='Arial,Helvetica,sans-serif' font-weight='700' font-size='28' fill='white'>H%26A</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --celeste: #00ACD4; --celeste-dark: #0090B4;
+    --ink: #15263D; --t1: #1E3A5F; --t2: #4A6080; --t3: #8FA3BA;
+    --bg: #EEF2F6; --surface: #FFFFFF; --paper: #FCFCFB;
+    --line: #E7E6E6; --line-soft: #EFEEEC;
+    --ok: #22C55E; --ok-bg: rgba(34,197,94,0.10); --ok-bd: rgba(34,197,94,0.30); --ok-tx: #177A50;
+    --warn: #F59E0B; --warn-bg: rgba(245,158,11,0.12); --warn-bd: rgba(245,158,11,0.32); --warn-tx: #9A5A0B;
+    --cel-bg: rgba(0,172,212,0.10); --cel-bd: rgba(0,172,212,0.30);
+    --neutral: #8C837B; --neutral-bg: rgba(140,131,123,0.12); --neutral-bd: rgba(140,131,123,0.30); --neutral-tx: #6B635C;
+    --sh: 0 6px 24px rgba(30,58,95,0.09);
+    --font: 'Plus Jakarta Sans', 'Source Sans Pro', system-ui, Arial, sans-serif;
+    --serif: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); }
+
+  .bar { position: sticky; top: 0; z-index: 10; height: 54px; background: var(--ink);
+         border-bottom: 3px solid var(--celeste); display: flex; align-items: center; gap: 12px; padding: 0 24px; }
+  .iso { width: 30px; height: 30px; border-radius: 9999px; background: var(--celeste); color: #FFF;
+         display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; }
+  .bar__app { font-size: 15px; font-weight: 700; color: #FFF; white-space: nowrap; }
+  .bar__div { width: 1px; height: 20px; background: rgba(255,255,255,0.22); }
+  .bar__sub { font-size: 13px; color: #C7D5E4; }
+  .bar__meta { font-size: 11px; color: #C7D5E4; margin-left: auto; }
+
+  .tabs { display: flex; gap: 6px; padding: 16px 32px 0; flex-wrap: wrap; }
+  .tab { font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 9999px; cursor: pointer;
+         border: 1.5px solid var(--line); background: var(--surface); color: var(--t2); }
+  .tab:hover { border-color: var(--celeste); color: var(--celeste-dark); }
+  .tab[aria-selected="true"] { background: var(--celeste); border-color: var(--celeste); color: #FFF; }
+
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 32px 56px; }
+  .card { background: var(--surface); border-radius: 14px; box-shadow: var(--sh); }
+  .h-display { font-family: var(--serif); color: var(--ink); line-height: 1.2; margin: 0; }
+  .lead { font-size: 14px; color: var(--t2); line-height: 1.6; margin: 10px 0 0; }
+  em { font-style: italic; }
+
+  /* — Tablero — */
+  .counter { padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 40px; flex-wrap: wrap; }
+  .counter__big { display: flex; align-items: baseline; gap: 8px; }
+  .counter__n { font-family: var(--serif); font-size: 66px; line-height: 1; color: var(--celeste); font-variant-numeric: tabular-nums; }
+  .counter__d { font-family: var(--serif); font-size: 30px; line-height: 1; color: var(--t3); }
+  .counter__lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); margin-top: 8px; }
+  .counter__note { font-size: 12px; color: var(--t2); margin-top: 6px; max-width: 220px; line-height: 1.5; }
+  .counter__right { flex: 1 1 460px; min-width: 300px; }
+  .track { display: flex; height: 14px; border-radius: 9999px; overflow: hidden; background: var(--line-soft); gap: 2px; }
+  .legend { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; margin-top: 18px; }
+  .legend > div { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 8px; padding: 12px 14px; }
+  .legend .row { display: flex; align-items: center; gap: 7px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 9999px; flex-shrink: 0; }
+  .legend .n { font-size: 22px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .legend .lbl { font-size: 12px; font-weight: 700; margin-top: 6px; color: var(--t1); }
+  .legend .help { font-size: 11px; color: var(--t2); margin-top: 2px; line-height: 1.4; }
+
+  .cols { display: flex; gap: 24px; align-items: flex-start; }
+  .rail { width: 396px; flex-shrink: 0; overflow: hidden; }
+  .rail__head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+  .rail__hint { font-size: 12px; color: var(--t2); margin-top: 4px; line-height: 1.5; }
+  .presets { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+  .preset { font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 9999px; cursor: pointer;
+            border: 1.5px solid var(--line); background: var(--surface); color: var(--t2); }
+  .preset[aria-pressed="true"] { background: var(--celeste); border-color: var(--celeste); color: #FFF; }
+  .key { display: flex; gap: 12px; align-items: flex-start; padding: 13px 20px; cursor: pointer;
+         border-bottom: 1px solid var(--line-soft); background: var(--surface); text-align: left; width: 100%;
+         border-left: 0; border-right: 0; border-top: 0; font: inherit; color: inherit; }
+  .key:hover { background: #F7FAFC; }
+  .key[aria-pressed="true"] { background: rgba(34,197,94,0.06); }
+  .key[aria-pressed="true"]:hover { background: rgba(34,197,94,0.11); }
+  .key__box { width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0; margin-top: 2px; display: flex;
+              align-items: center; justify-content: center; border: 2px solid #C9D3DD; background: #FFF; }
+  .key[aria-pressed="true"] .key__box { border-color: var(--ok); background: var(--ok); }
+  .key__body { flex-grow: 1; min-width: 0; }
+  .key__top { display: flex; align-items: baseline; gap: 7px; }
+  .chip { font-size: 10px; font-weight: 800; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px;
+          flex-shrink: 0; background: rgba(21,38,61,0.07); color: var(--t2); }
+  .key[aria-pressed="true"] .chip { background: rgba(34,197,94,0.14); color: var(--ok-tx); }
+  .key__title { font-size: 13px; font-weight: 700; line-height: 1.3; }
+  .key__detail { font-size: 11.5px; color: var(--t2); margin-top: 3px; line-height: 1.45; }
+  .key__foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .owner { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 9999px; background: var(--cel-bg); color: var(--celeste-dark); }
+  .kind { font-size: 10.5px; color: var(--t3); }
+  .key__gain { flex-shrink: 0; text-align: right; width: 56px; font-size: 19px; font-weight: 800;
+               color: var(--celeste); font-variant-numeric: tabular-nums; line-height: 1; }
+  .key__gain.zero { font-size: 15px; color: #C9D3DD; }
+  .key__gain.done { font-size: 11px; color: var(--ok-tx); }
+
+  .fams { flex-grow: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .fam { padding: 16px 18px 18px; }
+  .fam__head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .fam__letter { width: 26px; height: 26px; border-radius: 8px; background: var(--cel-bg); border: 1px solid var(--cel-bd);
+                 color: var(--celeste-dark); font-size: 13px; font-weight: 800; display: flex; align-items: center;
+                 justify-content: center; flex-shrink: 0; }
+  .fam__name { font-size: 14px; font-weight: 700; }
+  .fam__rule { flex-grow: 1; height: 1px; background: var(--line-soft); }
+  .tally { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 9999px; white-space: nowrap; }
+  .fam__grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+  .ctl { border-radius: 8px; padding: 9px 11px 10px; min-height: 64px; border: 1px solid; }
+  .ctl__top { display: flex; align-items: baseline; gap: 6px; }
+  .ctl__id { font-size: 10px; font-weight: 800; letter-spacing: .04em; flex-shrink: 0; }
+  .ctl__name { font-size: 12px; font-weight: 600; line-height: 1.3; }
+  .ctl__note { font-size: 10.5px; margin-top: 5px; line-height: 1.35; }
+
+  /* — Novedades — */
+  .sw { padding: 20px 22px; cursor: pointer; border: 2px solid transparent; text-align: left; width: 100%;
+        font: inherit; color: inherit; background: var(--surface); }
+  .sw[aria-pressed="true"] { border-color: var(--ok); }
+  .sw__box { width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0; margin-top: 2px; display: flex;
+             align-items: center; justify-content: center; border: 2px solid #C9D3DD; background: #FFF; }
+  .sw[aria-pressed="true"] .sw__box { border-color: var(--ok); background: var(--ok); }
+  .verdict { border-radius: 14px; padding: 18px 22px; border: 1px solid; margin-top: 20px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  .check { border-radius: 8px; padding: 12px 14px; border: 1px solid; }
+  .step { border-radius: 8px; padding: 13px 15px; border: 1px solid; }
+  .step__num { width: 24px; height: 24px; border-radius: 9999px; flex-shrink: 0; display: flex; align-items: center;
+               justify-content: center; font-size: 12px; font-weight: 800; }
+  .spill { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-radius: 8px; border: 1px solid; }
+
+  /* — Orden — */
+  .rung { padding: 14px 20px; border-bottom: 1px solid var(--line-soft); display: flex; gap: 14px; align-items: flex-start; }
+  .rung__num { width: 26px; height: 26px; border-radius: 9999px; flex-shrink: 0; display: flex; align-items: center;
+               justify-content: center; font-size: 11px; font-weight: 800; }
+  .rung__total { font-family: var(--serif); font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .opens { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+  .open-chip { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--cel-bg); color: var(--celeste-dark); }
+  .soloRow { display: flex; align-items: center; gap: 10px; }
+  .soloRow .chip { width: 66px; text-align: center; }
+  .bar-track { flex-grow: 1; height: 9px; border-radius: 9999px; background: var(--line-soft); overflow: hidden; }
+  .bar-fill { display: block; height: 9px; border-radius: 9999px; background: var(--celeste); }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+
+  @media (max-width: 1180px) {
+    .cols { flex-direction: column; }
+    .rail { width: 100%; }
+    .fam__grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grid4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  @media (max-width: 780px) {
+    .wrap, .tabs { padding-left: 16px; padding-right: 16px; }
+    .fam__grid, .grid3, .grid2, .legend, .grid4 { grid-template-columns: 1fr; }
+    .bar__meta, .bar__sub { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="iso">H&amp;A</div>
+  <span class="bar__app">Controles Nómina</span>
+  <span class="bar__div" aria-hidden="true"></span>
+  <span class="bar__sub">Mapa de fases — qué destraba qué</span>
+  <span class="bar__meta">Catálogo maestro v1.0 · 42 controles</span>
+</header>
+
+<nav class="tabs" role="tablist" id="tabs">
+  <button class="tab" role="tab" aria-selected="true"  data-panel="tablero">El tablero</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="novedades">Tu caso — novedades</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="orden">Por dónde seguir</button>
+</nav>
+
+<!-- ══════════ TABLERO ══════════ -->
+<main class="wrap" id="panel-tablero" role="tabpanel">
+  <div class="card counter">
+    <div>
+      <div class="counter__big"><span class="counter__n" id="reachN">7</span><span class="counter__d">/ 42</span></div>
+      <div class="counter__lbl">Controles al alcance</div>
+      <div class="counter__note" id="reachNote"></div>
+    </div>
+    <div class="counter__right">
+      <div class="track" id="track"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section class="card rail">
+      <div class="rail__head">
+        <h2 class="h-display" style="font-size:21px">Las llaves</h2>
+        <p class="rail__hint">Tildá una para ver qué destraba. El número de la derecha es cuántos controles suma <em>ahora</em>, con lo que ya tildaste.</p>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div id="keys"></div>
+    </section>
+    <div class="fams" id="fams"></div>
+  </div>
+
+  <p style="margin-top:20px; font-size:11px; color:var(--t3); line-height:1.6">
+    Universo: los 42 controles del catálogo maestro de payroll (familias A–I), los mismos que están cargados en el
+    tablero <em>Catálogo de Controles de Payroll</em> de monday. Los 4 prerrequisitos del catálogo (A0, B0, E0 y la
+    pieza T) no se cuentan como controles: están arriba, como llaves.
+  </p>
+</main>
+
+<!-- ══════════ NOVEDADES ══════════ -->
+<main class="wrap" id="panel-novedades" role="tabpanel" hidden>
+  <div style="max-width:780px; margin-bottom:24px">
+    <h2 class="h-display" style="font-size:34px">Tu pregunta: ¿qué necesito para el control de novedades previo a la carga?</h2>
+    <p class="lead">Es el control B1 del catálogo. Tildá abajo lo que ya tenés y mirá qué queda funcionando.</p>
+  </div>
+
+  <div class="grid2" id="switches"></div>
+  <div class="verdict" id="verdict"></div>
+
+  <section class="card" style="padding:20px 22px 22px; margin-top:20px">
+    <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:14px; flex-wrap:wrap">
+      <h3 class="h-display" style="font-size:20px">Lo que mira el validador</h3>
+      <span class="fam__rule"></span>
+      <span class="tally" id="checkTally"></span>
+    </div>
+    <div class="grid3" id="checks"></div>
+  </section>
+
+  <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:16px; margin-top:20px; align-items:start" id="novBottom">
+    <section class="card" style="padding:20px 22px 22px">
+      <h3 class="h-display" style="font-size:20px; margin-bottom:4px">Los tres escalones</h3>
+      <p style="font-size:12px; color:var(--t2); margin:0 0 16px; line-height:1.5">Los definiste vos. Van de menos a más ambicioso — y sólo el de arriba de todo depende del template.</p>
+      <div style="display:flex; flex-direction:column; gap:10px" id="steps"></div>
+    </section>
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <section class="card" style="padding:20px 22px 22px">
+        <h3 class="h-display" style="font-size:19px; margin-bottom:4px">Lo que viene de arrastre</h3>
+        <p style="font-size:12px; color:var(--t2); margin:0 0 14px; line-height:1.5">La misma llave no destraba sólo B1.</p>
+        <div style="display:flex; flex-direction:column; gap:8px" id="spill"></div>
+      </section>
+      <div style="background:var(--warn-bg); border:1px solid var(--warn-bd); border-radius:14px; padding:16px 18px">
+        <div style="font-size:13px; font-weight:800; color:var(--warn-tx); margin-bottom:6px">Antes de construirlo</div>
+        <div style="font-size:12px; color:var(--warn-tx); line-height:1.55">El criterio fino —qué es exactamente una falla, qué excepciones valen, qué hace el analista cuando salta— se captura control por control y se registra en el tablero de monday. Nada se construye sin eso escrito.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ══════════ ORDEN ══════════ -->
+<main class="wrap" id="panel-orden" role="tabpanel" hidden>
+  <div style="max-width:800px; margin-bottom:26px">
+    <h2 class="h-display" style="font-size:34px">Un orden posible</h2>
+    <p class="lead">Cada escalón es una llave. A la derecha, cuántos controles quedan al alcance después de darla vuelta. Arranca en 7: lo que hoy no depende de ninguna definición pendiente.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:20px; align-items:start" id="ordenGrid">
+    <section class="card" style="padding:8px 0 12px" id="ladder"></section>
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="background:var(--cel-bg); border:1px solid var(--cel-bd); border-radius:14px; padding:18px 20px">
+        <div style="font-size:14px; font-weight:800; color:var(--celeste-dark); margin-bottom:8px">Si hacés una sola cosa</div>
+        <div style="font-size:12.5px; color:var(--t1); line-height:1.6">Cablear el lector de tabulado. Es la llave que más destraba —<strong>8 controles de un saque</strong>— es la única que no depende de que nadie conteste nada, y ya tenés hecha la mitad: el detector de formato está construido y testeado desde el 18 de agosto, sin conectar a ningún control todavía.</div>
+      </div>
+      <section class="card" style="padding:18px 20px 20px">
+        <h3 class="h-display" style="font-size:19px; margin-bottom:4px">Rendimiento suelto</h3>
+        <p style="font-size:12px; color:var(--t2); margin:0 0 14px; line-height:1.5">Cuántos controles destraba cada llave por sí sola, partiendo de hoy. Las de abajo sólo rinden combinadas.</p>
+        <div style="display:flex; flex-direction:column; gap:6px" id="solo"></div>
+      </section>
+      <section class="card" style="padding:18px 20px 20px">
+        <h3 class="h-display" style="font-size:19px; margin-bottom:4px">Ya especificados, fuera del catálogo</h3>
+        <p style="font-size:12px; color:var(--t2); margin:0 0 14px; line-height:1.5">Tres controles del roadmap del repo con spec escrita. No entran en los 42.</p>
+        <div style="display:flex; flex-direction:column; gap:9px" id="extras"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" style="padding:20px 22px 22px; margin-top:20px">
+    <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap">
+      <h3 class="h-display" style="font-size:20px">Las cuatro tandas del catálogo</h3>
+      <span style="font-size:12px; color:var(--t3)">el orden que revisaste el 15 de agosto</span>
+    </div>
+    <div class="grid4" style="margin-top:14px" id="tandas"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+var CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) {
+  return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+/* ── Datos ────────────────────────────────────────────────────── */
+var KEYS = [
+  { id:'T',       title:'Cablear el lector de tabulado',           owner:'Repo',               kind:'construir · el detector ya está hecho', detail:'Ubicar campos por nombre y conceptos por código en Meta4 y Axton, y avisar qué columnas entraron o salieron entre dos archivos.' },
+  { id:'D7',      title:'Tabla de parámetros con vigencia',        owner:'Repo',               kind:'construir · sin decisión pendiente',    detail:'Alícuotas, topes, mínimo, detracción, escalas y valores variables, cada uno con fecha desde/hasta y resueltos por fecha de liquidación.' },
+  { id:'A0',      title:'Jerarquía de fuentes por dato',           owner:'Guille',             kind:'decisión',                              detail:'Para cada dato, qué archivo manda: padrón, importador, tabulado o nómina declarada en el F.931.' },
+  { id:'PADRON',  title:'Padrón y manual de conceptos por cliente', owner:'Guille + clientes', kind:'juntar datos',                          detail:'Un formato único que los controles lean: quién está activo, quién egresó, y qué conceptos existen en cada cliente.' },
+  { id:'B0',      title:'Template de novedades por sistema',       owner:'Guille + comercial', kind:'decisión',                              detail:'¿Un template único bajado a todos los clientes, o negociado cliente por cliente?' },
+  { id:'SAC',     title:'Las tres definiciones del SAC teórico',   owner:'Guille',             kind:'decisión · D-063',                      detail:'¿Entra 1101 en la doceava? ¿Se resta 1137? ¿Va 1103 en el juego base? Sin esto no se toca calcDoceava.' },
+  { id:'BASES',   title:'Qué concepto pega en qué base',           owner:'Guille + proveedor', kind:'decisión',                              detail:'El mapa concepto → bases sobre las que impacta, con sus excepciones legítimas.' },
+  { id:'TOPE',    title:'Criterio de tope imponible',              owner:'Guille',             kind:'decisión',                              detail:'El tope depende del tipo de liquidación y hoy no está definido cuál se aplica en cada caso.' },
+  { id:'CONTA',   title:'Cuál es el reporte contable vigente',     owner:'Proveedor',          kind:'decisión',                              detail:'El proveedor da de baja el reporte actual; hasta saber cuál lo reemplaza no se puede fijar el asiento.' },
+  { id:'OFICIOS', title:'Registro de oficios judiciales',          owner:'Guille + cliente',   kind:'juntar datos',                          detail:'Legajo, carátula, monto total, cuotas y saldo. Hoy el saldo vive sólo adentro del sistema.' },
+  { id:'SIRADIG', title:'El HTML del validador SIRADIG',           owner:'Guille',             kind:'juntar datos',                          detail:'El archivo que falta para cruzar lo que declara el empleado contra lo que quedó cargado.' }
+];
+/* Orden de la escalera: primero lo que más destraba, después las llaves de a dos,
+   y al final las de a una. No es el orden de KEYS. */
+var ORDER = ['T', 'D7', 'A0', 'PADRON', 'B0', 'CONTA', 'OFICIOS', 'BASES', 'SAC', 'TOPE', 'SIRADIG'];
+
+var PRESETS = [
+  { label:'Hoy',                 set:[] },
+  { label:'Tanda 1 — el lector', set:['T'] },
+  { label:'+ Tanda 2',           set:['T','D7'] },
+  { label:'Todo destrabado',     set:ORDER.slice() }
+];
+
+var CONTROLS = [
+  { id:'A1',  fam:'A', name:'Cobertura de legajos',        base:'parcial', repo:'cat_x_empleados', needs:['T','A0'] },
+  { id:'A2',  fam:'A', name:'Altas del mes',               base:'nuevo',   repo:'',                needs:['A0','B0'] },
+  { id:'A3',  fam:'A', name:'Bajas del mes',               base:'nuevo',   repo:'',                needs:['A0','B0'] },
+  { id:'A4',  fam:'A', name:'Alta y baja registral',       base:'nuevo',   repo:'',                needs:['A0'] },
+  { id:'A5',  fam:'A', name:'Legajo fantasma',             base:'nuevo',   repo:'',                needs:['A0','PADRON'] },
+  { id:'A6',  fam:'A', name:'Cierre de tres puntas',       base:'nuevo',   repo:'',                needs:['A0'] },
+  { id:'B1',  fam:'B', name:'Validador de novedades antes de importar', base:'nuevo', repo:'',     needs:['PADRON'] },
+  { id:'B2a', fam:'B', name:'Planilla del cliente vs importador',        base:'nuevo', repo:'',     needs:['B0','PADRON'] },
+  { id:'B2b', fam:'B', name:'Importador vs tabulado liquidado',          base:'nuevo', repo:'',     needs:['B0','T'] },
+  { id:'B2c', fam:'B', name:'Registro de que se controló',               base:'nuevo', repo:'',     needs:['B0'] },
+  { id:'C1',  fam:'C', name:'Cambio de básico',            base:'parcial', repo:'brutos',          needs:['T','D7'] },
+  { id:'C2',  fam:'C', name:'Cambio de categoría',         base:'nuevo',   repo:'',                needs:['T','PADRON'] },
+  { id:'C3',  fam:'C', name:'Sueldo sin novedad',          base:'nuevo',   repo:'',                needs:['T','PADRON'] },
+  { id:'C4',  fam:'C', name:'Valores parametrizados',      base:'nuevo',   repo:'',                needs:['T','D7'] },
+  { id:'D1',  fam:'D', name:'Aportes personales',          base:'listo',   repo:'Control CCSS',    needs:[] },
+  { id:'D2',  fam:'D', name:'Contribuciones patronales',   base:'listo',   repo:'Control CCSS',    needs:[] },
+  { id:'D3',  fam:'D', name:'ART',                         base:'listo',   repo:'Control CCSS',    needs:[] },
+  { id:'D4',  fam:'D', name:'Tope imponible',              base:'parcial', repo:'Control CCSS',    needs:['D7','TOPE'] },
+  { id:'D5',  fam:'D', name:'Base remunerativa vs no remunerativa', base:'parcial', repo:'nr',     needs:['BASES'] },
+  { id:'D6',  fam:'D', name:'Mínimo imponible',            base:'nuevo',   repo:'',                needs:['D7'] },
+  { id:'D7',  fam:'D', name:'Tabla de parámetros',         base:'nuevo',   repo:'',                needs:[] },
+  { id:'E1',  fam:'E', name:'Continuidad de embargos',     base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'E2',  fam:'E', name:'Acumulado contra el oficio',  base:'nuevo',   repo:'',                needs:['OFICIOS'] },
+  { id:'E3',  fam:'E', name:'Tope de embargabilidad',      base:'nuevo',   repo:'',                needs:['OFICIOS'] },
+  { id:'E4',  fam:'E', name:'Sindicatos y terceros',       base:'parcial', repo:'archivo al gremio', needs:['D7'] },
+  { id:'F1',  fam:'F', name:'Retenido entre períodos',     base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'F2',  fam:'F', name:'Validador SIRADIG',           base:'nuevo',   repo:'',                needs:['SIRADIG'] },
+  { id:'F3',  fam:'F', name:'Deducciones, acumuladores y SAC teórico', base:'parcial', repo:'acumuladores_ganancias', needs:['SAC'] },
+  { id:'G1',  fam:'G', name:'Variación entre quincenas',   base:'listo',   repo:'pop_variaciones', needs:[] },
+  { id:'G2',  fam:'G', name:'Variación entre meses',       base:'parcial', repo:'variaciones',     needs:['T'] },
+  { id:'G3',  fam:'G', name:'Diferencia entre períodos',   base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'G4',  fam:'G', name:'Diferencia entre versiones',  base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'G5',  fam:'G', name:'Netos imposibles',            base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'G6',  fam:'G', name:'Reconstrucción de variaciones', base:'nuevo', repo:'',                needs:['T'] },
+  { id:'H1',  fam:'H', name:'Cuadre de acreditaciones del mes', base:'listo', repo:'acreditaciones_reporte', needs:[] },
+  { id:'H2',  fam:'H', name:'Cotejo por legajo',           base:'nuevo',   repo:'',                needs:['T'] },
+  { id:'I1',  fam:'I', name:'Libro de sueldos digital',    base:'nuevo',   repo:'',                needs:['T','A0'] },
+  { id:'I2',  fam:'I', name:'Declaración jurada',          base:'nuevo',   repo:'',                needs:['T','A0'] },
+  { id:'I3',  fam:'I', name:'Asiento contable',            base:'parcial', repo:'finadiet_asiento', needs:['CONTA'] },
+  { id:'I4',  fam:'I', name:'Contabilidad desglosada',     base:'parcial', repo:'rend_vs_asiento', needs:['CONTA'] },
+  { id:'I5',  fam:'I', name:'Recibos emitidos',            base:'nuevo',   repo:'',                needs:['A0'] },
+  { id:'I6',  fam:'I', name:'Acumuladores antes del lote', base:'nuevo',   repo:'',                needs:[] }
+];
+
+var FAMILIES = [
+  { letter:'A', name:'Cobertura de nómina, altas y bajas' },
+  { letter:'B', name:'Novedades y trazabilidad' },
+  { letter:'C', name:'Remuneración, categoría y valores parametrizados' },
+  { letter:'D', name:'Bases imponibles, topes y parámetros' },
+  { letter:'E', name:'Embargos, cuota alimentaria y terceros' },
+  { letter:'F', name:'Ganancias' },
+  { letter:'G', name:'Diferencias entre períodos y versiones' },
+  { letter:'H', name:'Pago y acreditaciones' },
+  { letter:'I', name:'Cierre fiscal y contable' }
+];
+
+var TONE = {
+  listo:   { bg:'var(--ok-bg)',      bd:'var(--ok-bd)',      tx:'var(--ok-tx)' },
+  parcial: { bg:'var(--warn-bg)',    bd:'var(--warn-bd)',    tx:'var(--warn-tx)' },
+  nuevo:   { bg:'var(--cel-bg)',     bd:'var(--cel-bd)',     tx:'var(--celeste-dark)' },
+  trabado: { bg:'var(--paper)',      bd:'var(--line)',       tx:'var(--t3)' }
+};
+var LEGEND = [
+  { k:'listo',   label:'Andando',             help:'Funciona hoy con datos reales',        color:'#22C55E' },
+  { k:'parcial', label:'A medio camino',      help:'Hay base en el repo, falta cerrarlo',  color:'#F59E0B' },
+  { k:'nuevo',   label:'Listo para arrancar', help:'Sin llave pendiente, falta hacerlo',   color:'#00ACD4' },
+  { k:'trabado', label:'Trabado',             help:'Espera al menos una llave',            color:'#8C837B' }
+];
+
+/* ── Motor ────────────────────────────────────────────────────── */
+var on = {};
+function statusOf(c) {
+  if (c.base === 'listo') return 'listo';
+  var missing = c.needs.filter(function (n) { return !on[n]; });
+  if (missing.length) return 'trabado';
+  return c.base === 'parcial' ? 'parcial' : 'nuevo';
+}
+function openWith(set) {
+  return CONTROLS.filter(function (c) {
+    return c.needs.every(function (n) { return set[n]; });
+  }).map(function (c) { return c.id; });
+}
+function reachCount(set) { return openWith(set).length; }
+
+/* ── Tablero ──────────────────────────────────────────────────── */
+function renderTablero() {
+  var counts = { listo:0, parcial:0, nuevo:0, trabado:0 };
+  CONTROLS.forEach(function (c) { counts[statusOf(c)] += 1; });
+  var reach = counts.listo + counts.parcial + counts.nuevo;
+
+  document.getElementById('reachN').textContent = reach;
+  document.getElementById('reachNote').textContent =
+    reach === 7  ? 'Lo que se puede construir sin pedirle una definición a nadie.' :
+    reach === 42 ? 'Con todas las llaves dadas vuelta, el catálogo entero queda construible.' :
+                   'Con las llaves que tildaste, estos controles ya no dependen de una definición pendiente.';
+
+  document.getElementById('track').innerHTML = LEGEND.map(function (l) {
+    return '<div style="flex-grow:' + counts[l.k] + '; flex-basis:0; background:' + l.color + '"></div>';
+  }).join('');
+
+  document.getElementById('legend').innerHTML = LEGEND.map(function (l) {
+    return '<div><div class="row"><span class="dot" style="background:' + l.color + '"></span>' +
+           '<span class="n">' + counts[l.k] + '</span></div>' +
+           '<div class="lbl">' + esc(l.label) + '</div><div class="help">' + esc(l.help) + '</div></div>';
+  }).join('');
+
+  document.getElementById('presets').innerHTML = PRESETS.map(function (p, i) {
+    var active = ORDER.every(function (id) { return !!on[id] === (p.set.indexOf(id) !== -1); });
+    return '<button class="preset" data-preset="' + i + '" aria-pressed="' + active + '">' + esc(p.label) + '</button>';
+  }).join('');
+
+  document.getElementById('keys').innerHTML = KEYS.map(function (k) {
+    var isOn = !!on[k.id], gain = 0;
+    if (!isOn) {
+      var probe = Object.assign({}, on); probe[k.id] = true;
+      gain = reachCount(probe) - reach;
+    }
+    var gainCls = isOn ? 'done' : (gain > 0 ? '' : 'zero');
+    var gainTxt = isOn ? 'dada' : (gain > 0 ? '+' + gain : '—');
+    return '<button class="key" data-key="' + k.id + '" aria-pressed="' + isOn + '">' +
+      '<span class="key__box">' + (isOn ? CHECK_SVG : '') + '</span>' +
+      '<span class="key__body">' +
+        '<span class="key__top"><span class="chip">' + esc(k.id) + '</span>' +
+        '<span class="key__title">' + esc(k.title) + '</span></span>' +
+        '<span class="key__detail" style="display:block">' + esc(k.detail) + '</span>' +
+        '<span class="key__foot"><span class="owner">' + esc(k.owner) + '</span>' +
+        '<span class="kind">' + esc(k.kind) + '</span></span>' +
+      '</span>' +
+      '<span class="key__gain ' + gainCls + '">' + gainTxt + '</span></button>';
+  }).join('');
+
+  document.getElementById('fams').innerHTML = FAMILIES.map(function (f) {
+    var items = CONTROLS.filter(function (c) { return c.fam === f.letter; });
+    var open = items.filter(function (c) { return statusOf(c) !== 'trabado'; }).length;
+    var tallyStyle = open === items.length
+      ? 'background:var(--ok-bg); color:var(--ok-tx)'
+      : (open === 0 ? 'background:var(--neutral-bg); color:var(--neutral-tx)'
+                    : 'background:var(--cel-bg); color:var(--celeste-dark)');
+    var cells = items.map(function (c) {
+      var st = statusOf(c), t = TONE[st];
+      var missing = c.needs.filter(function (n) { return !on[n]; });
+      var note = st === 'trabado' ? 'Falta ' + missing.join(' + ') + (c.repo ? ' · base: ' + c.repo : '')
+               : st === 'listo'   ? c.repo
+               : st === 'parcial' ? 'Terminar sobre ' + c.repo
+               : 'Se puede construir';
+      return '<div class="ctl" style="background:' + t.bg + '; border-color:' + t.bd + '">' +
+        '<div class="ctl__top"><span class="ctl__id" style="color:' + t.tx + '">' + esc(c.id) + '</span>' +
+        '<span class="ctl__name">' + esc(c.name) + '</span></div>' +
+        '<div class="ctl__note" style="color:' + (st === 'trabado' ? 'var(--t3)' : t.tx) + '">' + esc(note) + '</div></div>';
+    }).join('');
+    return '<section class="card fam"><div class="fam__head">' +
+      '<span class="fam__letter">' + f.letter + '</span>' +
+      '<span class="fam__name">' + esc(f.name) + '</span>' +
+      '<span class="fam__rule"></span>' +
+      '<span class="tally" style="' + tallyStyle + '">' + open + ' de ' + items.length + '</span>' +
+      '</div><div class="fam__grid">' + cells + '</div></section>';
+  }).join('');
+}
+
+document.getElementById('keys').addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-key]'); if (!btn) return;
+  var id = btn.getAttribute('data-key');
+  on[id] = !on[id];
+  renderTablero();
+});
+document.getElementById('presets').addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-preset]'); if (!btn) return;
+  on = {};
+  PRESETS[+btn.getAttribute('data-preset')].set.forEach(function (id) { on[id] = true; });
+  renderTablero();
+});
+
+/* ── Novedades ────────────────────────────────────────────────── */
+var nov = { padron:false, template:false };
+var CHECKS = [
+  { name:'Legajo inexistente o egresado',              needs:'padron',   free:'Necesita saber quién está activo en el cliente' },
+  { name:'Concepto fuera del manual del cliente',      needs:'padron',   free:'Necesita la lista de conceptos que existen en ese cliente' },
+  { name:'Legajo + concepto duplicado en el período',  needs:'',         free:'Se ve en la planilla sola' },
+  { name:'Requeridos vacíos en un alta',               needs:'template', free:'Sin template hay que declarar a mano qué campos son obligatorios' },
+  { name:'Formato de CUIL y CBU',                      needs:'',         free:'Dígito verificador: se valida sin ningún archivo extra' },
+  { name:'Valor fuera de rango contra el histórico',   needs:'',         free:'Usa las corridas que la app ya guarda' }
+];
+var SPILL = [
+  { id:'A5',  name:'Legajo fantasma',                    by:'padron' },
+  { id:'C2',  name:'Cambio de categoría',                by:'padron' },
+  { id:'C3',  name:'Sueldo sin novedad',                 by:'padron' },
+  { id:'B2a', name:'Planilla del cliente vs importador', by:'ambas' },
+  { id:'B2b', name:'Importador vs tabulado',             by:'template' },
+  { id:'B2c', name:'Registro de que se controló',        by:'template' },
+  { id:'A2',  name:'Altas del mes',                      by:'template' },
+  { id:'A3',  name:'Bajas del mes',                      by:'template' }
+];
+
+function renderNovedades() {
+  var sw = [
+    { k:'padron', id:'PADRON', title:'Padrón y manual de conceptos', owner:'Guille + clientes', kind:'juntar datos',
+      detail:'De cada cliente, en un formato único que los controles lean: quién está activo, quién egresó, y qué conceptos existen.' },
+    { k:'template', id:'B0', title:'Template de novedades', owner:'Guille + comercial', kind:'decisión',
+      detail:'La decisión pendiente: ¿un template único bajado a todos los clientes, o negociado cliente por cliente?' }
+  ];
+  document.getElementById('switches').innerHTML = sw.map(function (s) {
+    var isOn = nov[s.k];
+    return '<button class="card sw" data-sw="' + s.k + '" aria-pressed="' + isOn + '">' +
+      '<span style="display:flex; gap:14px; align-items:flex-start">' +
+      '<span class="sw__box">' + (isOn ? CHECK_SVG.replace(/width="12" height="12"/, 'width="14" height="14"') : '') + '</span>' +
+      '<span style="flex-grow:1">' +
+        '<span style="display:flex; align-items:baseline; gap:8px"><span class="chip"' +
+          (isOn ? ' style="background:rgba(34,197,94,0.14); color:var(--ok-tx)"' : '') + '>' + esc(s.id) + '</span>' +
+        '<span style="font-size:16px; font-weight:700">' + esc(s.title) + '</span></span>' +
+        '<span style="display:block; font-size:12.5px; color:var(--t2); margin-top:6px; line-height:1.5">' + esc(s.detail) + '</span>' +
+        '<span class="key__foot"><span class="owner">' + esc(s.owner) + '</span><span class="kind">' + esc(s.kind) + '</span></span>' +
+      '</span></span></button>';
+  }).join('');
+
+  var title, body, tone;
+  if (nov.padron) {
+    tone = { bg:'var(--ok-bg)', bd:'var(--ok-bd)', tx:'var(--ok-tx)' };
+    title = nov.template ? 'B1 en escalón 1 — el estado deseado' : 'Alcanza para arrancar: B1 se puede construir';
+    body = nov.template
+      ? 'El archivo llega siempre con la misma forma, así que el validador no tiene que adivinar ni preguntar nada, y las 6 validaciones corren completas. Éste es el techo, no el piso: si el template tarda, con el padrón sólo ya tenés el control andando.'
+      : 'Con el padrón y el manual de conceptos, el validador corre en escalón 2 (detecta pestaña, fila de cabeceras y columnas solo) o en escalón 3 (le pregunta al liquidador una vez y guarda la respuesta por cliente). 5 de las 6 validaciones andan. La decisión del template no te traba: te sube un escalón.';
+  } else if (nov.template) {
+    tone = { bg:'var(--warn-bg)', bd:'var(--warn-bd)', tx:'var(--warn-tx)' };
+    title = 'El template solo no alcanza';
+    body = 'Saber en qué columna viene cada cosa no te dice si un legajo existe, ni si un concepto está en el manual de ese cliente. Sin padrón y sin manual de conceptos, el validador queda en las 3 validaciones que se resuelven mirando la planilla sola.';
+  } else {
+    tone = { bg:'var(--neutral-bg)', bd:'var(--neutral-bd)', tx:'var(--neutral-tx)' };
+    title = 'Hoy B1 no se puede construir';
+    body = 'Las dos validaciones que más valor tienen —legajo que no existe o ya egresó, concepto que no está en el manual del cliente— necesitan datos que hoy no están en ningún lado en formato único. Tildá el padrón acá arriba: es la única llave que B1 realmente necesita.';
+  }
+  var v = document.getElementById('verdict');
+  v.style.background = tone.bg; v.style.borderColor = tone.bd; v.style.color = tone.tx;
+  v.innerHTML = '<div style="font-size:16px; font-weight:800; line-height:1.3">' + esc(title) + '</div>' +
+                '<div style="font-size:13px; margin-top:6px; line-height:1.6; max-width:900px">' + esc(body) + '</div>';
+
+  var onCount = 0;
+  document.getElementById('checks').innerHTML = CHECKS.map(function (c) {
+    var ok = !c.needs || nov[c.needs]; if (ok) onCount++;
+    var note = ok ? c.free : (c.needs === 'padron' ? 'Espera el padrón y el manual de conceptos' : 'Espera la decisión del template');
+    return '<div class="check" style="background:' + (ok ? 'var(--ok-bg)' : 'var(--paper)') + '; border-color:' + (ok ? 'var(--ok-bd)' : 'var(--line)') + '">' +
+      '<div style="display:flex; gap:8px; align-items:flex-start">' +
+      '<span style="width:9px; height:9px; border-radius:9999px; flex-shrink:0; margin-top:5px; background:' + (ok ? 'var(--ok)' : '#C9D3DD') + '"></span>' +
+      '<span><span style="display:block; font-size:13px; font-weight:700; line-height:1.35">' + esc(c.name) + '</span>' +
+      '<span style="display:block; font-size:11px; margin-top:4px; line-height:1.4; color:' + (ok ? 'var(--ok-tx)' : 'var(--t3)') + '">' + esc(note) + '</span></span>' +
+      '</div></div>';
+  }).join('');
+  var t = document.getElementById('checkTally');
+  t.textContent = onCount + ' de 6 validaciones';
+  t.style.cssText = onCount === 6 ? 'background:var(--ok-bg); color:var(--ok-tx)' : 'background:var(--cel-bg); color:var(--celeste-dark)';
+
+  var stepDefs = [
+    { num:'3', name:'Preguntarle al liquidador', detail:'Pestaña, fila de cabeceras y columna de arranque. Se pregunta una vez y se guarda por cliente.', ready:nov.padron },
+    { num:'2', name:'Autoparseo', detail:'La app detecta sola la pestaña, la fila de cabeceras y las columnas.', ready:nov.padron },
+    { num:'1', name:'Template único con el cliente', detail:'El archivo llega siempre igual. Es el estado deseado.', ready:nov.padron && nov.template }
+  ];
+  document.getElementById('steps').innerHTML = stepDefs.map(function (s) {
+    return '<div class="step" style="background:' + (s.ready ? 'var(--cel-bg)' : 'var(--paper)') + '; border-color:' + (s.ready ? 'var(--cel-bd)' : 'var(--line)') + '">' +
+      '<div style="display:flex; gap:12px; align-items:flex-start">' +
+      '<span class="step__num" style="background:' + (s.ready ? 'var(--celeste)' : 'var(--line)') + '; color:' + (s.ready ? '#FFF' : 'var(--t3)') + '">' + s.num + '</span>' +
+      '<span style="flex-grow:1"><span style="display:block; font-size:13.5px; font-weight:700; line-height:1.35">' + esc(s.name) + '</span>' +
+      '<span style="display:block; font-size:12px; color:var(--t2); margin-top:4px; line-height:1.5">' + esc(s.detail) + '</span></span>' +
+      '<span class="tally" style="' + (s.ready ? 'background:var(--cel-bg); color:var(--celeste-dark)' : 'background:var(--neutral-bg); color:var(--neutral-tx)') + '">' +
+      (s.ready ? 'al alcance' : 'trabado') + '</span></div></div>';
+  }).join('');
+
+  document.getElementById('spill').innerHTML = SPILL.map(function (sp) {
+    var ok = sp.by === 'padron' ? nov.padron : (sp.by === 'template' ? nov.template : (nov.padron && nov.template));
+    var label = sp.by === 'padron' ? 'padrón' : (sp.by === 'template' ? 'template' : 'las dos');
+    return '<div class="spill" style="background:' + (ok ? 'var(--ok-bg)' : 'var(--paper)') + '; border-color:' + (ok ? 'var(--ok-bd)' : 'var(--line-soft)') + '">' +
+      '<span class="chip"' + (ok ? ' style="background:rgba(34,197,94,0.14); color:var(--ok-tx)"' : '') + '>' + esc(sp.id) + '</span>' +
+      '<span style="font-size:12px; font-weight:600; flex-grow:1">' + esc(sp.name) + '</span>' +
+      '<span style="font-size:10px; font-weight:700; flex-shrink:0; color:' + (ok ? 'var(--ok-tx)' : 'var(--t3)') + '">' + label + '</span></div>';
+  }).join('');
+}
+document.getElementById('switches').addEventListener('click', function (e) {
+  var btn = e.target.closest('[data-sw]'); if (!btn) return;
+  var k = btn.getAttribute('data-sw');
+  nov[k] = !nov[k];
+  renderNovedades();
+});
+
+/* ── Orden ────────────────────────────────────────────────────── */
+var TANDAS = [
+  { num:'1', tag:'Cero decisión pendiente', items:['T','G5','I6','H2'], why:'T habilita al resto; G5 e I6 son chequeos de segundos con daño real documentado; H2 extiende H1, que ya está construido.' },
+  { num:'2', tag:'Lo que atrapa la ticketera', items:['D7','G3','G4','G6','C4'], why:'D7 es la tabla que pediste como “muy valiosa”: C4, D4 y D6 cuelgan de ella. G3 y G4 atrapan lo que hoy aparece en tickets.' },
+  { num:'3', tag:'Con A0 o D7 ya resueltas', items:['A1','A5','A6','D6','C1','C2','C3','B1'], why:'Necesitan la jerarquía de fuentes definida o la tabla de parámetros poblada. B1 espera la decisión del template sólo para su escalón 1.' },
+  { num:'4', tag:'Bloqueados por definiciones', items:['A2','A3','A4','B2','D4','D5','E','I1–I5','F'], why:'Tope imponible, oficios, template por sistema, reporte contable vigente y el HTML de SIRADIG. Ninguno se destraba programando.' }
+];
+var EXTRAS = [
+  { name:'Tasa de Provisiones', tone:'cel', note:'Diseño cerrado el 5 de agosto. Ve un defecto que ningún cruce puede ver: el error está en los dos lados y la diferencia da cero. Falta decidir dónde viven los códigos por defecto y correr la eval contra el mes de referencia.' },
+  { name:'Gross-up (AFA, concepto 1017)', tone:'cel', note:'Reemplaza el goal-seek de Excel. Diseño validado, spec escrita, sin definición pendiente.' },
+  { name:'Control de Netos (Sportline)', tone:'warn', note:'Trabado hasta que Meli conteste dos cosas: cómo entra el neto acordado por legajo, y qué conceptos no remunerativos pagan obra social.' }
+];
+
+function renderOrden() {
+  var set = {}, prev = openWith(set);
+  var rows = ['<div class="rung" style="background:rgba(34,197,94,0.06)">' +
+    '<span class="rung__num" style="background:var(--ok); color:#FFF">0</span>' +
+    '<span style="flex-grow:1; min-width:0">' +
+      '<span style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap">' +
+      '<span class="chip" style="background:rgba(34,197,94,0.14); color:var(--ok-tx)">HOY</span>' +
+      '<span style="font-size:13.5px; font-weight:700; line-height:1.3">Lo que ya se puede construir sin destrabar nada</span></span>' +
+      '<span class="opens">' + prev.map(function (o) { return '<span class="open-chip">' + o + '</span>'; }).join('') + '</span>' +
+    '</span>' +
+    '<span style="flex-shrink:0; text-align:right; width:96px">' +
+      '<span style="display:block; font-size:11px; font-weight:800; color:var(--celeste)">punto de partida</span>' +
+      '<span style="display:flex; align-items:baseline; gap:3px; justify-content:flex-end; margin-top:2px">' +
+      '<span class="rung__total">' + prev.length + '</span><span style="font-size:12px; color:var(--t3)">/ 42</span></span>' +
+    '</span></div>'];
+
+  ORDER.forEach(function (id, i) {
+    set[id] = true;
+    var now = openWith(set);
+    var added = now.filter(function (x) { return prev.indexOf(x) === -1; });
+    var lead = i < 2;
+    var info = KEYS.filter(function (k) { return k.id === id; })[0];
+    rows.push('<div class="rung"' + (lead ? ' style="background:rgba(0,172,212,0.06)"' : '') + '>' +
+      '<span class="rung__num" style="background:' + (lead ? 'var(--celeste)' : 'var(--line-soft)') + '; color:' + (lead ? '#FFF' : 'var(--t2)') + '">' + (i + 1) + '</span>' +
+      '<span style="flex-grow:1; min-width:0">' +
+        '<span style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap">' +
+        '<span class="chip">' + esc(id) + '</span>' +
+        '<span style="font-size:13.5px; font-weight:700; line-height:1.3">' + esc(info.title) + '</span>' +
+        '<span style="font-size:10.5px; color:var(--t3)">· ' + esc(info.owner.toLowerCase()) + '</span></span>' +
+        '<span class="opens">' + added.map(function (o) { return '<span class="open-chip">' + o + '</span>'; }).join('') + '</span>' +
+      '</span>' +
+      '<span style="flex-shrink:0; text-align:right; width:96px">' +
+        '<span style="display:block; font-size:11px; font-weight:800; color:var(--celeste)">+' + added.length + '</span>' +
+        '<span style="display:flex; align-items:baseline; gap:3px; justify-content:flex-end; margin-top:2px">' +
+        '<span class="rung__total">' + now.length + '</span><span style="font-size:12px; color:var(--t3)">/ 42</span></span>' +
+      '</span></div>');
+    prev = now;
+  });
+  document.getElementById('ladder').innerHTML = rows.join('');
+
+  var base = openWith({}).length;
+  var solo = ORDER.map(function (id) {
+    var probe = {}; probe[id] = true;
+    return { id:id, gain: openWith(probe).length - base };
+  }).sort(function (a, b) { return b.gain - a.gain; });
+  var max = solo[0].gain || 1;
+  document.getElementById('solo').innerHTML = solo.map(function (k) {
+    var w = Math.max(Math.round((k.gain / max) * 100), 3);
+    return '<div class="soloRow"><span class="chip">' + esc(k.id) + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%' + (k.gain ? '' : '; background:#D9DEE3') + '"></span></span>' +
+      '<span style="font-size:12px; font-weight:800; width:26px; text-align:right; flex-shrink:0; color:' +
+      (k.gain ? 'var(--celeste-dark)' : '#C9D3DD') + '">' + (k.gain ? '+' + k.gain : '0') + '</span></div>';
+  }).join('');
+
+  document.getElementById('extras').innerHTML = EXTRAS.map(function (e) {
+    var bg = e.tone === 'cel' ? 'var(--cel-bg)' : 'var(--warn-bg)';
+    var bd = e.tone === 'cel' ? 'var(--cel-bd)' : 'var(--warn-bd)';
+    var tx = e.tone === 'cel' ? 'var(--celeste-dark)' : 'var(--warn-tx)';
+    return '<div style="border:1px solid ' + bd + '; background:' + bg + '; border-radius:8px; padding:11px 13px">' +
+      '<div style="font-size:12.5px; font-weight:700">' + esc(e.name) + '</div>' +
+      '<div style="font-size:11px; margin-top:5px; line-height:1.5; color:' + tx + '">' + esc(e.note) + '</div></div>';
+  }).join('');
+
+  document.getElementById('tandas').innerHTML = TANDAS.map(function (t, i) {
+    var lead = i < 2;
+    return '<div style="border:1px solid ' + (lead ? 'var(--cel-bd)' : 'var(--line)') + '; background:' + (lead ? 'var(--cel-bg)' : 'var(--paper)') + '; border-radius:8px; padding:13px 15px">' +
+      '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">' +
+      '<span class="step__num" style="width:22px; height:22px; background:' + (lead ? 'var(--celeste)' : 'var(--line)') + '; color:' + (lead ? '#FFF' : 'var(--neutral-tx)') + '">' + t.num + '</span>' +
+      '<span style="font-size:12px; font-weight:700">' + esc(t.tag) + '</span></div>' +
+      '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px">' +
+      t.items.map(function (it) {
+        return '<span style="font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; background:' +
+          (lead ? 'rgba(255,255,255,0.75)' : '#FFF') + '; border:1px solid ' + (lead ? 'var(--cel-bd)' : 'var(--line)') +
+          '; color:' + (lead ? 'var(--celeste-dark)' : 'var(--t2)') + '">' + esc(it) + '</span>';
+      }).join('') + '</div>' +
+      '<div style="font-size:11px; color:var(--t2); line-height:1.5">' + esc(t.why) + '</div></div>';
+  }).join('');
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+document.getElementById('tabs').addEventListener('click', function (e) {
+  var btn = e.target.closest('.tab'); if (!btn) return;
+  var target = btn.getAttribute('data-panel');
+  [].forEach.call(document.querySelectorAll('.tab'), function (t) {
+    t.setAttribute('aria-selected', String(t === btn));
+  });
+  ['tablero', 'novedades', 'orden'].forEach(function (p) {
+    document.getElementById('panel-' + p).hidden = (p !== target);
+  });
+  window.scrollTo(0, 0);
+});
+
+renderTablero();
+renderNovedades();
+renderOrden();
+</script>
+</body>
+</html>

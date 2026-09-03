@@ -38,3 +38,7 @@ test-results/
 *.csv
 *.tsv
 !Catalogo_Conceptos_Plantilla.xlsx
+
+# Salida armada del mockup de fases: 2 MB del editor de Claude Design, que se
+# vuelve a generar desde los .dc.html de al lado. La fuente son esos archivos.
+docs/mapa-fases/mapa-de-fases-controles.html
