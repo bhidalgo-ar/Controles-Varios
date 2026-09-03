@@ -89,8 +89,8 @@ assert('un campo OPCIONAL no ofrece ⊘ (no bloquea, declararlo ausente no cambi
 // ── pendingUploadRequirements: el gate del submit ────────────────────────────
 
 const pendVacio = pendingUploadRequirements('nr_file', nrFields, {});
-assert('NR sin nada mapeado: bloquean legajo + los 18 conceptos (19 campos)',
-  pendVacio.length === 19);
+assert('NR sin nada mapeado: bloquean legajo + todos los conceptos',
+  pendVacio.length === 1 + NR_CONCEPTS.length);
 
 // El caso que la activación NO puede romper: un NR al que le faltan conceptos
 // se sube declarándolos ausentes. OMITIDO cuenta como resuelto.

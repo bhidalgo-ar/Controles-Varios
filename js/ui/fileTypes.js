@@ -287,6 +287,7 @@ export const FILE_TYPES = {
       { key: 'tabAsigPasColumn',        label: 'ASIG_PAS — columna en Tabulado',        required: false },
       { key: 'tabReintGuardColumn',     label: 'REINT_GUARD — columna en Tabulado',     required: false },
       { key: 'tabIncrementoStColumn',   label: 'INCREMENTO_ST — columna en Tabulado',   required: false },
+      { key: 'tabAjusteNrColumn',       label: 'AJUSTE_NR — columna en Tabulado',       required: false },
     ] },
     // Sólo las consume el Reporte NR (`nr_reporte`, D-048/D-049): a diferencia
     // de `shared`, no las usa Brutos ni GS Pers, así que van en su propio grupo
@@ -330,6 +331,7 @@ export const FILE_TYPES = {
     'ASIG_PAS':        'tabAsigPasColumn',
     'REINT_GUARD':     'tabReintGuardColumn',
     'INCREMENTO_ST':   'tabIncrementoStColumn',
+    'AJUSTE_NR':       'tabAjusteNrColumn',
   },
   },
 
@@ -409,6 +411,7 @@ export const FILE_TYPES = {
       { key: 'asigPasColumn',         label: 'Columna de ASIG_PAS',               required: false },
       { key: 'reintGuardColumn',      label: 'Columna de REINT_GUARD',             required: false },
       { key: 'incrementoStColumn',    label: 'Columna de INCREMENTO_ST',           required: false },
+      { key: 'ajusteNrColumn',        label: 'Columna de AJUSTE_NR',               required: false },
     ],
   },
 

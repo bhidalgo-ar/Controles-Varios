@@ -710,7 +710,12 @@ function initSelectionTotals(tableEl, dataRows) {
 
     const matched = dataRows.filter(tr => filterSet.has(tr));
     const sums = new Map();
-    for (const c of sumCol) if (c !== null) sums.set(c, 0);
+    // `undefined` = todavía no sumó nada. Arrancar en `0` hacía que una columna
+    // sin ningún dato en la selección cerrara en "0,00" —un cero afirmado sobre
+    // un dato que no existe—, y con un concepto por columna (Control NR: 19) eso
+    // es la mayoría de la fila del total en cuanto se filtra un legajo.
+    // `null` es otra cosa: había algo y no se pudo leer como número.
+    for (const c of sumCol) if (c !== null) sums.set(c, undefined);
 
     for (const tr of matched) {
       const byCol = cellsByColumn(tr);
@@ -720,7 +725,7 @@ function initSelectionTotals(tableEl, dataRows) {
         const txt = byCol[c]?.textContent ?? '';
         if (!/\d/.test(txt)) continue;              // vacío, "—" o un badge de ausencia: no suma
         const v = parseARNumber(txt);
-        sums.set(c, v === null ? null : acc + v);
+        sums.set(c, v === null ? null : (acc ?? 0) + v);
       }
     }
 
@@ -731,7 +736,7 @@ function initSelectionTotals(tableEl, dataRows) {
         return;
       }
       const v = sums.get(c);
-      if (v === null) { cell.textContent = '—'; return; }
+      if (v === null || v === undefined) { cell.textContent = '—'; return; }
       cell.innerHTML = cell.classList.contains('rb-magcell')
         ? diffBadgeHtml(v, { decimals: decimals[i] })
         : esc(fmtAmount(v, decimals[i]));

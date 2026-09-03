@@ -86,7 +86,7 @@ export const TAB_CODE_SEEDS = {
   // Gastos personales y descuento de cochera.
   tabGtosPersonalesColumn:  '8802', // 8802-GTOS_PERSONAL
   tabDtoCocheraColumn:      '8805', // 8805-DTO_COCHERA (¡no 4899-COCHERA_IG!)
-  // No Remunerativos — 10 de los 18 conceptos.
+  // No Remunerativos — 11 de los 19 conceptos.
   tabReinHomeOficeColumn:   '3025', // 3025-REIN_HOME_OFICE
   tabIndemPreavisoColumn:   '3903', // 3903-INDEM_PREAVISO
   tabSacPreavisoColumn:     '3905', // 3905-SAC_PREAVISO
@@ -97,6 +97,9 @@ export const TAB_CODE_SEEDS = {
   tabVacNoGozSacColumn:     '3974', // 3974-VAC_NO_GOZ_SAC
   tabGratExtraordColumn:    '1203', // 1203-GRAT_EXTRAORD
   tabReintGuardColumn:      '4897', // 4897-REINT_GUARD
+  // Lo trajo Willy el 2026-09-03 al pedir el concepto: sale de la numeración
+  // del cliente, no de una analogía con otro código.
+  tabAjusteNrColumn:        '4418', // 4418-AJUSTE_NR
   // Sin semilla, a propósito (no liquidados en el Tabulado de muestra):
   //   tabIndemAntFalleColumn, tabIndmMaternidadColumn, tabGratVacColumn,
   //   tabGraVacnogSacColumn, tabIndemFuerMayColumn, tabIndemEmbarazoColumn,

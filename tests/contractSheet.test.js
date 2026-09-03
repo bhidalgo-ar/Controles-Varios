@@ -250,18 +250,18 @@ assert('GS Pers: F1:H1 (Valores Tabulado)',     hasMerge(wsGsPers, 1, 6, 1, 8));
 assert('GS Pers: exactamente 4 merges',         wsGsPers.merges.length === 4);
 
 const wsNr = writeGroupedContractSheet(new FakeWorkbook(), EXPORT_CONTRACTS.nr, []);
-// NR Controlar pasó de headerRows:1 (18 columnas de diferencia, coloreadas por
-// concepto) a headerRows:2 con TRES bloques de 18: Reporte de NR, Tabulado y
-// CTRL. Los merges esperados son A1:A2, B1:B2 y un banner por bloque.
+// NR Controlar pasó de headerRows:1 (una columna de diferencia por concepto,
+// coloreada por concepto) a headerRows:2 con TRES bloques de 19: Reporte de NR,
+// Tabulado y CTRL. Los merges esperados son A1:A2, B1:B2 y un banner por bloque.
 assert('NR Controlar: A1:A2 (Legajo)',  hasMerge(wsNr, 1, 1, 2, 1));
 assert('NR Controlar: B1:B2 (# Difs)',  hasMerge(wsNr, 1, 2, 2, 2));
-assert('NR Controlar: C1:T1 (Reporte de NR, 18 columnas)',        hasMerge(wsNr, 1, 3, 1, 20));
-assert('NR Controlar: U1:AL1 (Tabulado, 18 columnas)',            hasMerge(wsNr, 1, 21, 1, 38));
-assert('NR Controlar: AM1:BD1 (CTRL, 18 columnas)',               hasMerge(wsNr, 1, 39, 1, 56));
+assert('NR Controlar: C1:U1 (Reporte de NR, 19 columnas)',        hasMerge(wsNr, 1, 3, 1, 21));
+assert('NR Controlar: V1:AN1 (Tabulado, 19 columnas)',            hasMerge(wsNr, 1, 22, 1, 40));
+assert('NR Controlar: AO1:BG1 (CTRL, 19 columnas)',               hasMerge(wsNr, 1, 41, 1, 59));
 assert('NR Controlar: exactamente 5 merges (2 verticales + 3 bloques)',
   wsNr.merges.length === 5);
-assert('NR Controlar: 56 columnas — Legajo + # Difs + 3 bloques de 18',
-  EXPORT_CONTRACTS.nr.columns.length === 56);
+assert('NR Controlar: 59 columnas — Legajo + # Difs + 3 bloques de 19',
+  EXPORT_CONTRACTS.nr.columns.length === 59);
 {
   const colorDe = grupo => wsNr.rows[0].cells[
     EXPORT_CONTRACTS.nr.columns.findIndex(c => c.group === grupo)

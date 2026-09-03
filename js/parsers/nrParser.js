@@ -1,6 +1,6 @@
 // nrParser.js — Parser del Reporte de No Remunerativos (NR)
 //
-// Columnas clave: LEGAJO/ID_EMPLEADO + los 18 conceptos NR
+// Columnas clave: LEGAJO/ID_EMPLEADO + los 19 conceptos NR
 /* global XLSX */
 export { detectHeaders } from './nominaMaestra.js';
 import { buildParserMapping } from './conceptMatcher.js';
@@ -27,6 +27,7 @@ const NR_CODIGO_TO_KEY = {
   'ASIG_PAS':         'asigPasColumn',
   'REINT_GUARD':      'reintGuardColumn',
   'INCREMENTO_ST':    'incrementoStColumn',
+  'AJUSTE_NR':        'ajusteNrColumn',
 };
 
 /**
