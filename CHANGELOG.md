@@ -7,6 +7,25 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(nr): el .xlsx del Control NR muestra los dos lados y el CTRL como fórmula — 2026-09-03
+
+- **Qué cambia para el analista:** el .xlsx del "Control NR" (modo Controlar) traía Legajo, `# Difs` y
+  las 18 diferencias como número plano — el cruce que hacía la app no se podía rehacer desde el Excel.
+  Ahora salen **56 columnas** en tres bloques de 18, con un banner mergeado por bloque: **"Reporte de
+  NR"**, **"Tabulado"** y **"CTRL (Tab − Reporte)"**, igual que ya se ve en el Control de Brutos.
+- **El bloque CTRL va como fórmula**, no como valor ya calculado: cada celda es
+  `=<celda del Tabulado>-<celda del Reporte>` de esa misma fila, así que abrir el Excel deja ver de
+  dónde sale cada resta. Si falta uno de los dos lados no hay fórmula: la celda del CTRL queda vacía,
+  no en 0,00 (`null` ≠ `0`).
+- El número de columna de cada fórmula sale del contrato (`colLetter()` + `findIndex`), no está
+  cableado a mano — agregar una columna al principio del contrato no rompe a qué celda apunta cada
+  resta.
+- El modo "Generar Reporte" de NR no cambió.
+- Nuevo: `colLetter()` en `js/exports/contractSheet.js`; `nrControlarRows()` exportada en
+  `js/controls/nr.js` (antes era una función interna sin nombre). `tests/nrExportFormulas.test.js`
+  (nuevo, en la cadena de `test:unit`) fija a qué celdas apunta cada resta y el orden Tabulado −
+  Reporte; los merges del layout nuevo se actualizaron en `tests/contractSheet.test.js`.
+
 ### feat(conta): la desglosada de COTY sale como la pide Contaduría del cliente — legajo sin ceros, número de cuenta y número de concepto de Meta4 — 2026-08-31
 
 - **Qué cambia para el analista:** la Contabilidad Desglosada de COTY ahora sale con **12 columnas** en

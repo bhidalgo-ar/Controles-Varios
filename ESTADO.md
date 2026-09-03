@@ -72,9 +72,9 @@
 
 ## NR (Marval) — 8 conceptos sin semilla de código
 - Qué es: 8 de los 18 conceptos de NR no tienen código confirmado porque no se liquidaron en el Tabulado de muestra.
-- Punto: se piden a mano en el Paso 2, con el toggle ⊘ como salida; no se inventan por analogía.
+- Punto: se piden a mano en el Paso 2, con el toggle ⊘ como salida; no se inventan por analogía. **2026-09-03**: el .xlsx del "Control NR" (modo Controlar) pasó de mostrar sólo la diferencia como número plano a mostrar los dos lados (Reporte de NR, Tabulado) más el CTRL, y el CTRL ahora es una fórmula `=<Tabulado>-<Reporte>` que apunta a las celdas de la misma fila (56 columnas, headerRows:2) — para que el analista pueda rehacer el cruce desde el Excel, igual que ya se ve en Brutos. El modo "Generar Reporte" de NR no cambió.
 - Próximo paso: conseguir un Tabulado de un mes con indemnizaciones liquidadas.
-- Detalle: D-039.
+- Detalle: D-039, `specs/contrato-export.md` (nota 2026-09-03), `tests/nrExportFormulas.test.js`.
 
 ## Auto-detección del Paso 2 — prioridad de palabras clave (?)
 - Qué es: `autoDetectTabExtraConfig` recorre encabezados por fuera y palabras clave por dentro, así que gana el primer encabezado del archivo que contenga cualquiera de ellas.

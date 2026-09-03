@@ -17,6 +17,17 @@
 > `fieldsFor()`, `extraFieldGroupsFor()`). Los nombres se dejan como estaban en el resto del texto porque
 > describen el estado en que se hizo la auditoría; lo que hay que leer hoy es `fileTypes.js`.
 >
+> **2026-09-03:** el contrato `nrControlar` cambió de layout (pedido de Willy: el .xlsx tiene que
+> dejar rehacer el cruce, no traer sólo la diferencia). Pasó de `headerRows:1` con las 18 columnas de
+> diferencia coloreadas por grupo indem/otros, a `headerRows:2` con **tres bloques de 18** ("Reporte de
+> NR", "Tabulado", "CTRL") con banner mergeado, 56 columnas en total. El bloque CTRL va como fórmula
+> `=<Tabulado>-<Reporte>` apuntando a las dos celdas de su misma fila (sin los dos lados, celda vacía —
+> null ≠ 0), armada en `nrControlarRows()` (`js/controls/nr.js`, exportada para test) con el número de
+> columna resuelto por `colLetter()` (nuevo, `js/exports/contractSheet.js`) y no cableado a mano. El
+> párrafo del Paso 4b que describe `writeGroupedContractSheet` y NR más abajo describe el layout viejo
+> de NR Controlar — ver `tests/nrExportFormulas.test.js` y los merges actualizados en
+> `tests/contractSheet.test.js` para el layout real. El modo "Generar Reporte" de NR no cambió.
+>
 > **Detalle histórico:** los Pasos 4b y 6 el 2026-08-12; los writers del Paso 6 el 2026-08-13
 > (D-047, 4 de los 5: Rend vs Tabulado, Rend vs Asiento, Rend x EE, EE x CATEG ×2 hojas), y el 5º
 > —`acreditaciones_reporte`— **cerrado como excepción permanente declarada y verificada** el 2026-08-13
