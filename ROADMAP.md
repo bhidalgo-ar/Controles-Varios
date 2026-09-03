@@ -135,7 +135,7 @@ necesitan los CDN) lo cubre CI, que está en verde.
 | Cliente | Sistema | Qué falta probar | Con qué se destraba | Riesgo si no se hace |
 |---|---|---|---|---|
 | **FINADIET** | Meta4 | **Postergado (2026-08-17).** La familia contable sale del foco: es muy customizada por cliente y entrega menos valor con más esfuerzo que la familia de novedades — ver **D-062** | — | Ninguno hoy, por decisión. Al retomar, la primera pregunta es cuál es el archivo de entrada real: el de cierre que sí existe en SharePoint no tiene el layout que pide el parser (detalle en D-062) |
-| **Marval** | Meta4 | Confirmar el código de 8 de los 18 conceptos de NR | Un Tabulado de un mes **con indemnizaciones liquidadas** | Bajo mientras tanto: los 8 se piden a mano en el Paso 2 y el toggle ⊘ los saltea. No se inventan por analogía (D-039) |
+| **Marval** | Meta4 | Confirmar el código de 8 de los 19 conceptos de NR | Un Tabulado de un mes **con indemnizaciones liquidadas** | Bajo mientras tanto: los 8 se piden a mano en el Paso 2 y el toggle ⊘ los saltea. No se inventan por analogía (D-039) |
 | **Epiroc** (era POP) | Axton | Correr Acumuladores Ganancias **end-to-end en el navegador** con el `.xlsx` real, y comparar contra la columna **AG** (`IG_CMASIS_REMU`, "SAC TEORICO") de `EPIR Control IG Nuevo MM-2026.xlsx`, tab `IMPGAN` — de a un legajo y con el caso completo, no con un conteo (**D-064**) | Los crudos `repacumuladores` de `Empresas/Epiroc/Ganancias/2026/MM` — Epiroc reemplaza a POP como cliente de prueba porque es el único Axton con serie mensual completa (04 a 07/2026); en POP sólo hay extractos de un legajo | **Medio, y hay tres definiciones ANTES de la prueba:** reconstruido el cálculo desde el crudo de 05/2026, la columna AG **no reconcilia** con `calcDoceava`. Las tres preguntas y por qué no se toca el código todavía, en **D-063** |
 | **OPmobility Florida (POF)** | Meta4 | Validar el concepto `1000` (los mensuales) en Variación entre períodos | Un Tabulado que **tenga** mensuales — en los dos de muestra los 71 empleados liquidan por `899999` | Bajo. La lógica está y suma sola cuando el concepto exista, pero nunca corrió con datos |
 | **OPmobility Florida (POF)** | Meta4 | Cerrar **con el cliente** qué quincena compara contra cuál | Una respuesta del cliente, no un archivo | Medio, y es lo que traba el "subir un solo archivo por mes". Hoy comparás los dos que subís y el reporte dice exactamente qué comparó — que es lo correcto mientras la regla no esté cerrada |
@@ -225,7 +225,7 @@ necesitan los CDN) lo cubre CI, que está en verde.
 - **Que la corrida guarde con qué columnas del Tabulado corrió.** Salió al implementar D-053: el aviso de
   columna se recalcula de lo que la corrida guarda (`controlRunFiles`: filas + mapeo por archivo), y ahí
   está el mapeo del **archivo** pero no las columnas que se eligen en el **Paso 2** (`tabExtraConfig`:
-  los 18 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN / GTOS_PERSONALES / DTO_COCHERA y las
+  los 19 conceptos NR del lado Tabulado, SUELDO / A_CTA_FUT_AUMEN / GTOS_PERSONALES / DTO_COCHERA y las
   3 de fecha) — viajan al control pero no al registro del archivo.
   **Parcialmente resuelto por D-058:** el run guarda ahora sus **avisos** (`warnings`, texto ya redactado),
   armados al ejecutar, así que el aviso de esas columnas sí se ve después — en "Detalles del run" y en el
@@ -239,11 +239,11 @@ necesitan los CDN) lo cubre CI, que está en verde.
   a mano en el Paso 2 (D-039), ahora con el toggle ⊘ como salida para que no traben la carga (D-052).
   Para cerrarlo hace falta un Tabulado de un mes con indemnizaciones liquidadas — no se inventan por
   analogía. **Pendiente de prueba** (Willy, 2026-08-13).
-- **NR derivado del catálogo de conceptos del cliente, en vez de los 18 cableados.** Dirección definida por
+- **NR derivado del catálogo de conceptos del cliente, en vez de los 19 cableados.** Dirección definida por
   Willy el 2026-08-13, al confirmar el gate de OBLIGATORIA en la carga de archivo
   (`specs/obligatoria-gate-carga-archivo.md`): el Tabulado es el archivo madre —trae los conceptos que
   **realmente se liquidaron** ese período— y el entregable es un **template fijo** que pide un conjunto
-  declarado de conceptos. Hoy ese conjunto son los 18 de `NR_CONCEPTS` (`js/controls/nr.js`), escritos a
+  declarado de conceptos. Hoy ese conjunto son los 19 de `NR_CONCEPTS` (`js/controls/nr.js`), escritos a
   mano y compartidos por todos los clientes. Lo que corresponde es que cada cliente cargue su **catálogo de
   conceptos**, marque ahí cuáles son no remunerativos, y que el control derive su lista de eso: matchear
   solo y avisar en los dos sentidos — **una columna del entregable que quedó sin match** (el concepto no se
@@ -263,7 +263,7 @@ necesitan los CDN) lo cubre CI, que está en verde.
   reemplaza a la omisión declarada: "el catálogo dice que este cliente no lo tiene" y "el analista declaró
   que este archivo no lo trae" son dos afirmaciones distintas, y la segunda sigue siendo la que habilita
   subir el archivo de este mes.
-  **Cuándo conviene hacerlo:** hoy el control de NR lo usa **sólo Marval**, así que los 18 cableados no
+  **Cuándo conviene hacerlo:** hoy el control de NR lo usa **sólo Marval**, así que los 19 cableados no
   duelen. El día que un segundo cliente pida NR con otro juego de conceptos, esto pasa de mejora a
   requisito.
 - **Asiento de Remuneraciones — promoción a control de sistema.** Con el plan de cuentas, los centros de

@@ -193,7 +193,7 @@ for (const ctrl of Object.values(CONTROL_REGISTRY)) {
 // ── Las columnas del Tabulado que se piden en el Paso 2 ─────────────────────
 // Eran cinco arrays sueltos en controlsWizard.js más un mapa de códigos. Se
 // piden en el Paso 2 y no al subir el archivo, y sólo las que necesita algún
-// control seleccionado: no tiene sentido pedirle los 18 conceptos de NR a quien
+// control seleccionado: no tiene sentido pedirle los 19 conceptos de NR a quien
 // corre sólo Brutos.
 
 const TODOS = new Set(['brutos', 'gsPers', 'nr']);
@@ -201,7 +201,7 @@ const gruposDe = (activos, opts) => extraFieldGroupsFor('tab_control', activos, 
 const camposDe = (activos, opts) => gruposDe(activos, opts).flatMap(g => g.fields);
 
 assert('el Tabulado declara sus columnas del Paso 2', gruposDe(TODOS).length === 6);
-assert('son 29 columnas en total', camposDe(TODOS).length === 29);
+assert('son 30 columnas en total', camposDe(TODOS).length === 30);
 assert('el Tabulado anterior las comparte por referencia (es el mismo archivo)',
   FILE_TYPES.tab_prev_file.extraFieldGroups === FILE_TYPES.tab_control.extraFieldGroups);
 
@@ -226,8 +226,8 @@ assert('ninguna choca con una columna que se pide al subir el archivo',
 // Sólo lo que pide el control seleccionado, más los compartidos.
 assert('con sólo Brutos: sus 2 columnas + las 5 compartidas',
   camposDe(new Set(['brutos'])).length === 7);
-assert('con sólo NR: sus 18 conceptos + ID_CENTRO_TRAB/ID_CATEGORIA + las 5 compartidas',
-  camposDe(new Set(['nr'])).length === 25);
+assert('con sólo NR: sus 19 conceptos + ID_CENTRO_TRAB/ID_CATEGORIA + las 5 compartidas',
+  camposDe(new Set(['nr'])).length === 26);
 assert('sin ningún control: sólo las 5 compartidas',
   camposDe(new Set()).length === 5);
 
@@ -237,7 +237,7 @@ assert('sin ningún control: sólo las 5 compartidas',
 // diferencia importa — y este assert es el que la mantiene explícita en vez de
 // que dependa de un `...TAB_SHARED_FIELDS` que alguien mueve de lugar.
 assert('el gate NO mira las columnas compartidas',
-  camposDe(TODOS, { soloGateados: true }).length === 24);
+  camposDe(TODOS, { soloGateados: true }).length === 25);
 assert('…y el panel SÍ (los 5 de diferencia son exactamente los compartidos)',
   camposDe(TODOS).length - camposDe(TODOS, { soloGateados: true }).length === 5);
 assert('sin ningún control seleccionado el gate no pide nada',

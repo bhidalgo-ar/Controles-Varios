@@ -18,13 +18,13 @@ import {
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 //
-// Modo 1 — "Controlar": cruza los 18 conceptos NR del Reporte de M4
+// Modo 1 — "Controlar": cruza los 19 conceptos NR del Reporte de M4
 //   contra las columnas configuradas en el Tabulado.
 //
 // Modo 2 — "Generar Reporte": genera el Reporte de NR directamente desde
 //   el Tabulado. Layout: A(vacía) | B=ID_EMPLEADO | C=NOMBRE | D=APELLIDO_1
 //   | E=FECHA_ALTA | F=FECHA_BAJA | G=FEC_PAGO | H=ID_CENTRO_TRAB
-//   | I=ID_CATEGORIA | J-AA = 18 conceptos en orden.
+//   | I=ID_CATEGORIA | J-AB = 19 conceptos en orden.
 
 // ── Definición de conceptos NR ────────────────────────────────────────────────
 // Orden = orden de columnas en el XLSX de salida.
@@ -32,7 +32,7 @@ import {
 // group: 'indem' = Indemnizatorios (verde) | 'otros' = Otros NR (naranja)
 
 // Exportado para que js/exports/contracts.js derive la lista de columnas del
-// Reporte NR de ACÁ, en vez de mantener una segunda copia de los 18 conceptos.
+// Reporte NR de ACÁ, en vez de mantener una segunda copia de los conceptos.
 export const NR_CONCEPTS = [
   { key: 'reinHomeOfice',  label: 'REIN_HOME_OFICE',  tabKey: 'tabReinHomeOficeColumn',  nrKey: 'reinHomeOficeColumn',  group: 'otros' },
   { key: 'indemPreaviso',  label: 'INDEM_PREAVISO',   tabKey: 'tabIndemPreavisoColumn',  nrKey: 'indemPreavisoColumn',  group: 'indem' },
@@ -52,6 +52,11 @@ export const NR_CONCEPTS = [
   { key: 'asigPas',        label: 'ASIG_PAS',         tabKey: 'tabAsigPasColumn',        nrKey: 'asigPasColumn',        group: 'otros' },
   { key: 'reintGuard',     label: 'REINT_GUARD',      tabKey: 'tabReintGuardColumn',     nrKey: 'reintGuardColumn',     group: 'otros' },
   { key: 'incrementoSt',   label: 'INCREMENTO_ST',    tabKey: 'tabIncrementoStColumn',   nrKey: 'incrementoStColumn',   group: 'otros' },
+  // 4418-AJUSTE_NR — el 19º concepto, pedido de Willy (2026-09-03). Va AL FINAL
+  // de la lista a propósito: el orden de `NR_CONCEPTS` es el orden de columnas
+  // del XLSX del modo "Generar Reporte", y meterlo en el medio correría de
+  // lugar las 18 columnas que Meta4 ya emite en un orden fijo.
+  { key: 'ajusteNr',       label: 'AJUSTE_NR',        tabKey: 'tabAjusteNrColumn',       nrKey: 'ajusteNrColumn',       group: 'otros' },
 ];
 
 // NOTA: contracts.js importa `NR_CONCEPTS` de ESTE archivo — un `import`
@@ -76,14 +81,14 @@ export function summarizeNr(results) {
   );
 
   // Concepto NR más afectado (el que aparece en más legajos con diferencia) —
-  // más útil acá que "el peor caso individual" porque hay 18 conceptos posibles.
+  // más útil acá que "el peor caso individual" porque hay 19 conceptos posibles.
   const conceptCounts = NR_CONCEPTS
     .map(c => ({ label: c.label, count: results.rows.filter(r => isDif(r.valores[c.key].ctrl)).length }))
     .filter(c => c.count > 0)
     .sort((a, b) => b.count - a.count);
   const contextNote = conceptCounts.length
     ? `concepto más afectado: ${conceptCounts[0].label}${conceptCounts.length > 1 ? ` (+${conceptCounts.length - 1} más)` : ''}`
-    : '18 conceptos NR verificados';
+    : `${NR_CONCEPTS.length} conceptos NR verificados`;
 
   return {
     status:   s.conDif > 0 ? 'warning' : 'success',
@@ -251,7 +256,7 @@ function hasAnyNrValue(r) {
 // Qué cuenta como diferencia: el monto que el cliente puso en "Umbrales" (D-069).
 const isDif = v => isDiff(v);
 
-// La banda de cada concepto: los 18 se leen como dos bloques, indemnizatorios y
+// La banda de cada concepto: los 19 se leen como dos bloques, indemnizatorios y
 // el resto. El tinte lo pone la pieza compartida (antes lo escribía este módulo
 // en verde y naranja, con su propio rgba).
 const BANDA = { indem: 'Indemnizatorios', otros: 'Otros NR' };
@@ -259,7 +264,7 @@ const BANDA = { indem: 'Indemnizatorios', otros: 'Otros NR' };
 // ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
 //
 // La causa arranca por las DOS BANDAS (indemnizatorios / otros NR), no por los
-// 18 conceptos: 18 cortes son una pared en un gráfico de causa igual que lo son
+// 19 conceptos: 19 cortes son una pared en un gráfico de causa igual que lo son
 // en la fila de chips (§7.7 de la spec — Willy elige en pantalla si conviene
 // abrir a concepto). Cada legajo se abre en una instancia por concepto CON
 // DIFERENCIA, para que la banda que más pesa sea la que más conceptos suma.
@@ -326,7 +331,7 @@ export function renderNrResults(results, container) {
           : `${diffRows.length} de ${relevantRows.length} empleados con NR tienen alguna diferencia.`,
         body: diffRows.length === 0
           ? `${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores no remunerativos, verificados contra el Tabulado sin diferencias.`
-          : `Diferencia total de <strong>${fmtNum(totalDiffAmount)}</strong> entre los 18 conceptos no remunerativos. El detalle completo está en la solapa «Planilla».`,
+          : `Diferencia total de <strong>${fmtNum(totalDiffAmount)}</strong> entre los ${NR_CONCEPTS.length} conceptos no remunerativos. El detalle completo está en la solapa «Planilla».`,
       });
 
       renderTiles(panel, [
@@ -369,8 +374,8 @@ export function renderNrResults(results, container) {
 // conceptos que no se liquidaron en el período no salen como una columna de
 // ceros: se ocultan y se dice cuántos al pie (D-036).
 //
-// **Los 18 conceptos son el segundo eje y van en `Marcas ▾`, no en la fila de
-// chips**: 18 chips no son un filtro, son una pared (§3). La fila de chips dice
+// **Los 19 conceptos son el segundo eje y van en `Marcas ▾`, no en la fila de
+// chips**: 19 chips no son un filtro, son una pared (§3). La fila de chips dice
 // siempre lo mismo en las 21 pantallas y por eso son sólo los cinco estados.
 
 /** Los conceptos que tienen algún valor real en la corrida — las columnas que se muestran. */
@@ -396,15 +401,47 @@ function difsDeLegajo(r) {
 
 /**
  * La planilla lee filas planas y `runNr` guarda cada concepto anidado en
- * `valores[key].ctrl`, así que se aplana acá —una vez, como ya hace el export— y
- * la fila se queda con una referencia a la original para lo que no es un importe.
+ * `valores[key] = { nrVal, tabVal, ctrl }`, así que se aplana acá —una vez, como
+ * ya hace el export— y la fila se queda con una referencia a la original para lo
+ * que no es un importe.
+ *
+ * Las tres claves por concepto son las MISMAS que usa el `.xlsx`
+ * (`nr_<key>` · `tab_<key>` · `<key>`), así que la pantalla y el archivo nombran
+ * lo mismo y un total se puede escribir una sola vez para los dos.
  */
 function filasDePlanilla(rows, conceptos) {
   return rows.map(r => {
     const fila = { legajo: r.legajo, difs: difsDeLegajo(r), _row: r };
-    for (const c of conceptos) fila[c.key] = r.valores[c.key].ctrl;
+    for (const c of conceptos) {
+      const { nrVal, tabVal, ctrl } = r.valores[c.key];
+      fila[`nr_${c.key}`]  = nrVal;
+      fila[`tab_${c.key}`] = tabVal;
+      fila[c.key]          = ctrl;
+    }
     return fila;
   });
+}
+
+/** Suma de una columna ya aplanada. `null` —no `0`— si ninguna fila trajo dato:
+ *  un concepto que nadie liquidó deja la celda del TOTAL vacía. */
+function totalDeColumna(rows, key) {
+  return sumaONull(rows.map(r => r[key]));
+}
+
+/**
+ * El TOTAL de una columna CTRL es la **resta de los totales** (Σ Tab − Σ Reporte)
+ * y no la suma de la columna: son números distintos en cuanto un legajo no se
+ * pudo comparar —el que está en el reporte y no en el Tabulado suma de un lado y
+ * de ninguno del otro—, y el de la resta es el que muestra el puente del Resumen.
+ * Si acá saliera la suma de la columna, la misma pantalla diría dos cosas.
+ *
+ * Con un solo lado del concepto liquidado no hay resta que mostrar: la celda va
+ * vacía, no en cero (`null` no es `0`).
+ */
+function totalCtrl(rows, c) {
+  const tab = totalDeColumna(rows, `tab_${c.key}`);
+  const nr  = totalDeColumna(rows, `nr_${c.key}`);
+  return (tab === null || nr === null) ? null : tab - nr;
 }
 
 function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
@@ -417,17 +454,34 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
     { key: 'difs', label: '# Difs', sub: 'conceptos con diferencia', band: 'Identificación',
       cell: (f) => `<strong style="color:var(${f.difs > 0 ? '--color-danger' : '--color-success'});">${f.difs}</strong>`,
       total: false },
-    ...conceptos.map(c => ({
-      key: c.key, label: c.label, sub: 'Tab − NR', band: BANDA[c.group],
-      diff: true, absentLabel: 'sin comparar',
-    })),
+    // Una banda por concepto y, adentro, las tres columnas de siempre: lo que
+    // informa el Reporte de NR, lo que dice el Tabulado y la resta — el mismo
+    // molde que el Control de Brutos (pedido de Willy, 2026-09-03). Antes acá
+    // salía sólo la diferencia y los dos lados había que ir a buscarlos al
+    // `.xlsx` exportado o abrir la ficha del legajo.
+    ...conceptos.flatMap(c => {
+      const banda = etiquetaConcepto(c, results.codigos);
+      return [
+        { key: `nr_${c.key}`,  label: 'NR',   sub: 'lo que informa el reporte', band: banda, num: true },
+        { key: `tab_${c.key}`, label: 'Tab',  sub: 'la columna del Tabulado',   band: banda, num: true },
+        { key: c.key,          label: 'CTRL', sub: 'Tab − NR',                  band: banda,
+          diff: true, close: true, absentLabel: 'sin comparar',
+          total: (filas) => totalCtrl(filas, c) },
+      ];
+    }),
   ];
 
-  // Exportar sigue trayendo los 18 conceptos y todos los legajos evaluados: el
-  // filtro de pantalla recorta lo que se ve, no lo que se archiva.
-  const csvHeaders = ['Legajo', '# Difs', ...NR_CONCEPTS.map(c => c.label)];
+  // Exportar sigue trayendo los 19 conceptos y todos los legajos evaluados: el
+  // filtro de pantalla recorta lo que se ve, no lo que se archiva. Las tres
+  // columnas por concepto son las mismas que la pantalla y que el `.xlsx`.
+  const csvHeaders = ['Legajo', '# Difs', ...NR_CONCEPTS.flatMap(c => [
+    `${c.label} (NR)`, `${c.label} (Tab)`, `${c.label} (Dif)`,
+  ])];
   const csvRows = () => relevantRows.map(r => [
-    r.legajo, difsDeLegajo(r), ...NR_CONCEPTS.map(c => fmtNum(r.valores[c.key].ctrl)),
+    r.legajo, difsDeLegajo(r), ...NR_CONCEPTS.flatMap(c => {
+      const { nrVal, tabVal, ctrl } = r.valores[c.key];
+      return [fmtNum(nrVal), fmtNum(tabVal), fmtNum(ctrl)];
+    }),
   ]);
 
   renderPlanillaPanel(container, {
@@ -441,7 +495,7 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
     getLabel: (f) => `${f.legajo}`,
     searchLabel: 'Buscar legajo',
     stickyCols: 2,
-    empty: 'Ningún empleado tiene valor real en los 18 conceptos NR.',
+    empty: `Ningún empleado tiene valor real en los ${NR_CONCEPTS.length} conceptos NR.`,
     beforeTable: (host) => {
       // Con cero diferencias igual se muestra la tabla de evaluados: es el
       // respaldo de que el control se corrió y cerró — y es lo que el analista
@@ -459,9 +513,10 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
       const pie = document.createElement('p');
       pie.className = 'text-muted';
       pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
-      pie.textContent = 'Cada columna es la diferencia Tab − NR de ese concepto.'
+      pie.textContent = 'Cada concepto trae lo que informa el Reporte de NR, lo que dice el '
+        + 'Tabulado y la resta Tab − NR. La última fila es el total de cada columna.'
         + (ocultos > 0 ? ` Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin valores en el período.` : '')
-        + ' Exportá el .xlsx para ver los valores de cada fuente en su columna y la resta como fórmula.';
+        + ' En el .xlsx la resta va como fórmula, apuntando a las dos celdas de la fila.';
       host.appendChild(pie);
     },
     onExport: (exportEl) => renderExportMenu(exportEl, {
@@ -477,9 +532,9 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
 // La solapa Fichas (§4 de specs/vista-estandar-resultados.md)
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// La planilla compara 18 columnas entre cientos de legajos; la ficha abre UN
+// La planilla compara 19 conceptos entre cientos de legajos; la ficha abre UN
 // legajo y dice por qué no cierra. Hasta acá la fila de un legajo decía
-// "# Difs: 3" y nada más: cuáles de los 18 conceptos, de qué lado, y por cuánto
+// "# Difs: 3" y nada más: cuáles de los 19 conceptos, de qué lado, y por cuánto
 // había que ir a buscarlo al .xlsx exportado.
 //
 // La ficha no recalcula nada. Los dos lados de cada concepto y su diferencia ya
@@ -505,8 +560,8 @@ function sumaONull(valores) {
 const SEVERIDAD_NR = { conDif: 'error', sinComparar: 'warn', margen: 'info', centavo: 'ok' };
 
 /**
- * El segundo eje del filtro: **qué conceptos liquidó** este legajo. Son los 18 y
- * van en `Marcas ▾`, nunca en la fila de chips: 18 chips no son un filtro, son
+ * El segundo eje del filtro: **qué conceptos liquidó** este legajo. Son los 19 y
+ * van en `Marcas ▾`, nunca en la fila de chips: 19 chips no son un filtro, son
  * una pared, y la fila de chips dice siempre lo mismo en las 21 pantallas (§3).
  *
  * La misma lista alimenta las pills de cada tarjeta, así que el desplegable y la
@@ -803,7 +858,7 @@ function renderNrFichas(panel, { relevantRows, results }) {
   });
 }
 
-/** Los tres ítems del ⬇ Exportar ▾ de la solapa Fichas. Siempre los 18
+/** Los tres ítems del ⬇ Exportar ▾ de la solapa Fichas. Siempre los 19
  *  conceptos y todos los legajos evaluados: el filtro de pantalla recorta lo que
  *  se ve, no lo que se archiva. */
 function mountNrExportMenu(exportEl, { rows, results }) {
@@ -878,7 +933,7 @@ export function summarizeNrReporte(results) {
     diffTotalAmount: null,
     worstCase:       null,
     contextNote:     hayValores
-      ? `${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor.`
+      ? `${conceptsWithValue.length} de los ${NR_CONCEPTS.length} conceptos no remunerativos con algún valor.`
       : null,
     // No cruza dos archivos: no hay escala, puente, lados ni cortes que
     // dibujar. La declaración explícita es lo que el candado de CI reconoce
@@ -918,13 +973,13 @@ export function renderNrReporteResults(results, container) {
           ? `Reporte de NR generado — ${relevantRows.length} empleado${relevantRows.length === 1 ? '' : 's'} con valores.`
           : 'Ningún empleado tiene valores NR distintos de cero en este período.',
         body: relevantRows.length > 0
-          ? `Armado directo desde el Tabulado, con ${conceptsWithValue.length} de los 18 conceptos no remunerativos con algún valor. El detalle completo está en la solapa «Planilla».`
+          ? `Armado directo desde el Tabulado, con ${conceptsWithValue.length} de los ${NR_CONCEPTS.length} conceptos no remunerativos con algún valor. El detalle completo está en la solapa «Planilla».`
           : null,
       });
       renderTiles(panel, [
         { label: 'Empleados con NR', value: relevantRows.length },
         { label: 'Sin valores NR', value: noNrCount, sub: 'no entran al reporte' },
-        { label: 'Conceptos con valor', value: `${conceptsWithValue.length} / 18` },
+        { label: 'Conceptos con valor', value: `${conceptsWithValue.length} / ${NR_CONCEPTS.length}` },
       ]);
     },
     planilla(panel) { renderNrReportePlanilla(panel, { relevantRows, conceptsWithValue, results }); },
@@ -934,7 +989,7 @@ export function renderNrReporteResults(results, container) {
 // ── La planilla del Reporte (§5) ─────────────────────────────────────────────
 //
 // Las columnas y su orden son las del archivo que se entrega. Lo que agrega la
-// vista estándar es la banda y el sublabel: de dónde sale cada valor. Los 18
+// vista estándar es la banda y el sublabel: de dónde sale cada valor. Los 19
 // conceptos siguen siendo un desplegable —ahora "Marcas ▾"— y no chips.
 const BANDAS_REPORTE_NR = {
   legajo:       { band: 'Identificación',    sub: 'el legajo del Tabulado' },
@@ -973,7 +1028,7 @@ function renderNrReportePlanilla(container, { relevantRows, conceptsWithValue, r
     })),
   ];
 
-  // Exportar siempre incluye TODOS los empleados con valores NR y las 18
+  // Exportar siempre incluye TODOS los empleados con valores NR y las 19
   // columnas de conceptos completas (igual que exportNrReporteToXlsx) — el
   // filtro de pantalla sólo recorta lo que se ve.
   const csvHeaders = ['ID_EMPLEADO', 'NOMBRE', 'APELLIDO_1', 'FECHA_ALTA', 'FECHA_BAJA', 'FEC_PAGO', 'ID_CENTRO_TRAB', 'ID_CATEGORIA', ...NR_CONCEPTS.map(c => c.label)];
@@ -1003,7 +1058,7 @@ function renderNrReportePlanilla(container, { relevantRows, conceptsWithValue, r
       pie.textContent = (ocultos > 0
         ? `Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin valores en el período. `
         : '')
-        + 'El .xlsx exportado incluye las 18 columnas de conceptos en el layout estándar.';
+        + `El .xlsx exportado incluye las ${NR_CONCEPTS.length} columnas de conceptos en el layout estándar.`;
       host.appendChild(pie);
     },
     onExport: (exportEl) => renderExportMenu(exportEl, {
@@ -1016,8 +1071,8 @@ function renderNrReportePlanilla(container, { relevantRows, conceptsWithValue, r
 
 // ── Exports a Excel ───────────────────────────────────────────────────────────
 
-// XLSX "Controlar": Legajo · # Difs · 18 columnas con el valor del Reporte de
-// NR · 18 con el del Tabulado · 18 de CTRL, y el CTRL va como FÓRMULA
+// XLSX "Controlar": Legajo · # Difs · 19 columnas con el valor del Reporte de
+// NR · 19 con el del Tabulado · 19 de CTRL, y el CTRL va como FÓRMULA
 // (`=<Tabulado>-<Reporte>`) apuntando a las dos celdas de la misma fila. El
 // analista abre el .xlsx y ve el cruce, no un número ya masticado.
 //
@@ -1055,6 +1110,54 @@ export function nrControlarRows(rows, contract) {
   });
 }
 
+/**
+ * La fila de TOTAL del `.xlsx`, en negrita abajo del último legajo (pedido de
+ * Willy, 2026-09-03) — misma cuenta que la fila de TOTAL de la pantalla.
+ *
+ * Los totales de las dos fuentes van como `SUM()` sobre su propia columna y el
+ * del CTRL como la RESTA de esos dos totales, apuntando a las celdas de esta
+ * misma fila: así el Excel deja rehacer la cuenta entera, igual que ya hace la
+ * resta de cada legajo. Un concepto que no liquidó nadie de un lado no lleva
+ * total del CTRL: la celda va vacía, no en cero (`null` no es `0`).
+ *
+ * Exportada para el test: es donde se decide a qué celdas apunta cada total.
+ *
+ * @param {object[]} flat      lo que devuelve `nrControlarRows()`
+ * @param {object}   contract  `EXPORT_CONTRACTS.nr`
+ */
+export function nrControlarTotalRow(flat, contract) {
+  const primeraFilaDatos = (contract.headerRows || 1) + 1;
+  const ultimaFilaDatos  = primeraFilaDatos + flat.length - 1;
+  const filaTotal        = ultimaFilaDatos + 1;
+  const colDe = key => colLetter(contract.columns.findIndex(c => c.key === key) + 1);
+
+  // El rótulo y el conteo de diferencias de toda la corrida. Sin filas no hay
+  // rango que sumar, así que tampoco hay fila de TOTAL que escribir.
+  if (flat.length === 0) return null;
+
+  const total = { legajo: 'TOTAL', difs: flat.reduce((acc, f) => acc + (f.difs ?? 0), 0) };
+
+  const suma = (key) => {
+    const v = totalDeColumna(flat, key);
+    if (v === null) return null;
+    const col = colDe(key);
+    return { formula: `SUM(${col}${primeraFilaDatos}:${col}${ultimaFilaDatos})`, result: v };
+  };
+
+  for (const c of NR_CONCEPTS) {
+    const nrKey  = `nr_${c.key}`;
+    const tabKey = `tab_${c.key}`;
+    total[nrKey]  = suma(nrKey);
+    total[tabKey] = suma(tabKey);
+    const dif = totalCtrl(flat, c);
+    total[c.key] = dif === null
+      ? null
+      : { formula: `${colDe(tabKey)}${filaTotal}-${colDe(nrKey)}${filaTotal}`, result: dif };
+  }
+
+  return total;
+}
+
 async function exportNrToXlsx(results) {
   await loadExcelJS();
 
@@ -1064,11 +1167,13 @@ async function exportNrToXlsx(results) {
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-  writeGroupedContractSheet(wb, contract, nrControlarRows(results.rows, contract));
+  const flat     = nrControlarRows(results.rows, contract);
+  const totalRow = nrControlarTotalRow(flat, contract);
+  writeGroupedContractSheet(wb, contract, flat, { ...(totalRow ? { totalRow } : {}) });
   await downloadWorkbook(wb, `NR_Control_${periodSuffix(results.period)}.xlsx`);
 }
 
-// XLSX "Generar Reporte": A(vacía) · B=ID_EMPLEADO · ... · I=ID_CATEGORIA · J-AA=18 conceptos
+// XLSX "Generar Reporte": A(vacía) · B=ID_EMPLEADO · ... · I=ID_CATEGORIA · J-AB=19 conceptos
 async function exportNrReporteToXlsx(results) {
   await loadExcelJS();
   const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');

@@ -299,15 +299,15 @@ assert('tab_control.apellidoNombreColumn está referenciada por más de un contr
 assert('puestoColumn está referenciada desde los DOS archivos (es la colisión de D-045)',
   usos('tab_control', 'puestoColumn') > 0 && usos('cat_empleados', 'puestoColumn') > 0);
 
-// ── Los 18 conceptos de NR están en el contrato, derivados de NR_CONCEPTS ────
+// ── Los conceptos de NR están en el contrato, derivados de NR_CONCEPTS ───────
 // (no una segunda lista copiada a mano)
 
 const { NR_CONCEPTS } = await import('./js/controls/nr.js');
 const nrReporteKeys = new Set(EXPORT_CONTRACTS.nr_reporte.columns.map(c => c.key));
-assert('los 18 conceptos de NR_CONCEPTS están todos en el contrato del Reporte',
+assert('los conceptos de NR_CONCEPTS están todos en el contrato del Reporte',
   NR_CONCEPTS.every(c => nrReporteKeys.has(c.key)));
 assert('el contrato de NR Reporte no tiene más conceptos que NR_CONCEPTS (nada inventado)',
-  NR_CONCEPTS.length === nrReporteKeys.size - 9); // spacer + 8 campos fijos + 18 conceptos
+  NR_CONCEPTS.length === nrReporteKeys.size - 9); // spacer + 8 campos fijos + los conceptos
 
 // necessityOfKey de un concepto NR debe salir OBLIGATORIA por el lado tabKey
 // (nr_reporte) — el punto entero del Paso 2 es que esto pase a gatear.
@@ -401,7 +401,7 @@ assert('…y desde el archivo de NR (modo Controlar)',
 // Paso 2 primero, y el formulario de mapeo y el panel de remapeo de
 // fileUpload.js después (D-041 punto 4, specs/obligatoria-gate-carga-archivo.md).
 // Bloquear sin esa salida habría roto la carga de cualquier NR al que le falte
-// un concepto — y ningún cliente tiene los 18. La salida es de quien llama:
+// un concepto — y ningún cliente los tiene todos. La salida es de quien llama:
 // OMITIDO es truthy, así que pasa el `!mapping[key]` de los gates — ver
 // tests/uploadOmission.test.js.
 
@@ -437,7 +437,7 @@ assert('…y ese mismo campo sigue bloqueando por su required:true',
 // invirtió junto con la activación del gate en fileUpload.js, que era la
 // última superficie sin la vía de escape.
 const { NR_CONCEPTS: nrConceptsParaGate } = await import('./js/controls/nr.js');
-assert('los 18 conceptos NR bloquean por contrato, de los dos lados (nr_file y tab_control)',
+assert('todos los conceptos NR bloquean por contrato, de los dos lados (nr_file y tab_control)',
   nrConceptsParaGate.every(c =>
     blocksProgress('nr_file', c.nrKey, false) === true
     && blocksProgress('tab_control', c.tabKey, false) === true));

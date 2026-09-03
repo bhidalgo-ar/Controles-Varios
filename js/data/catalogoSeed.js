@@ -65,4 +65,5 @@ export const CATALOGO_SEED = [
   { codigo: 'ASIG_PAS',         descripcion: 'Asignación por Pasantía',             clasificacion: 'no_remu', controles: ['nr'], alias: ['asig pas'] },
   { codigo: 'REINT_GUARD',      descripcion: 'Reintegro de Guardería',              clasificacion: 'no_remu', controles: ['nr'], alias: ['reint guard'] },
   { codigo: 'INCREMENTO_ST',    descripcion: 'Incremento Salarial Transitorio',     clasificacion: 'no_remu', controles: ['nr'], alias: ['incremento st'] },
+  { codigo: 'AJUSTE_NR',        descripcion: 'Ajuste No Remunerativo',              clasificacion: 'no_remu', controles: ['nr'], alias: ['ajuste nr'] },
 ];

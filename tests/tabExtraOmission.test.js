@@ -31,13 +31,13 @@ function assert(desc, val) {
   else      { console.error('✗', desc); fail++; }
 }
 
-// ── El caso que había que arreglar: los 18 conceptos de NR ahora bloquean ────
+// ── El caso que había que arreglar: los conceptos de NR ahora bloquean ───────
 
 {
   const cfgVacio = {};
   const pend = pendingTabRequirements(cfgVacio, { hasBrutos: false, hasGsPers: false, hasNr: true });
-  assert('con NR seleccionado y la config vacía, los 18 conceptos quedan pendientes',
-    pend.length === 18);
+  assert('con NR seleccionado y la config vacía, todos sus conceptos quedan pendientes',
+    pend.length === NR_CONCEPTS.length);
   assert('todos los pendientes son los tabKey de NR_CONCEPTS',
     pend.every(f => NR_CONCEPTS.some(c => c.tabKey === f.key)));
 }

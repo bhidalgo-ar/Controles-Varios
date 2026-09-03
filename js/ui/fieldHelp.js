@@ -88,6 +88,7 @@ export const TAB_FIELD_LABELS = {
   tabAsigPasColumn:       { code: 'ASIG_PAS' },
   tabReintGuardColumn:    { code: 'REINT_GUARD' },
   tabIncrementoStColumn:  { code: 'INCREMENTO_ST' },
+  tabAjusteNrColumn:      { code: 'AJUSTE_NR', name: 'Ajuste de no remunerativos' },
 
   // ── Identificación (NR) ───────────────────────────────────────────────────
   tabIdCentroTrabColumn: {

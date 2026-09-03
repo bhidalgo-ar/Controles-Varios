@@ -70,11 +70,11 @@
 - Próximo paso: que Willy conteste las tres — no se toca `calcDoceava` antes.
 - Detalle: D-063, D-064.
 
-## NR (Marval) — 8 conceptos sin semilla de código
-- Qué es: 8 de los 18 conceptos de NR no tienen código confirmado porque no se liquidaron en el Tabulado de muestra.
-- Punto: se piden a mano en el Paso 2, con el toggle ⊘ como salida; no se inventan por analogía. **2026-09-03**: el .xlsx del "Control NR" (modo Controlar) pasó de mostrar sólo la diferencia como número plano a mostrar los dos lados (Reporte de NR, Tabulado) más el CTRL, y el CTRL ahora es una fórmula `=<Tabulado>-<Reporte>` que apunta a las celdas de la misma fila (56 columnas, headerRows:2) — para que el analista pueda rehacer el cruce desde el Excel, igual que ya se ve en Brutos. El modo "Generar Reporte" de NR no cambió.
-- Próximo paso: conseguir un Tabulado de un mes con indemnizaciones liquidadas.
-- Detalle: D-039, `specs/contrato-export.md` (nota 2026-09-03), `tests/nrExportFormulas.test.js`.
+## NR (Marval) — 8 de los 19 conceptos sin semilla de código
+- Qué es: 8 de los 19 conceptos de NR no tienen código confirmado porque no se liquidaron en el Tabulado de muestra (los otros 11 sí).
+- Punto: se piden a mano en el Paso 2, con el toggle ⊘ como salida; no se inventan por analogía. **2026-09-03**: se sumó el concepto **4418-AJUSTE_NR** (19º de `NR_CONCEPTS`, pedido de Willy, con semilla). El .xlsx del "Control NR" (modo Controlar) ahora tiene 3 bloques de 19 columnas (Reporte de NR · Tabulado · CTRL, éste como fórmula que apunta a las dos celdas de la fila) y cierra con una **fila de TOTAL en negrita** (`SUM()` por fuente, la resta de esos totales en el CTRL; celda vacía si a un concepto le falta un lado). La solapa «Planilla» de la pantalla dejó de mostrar sólo la diferencia por concepto: ahora cada concepto es su propia banda `<código> · <LABEL>` con las mismas tres columnas (NR · Tab · CTRL); CSV y «Copiar» igual. De paso, en cualquier planilla filtrada (las 19 que usan `initSelectionTotals`) una columna sin dato en la selección cierra en «—» y no en «0,00». El modo "Generar Reporte" de NR no cambió.
+- Próximo paso: conseguir un Tabulado de un mes con indemnizaciones liquidadas, y de paso confirmar contra un Tabulado real el código `4418` de AJUSTE_NR, que hoy es semilla porque lo trajo Willy al pedir el concepto y no un archivo (D-035).
+- Detalle: D-039, `specs/contrato-export.md` (nota 2026-09-03), `tests/nrExportFormulas.test.js`, `tests/contractSheet.test.js`.
 
 ## Auto-detección del Paso 2 — prioridad de palabras clave (?)
 - Qué es: `autoDetectTabExtraConfig` recorre encabezados por fuera y palabras clave por dentro, así que gana el primer encabezado del archivo que contenga cualquiera de ellas.

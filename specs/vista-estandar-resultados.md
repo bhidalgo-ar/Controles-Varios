@@ -140,8 +140,8 @@ lo que se pidió.
 
 Entonces: las marcas van en un desplegable **`Marcas ▾`** inmediatamente a la derecha del buscador,
 propio de cada control y opcional. En Netos: fuera de escala, topeó aportes, vacaciones en el mes,
-sin mes anterior cargado. En NR: los 18 conceptos (que ya son un desplegable hoy, y ahí se quedan —
-18 chips no son un filtro, son una pared). En Agrupadores: el agrupador.
+sin mes anterior cargado. En NR: los 19 conceptos (que ya son un desplegable hoy, y ahí se quedan —
+19 chips no son un filtro, son una pared). En Agrupadores: el agrupador.
 
 > **Nota — desvío en la implementación (D-081).** El piloto de la tanda 1 (Acumuladores) puso
 > `Marcas ▾` a la IZQUIERDA del buscador, no a la derecha como dice el párrafo de arriba, y la tanda 3
@@ -314,7 +314,7 @@ Aprobado por Willy el 2026-08-20.
 |---|---|---|---|---|
 | **Control de Netos** | sí | sí | **sí** | el del handoff; se hace en su propio chat |
 | **Cruce por Agrupadores** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 5, D-087)** | migrado a una sola planilla, una fila por legajo con una banda por agrupador — antes eran ~1000 filas para ~100 empleados. Y la ficha por legajo con sus agrupadores adentro, con la diferencia **neta** (Nómina − Resumen) y la **total** (la que suma el semáforo) separadas: el número grande es la total, para que un empleado con dos agrupadores compensados no salga en 0 |
-| **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 4, D-086)** | 18 conceptos, en `Marcas ▾` ("el legajo liquidó ese concepto"). La ficha abre un legajo y dice en qué conceptos no cierra, con su código y los dos lados — antes la fila decía "# Difs" y nada más |
+| **Control NR** | **hecho (tanda 2, D-078)** | **hecho (tanda 2, D-078)** | **hecho (tanda 4, D-086)** | 19 conceptos (18 al mergear la tanda 2, sumó `AJUSTE_NR` el 2026-09-03), en `Marcas ▾` ("el legajo liquidó ese concepto"). La ficha abre un legajo y dice en qué conceptos no cierra, con su código y los dos lados — antes la fila decía "# Difs" y nada más. **2026-09-03:** la planilla dejó de mostrar una sola columna de diferencia por concepto; ahora cada concepto es su propia banda `<código> · <LABEL>` con las tres columnas de siempre (NR · Tab · CTRL), igual que Brutos |
 | **Novedades vs Liquidación** | **hecho (tanda 3)** | **hecho (tanda 3)** | **hecho (tanda 4, D-086)** | migrado: las cuatro bandas del cruce se leen ahora en los cinco chips de estado; la ficha invierte el cruce: un legajo por tarjeta con las cuatro bandas adentro |
 | **Acumuladores Ganancias** | **hecho (tanda 1)** | **hecho (tanda 1)** | **sí — reemplaza la ficha vieja** | migrado de punta a punta en la tanda 1, piloto del estándar (D-077) |
 | **EE x CATEG** | **hecho (tanda 2, D-078)** | **hecho sin bandas ni TOTAL (tanda 2, D-078)** | **hecho (tanda 6, D-082)** | las tres tablas de diferencias se fusionaron en una planilla con columna "Qué pasa"; sigue sin totales porque compara campos de texto, no importes. La ficha es una tarjeta por legajo con la tira de conteo de campos (no una cascada de importes) y una conclusión que dice si el problema es del empleado o de una carga masiva. Suma una **cuarta** solapa, "Por campo" — la matriz campo × legajo, única excepción a las tres solapas del §2 |
