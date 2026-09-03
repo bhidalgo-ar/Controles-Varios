@@ -13,6 +13,18 @@
 
 import { test, expect } from '@playwright/test';
 
+/**
+ * Cuántos conceptos NR declara la app. Se le pregunta a `NR_CONCEPTS` y no se
+ * escribe el número acá: sumar un concepto (AJUSTE_NR, 2026-09-03) rompía este
+ * spec sin que nada del gate ni del toggle hubiera cambiado.
+ *
+ * Se importa DENTRO del navegador y no arriba en el spec: `nr.js` arrastra
+ * `exportMenu.js`, que se engancha a `document` al cargar, y en Node —donde
+ * corre el spec— no hay `document`.
+ */
+const conceptosNr = (page) => page.evaluate(async () =>
+  (await import('/js/controls/nr.js')).NR_CONCEPTS.length);
+
 const errores = [];
 test.beforeEach(async ({ page }) => { page.on('pageerror', e => errores.push(String(e))); });
 
@@ -46,10 +58,11 @@ async function abrirFormulario(page, { detecta = false } = {}) {
 test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil', async ({ page }) => {
   await abrirFormulario(page);
 
-  // Formulario de mapeo: 19 campos de NR — legajo (CLAVE, sin ⊘) + 18
-  // conceptos OBLIGATORIA, cada uno con su toggle.
+  // Formulario de mapeo: legajo (CLAVE, sin ⊘) + un concepto OBLIGATORIA por
+  // cada NR, cada uno con su toggle.
   await expect(page.locator('#js-mapping-form')).toBeVisible();
-  await expect(page.locator('[data-fu-omit]')).toHaveCount(18);
+  const CONCEPTOS_NR = await conceptosNr(page);
+  await expect(page.locator('[data-fu-omit]')).toHaveCount(CONCEPTOS_NR);
 
   // Sin resolver los conceptos, el submit bloquea y el toast ofrece el ⊘.
   await page.selectOption('select[name="legajoColumn"]', 'LEGAJO');
@@ -59,7 +72,7 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(toast).toContainText('declaralas ausentes con ⊘');
   expect(await page.evaluate(() => window.__completes.length)).toBe(0);
 
-  // Los 18 conceptos declarados ⊘ → el gate pasa: que este cliente no
+  // Todos los conceptos declarados ⊘ → el gate pasa: que este cliente no
   // liquide NR también es resultado válido (D-036).
   for (const btn of await page.locator('[data-fu-omit]').all()) await btn.click();
   // El select de un omitido queda deshabilitado y el badge lo dice.
@@ -71,12 +84,12 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await expect(page.locator('#host')).toContainText('nr.xlsx');
   expect(mapping.legajoColumn).toBe('LEGAJO');
   expect(mapping.gratVacColumn).toBe('__omitido__');
-  expect(Object.values(mapping).filter(v => v === '__omitido__').length).toBe(18);
+  expect(Object.values(mapping).filter(v => v === '__omitido__').length).toBe(CONCEPTOS_NR);
 
   // Panel de remapeo: la omisión se dibuja (no se pierde en silencio) y
   // destildar sin elegir columna vuelve a bloquear, nombrando la salida.
   await page.click('#host details summary');
-  await expect(page.locator('#host [data-fu-omit][aria-pressed="true"]')).toHaveCount(18);
+  await expect(page.locator('#host [data-fu-omit][aria-pressed="true"]')).toHaveCount(CONCEPTOS_NR);
   await page.click('[data-fu-omit-group="gratVacColumn"] [data-fu-omit]');
   await page.click('#js-remap-apply');
   await expect(page.locator('.toast').last()).toContainText('o declarala ausente con ⊘');
@@ -92,7 +105,7 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   await page.evaluate(() => { window.__completes = []; });
   await abrirFormulario(page, { detecta: true });
   await expect(page.locator('#js-mapping-form')).toBeVisible();
-  await expect(page.locator('[data-fu-omit][aria-pressed="true"]')).toHaveCount(18);
+  await expect(page.locator('[data-fu-omit][aria-pressed="true"]')).toHaveCount(CONCEPTOS_NR);
   await expect(page.locator('select[name="reinHomeOficeColumn"]')).toBeDisabled();
   await expect(page.locator('[data-fu-omit-group="reinHomeOficeColumn"]')).toContainText('columna candidata');
   await expect(page.locator('select[name="reinHomeOficeColumn"]')).toHaveValue('');
@@ -100,7 +113,7 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   // Caso borde: el cliente empezó a liquidar ese concepto — la columna candidata
   // que el hint señaló de verdad está en el archivo. Destildar el ⊘ y elegirla
   // tiene que resolver el campo (no queda pegado en omitido para siempre) sin
-  // tocar los otros 17, que siguen declarados ausentes.
+  // tocar los demás, que siguen declarados ausentes.
   await page.click('[data-fu-omit-group="reinHomeOficeColumn"] [data-fu-omit]');
   await expect(page.locator('select[name="reinHomeOficeColumn"]')).toBeEnabled();
   await page.selectOption('select[name="reinHomeOficeColumn"]', 'REIN_HOME_OFICE');
@@ -108,7 +121,7 @@ test('el gate bloquea, el ⊘ es la salida, y la omisión persiste en el perfil'
   const { mapping: mappingResuelto } = await esperarComplete(page, 1);
   await expect(page.locator('#host')).toContainText('nr.xlsx');
   expect(mappingResuelto.reinHomeOficeColumn).toBe('REIN_HOME_OFICE');
-  expect(Object.values(mappingResuelto).filter(v => v === '__omitido__').length).toBe(17);
+  expect(Object.values(mappingResuelto).filter(v => v === '__omitido__').length).toBe(CONCEPTOS_NR - 1);
 
   expect(errores).toEqual([]);
 });

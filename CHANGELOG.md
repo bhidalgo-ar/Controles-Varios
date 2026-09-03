@@ -7,6 +7,43 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(nr): la planilla del Control NR muestra los dos lados por concepto, el .xlsx cierra con TOTAL y se suma AJUSTE_NR — 2026-09-03
+
+- **Qué cambia para el analista, en la solapa «Planilla» del Control NR:** antes cada concepto era **una
+  columna** con la diferencia Tab − NR y para ver los dos lados había que abrir el `.xlsx` exportado o la
+  ficha del legajo. Ahora **cada concepto es su propia banda**, rotulada `<código> · <LABEL>`, con las
+  **tres columnas** de siempre: **NR** (lo que informa el reporte), **Tab** (la columna del Tabulado) y
+  **CTRL** (Tab − NR) — el mismo molde que el Control de Brutos. El CSV y el «Copiar» traen las mismas
+  tres columnas por concepto.
+- **El `.xlsx` del modo Controlar cierra con una fila de TOTAL en negrita** debajo del último legajo: el
+  total de cada fuente sale como `SUM()` sobre su propia columna, y el del CTRL como la **resta de esos
+  dos totales**, apuntando a las celdas de esa misma fila — se puede rehacer la cuenta entera desde el
+  Excel, igual que ya pasaba con la resta de cada legajo. Un concepto que no se liquidó de un lado deja
+  la celda del total **vacía, no en cero**. Sin filas de legajos no se escribe fila de TOTAL. La
+  pantalla ya tenía su propia fila de TOTAL (la arma `rubroGridHtml`); ahora las columnas nuevas también
+  totalizan, y la de diferencia con la misma regla que el `.xlsx`: Σ Tab − Σ Reporte, no la suma de la
+  columna de diferencias.
+- **Concepto nuevo: `4418-AJUSTE_NR`**, el 19º de `NR_CONCEPTS`. Va al final de la lista a propósito: el
+  orden de `NR_CONCEPTS` es el orden de columnas del `.xlsx` del modo "Generar Reporte", y meterlo en el
+  medio hubiera corrido de lugar las 18 columnas que Meta4 ya emite en un orden fijo (el layout pasa de
+  J-AA a J-AB). El código `4418` lo trajo Willy al pedir el concepto, no sale de una analogía con otro
+  código (D-039) — sigue pendiente confirmarlo contra un Tabulado real.
+- **De paso, en la fila de TOTAL de cualquier planilla filtrada** (las 19 pantallas que comparten
+  `initSelectionTotals`), una columna sin ningún dato en la selección ahora cierra en **«—»** y no en
+  «0,00»: con un concepto por columna eso era la mayoría de la fila del total en cuanto se filtraba un
+  legajo.
+- Verificado: `npm run test:unit` completo en verde (los conteos de conceptos ahora se derivan de
+  `NR_CONCEPTS.length` en vez de un `18` cableado en `tests/tabExtraOmission.test.js`,
+  `tests/uploadOmission.test.js` y `tests/exportContracts.test.js`; `tests/contractSheet.test.js` pasó a
+  esperar tres bloques de 19 columnas — 59 en total, C1:U1/V1:AN1/AO1:BG1; `tests/nrExportFormulas.test.js`
+  suma la cobertura de la fila de TOTAL y de `AJUSTE_NR`) y todos los e2e de fixture. En CI, el e2e
+  arrancó en rojo por un conteo cableado más: `tests/e2e/uploadOmission.spec.js` esperaba 18 toggles ⊘ en
+  el formulario de NR y ahora son 19 — ese spec pasó a preguntarle el número a `NR_CONCEPTS`, importado
+  **dentro del navegador** (en Node no hay `document` y `nr.js` arrastra `exportMenu.js`, que se engancha
+  a él al cargar). Los ~17 e2e que abren la app real no corren en el entorno de desarrollo remoto (CDN sin
+  salida); lo prueba CI.
+- Ver `specs/contrato-export.md` (nota 2026-09-03) y `specs/vista-estandar-resultados.md` §8.
+
 ### feat(nr): el .xlsx del Control NR muestra los dos lados y el CTRL como fórmula — 2026-09-03
 
 - **Qué cambia para el analista:** el .xlsx del "Control NR" (modo Controlar) traía Legajo, `# Difs` y
