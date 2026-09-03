@@ -10,7 +10,7 @@ import { loadExcelJS, downloadWorkbook, downloadCsv, copyRowsToClipboard } from 
 import { formatAmount as fmtNum, toNum } from '../utils/currency.js';
 import { makeLegajoKey } from '../utils/legajo.js';
 import { groupRowsByLegajo, sumColumn, lastRow } from './consolidate.js';
-import { writeGroupedContractSheet } from '../exports/contractSheet.js';
+import { writeGroupedContractSheet, colLetter } from '../exports/contractSheet.js';
 import { periodSuffix } from '../utils/dates.js';
 import { resumenStats, RESUMEN_BLOCKS } from './resumenStats.js';
 import {
@@ -461,7 +461,7 @@ function renderNrPlanilla(container, { relevantRows, diffRows, results }) {
       pie.style.cssText = 'font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);';
       pie.textContent = 'Cada columna es la diferencia Tab − NR de ese concepto.'
         + (ocultos > 0 ? ` Se ocultan ${ocultos} concepto${ocultos === 1 ? '' : 's'} sin valores en el período.` : '')
-        + ' Exportá el .xlsx para ver los valores originales de cada fuente.';
+        + ' Exportá el .xlsx para ver los valores de cada fuente en su columna y la resta como fórmula.';
       host.appendChild(pie);
     },
     onExport: (exportEl) => renderExportMenu(exportEl, {
@@ -1016,24 +1016,55 @@ function renderNrReportePlanilla(container, { relevantRows, conceptsWithValue, r
 
 // ── Exports a Excel ───────────────────────────────────────────────────────────
 
-// XLSX "Controlar": Legajo + 18 columnas CTRL (Tab − NR), coloreadas por grupo
+// XLSX "Controlar": Legajo · # Difs · 18 columnas con el valor del Reporte de
+// NR · 18 con el del Tabulado · 18 de CTRL, y el CTRL va como FÓRMULA
+// (`=<Tabulado>-<Reporte>`) apuntando a las dos celdas de la misma fila. El
+// analista abre el .xlsx y ve el cruce, no un número ya masticado.
+//
+// El número de columna sale del contrato y no de constantes acá: si mañana se
+// agrega una columna al principio, las fórmulas siguen apuntando bien.
+//
+// El contrato lee columnas planas (`row[c.key]`) y `runNr()` guarda cada
+// concepto anidado en `valores[c.key]`: el aplanado vive en `nrControlarRows`.
+/**
+ * Las filas planas del modo Controlar, con el CTRL ya armado como fórmula.
+ * Exportada para que `tests/nrExportFormulas.test.js` verifique a qué celdas
+ * apunta cada resta sin tener que abrir un .xlsx.
+ *
+ * @param {object[]} rows      filas de `runNr()` (`valores[key] = { nrVal, tabVal, ctrl }`)
+ * @param {object}   contract  `EXPORT_CONTRACTS.nr`
+ */
+export function nrControlarRows(rows, contract) {
+  const colDe = key => colLetter(contract.columns.findIndex(c => c.key === key) + 1);
+  const primeraFilaDatos = (contract.headerRows || 1) + 1;
+
+  return rows.map((r, i) => {
+    const filaExcel = primeraFilaDatos + i;
+    const flat = { legajo: r.legajo, difs: NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length };
+    for (const c of NR_CONCEPTS) {
+      const { nrVal, tabVal, ctrl } = r.valores[c.key];
+      flat[`nr_${c.key}`]  = nrVal;
+      flat[`tab_${c.key}`] = tabVal;
+      // Sin los dos lados no hay resta que mostrar: la celda queda vacía, no en
+      // cero (null ≠ 0 — un 0,00 acá diría "cerró bien" sobre un dato que falta).
+      flat[c.key] = ctrl === null
+        ? null
+        : { formula: `${colDe(`tab_${c.key}`)}${filaExcel}-${colDe(`nr_${c.key}`)}${filaExcel}`, result: ctrl };
+    }
+    return flat;
+  });
+}
+
 async function exportNrToXlsx(results) {
   await loadExcelJS();
 
-  // El contrato lee columnas planas (`row[c.key]`); `runNr()` guarda cada
-  // concepto anidado en `valores[c.key].ctrl` — se aplana acá, una sola vez,
-  // en vez de que el writer conozca esa forma.
-  const flatRows = results.rows.map(r => {
-    const flat = { legajo: r.legajo, difs: NR_CONCEPTS.filter(c => isDif(r.valores[c.key].ctrl)).length };
-    for (const c of NR_CONCEPTS) flat[c.key] = r.valores[c.key].ctrl;
-    return flat;
-  });
-
   const { EXPORT_CONTRACTS } = await import('../exports/contracts.js');
+  const contract = EXPORT_CONTRACTS.nr;
+
   const wb = new window.ExcelJS.Workbook();
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
-  writeGroupedContractSheet(wb, EXPORT_CONTRACTS.nr, flatRows);
+  writeGroupedContractSheet(wb, contract, nrControlarRows(results.rows, contract));
   await downloadWorkbook(wb, `NR_Control_${periodSuffix(results.period)}.xlsx`);
 }
 
