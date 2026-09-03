@@ -31,6 +31,15 @@ const DIFF_COLOR    = 'FFCC0000';
 // necesita el mismo desenvuelto — ver `catXEmpleados.js`.
 export const numericValue = v => (v !== null && typeof v === 'object') ? v.result : v;
 
+/** Letra de columna de Excel a partir del número de columna 1-based (1 → 'A',
+ * 27 → 'AA'). La necesita el módulo que arma una fórmula que apunta a otra
+ * celda de la misma hoja — ver `nr.js`. */
+export function colLetter(n) {
+  let s = '', k = n;
+  while (k > 0) { const rem = (k - 1) % 26; s = String.fromCharCode(65 + rem) + s; k = Math.floor((k - 1) / 26); }
+  return s;
+}
+
 /**
  * Escribe una hoja `contract.sheet` en `wb` con TODAS las columnas de
  * `contract.columns`, siempre, en ese orden — layout:'fijo': si `row[key]` es

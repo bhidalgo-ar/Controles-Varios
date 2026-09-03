@@ -250,15 +250,24 @@ assert('GS Pers: F1:H1 (Valores Tabulado)',     hasMerge(wsGsPers, 1, 6, 1, 8));
 assert('GS Pers: exactamente 4 merges',         wsGsPers.merges.length === 4);
 
 const wsNr = writeGroupedContractSheet(new FakeWorkbook(), EXPORT_CONTRACTS.nr, []);
-assert('NR Controlar: headerRows:1, cero merges (color por columna, sin agrupar filas)',
-  wsNr.merges.length === 0);
-assert('NR Controlar: Legajo y # Difs (sin grupo) comparten el mismo color default',
-  wsNr.rows[0].cells[0].fill.fgColor.argb === wsNr.rows[0].cells[1].fill.fgColor.argb);
+// NR Controlar pasó de headerRows:1 (18 columnas de diferencia, coloreadas por
+// concepto) a headerRows:2 con TRES bloques de 18: Reporte de NR, Tabulado y
+// CTRL. Los merges esperados son A1:A2, B1:B2 y un banner por bloque.
+assert('NR Controlar: A1:A2 (Legajo)',  hasMerge(wsNr, 1, 1, 2, 1));
+assert('NR Controlar: B1:B2 (# Difs)',  hasMerge(wsNr, 1, 2, 2, 2));
+assert('NR Controlar: C1:T1 (Reporte de NR, 18 columnas)',        hasMerge(wsNr, 1, 3, 1, 20));
+assert('NR Controlar: U1:AL1 (Tabulado, 18 columnas)',            hasMerge(wsNr, 1, 21, 1, 38));
+assert('NR Controlar: AM1:BD1 (CTRL, 18 columnas)',               hasMerge(wsNr, 1, 39, 1, 56));
+assert('NR Controlar: exactamente 5 merges (2 verticales + 3 bloques)',
+  wsNr.merges.length === 5);
+assert('NR Controlar: 56 columnas — Legajo + # Difs + 3 bloques de 18',
+  EXPORT_CONTRACTS.nr.columns.length === 56);
 {
-  const firstIndem = EXPORT_CONTRACTS.nr.columns.findIndex(c => c.group === 'indem');
-  const firstOtros = EXPORT_CONTRACTS.nr.columns.findIndex(c => c.group === 'otros');
-  assert('NR Controlar: un concepto "indem" y uno "otros" tienen colores de header distintos',
-    wsNr.rows[0].cells[firstIndem].fill.fgColor.argb !== wsNr.rows[0].cells[firstOtros].fill.fgColor.argb);
+  const colorDe = grupo => wsNr.rows[0].cells[
+    EXPORT_CONTRACTS.nr.columns.findIndex(c => c.group === grupo)
+  ].fill.fgColor.argb;
+  assert('NR Controlar: los tres bloques tienen colores de header distintos',
+    new Set([colorDe('nrFile'), colorDe('tab'), colorDe('ctrl')]).size === 3);
 }
 
 const wsNrReporte = writeGroupedContractSheet(new FakeWorkbook(), EXPORT_CONTRACTS.nr_reporte, []);

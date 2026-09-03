@@ -73,6 +73,8 @@ const INDEM_HDR = 'FFD4EDDA';
 const INDEM_BG  = 'FFEAF5EE';
 const OTROS_HDR = 'FFFFE4CC';
 const OTROS_BG  = 'FFFFEFE0';
+const CTRL_HDR  = 'FFA9D08E';
+const CTRL_BG   = 'FFE2EFDA';
 
 /**
  * @typedef {object} ExportColumn
@@ -245,25 +247,47 @@ const nrConceptColumn = (c, key, fromFile, extra = {}) => ({
   label: c.label, key: c.key, from: [key], fromFile, necessity: NECESSITY.OBLIGATORIA, type: 'num', ...extra,
 });
 
-// Grupos de color compartidos por los dos modos (Controlar y Reporte): cada
-// concepto NR se pinta según `c.group` ('indem'/'otros'), tanto si la columna
-// sale de nrKey (Controlar) como de tabKey (Reporte) — es el mismo concepto.
+// Grupos de color del modo Reporte: cada concepto NR se pinta según `c.group`
+// ('indem'/'otros'). El modo Controlar ya no los usa — sus 54 columnas se
+// agrupan por bloque (Reporte / Tabulado / CTRL), que es lo que hace legible el
+// cruce; el concepto queda en el encabezado de la segunda fila.
 const NR_CONCEPT_GROUPS = {
   indem: { headerColor: INDEM_HDR, dataColor: INDEM_BG },
   otros: { headerColor: OTROS_HDR, dataColor: OTROS_BG },
 };
 
-/** Encabezado de una sola fila, coloreado por columna (sin merges) — migrado
- * a `writeGroupedContractSheet` en el Paso 4b. */
+/** Los tres bloques de 18 columnas del modo Controlar: lo que trae el archivo
+ * de NR, lo que trae el Tabulado y el CTRL. Encabezado de dos filas (el nombre
+ * del bloque mergeado arriba, el concepto abajo) — así el analista ve de dónde
+ * sale cada número y la fórmula del CTRL se lee sola. */
+const NR_BLOQUES = {
+  nrFile: { label: 'Reporte de NR',        headerColor: CYAN_HDR,  dataColor: CYAN_BG },
+  tab:    { label: 'Tabulado',             headerColor: LILAC_HDR, dataColor: LILAC_BG },
+  ctrl:   { label: 'CTRL (Tab − Reporte)', headerColor: CTRL_HDR,  dataColor: CTRL_BG },
+};
+
+/** Modo Controlar. Antes salían sólo Legajo + `# Difs` + las 18 diferencias
+ * como número plano: el cruce que hizo la app no se podía rehacer en el Excel
+ * (pedido de Willy, 2026-09-03 — "tienen que verse los cruces que hace entre
+ * celdas"). Ahora salen los DOS lados y el CTRL va como fórmula
+ * `=<Tabulado>-<Reporte>` apuntando a las celdas de la misma fila, igual que el
+ * Control de Brutos muestra SAL_BASE y SAL_BASE (Tab) uno al lado del otro.
+ * Las fórmulas las arma `js/controls/nr.js`, que es quien conoce el número de
+ * fila real. */
 const nrControlar = {
   exportId: 'nr', sheet: 'Control NR', layout: LAYOUT_FIJO, audience: 'payroll',
-  headerRows: 1,
-  groups: NR_CONCEPT_GROUPS,
+  headerRows: 2,
+  groups: NR_BLOQUES,
   columns: [
     { label: 'Legajo', key: 'legajo', width: 12, from: ['legajoColumn'], fromFile: 'nr_file', necessity: NECESSITY.CLAVE,       type: 'txt' },
     { label: '# Difs', key: 'difs',   width: 10, from: [],                necessity: NECESSITY.OBLIGATORIA, type: 'num',
       diffHighlight: true, dataAlign: 'center', numFmt: false },
-    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.nrKey, 'nr_file', { diffHighlight: true }), width: 16, group: c.group })),
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.nrKey,  'nr_file'),     key: `nr_${c.key}`,  width: 16, group: 'nrFile' })),
+    ...NR_CONCEPTS.map(c => ({ ...nrConceptColumn(c, c.tabKey, 'tab_control'), key: `tab_${c.key}`, width: 16, group: 'tab' })),
+    ...NR_CONCEPTS.map(c => ({
+      label: c.label, key: c.key, width: 16, from: [], necessity: NECESSITY.OBLIGATORIA,
+      type: 'num', group: 'ctrl', diffHighlight: true,
+    })),
   ],
 };
 
