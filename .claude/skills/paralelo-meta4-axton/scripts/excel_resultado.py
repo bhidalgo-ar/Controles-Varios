@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""El Excel que ve el analista. Cinco hojas, siempre las mismas.
+"""El Excel que ve el analista. Cinco hojas, siempre las mismas, mas la de
+contribuciones cuando vino el control de cargas sociales.
 
 El criterio de lectura: el numero grande es la diferencia de neto, y para cada
 legajo que no cierra tiene que estar escrito EN QUE CONCEPTO esta la plata.
@@ -20,7 +21,7 @@ N = Font(size=10)
 BOX = Border(bottom=Side(style='thin', color="BFBFBF"))
 
 
-def escribir(res, ancla, meta, salida, tol=0.01, ruido=1.00):
+def escribir(res, ancla, meta, salida, tol=0.01, ruido=1.00, contrib=None):
     wb = openpyxl.Workbook()
     porLegajo, detalle = res['porLegajo'], res['detalle']
     totM4 = sum(v['netoM4'] for v in porLegajo)
@@ -246,7 +247,89 @@ def escribir(res, ancla, meta, salida, tol=0.01, ruido=1.00):
         rr += 1
     ws.auto_filter.ref = f"A1:I{rr-1}"
 
-    # ============================================== 5. Sin comparar
+    # ============================================== 5. Contribuciones
+    if contrib:
+        ws = wb.create_sheet("Contribuciones")
+        ws.column_dimensions['A'].width = 34
+        for col in 'BCDEFG':
+            ws.column_dimensions[col].width = 18
+        ws.cell(row=1, column=1, value="Contribuciones patronales, Meta4 contra Axton").font = \
+            Font(bold=True, size=13, color=AZUL)
+        ws.cell(row=2, column=1, value=
+                "Una contribución se calcula sobre la base, así que casi nunca es un error "
+                "propio: la columna «De dónde viene» dice si hay que corregir el haber, la "
+                "base o la contribución.").font = Font(size=9, italic=True, color="404040")
+
+        cab(ws, [("Contribución", 34), ("Col. Meta4", 16), ("Cód. Axton", 14),
+                 ("Total Meta4", 18), ("Total Axton", 18), ("Axton − Meta4", 18),
+                 ("Legajos que difieren", 14)], fila=4)
+        rr = 5
+        for g in contrib['porConcepto']:
+            vals = [g['concepto'], g['colM4'],
+                    g['codAx'] if g['existeAx'] else f"{g['codAx']} (no hay columna)",
+                    g['meta4'], g['axton'], g['dif'], g['legajos']]
+            for i, val in enumerate(vals, 1):
+                c = ws.cell(row=rr, column=i, value=val)
+                c.font = N; c.border = BOX
+                if i in (4, 5, 6):
+                    c.number_format = MON
+            if abs(g['dif']) > ruido:
+                ws.cell(row=rr, column=6).font = Font(size=10, bold=True, color=ROJO)
+            else:
+                ws.cell(row=rr, column=7).font = Font(size=10, color=VERDE)
+            rr += 1
+        ws.cell(row=rr, column=1, value="TOTAL").font = B
+        for i, k in ((4, 'meta4'), (5, 'axton'), (6, 'dif')):
+            c = ws.cell(row=rr, column=i,
+                        value=round(sum(g[k] for g in contrib['porConcepto']), 2))
+            c.number_format = MON; c.font = B
+
+        rr += 3
+        ws.cell(row=rr, column=1, value="El detalle, legajo por legajo").font = \
+            Font(bold=True, size=12, color=AZUL)
+        rr += 1
+        cab(ws, [("Legajo", 10), ("Apellido y Nombre", 30), ("Contribución", 30),
+                 ("Meta4", 16), ("Axton", 16), ("Axton − Meta4", 16),
+                 ("De dónde viene", 16), ("Por qué", 110)], fila=rr)
+        rr += 1
+        orden = {'Contribución': 0, 'Base': 1, 'Remuneración': 2, 'Redondeo': 3}
+        for f in sorted(contrib['filas'],
+                        key=lambda f: (orden.get(f['causa'], 9), -abs(f['dif']))):
+            for i, val in enumerate([f['legajo'], f['nombre'], f['concepto'], f['meta4'],
+                                     f['axton'], f['dif'], f['causa'], f['comentario']], 1):
+                c = ws.cell(row=rr, column=i, value=val)
+                c.font = N; c.border = BOX
+                if i in (4, 5, 6):
+                    c.number_format = MON
+            color = {'Contribución': ROJO, 'Base': ROJO,
+                     'Remuneración': AMBAR}.get(f['causa'], "404040")
+            ws.cell(row=rr, column=7).font = Font(size=10, bold=f['causa'] != 'Redondeo',
+                                                  color=color)
+            ws.cell(row=rr, column=6).font = Font(size=10, bold=f['causa'] != 'Redondeo',
+                                                  color=color)
+            rr += 1
+        if not contrib['filas']:
+            ws.cell(row=rr, column=1, value="Ninguna: todas las contribuciones coinciden").font = \
+                Font(size=10, color=VERDE)
+            rr += 1
+
+        if contrib['sinPar']:
+            rr += 2
+            ws.cell(row=rr, column=1,
+                    value="Contribuciones de Axton que no están declaradas en el config").font = \
+                Font(bold=True, size=12, color=AZUL)
+            rr += 1
+            cab(ws, [("Cód. Axton", 14), ("Concepto", 40), ("Importe del mes", 18)], fila=rr)
+            rr += 1
+            for c, nom, tot in contrib['sinPar']:
+                for i, val in enumerate([c, nom, tot], 1):
+                    cel = ws.cell(row=rr, column=i, value=val)
+                    cel.font = N; cel.border = BOX
+                    if i == 3:
+                        cel.number_format = MON
+                rr += 1
+
+    # ============================================== 6. Sin comparar
     ws = wb.create_sheet("Sin comparar")
     for col, w in (('A', 28), ('B', 18), ('C', 46), ('D', 18), ('E', 66)):
         ws.column_dimensions[col].width = w
@@ -353,4 +436,5 @@ def escribir(res, ancla, meta, salida, tol=0.01, ruido=1.00):
 
     wb.save(salida)
     return {'legajos': len(porLegajo), 'conDiferencia': len(conDifReal),
-            'difTotal': round(totAx - totM4, 2)}
+            'difTotal': round(totAx - totM4, 2),
+            'contribuciones': len(contrib['filas']) if contrib else None}

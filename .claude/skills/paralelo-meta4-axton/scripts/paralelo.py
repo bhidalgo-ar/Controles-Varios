@@ -16,6 +16,7 @@ Con --sin-excel hace solo las validaciones y el resumen por consola. Sirve para
 la primera pasada, cuando todavia se esta acomodando el config del cliente.
 """
 import argparse
+import collections
 import json
 import os
 import sys
@@ -37,6 +38,8 @@ def main():
     ap.add_argument('--axton', required=True, help="Tabulado de Axton (.xls, en realidad HTML)")
     ap.add_argument('--equivalencias', required=True, help="Tabla de equivalencias (.xlsx)")
     ap.add_argument('--pdf', help="PDF 'Control de liquidacion' de Meta4 (el ancla)")
+    ap.add_argument('--cargas', help="Control de cargas sociales de Meta4 (.xlsx). "
+                                     "Con esto el Excel suma la hoja de contribuciones.")
     ap.add_argument('--periodo', default="", help="Texto del periodo, para el encabezado")
     ap.add_argument('--salida', default="paralelo.xlsx")
     ap.add_argument('--ruido', type=float, default=1.00,
@@ -53,12 +56,22 @@ def main():
     m = L.leerMeta4(a.meta4, cfg['meta4'], modo)
     ax = L.leerAxton(a.axton, modo)
     eq = L.leerEquivalencias(a.equivalencias)
+    cg = None
+    if a.cargas:
+        if not cfg.get('contribuciones'):
+            raise SystemExit(
+                "Vino --cargas pero el config del cliente no declara el bloque "
+                "'contribuciones' (que columna de Meta4 va contra que codigo de Axton).")
+        cg = L.leerCargas(a.cargas, cfg['contribuciones'], modo)
     print(f"  Meta4: {len(m['rows'])} liquidaciones, "
           f"{len(set(r['legajo'] for r in m['rows']))} legajos, {len(m['codigos'])} columnas de concepto")
     print(f"  Axton: {len(ax['rows'])} liquidaciones, "
           f"{len(set(r['legajo'] for r in ax['rows']))} legajos, {len(ax['codigos'])} columnas de concepto")
     print(f"  Axton dice: {ax['preambulo'][:150]}")
     print(f"  Tipos de liquidacion en Axton: {ax['tipos']}")
+    if cg:
+        print(f"  Cargas sociales: {len(cg['rows'])} liquidaciones, "
+              f"{len(set(r['legajo'] for r in cg['rows']))} legajos")
     print(f"  Equivalencias: {len(eq['pares'])} pares usables, "
           f"{len(eq['sinAxton'])} sin codigo de Axton, {len(eq['sinMeta4'])} sin codigo de Meta4")
 
@@ -85,6 +98,19 @@ def main():
         problemas.append("la clasificacion de conceptos de Axton no reproduce el Neto "
                          "(revisar 'retenciones' y 'exentos' del config: casi siempre es "
                          "un codigo nuevo que el cliente estreno este mes)")
+
+    anclaCargas = None
+    if cg:
+        anclaCargas = C.anclarCargas(cg, m, cfg['contribuciones'])
+        print(f"  Cargas sociales, los aportes del empleado contra el Tabulado: "
+              f"{'coinciden' if not anclaCargas['fallas'] else str(len(anclaCargas['fallas'])) + ' no coinciden'}"
+              f" | legajos sólo en el Tabulado: {len(anclaCargas['soloTabulado'])}"
+              f" | sólo en cargas: {len(anclaCargas['soloCargas'])}")
+        for leg, msg in anclaCargas['fallas'][:5]:
+            print(f"     legajo {leg}: {msg}")
+        if anclaCargas['fallas'] or anclaCargas['soloTabulado'] or anclaCargas['soloCargas']:
+            problemas.append("el control de cargas sociales no reproduce los aportes del "
+                             "Tabulado: los dos archivos no son de la misma corrida")
 
     ancla = {'totalExcel': 0.0, 'totalPdf': 0.0, 'comparados': 0,
              'difieren': [], 'sinBloqueEnPdf': [], 'bloquesPdf': 0}
@@ -153,6 +179,23 @@ def main():
                 print(f"        {f['concepto'][:34]:<36} {f['codM4']:>10} -> {f['codAx']:<14}"
                       f" mueve el neto {plata(f['aporteNeto']):>14}  {f['estado']}")
 
+    contrib = None
+    if cg:
+        contrib = C.cruzarContribuciones(cg, ax, cfg['contribuciones'], porLegajo,
+                                         ruido=a.ruido)
+        print("\n== Contribuciones patronales ==")
+        for g in contrib['porConcepto']:
+            marca = "" if abs(g['dif']) <= a.ruido else "   <<<"
+            print(f"  {g['concepto'][:30]:<32} {g['colM4']:<15} -> {g['codAx']:<9}"
+                  f" Meta4 {plata(g['meta4']):>16} Axton {plata(g['axton']):>16}"
+                  f" dif {plata(g['dif']):>14}  ({g['legajos']} legajos){marca}")
+        porCausa = collections.Counter(f['causa'] for f in contrib['filas'])
+        print(f"  de donde vienen las diferencias: " +
+              ", ".join(f"{k} {v}" for k, v in porCausa.most_common()) or "  ninguna")
+        if contrib['sinPar']:
+            print("  contribuciones de Axton sin declarar en el config: " +
+                  ", ".join(f"{c}-{n} ({t:,.2f})" for c, n, t in contrib['sinPar']))
+
     if a.sin_excel:
         print("\n(sin Excel por --sin-excel)")
         return 0
@@ -173,7 +216,7 @@ def main():
         'validaM4': f"{len(m['rows']) - len(fallasM4)} de {len(m['rows'])}",
         'validaAx': f"{len(ax['rows']) - len(fallasAx)} de {len(ax['rows'])}",
     }
-    out = X.escribir(res, ancla, meta, a.salida, ruido=a.ruido)
+    out = X.escribir(res, ancla, meta, a.salida, ruido=a.ruido, contrib=contrib)
     print(f"\n== Excel escrito: {a.salida} ==")
     print(f"   {out['legajos']} legajos, {out['conDiferencia']} con diferencia, "
           f"total {plata(out['difTotal'])}")
