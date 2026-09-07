@@ -313,6 +313,30 @@ def escribir(res, ancla, meta, salida, tol=0.01, ruido=1.00, contrib=None):
                 Font(size=10, color=VERDE)
             rr += 1
 
+        if contrib.get('sinCruzar'):
+            rr += 2
+            ws.cell(row=rr, column=1,
+                    value="Contribuciones que NO se pudieron cruzar").font = \
+                Font(bold=True, size=12, color=AZUL)
+            rr += 1
+            ws.cell(row=rr, column=1, value=
+                    "No se emparejan a la fuerza: cruzar dos contribuciones bien vale más que "
+                    "nueve a medias.").font = Font(size=9, italic=True, color="404040")
+            rr += 1
+            cab(ws, [("Contribución", 34), ("Meta4", 16), ("Cód. Axton", 14),
+                     ("Total Meta4", 18), ("Total Axton", 18), ("Por qué no se cruzó", 80)],
+                fila=rr)
+            rr += 1
+            for x in contrib['sinCruzar']:
+                for i, val in enumerate([x['concepto'], x['colM4'], x['codAx'],
+                                         x['meta4'], x['axton'], x['motivo']], 1):
+                    cel = ws.cell(row=rr, column=i, value=val)
+                    cel.font = N; cel.border = BOX
+                    if i in (4, 5):
+                        cel.number_format = MON
+                ws.cell(row=rr, column=6).font = Font(size=10, color=AMBAR)
+                rr += 1
+
         if contrib['sinPar']:
             rr += 2
             ws.cell(row=rr, column=1,

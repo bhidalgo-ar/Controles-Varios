@@ -180,8 +180,8 @@ def main():
                       f" mueve el neto {plata(f['aporteNeto']):>14}  {f['estado']}")
 
     contrib = None
-    if cg:
-        contrib = C.cruzarContribuciones(cg, ax, cfg['contribuciones'], porLegajo,
+    if cfg.get('contribuciones', {}).get('pares'):
+        contrib = C.cruzarContribuciones(cg, m, ax, cfg['contribuciones'], porLegajo,
                                          ruido=a.ruido)
         print("\n== Contribuciones patronales ==")
         for g in contrib['porConcepto']:
@@ -192,6 +192,11 @@ def main():
         porCausa = collections.Counter(f['causa'] for f in contrib['filas'])
         print(f"  de donde vienen las diferencias: " +
               ", ".join(f"{k} {v}" for k, v in porCausa.most_common()) or "  ninguna")
+        for x in contrib['sinCruzar']:
+            print(f"  NO se pudo cruzar {x['concepto']} ({x['colM4']} -> {x['codAx']}): "
+                  f"{x['motivo']}"
+                  + (f" | Axton dice {plata(x['axton'])}" if x['axton'] is not None else "")
+                  + (f" | Meta4 dice {plata(x['meta4'])}" if x['meta4'] is not None else ""))
         if contrib['sinPar']:
             print("  contribuciones de Axton sin declarar en el config: " +
                   ", ".join(f"{c}-{n} ({t:,.2f})" for c, n, t in contrib['sinPar']))

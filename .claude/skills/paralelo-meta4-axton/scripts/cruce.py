@@ -287,8 +287,15 @@ def anclarCargas(cg, m, cfg, tol=0.01):
             'legajos': len(porCargas)}
 
 
-def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
+def cruzarContribuciones(cg, m, a, cfg, porLegajo, tol=0.01, ruido=1.00):
     """Las contribuciones patronales de Meta4 contra las de Axton, por legajo.
+
+    El lado de Meta4 sale de dos fuentes posibles y cada par declara la suya:
+    'meta4' es una columna del control de cargas sociales (que las trae todas) y
+    'tabulado' un codigo de concepto del Tabulado (que trae solo algunas). Si el
+    control de cargas no vino, se cruza lo que el Tabulado alcance y las demas
+    salen listadas como no cruzables: es mejor cruzar dos contribuciones bien que
+    nueve a medias.
 
     Una contribucion se calcula sobre la base, asi que casi nunca es un error
     propio: si el bruto del legajo no coincide, las contribuciones salen mal
@@ -308,11 +315,17 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
     nombres = {v['legajo']: v['nombre'] for v in porLegajo}
 
     CG = collections.defaultdict(lambda: collections.defaultdict(float))
-    for r in cg['rows']:
+    for r in (cg['rows'] if cg else []):
         nombres.setdefault(r['legajo'], r['nombre'])
         for h, v in r['valores'].items():
             if v is not None:
                 CG[r['legajo']][h] += v
+    TAB = collections.defaultdict(lambda: collections.defaultdict(float))
+    for r in m['rows']:
+        nombres.setdefault(r['legajo'], r['nombre'])
+        for c, v in r['conceptos'].items():
+            if v is not None:
+                TAB[r['legajo']][c] += v
     AX = collections.defaultdict(lambda: collections.defaultdict(float))
     BRUTO = collections.defaultdict(float)
     for r in a['rows']:
@@ -322,23 +335,53 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
                 AX[r['legajo']][c] += v
 
     colBase = cfg.get('columnaBase')
-    legajos = sorted(set(CG) & set(AX), key=lambda x: int(x) if x.isdigit() else 0)
+    codBase = cfg.get('codigoBaseTabulado')
+    ladoM4 = set(CG) if cg else set(TAB)
+    legajos = sorted(ladoM4 & set(AX), key=lambda x: int(x) if x.isdigit() else 0)
     cols = set(a['codigos'])
+    codsTab = set(m['codigos'])
 
-    filas, porConcepto = [], []
+    def base(leg):
+        if cg and colBase:
+            return CG[leg].get(colBase, 0.0)
+        return TAB[leg].get(codBase, 0.0) if codBase else 0.0
+
+    def valorM4(par, leg):
+        """El importe de Meta4 del par, de la fuente que el par declare."""
+        if cg and par.get('meta4'):
+            return CG[leg].get(par['meta4'], 0.0)
+        if par.get('tabulado') in codsTab:
+            return TAB[leg].get(par['tabulado'], 0.0)
+        return None
+
+    filas, porConcepto, sinCruzar = [], [], []
     for par in cfg.get('pares', []):
         codigos = [c for c in par['axton'] if c in cols]
+        hayM4 = (cg and par.get('meta4')) or par.get('tabulado') in codsTab
+        if not hayM4 or not codigos:
+            sinCruzar.append({
+                'concepto': par['nombre'],
+                'colM4': par.get('meta4') or par.get('tabulado') or '—',
+                'codAx': "+".join(par['axton']),
+                'motivo': ("no hay de dónde sacarla en Meta4 (falta el control de cargas "
+                           "sociales)" if not hayM4 else
+                           "Axton no trajo la columna en este export"),
+                'meta4': round(sum(valorM4(par, l) or 0.0 for l in legajos), 2) if hayM4 else None,
+                'axton': round(sum(AX[l].get(c, 0.0) for l in legajos for c in par['axton']), 2)
+                         if codigos else None,
+            })
+            continue
         tm = ta = 0.0
         n = 0
         for leg in legajos:
-            vm = CG[leg].get(par['meta4'], 0.0)
+            vm = valorM4(par, leg) or 0.0
             va = sum(AX[leg].get(c, 0.0) for c in codigos)
             tm += vm; ta += va
             dif = round(va - vm, 2)
             if abs(dif) <= tol:
                 continue
             n += 1
-            difBase = round(BRUTO[leg] - CG[leg].get(colBase, 0.0), 2) if colBase else None
+            difBase = round(BRUTO[leg] - base(leg), 2) if (colBase or codBase) else None
             dn = difNeto.get(leg)
             # Lo que decide NO es el neto sino la BASE: el neto puede diferir
             # por una retencion (Ganancias) sin mover un peso de la base, y
@@ -356,7 +399,7 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
             elif baseDifiere:
                 causa = 'Base'
                 coment = (f"El neto coincide pero la base no: Axton contribuye sobre "
-                          f"{BRUTO[leg]:,.2f} y Meta4 sobre {CG[leg].get(colBase, 0.0):,.2f} "
+                          f"{BRUTO[leg]:,.2f} y Meta4 sobre {base(leg):,.2f} "
                           f"({difBase:+,.2f}). Hay un concepto que un sistema toma para "
                           f"contribuir y el otro no.")
             else:
@@ -367,10 +410,10 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
                 # vistazo una alicuota distinta de una base armada distinta puertas
                 # adentro: si los dos porcentajes son casi iguales es la alicuota, y
                 # si uno se va lejos es que ese sistema contribuye sobre otra cosa.
-                base = CG[leg].get(colBase, 0.0) if colBase else 0.0
-                if abs(base) > 1:
-                    coment += (f" Sobre una base de {base:,.2f}, Meta4 contribuye el "
-                               f"{vm / base * 100:.4f}% y Axton el {va / base * 100:.4f}%.")
+                bs = base(leg)
+                if abs(bs) > 1:
+                    coment += (f" Sobre una base de {bs:,.2f}, Meta4 contribuye el "
+                               f"{vm / bs * 100:.4f}% y Axton el {va / bs * 100:.4f}%.")
                 if netoDifiere:
                     coment += (f" Ojo: el neto de este legajo difiere en {dn:+,.2f}, pero por "
                                f"una retención que no toca la base, así que arreglar el neto "
@@ -380,11 +423,13 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
                           'codAx': "+".join(par['axton']),
                           'existeAx': bool(codigos),
                           'meta4': round(vm, 2), 'axton': round(va, 2), 'dif': dif,
-                          'baseM4': round(CG[leg].get(colBase, 0.0), 2) if colBase else None,
+                          'baseM4': round(base(leg), 2) if (colBase or codBase) else None,
                           'baseAx': round(BRUTO[leg], 2),
                           'difBase': difBase, 'difNeto': dn,
                           'causa': causa, 'comentario': coment})
-        porConcepto.append({'concepto': par['nombre'], 'colM4': par['meta4'],
+        porConcepto.append({'concepto': par['nombre'],
+                            'colM4': (par.get('meta4') if (cg and par.get('meta4'))
+                                      else par.get('tabulado')),
                             'codAx': "+".join(par['axton']), 'existeAx': bool(codigos),
                             'meta4': round(tm, 2), 'axton': round(ta, 2),
                             'dif': round(ta - tm, 2), 'legajos': n})
@@ -395,6 +440,7 @@ def cruzarContribuciones(cg, a, cfg, porLegajo, tol=0.01, ruido=1.00):
                      and any((r['conceptos'].get(c) or 0) != 0 for r in a['rows'])),
                     key=int)
     return {'filas': filas, 'porConcepto': porConcepto, 'legajos': legajos,
+            'sinCruzar': sinCruzar,
             'sinPar': [(c, a['labels'][c],
                         round(sum(r['conceptos'].get(c) or 0.0 for r in a['rows']), 2))
                        for c in sinPar]}

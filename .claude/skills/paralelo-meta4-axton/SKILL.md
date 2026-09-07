@@ -125,6 +125,17 @@ porcentajes casi iguales, diferencia de pesos) de una base armada distinta puert
 de los dos se va lejos: 14,62 % contra 10,76 % en un caso real fue Meta4 contribuyendo sin
 descontar las vacaciones).
 
+**El lado de Meta4 sale de dos fuentes y cada par declara la suya.** `meta4` es una columna
+del control de cargas sociales, que las trae todas; `tabulado` es un código de concepto del
+Tabulado, que trae sólo algunas (en la quincena de este cliente, tres). Si el control de cargas
+no vino, se cruza lo que el Tabulado alcance y **las demás salen listadas como no cruzables, con
+el total que sí declara cada lado**. No se emparejan a la fuerza: cruzar dos contribuciones bien
+vale más que ocho a medias.
+
+**No saques importes por concepto del PDF.** El texto sale desordenado y el nombre del concepto
+aparece *después* de su importe partido en fragmentos: reconstruirlo da números coherentes y
+equivocados. Del PDF sale el ancla y nada más.
+
 **El archivo de cargas tiene su propia ancla**: sus columnas de aportes del empleado
 (`TOT_JUB`, `TOT_LEY`, `TOT_OS`) tienen que dar idénticas a los conceptos del Tabulado. Si no,
 los dos archivos son de corridas distintas y el script corta: se declara en `aportesDeControl`

@@ -129,5 +129,96 @@
     "reprodujeron exacto los de Meta4 (-900.000,00 el anticipo y 151.548,57 el embargo), asi",
     "que se comparan contra la SUMA de los dos codigos y salen listados en el Excel para que",
     "el analista corrija la tabla, que es el documento del cliente."
-  ]
+  ],
+  "_contribuciones": [
+    "El cruce de las contribuciones patronales. Cada par declara de donde sale el lado de",
+    "Meta4: 'meta4' es una columna del control de cargas sociales (que las trae todas) y",
+    "'tabulado' un codigo de concepto del Tabulado (que en la quincena trae solo 6105, 6142 y",
+    "6050). Si el control de cargas no vino, se cruza lo que el Tabulado alcance y el resto sale",
+    "listado como no cruzable.",
+    "'codigoBaseTabulado' es 5840 (TOT_HAB_CON_AP): la remuneracion sobre la que Meta4",
+    "contribuye, que se compara contra el Bruto de Axton para saber si una diferencia viene de",
+    "la base o del calculo."
+  ],
+  "contribuciones": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "NOMBRE",
+    "columnaBase": "TOT_HAB_CON_AP",
+    "codigoBaseTabulado": "5840",
+    "aportesDeControl": [
+      {
+        "meta4": "TOT_JUB",
+        "tabulado": "6005"
+      },
+      {
+        "meta4": "TOT_LEY",
+        "tabulado": "6018"
+      },
+      {
+        "meta4": "TOT_OS",
+        "tabulado": "6041"
+      }
+    ],
+    "pares": [
+      {
+        "nombre": "Contribución Jubilación",
+        "meta4": "TOT_CONT_JUB",
+        "tabulado": "6105",
+        "axton": [
+          "880011"
+        ]
+      },
+      {
+        "nombre": "Contribución F.N.E.",
+        "meta4": "TOT_CONT_FNE",
+        "tabulado": "6142",
+        "axton": [
+          "880014"
+        ]
+      },
+      {
+        "nombre": "Aporte A.R.T. (fijo)",
+        "meta4": "APORTE_ART",
+        "tabulado": "6050",
+        "axton": [
+          "880021"
+        ]
+      },
+      {
+        "nombre": "Contribución Obra Social",
+        "meta4": "TOT_CONT_OS",
+        "axton": [
+          "880015"
+        ]
+      },
+      {
+        "nombre": "Contribución Ley 19032",
+        "meta4": "TOT_CONT_LEY",
+        "axton": [
+          "880012"
+        ]
+      },
+      {
+        "nombre": "Contribución ANSES",
+        "meta4": "TOT_CONT_ANSES",
+        "axton": [
+          "880013"
+        ]
+      },
+      {
+        "nombre": "A.R.T. variable",
+        "meta4": "TOT_ART_VARI",
+        "axton": [
+          "880022"
+        ]
+      },
+      {
+        "nombre": "Seguro de vida obligatorio",
+        "meta4": "SEGURO_VIDA",
+        "axton": [
+          "880025"
+        ]
+      }
+    ]
+  }
 }
