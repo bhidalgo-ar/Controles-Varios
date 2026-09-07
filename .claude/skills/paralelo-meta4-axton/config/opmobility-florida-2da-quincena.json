@@ -87,7 +87,7 @@
     ]
   },
   "axton": {
-    "_retenciones": "605700 (anticipo), 605694 (farmacia), 605710/605712 (judiciales) y 600005 (Resol 227/01) son las que esta quincena usa de verdad.",
+    "_retenciones": "605700 (anticipo), 605694 (farmacia), 605710/605712 (judiciales) y 600005 (Resol 227/01) son las que esta quincena usa de verdad. 605701 y 605715 son los mismos conceptos con otro codigo ('DC'): el cliente movio el anticipo y el embargo ahi a mitad del paralelo, asi que van declarados los dos.",
     "retenciones": [
       "600000",
       "600005",
@@ -97,8 +97,10 @@
       "605130",
       "605694",
       "605700",
+      "605701",
       "605710",
       "605712",
+      "605715",
       "609995"
     ],
     "_exentos": "599997 es el SOBREGIRO: Axton lo agrega cuando el neto le daria negativo, para dejarlo en cero. Es exento y sin el la validacion 1 no cierra.",
@@ -113,5 +115,19 @@
       "9"
     ]
   },
-  "mapeosDeclarados": {}
+  "mapeosDeclarados": {
+    "605700": [
+      "605701"
+    ],
+    "605710": [
+      "605715"
+    ]
+  },
+  "_mapeosDeclarados": [
+    "Axton mudo el anticipo de 605700 a 605701 y el embargo de 605710 a 605715 a mitad del",
+    "paralelo, sin que la tabla de equivalencias cambie. Los importes del codigo nuevo",
+    "reprodujeron exacto los de Meta4 (-900.000,00 el anticipo y 151.548,57 el embargo), asi",
+    "que se comparan contra la SUMA de los dos codigos y salen listados en el Excel para que",
+    "el analista corrija la tabla, que es el documento del cliente."
+  ]
 }
