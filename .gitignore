@@ -38,3 +38,7 @@ test-results/
 *.csv
 *.tsv
 !Catalogo_Conceptos_Plantilla.xlsx
+
+# Cache de Python (los scripts de las skills se corren sin build)
+__pycache__/
+*.pyc
