@@ -43,6 +43,7 @@ globalThis.Dexie = Dexie;
 const {
   runContaDesglosada,
   summarizeContaDesglosada,
+  lineasDelArchivoDesglosada,
   DEFAULT_CONTA_DESGLOSADA_CONFIG,
 } = await import('./js/controls/contaDesglosada.js');
 
@@ -622,6 +623,40 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   assert('una tabla vacía es válida: la columna de Meta4 sale vacía',
     textoAEquivalencias('').equivalencias.length === 0
     && textoAEquivalencias('').errores.length === 0);
+}
+
+// ── 15. El archivo de la desglosada: DEBE y HABER sin celdas vacías ────────
+//
+// Contaduría del cliente pidió que el lado que no lleva importe salga en 0,00 y
+// no vacío. Vale sólo para el archivo de la Contabilidad Desglosada: el Asiento
+// se queda como está. Y el cero no se escribe en la única línea donde el vacío
+// significa "falta el dato" — la que vino sin importe en el origen (D-036).
+{
+  const rows = [
+    fila({ legajo: '1', nro: '100', concepto: 'Sueldo', importe: '1.000,00',
+           debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '500', concepto: 'Jubilacion', importe: '-30,00',
+           debe: 'Descuentos varios', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '2', nro: '100', concepto: 'Sueldo', importe: '',
+           debe: 'Sueldos Ventas', haber: 'Sueldos a pagar' }),
+  ];
+  const r = runContaDesglosada(rows, [], MAPPING);
+  const archivo = lineasDelArchivoDesglosada(r);
+
+  const conPlata = archivo.filter(l => l.importe !== null);
+  assert('en el archivo, toda línea con importe trae DEBE y HABER con número',
+    conPlata.length > 0 && conPlata.every(l => l.debe !== null && l.haber !== null));
+  assert('…y el lado que no lleva plata vale 0, no un importe inventado',
+    conPlata.every(l => (l.debe_haber === 'DEBE' ? l.haber : l.debe) === 0));
+  assert('…y el lado que sí lleva plata no se toca',
+    archivo.find(l => l.legajo === '1' && l.nro === '100').debe === 1000);
+
+  const sinImporte = archivo.find(l => l.legajo === '2' && l.nro === '100');
+  assert('la línea que vino sin importe sigue con los dos lados vacíos',
+    sinImporte.debe === null && sinImporte.haber === null);
+
+  assert('…y las líneas del control quedan intactas: el 0 es sólo del archivo',
+    r.lineas.find(l => l.legajo === '1' && l.nro === '100').haber === null);
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
