@@ -3838,3 +3838,42 @@ semáforo dan exactamente lo mismo). Lo que cambia es cómo se lee el archivo de
 `js/ui/contaDesglosadaConfigEditor.js`, `js/exports/contracts.js`,
 `tests/contaDesglosadaControl.test.js`, `specs/conta-desglosada-asiento.md`, D-020, D-035, D-036,
 D-038, D-039, D-042, D-066.
+
+---
+
+## D-096 — En el archivo de la desglosada, DEBE y HABER salen en 0,00 y no vacíos: excepción acotada a "`null` no es `0`"
+
+**Fecha:** 2026-09-15
+**Contexto:** Contaduría del cliente (COTY) pidió, vía Mica, que en la Contabilidad Desglosada el lado
+de DEBE o HABER que no lleva importe salga con `0,00` en vez de la celda vacía. PENDIENTE: falta el
+porqué de Contaduría — no se registró si es para que cierre una fórmula del lado de ellos, un
+requisito de su sistema contable, u otra cosa.
+
+**Decisión:** se agregó `lineasDelArchivoDesglosada(results)` en `js/controls/contaDesglosada.js`, que
+mapea las líneas del cálculo (`lineasDeLaDesglosada`) **en el borde del export**: donde antes un lado
+sin importe quedaba `null`, ahora sale `0`. La usan los tres formatos de la desglosada — `.xlsx`, CSV y
+"Copiar" — y **sólo** ellos: el Asiento Contable sigue con la celda vacía, y la pantalla del control
+tampoco cambia, porque ninguna de las dos lee `lineasDelArchivoDesglosada`.
+
+Es una excepción **acotada** al gotcha "`null` no es `0`" del `CLAUDE.md`, no una derogación: cada
+línea de la desglosada lleva el importe de un solo lado **por construcción** (regla 1, desdoblamiento,
+§2 de la spec), así que el lado que no lo lleva no es un dato que falte — es la mitad de la línea que
+no correspondía escribir. `0,00` ahí no tapa nada, describe correctamente "de este lado no va nada".
+
+La única línea donde el vacío **sí** es falta de dato es la que vino sin importe en el origen: ahí los
+dos lados —DEBE y HABER— están en `null`, y `lineasDelArchivoDesglosada` los deja así. Completarla con
+`0,00` la volvería indistinguible de una línea que sí tiene importe pero no mueve ese lado, y el gotcha
+que cita D-036 es exactamente ese: una línea sin dato completada con cero no la detecta nadie.
+
+**Alternativas descartadas:**
+- **Escribir el cero en el cálculo** (`armarDesglosada`, donde nace cada línea) en vez de en el export:
+  se descartó porque ahí adentro `debe`/`haber` siguen siendo la fuente para la pantalla del control y
+  para el Asiento (`lineasDeLaDesglosada` es la base de los dos), y los dos tienen que seguir
+  distinguiendo "no hay importe de este lado" de "hay importe y vale cero" para lo que ya usan esos
+  datos (semáforo, fichas). Meter el cero ahí lo hubiera propagado a los dos lugares que no lo pidieron.
+
+**Motivo:** pedido explícito de Contaduría del cliente, vía Mica. El porqué de fondo queda
+`PENDIENTE: falta el porqué`.
+
+**Detalle:** `js/controls/contaDesglosada.js` (`lineasDelArchivoDesglosada`),
+`tests/contaDesglosadaControl.test.js` (sección 15), `specs/conta-desglosada-asiento.md` §4, D-036.

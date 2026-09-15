@@ -1369,10 +1369,31 @@ export function lineasDeLaDesglosada(results) {
   return results.asiento?.desglosadaConCodigo || results.lineas;
 }
 
+/**
+ * Las líneas como salen en el ARCHIVO de la Contabilidad Desglosada: DEBE y
+ * HABER con 0,00 en vez de la celda vacía, que es como lo pidió Contaduría del
+ * cliente. Sólo la desglosada — el Asiento se queda con la celda vacía.
+ *
+ * Acá el cero no tapa nada, y por eso es la excepción a "`null` no es `0`": una
+ * línea de la desglosada lleva el importe de UN solo lado por construcción, así
+ * que el lado vacío siempre significa "de este lado no va nada", nunca "no hay
+ * dato". La única línea donde el vacío SÍ es falta de dato es la que vino sin
+ * importe en el origen: ahí los dos lados están vacíos, y se quedan vacíos —
+ * completarla con 0,00 la haría indistinguible de una línea que no mueve plata
+ * (D-036).
+ */
+export function lineasDelArchivoDesglosada(results) {
+  return lineasDeLaDesglosada(results).map(l => (
+    l.debe === null && l.haber === null
+      ? l
+      : { ...l, debe: l.debe ?? 0, haber: l.haber ?? 0 }
+  ));
+}
+
 async function exportDesglosadaToXlsx(results) {
   await loadExcelJS();
   const wb = new window.ExcelJS.Workbook();
-  writeContractSheet(wb, EXPORT_CONTRACTS.conta_desglosada, lineasDeLaDesglosada(results), {
+  writeContractSheet(wb, EXPORT_CONTRACTS.conta_desglosada, lineasDelArchivoDesglosada(results), {
     totalRow: { legajo: 'TOTAL', debe: results.totalDebe, haber: results.totalHaber },
   });
   await downloadWorkbook(wb, `Contabilidad_Desglosada_${periodSuffix(results.period)}.xlsx`);
@@ -1405,7 +1426,7 @@ function filasDeVista(results, vistaId) {
       fmtNum(f.debe), fmtNum(f.haber), fmtNum(f.neto_debe), fmtNum(f.neto_haber)]);
     nombre = `Asiento_Contable_${suf}.csv`;
   } else {
-    const lineas = lineasDeLaDesglosada(results);
+    const lineas = lineasDelArchivoDesglosada(results);
     headers = ['Legajo', 'Ingreso', 'Nro', 'Nro Meta4', 'Concepto', 'Importe', 'Centro de Costo',
       'Nro Cuenta', 'Cuenta', 'DEBE_HABER', 'DEBE', 'HABER'];
     rows = lineas.map(l => [l.legajo, l.ingreso, l.nro, l.nro_meta4 || '', l.concepto,
