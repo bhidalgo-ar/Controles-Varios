@@ -7,6 +7,25 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(conta): DEBE y HABER con 0,00 en el archivo de la Contabilidad Desglosada — 2026-09-15
+
+- **Qué cambia para el analista, en el `.xlsx`, el CSV y el "Copiar" de la Contabilidad Desglosada
+  (COTY):** el lado de DEBE o HABER que una línea no lleva salía con la celda **vacía**; ahora sale con
+  **`0,00`**. Lo pidió Contaduría del cliente vía Mica. `PENDIENTE: falta el porqué` — no quedó
+  registrado para qué lo necesitan del otro lado.
+- **Vale sólo para la salida de la Contabilidad Desglosada.** El Asiento Contable se descarga igual que
+  antes, con la celda vacía en el lado sin importe, y la pantalla del control tampoco cambia.
+- **La única línea que se queda con los dos lados vacíos** es la que vino sin importe en el origen — ahí
+  el vacío sí significa que falta el dato, y completarla con `0,00` la volvería indistinguible de una
+  línea que no mueve plata (D-036).
+- El cero se escribe en el borde del export (`lineasDelArchivoDesglosada`), no en el cálculo: es una
+  excepción acotada al gotcha "`null` no es `0`" del `CLAUDE.md`, porque en la desglosada cada línea
+  lleva importe de un solo lado por construcción y el lado vacío nunca significa "no hay dato". Ver
+  **D-096**.
+- Verificado: `tests/contaDesglosadaControl.test.js` sección 15, `npm run test:unit` completo en verde
+  (113 asserts en este archivo).
+- Ver `specs/conta-desglosada-asiento.md` §4.
+
 ### feat(nr): la planilla del Control NR muestra los dos lados por concepto, el .xlsx cierra con TOTAL y se suma AJUSTE_NR — 2026-09-03
 
 - **Qué cambia para el analista, en la solapa «Planilla» del Control NR:** antes cada concepto era **una

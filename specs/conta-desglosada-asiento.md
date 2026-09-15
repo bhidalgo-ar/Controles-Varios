@@ -1,7 +1,7 @@
 # Contabilidad Desglosada + Asiento — COTY (Axton)
 
 **Estado:** implementado — control `conta_desglosada` del `CONTROL_REGISTRY`, cubierto por
-`tests/contaDesglosadaControl.test.js` (74 asserts). Verificado el 2026-08-19 contra los dos
+`tests/contaDesglosadaControl.test.js` (113 asserts). Verificado el 2026-08-19 contra los dos
 archivos reales de COTY del período 05/2026: reproduce **exactas** las cinco anclas del prototipo
 (ver §7). **Gana su solapa Fichas por cuenta contable el 2026-08-21** (tanda 7 de
 `specs/vista-estandar-resultados.md`, D-084), cubierta por `tests/fichasCuentaContable.test.js`, y de
@@ -20,6 +20,10 @@ número de cuenta adentro sería el mismo archivo dos veces. **Ningún número c
 filas del asiento, las cuentas patrimoniales y el semáforo dan exactamente lo mismo; lo que cambia es
 cómo se lee el archivo del otro lado. Con eso se cierra el pendiente de §8 sobre si la desglosada sale
 del estudio: **sale, y la fecha de ingreso se queda** (decisión de Willy).
+**El 2026-09-15, a pedido de Contaduría del cliente vía Mica, DEBE y HABER en el archivo de la
+desglosada salen con `0,00` en el lado que no lleva importe, en vez de la celda vacía** (D-096): vale
+sólo para la desglosada —`.xlsx`, CSV y "Copiar"—, el Asiento Contable y la pantalla del control se
+quedan como están.
 
 **Qué es:** un control de **generación** (`mode: 'Generar Reporte'`, `tabRequired: false`): no cruza
 dos archivos, arma tres. A partir del reporte "Totales de Concepto" de Axton produce la Contabilidad
@@ -169,6 +173,15 @@ descargue con la columna vacía.
 si no se subió el Reporte de Cuentas de Redefinición del cliente (o si esa cuenta no está en él), y
 `Nro Meta4` si el concepto no está en la tabla de equivalencias. Las dos cosas salen listadas en
 resultados con qué hacer; ninguna se completa con un número deducido.
+
+**En el archivo de la desglosada, DEBE y HABER salen en `0,00` y no vacíos** (D-096, pedido de
+Contaduría del cliente vía Mica, `PENDIENTE: falta el porqué`). No es lo mismo que las dos columnas de
+arriba: acá el `0,00` no reemplaza a un dato que falta, porque cada línea de la desglosada lleva
+importe de un solo lado por construcción (regla 1, §2) — el lado sin importe siempre significa "de este
+lado no va nada". La única línea que sí queda con los dos lados vacíos es la que vino sin importe en el
+origen, para no volverla indistinguible de una línea que no mueve plata (D-036). Se escribe en el borde
+del export —`lineasDelArchivoDesglosada(results)`—, así que ni el cálculo, ni la pantalla del control,
+ni el Asiento Contable lo ven: el Asiento sigue con la celda vacía en el lado sin importe.
 
 **La solapa Fichas (tanda 7, D-084) no agrega una columna a ninguno de los dos.** Es pantalla, la ve
 el analista, y su desglose es por concepto de liquidación —código y nombre, que son configuración, no
