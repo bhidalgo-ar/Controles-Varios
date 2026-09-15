@@ -208,9 +208,18 @@ el conteo de tests, no el código de salida.
 
 **Y aun con la variable puesta, en una sesión remota el e2e no pasa completo: los ~17 tests que abren
 la app real (`goto('/')`) fallan siempre.** `index.html` trae Dexie y SheetJS por CDN y el contenedor
-no llega. Los que cargan un fixture de `tests/e2e/fixtures/` sí corren y son los que sirven para
-verificar acá; lo que toca la app de verdad lo prueba CI o nadie. No es un bug del código y no se
-"arregla" volviendo a correrlo.
+no llega. Los que cargan un fixture de `tests/e2e/fixtures/` sí corren. No es un bug del código y no
+se "arregla" volviendo a correrlo.
+
+**Pero eso no quiere decir que la app no se pueda abrir acá.** `npm run servir:local` la sirve con
+Dexie, SheetJS y ExcelJS tomados de `node_modules` en vez del CDN, y Chromium ya está instalado
+(`/opt/pw-browsers/chromium`): se puede abrir una pantalla, apretar los botones, **bajar el .xlsx y
+mirarle las celdas** con `exceljs` desde node. Para el archivo que se descarga hay que interceptar
+ExcelJS desde Playwright — el `page.route` está escrito en el encabezado de `scripts/servir-local.mjs`.
+Con `APP_ROOT` apuntando a un `git worktree` de un commit anterior se levanta la versión de antes en
+otro puerto y se comparan los dos archivos: es la forma de probar que un cambio de export hace lo que
+dice, y de que lo que no tenía que cambiar salió igual. **Así que "esto sólo se puede verificar en el
+navegador y no lo pude abrir" ya no es una razón para no probar un cambio.**
 
 Un `count()` crudo (`expect(await loc.count()).toBe...`) es una foto sin reintento: puesto justo
 después de un click o de abrir una ficha, saca la foto antes de que el DOM nuevo exista. Usá las

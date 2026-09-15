@@ -7,6 +7,24 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(tooling): servir la app sin internet, para verificar cambios en el navegador real desde una sesión remota — 2026-09-15
+
+- **No cambia nada de lo que ve el analista.** Es una herramienta de desarrollo: `npm run servir:local`
+  sirve la app tomando SheetJS, Dexie y ExcelJS de `node_modules` en vez de los CDN, para poder abrirla
+  en un navegador (Chromium ya instalado en el contenedor) cuando el entorno no tiene salida a internet
+  — hasta ahora, cualquier verificación que necesitara la pantalla real quedaba sin hacer hasta que la
+  corriera Willy a mano. Con `APP_ROOT` apuntando a un `git worktree` de un commit anterior se levanta la
+  versión de antes en otro puerto, para comparar el archivo de antes contra el de después en el mismo
+  fixture.
+- **Con esto se verificó el cambio del `0,00` de la Contabilidad Desglosada (PR #202, D-096)**: en el mismo
+  fixture, antes de esa corrección salían 14 celdas de DEBE/HABER vacías y 0 en cero; después, 0 vacías
+  y 14 en cero. El Asiento Contable salió byte a byte idéntico en las dos versiones. Y en una fila a la
+  que se le sacó el importe, la única celda que queda vacía es la de esa fila. Es verificación con datos
+  de fixture inventados; el archivo real de COTY sigue sin abrirse (`docs/pruebas-pendientes.md` §2).
+- `exceljs` entra como devDependency — la app la sigue cargando por CDN en producción, esto es sólo para
+  el servidor local.
+- Detalle: `scripts/servir-local.mjs`, `CLAUDE.md` (sección "Tests y CI").
+
 ### feat(conta): DEBE y HABER con 0,00 en el archivo de la Contabilidad Desglosada — 2026-09-15
 
 - **Qué cambia para el analista, en el `.xlsx`, el CSV y el "Copiar" de la Contabilidad Desglosada

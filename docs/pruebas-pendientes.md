@@ -28,12 +28,13 @@ Si sólo tenés tiempo para tres cosas, son estas, y en este orden:
    pero hay **tres cosas mergeadas que nunca viste**: tus tres arreglos, el Detalle rediseñado en fichas
    y un bug de unidades que afectaba a 263 legajos. Más el tilde de jubilado, que nadie vio funcionando
    en pantalla. §1
-2. **Contabilidad Desglosada + Asiento (COTY)** — el cálculo cierra al centavo contra el prototipo,
-   pero **nadie abrió nunca los Excel que descarga la app**. Es el riesgo más silencioso de la
-   lista: un archivo que sale mal formateado no lo detecta ningún test. Y ahora hay algo más para
-   mirar ahí: las **tres columnas que pidió Contaduría del cliente** (legajo sin ceros, número de
-   cuenta y número de concepto de Meta4), que se probaron con datos inventados y no todavía con el
-   archivo real. §2
+2. **Contabilidad Desglosada + Asiento (COTY)** — el cálculo cierra al centavo contra el prototipo, y
+   desde el 2026-09-15 ya se pudo abrir el `.xlsx` en un navegador real (fixture inventado, con
+   `npm run servir:local`) y confirmar el cambio del `0,00` de DEBE/HABER. Pero **nadie abrió todavía
+   los Excel con el archivo real de COTY**, que sigue siendo el riesgo más silencioso de la lista: un
+   archivo que sale mal formateado no lo detecta ningún test. Y ahí hay algo más para mirar: las
+   **tres columnas que pidió Contaduría del cliente** (legajo sin ceros, número de cuenta y número de
+   concepto de Meta4), que se probaron con datos inventados y no todavía con el archivo real. §2
 3. **Novedades N1 + N2 (SIASA / Merz)** — dos controles nuevos, completos y en el registry, que
    **no vieron un solo archivo real**. El layout del importador está deducido de un relevamiento, no
    confirmado. §4 y §5
@@ -117,9 +118,16 @@ agrupado por cuenta, y controla que cierre. Desde el 2026-08-31 son **dos** arch
 
 ### Lo que hay que probar
 
-**Abrir los dos `.xlsx` que descarga la app y compararlos con los del prototipo.** Esto no se pudo
-hacer en el entorno de desarrollo porque la librería que arma los Excel viene por CDN y la red la
-bloquea. Los cinco números que tienen que aparecer, y que ya se sabe que el cálculo produce bien:
+**2026-09-15 — dejó de ser cierto que la descarga no se puede ejercitar acá.** `npm run servir:local`
+sirve la app con ExcelJS de `node_modules`, así que ahora se puede bajar el `.xlsx` desde el navegador
+real en el entorno remoto. Con eso ya se verificó, con un fixture inventado, el cambio del `0,00` de
+DEBE/HABER (PR #202): 14 celdas antes vacías ahora en `0,00`, el Asiento Contable idéntico byte a byte
+entre las dos versiones, y la fila sin importe es la única que sigue con la celda vacía. Lo que sigue
+pendiente es abrir los `.xlsx` **con el archivo real de COTY**, que es lo único que puede confirmar el
+prototipo, el formato de número/fecha que espera el Excel del contador y los 96 pares de Meta4.
+
+**Abrir los dos `.xlsx` que descarga la app y compararlos con los del prototipo, con el archivo real.**
+Los cinco números que tienen que aparecer, y que ya se sabe que el cálculo produce bien:
 
 - balance bruto **1.441.239.270,46**
 - balance neteado **1.359.204.242,38**
@@ -389,7 +397,7 @@ Y **una cuenta sin código pasa de leerse "Con diferencia" a leerse "Sin compara
 | **El residuo de cada ficha** | **Siempre cero.** Por construcción el desglose es el mismo saldo partido por concepto | Un residuo distinto de cero es la única señal de que el desglose y el saldo se desalinearon — y eso no se nota mirando los totales, que siguen cerrando |
 | Una cuenta **sin código** | Chip ámbar "Sin comparar", con la conclusión de que falta el Reporte de Cuentas de Redefinición del cliente | En rojo "Con diferencia" se leía como un problema de importes, cuando el balance cierra y lo que falta es el otro archivo |
 | Una **corrida vieja** reabierta (guardada antes de que existiera el desglose) | Dice que la corrida no guardó el desglose | Antes leía eso mismo como "los conceptos no suman al saldo" y te marcaba todas las cuentas en rojo |
-| **Los tres `.xlsx` que descarga la app** | Sigue pendiente de antes (§2): abrirlos y compararlos con los del prototipo | Un Excel con importes como texto se ve bien en pantalla y no se puede sumar. Ningún test lo agarra |
+| **Los `.xlsx` que descarga la app, con el archivo real de COTY** | Sigue pendiente de antes (§2): con fixture ya se abrieron con `npm run servir:local`, falta con el archivo real | Un Excel con importes como texto se ve bien en pantalla y no se puede sumar. Ningún test lo agarra |
 
 ---
 
