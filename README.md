@@ -28,6 +28,10 @@ Y abrir `http://localhost:4173` en el navegador.
 
 Cualquier otro static server sirve igual (`npx serve`, la extensión Live Server de VS Code, etc.) — lo único que importa es que sea HTTP, no `file://`.
 
+**Para uso normal esto alcanza.** `npm run servir:local` es otra cosa: sirve la app con SheetJS, Dexie
+y ExcelJS tomados de `node_modules` en vez del CDN, y existe sólo para poder abrir la app real desde una
+sesión remota sin salida a internet (ver `CLAUDE.md`, sección "Tests y CI", y `scripts/servir-local.mjs`).
+
 ---
 
 ## Uso básico
