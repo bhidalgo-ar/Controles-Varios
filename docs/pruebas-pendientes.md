@@ -121,10 +121,15 @@ agrupado por cuenta, y controla que cierre. Desde el 2026-08-31 son **dos** arch
 **2026-09-15 — dejó de ser cierto que la descarga no se puede ejercitar acá.** `npm run servir:local`
 sirve la app con ExcelJS de `node_modules`, así que ahora se puede bajar el `.xlsx` desde el navegador
 real en el entorno remoto. Con eso ya se verificó, con un fixture inventado, el cambio del `0,00` de
-DEBE/HABER (PR #202): 14 celdas antes vacías ahora en `0,00`, el Asiento Contable idéntico byte a byte
-entre las dos versiones, y la fila sin importe es la única que sigue con la celda vacía. Lo que sigue
-pendiente es abrir los `.xlsx` **con el archivo real de COTY**, que es lo único que puede confirmar el
-prototipo, el formato de número/fecha que espera el Excel del contador y los 96 pares de Meta4.
+DEBE/HABER (PR #202): 14 celdas antes vacías ahora en `0,00`, y el Asiento Contable idéntico byte a
+byte entre las dos versiones.
+
+**2026-09-16 — se cerró el pendiente del porqué de Contaduría, y con eso cae la excepción de la fila
+sin importe (D-096 revisada).** Ya no queda ninguna celda de importe vacía en el archivo: `Importe`,
+DEBE y HABER de esa línea también salen en `0,00`. Verificado en la app real con `npm run
+servir:local` bajando el `.xlsx` y mirando las celdas de datos. Lo que sigue pendiente es abrir los
+`.xlsx` **con el archivo real de COTY**, que es lo único que puede confirmar el prototipo, el formato
+de número/fecha que espera el Excel del contador y los 96 pares de Meta4.
 
 **Abrir los dos `.xlsx` que descarga la app y compararlos con los del prototipo, con el archivo real.**
 Los cinco números que tienen que aparecer, y que ya se sabe que el cálculo produce bien:
