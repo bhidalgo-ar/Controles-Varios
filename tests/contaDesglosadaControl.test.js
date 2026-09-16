@@ -627,10 +627,17 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
 
 // ── 15. El archivo de la desglosada: DEBE y HABER sin celdas vacías ────────
 //
-// Contaduría del cliente pidió que el lado que no lleva importe salga en 0,00 y
-// no vacío. Vale sólo para el archivo de la Contabilidad Desglosada: el Asiento
-// se queda como está. Y el cero no se escribe en la única línea donde el vacío
-// significa "falta el dato" — la que vino sin importe en el origen (D-036).
+// Contaduría del cliente trabaja este archivo con fórmulas y no lo importa a
+// ningún sistema, así que DEBE y HABER salen en 0,00 y nunca vacíos — **sin
+// excepción**, también en la línea que vino sin importe en el origen (D-096).
+// Vale sólo para el archivo de la Contabilidad Desglosada: el Asiento se queda
+// como está, y las líneas del control tampoco cambian.
+//
+// Las TRES columnas de plata (Importe, DEBE y HABER) van juntas: una fila con
+// DEBE y HABER en cero pero Importe vacío se contradice sola. El precio es que
+// en el .xlsx ya no se distingue "no vino el dato" de "vale cero"; lo que queda
+// como señal es la pantalla (`filasSinImporte`, que el control informa en
+// resultados) y las líneas del control, que siguen en `null`.
 {
   const rows = [
     fila({ legajo: '1', nro: '100', concepto: 'Sueldo', importe: '1.000,00',
@@ -643,20 +650,26 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   const r = runContaDesglosada(rows, [], MAPPING);
   const archivo = lineasDelArchivoDesglosada(r);
 
+  assert('en el archivo NINGUNA línea deja DEBE o HABER vacío',
+    archivo.length > 0 && archivo.every(l => l.debe !== null && l.haber !== null));
+
   const conPlata = archivo.filter(l => l.importe !== null);
-  assert('en el archivo, toda línea con importe trae DEBE y HABER con número',
-    conPlata.length > 0 && conPlata.every(l => l.debe !== null && l.haber !== null));
-  assert('…y el lado que no lleva plata vale 0, no un importe inventado',
-    conPlata.every(l => (l.debe_haber === 'DEBE' ? l.haber : l.debe) === 0));
+  assert('…el lado que no lleva plata vale 0, no un importe inventado',
+    conPlata.length > 0 && conPlata.every(l => (l.debe_haber === 'DEBE' ? l.haber : l.debe) === 0));
   assert('…y el lado que sí lleva plata no se toca',
     archivo.find(l => l.legajo === '1' && l.nro === '100').debe === 1000);
 
   const sinImporte = archivo.find(l => l.legajo === '2' && l.nro === '100');
-  assert('la línea que vino sin importe sigue con los dos lados vacíos',
-    sinImporte.debe === null && sinImporte.haber === null);
+  assert('la línea que vino sin importe sale con sus TRES importes en 0',
+    sinImporte.debe === 0 && sinImporte.haber === 0 && sinImporte.importe === 0);
+  assert('…y el control la sigue contando para avisarla en resultados, que es la '
+    + 'única señal que queda',
+    r.filasSinImporte === 1);
 
-  assert('…y las líneas del control quedan intactas: el 0 es sólo del archivo',
-    r.lineas.find(l => l.legajo === '1' && l.nro === '100').haber === null);
+  assert('las líneas del control quedan intactas: el 0 es sólo del archivo',
+    r.lineas.find(l => l.legajo === '1' && l.nro === '100').haber === null
+    && r.lineas.find(l => l.legajo === '2' && l.nro === '100').debe === null
+    && r.lineas.find(l => l.legajo === '2' && l.nro === '100').importe === null);
 }
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
