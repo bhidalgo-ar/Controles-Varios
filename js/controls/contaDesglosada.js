@@ -1371,23 +1371,32 @@ export function lineasDeLaDesglosada(results) {
 
 /**
  * Las líneas como salen en el ARCHIVO de la Contabilidad Desglosada: DEBE y
- * HABER con 0,00 en vez de la celda vacía, que es como lo pidió Contaduría del
- * cliente. Sólo la desglosada — el Asiento se queda con la celda vacía.
+ * HABER con 0,00 en vez de la celda vacía, **sin excepción**. Sólo la
+ * desglosada — el Asiento se queda como estaba.
  *
- * Acá el cero no tapa nada, y por eso es la excepción a "`null` no es `0`": una
- * línea de la desglosada lleva el importe de UN solo lado por construcción, así
- * que el lado vacío siempre significa "de este lado no va nada", nunca "no hay
- * dato". La única línea donde el vacío SÍ es falta de dato es la que vino sin
- * importe en el origen: ahí los dos lados están vacíos, y se quedan vacíos —
- * completarla con 0,00 la haría indistinguible de una línea que no mueve plata
- * (D-036).
+ * Es una excepción acotada a "`null` no es `0`", y la justifica para qué se usa
+ * este archivo: no se importa a ningún sistema, lo trabaja Contaduría del
+ * cliente a mano y con fórmulas, donde una celda vacía en el medio de un rango
+ * es justamente lo incómodo (D-096). Para casi todas las líneas el cero además
+ * no tapa nada: llevan el importe de UN solo lado por construcción, así que el
+ * lado vacío significa "de este lado no va nada" y no "no hay dato".
+ *
+ * La línea que vino **sin importe** en el origen es la que sí pierde algo: sus
+ * tres importes nacen en `null` porque falta el dato, y acá salen en 0,00 igual
+ * que una línea que no mueve plata. Se decidió a sabiendas (D-096): el archivo
+ * no se importa a ningún sistema, y dejar una sola celda vacía en el medio de
+ * un rango era exactamente el problema que se venía a resolver. Lo que queda
+ * como señal es la pantalla: el control sigue contando esas filas y avisándolas
+ * en resultados (`filasSinImporte`), y ese aviso pasa a ser **el único lugar**
+ * donde se ve que a una línea le falta el dato — en el .xlsx ya no se distingue.
+ *
+ * Las tres columnas de plata van juntas a propósito: si `importe` se quedara
+ * vacío con DEBE y HABER en cero, la fila quedaría contradiciendose sola.
  */
 export function lineasDelArchivoDesglosada(results) {
-  return lineasDeLaDesglosada(results).map(l => (
-    l.debe === null && l.haber === null
-      ? l
-      : { ...l, debe: l.debe ?? 0, haber: l.haber ?? 0 }
-  ));
+  return lineasDeLaDesglosada(results).map(l => ({
+    ...l, importe: l.importe ?? 0, debe: l.debe ?? 0, haber: l.haber ?? 0,
+  }));
 }
 
 async function exportDesglosadaToXlsx(results) {

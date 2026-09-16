@@ -7,6 +7,33 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(conta): también la línea sin importe sale con Importe, DEBE y HABER en 0,00 en el archivo de la Contabilidad Desglosada — 2026-09-16
+
+- **Cae la excepción del cambio de ayer (D-096).** Hasta ahora, en el `.xlsx`, el CSV y el "Copiar" de
+  la Contabilidad Desglosada (COTY) quedaba una sola celda vacía: la línea que había venido **sin
+  importe** en el "Totales de Concepto" de Axton conservaba DEBE y HABER en blanco. El resto de las
+  líneas ya salía con `0,00` en el lado que no lleva plata. Ahora esa línea también sale con sus tres
+  importes —**Importe, DEBE y HABER**— en `0,00`, igual que todas las demás.
+- **Por qué cambia:** Willy trajo el porqué del pedido de Contaduría que ayer había quedado
+  `PENDIENTE`. El archivo de la desglosada **no se importa a ningún sistema** — lo trabaja Contaduría
+  del cliente a mano, con fórmulas, y una celda vacía en el medio de un rango es justamente lo
+  incómodo. No es un problema de que rompa una importación.
+- **Las tres columnas de plata van juntas.** Se agregó `importe` a la columna que ya completaba `debe`
+  y `haber`: una fila con DEBE y HABER en cero pero Importe vacío se contradecía sola.
+- **El precio, asumido a sabiendas:** en el `.xlsx` ya no se distingue "no vino el dato" de "vale
+  cero". La señal que antes daba la celda vacía queda sólo en la pantalla de resultados — el control
+  sigue contando esas filas y avisándolas (`filasSinImporte`) — y en las líneas del control, que
+  siguen en `null`: el cero sigue siendo sólo del archivo.
+- **No cambia nada más:** el Asiento Contable se descarga igual que antes, y la pantalla del control
+  tampoco cambia — ninguna de las dos lee `lineasDelArchivoDesglosada`. La fila de TOTAL sigue sin
+  total de la columna Importe, a propósito: sumarla contaría dos veces cada movimiento, porque cada
+  fila del origen se desdobla en dos líneas.
+- Verificado en la app real con `npm run servir:local` (se bajó el `.xlsx` y se miraron las celdas):
+  en las filas de datos no queda ninguna celda de importe vacía.
+- `tests/contaDesglosadaControl.test.js` sección 15 actualizada, `npm run test:unit` completo en
+  verde.
+- Ver **D-096** (revisada) y `specs/conta-desglosada-asiento.md` §4.
+
 ### feat(tooling): servir la app sin internet, para verificar cambios en el navegador real desde una sesión remota — 2026-09-15
 
 - **No cambia nada de lo que ve el analista.** Es una herramienta de desarrollo: `npm run servir:local`
