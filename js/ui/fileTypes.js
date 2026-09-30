@@ -92,6 +92,12 @@ import {
   detectHeaders as detectHeadersCuentasRedefinicion,
 } from '../parsers/cuentasRedefinicionParser.js';
 import {
+  parseVacaciones,
+  detectHeadersVacaciones,
+  parseLiquidacionesVac,
+  detectHeadersLiquidaciones,
+} from '../parsers/saldoVacacionesParser.js';
+import {
   parseEscalaComercio,
   detectHeaders as detectHeadersEscalaComercio,
 } from '../parsers/escalaComercioParser.js';
@@ -177,6 +183,23 @@ const metaTotalesConceptoCruce = (m) =>
 
 const metaCuentasRedefinicion = (m) =>
   `${m?.cuentas ?? 0} cuentas · ${m?.nombresDistintos ?? 0} nombres distintos`;
+
+// El reporte de Vacaciones informa cuántos legajos leyó; el de Liquidaciones,
+// además, el período que declara su columna `liquidacion`: es lo que le permite
+// al analista ver que no subió el mes pasado antes de generar el reporte, y que
+// el archivo no mezcla períodos.
+const metaVacaciones = (m) => `${m?.uniqueLegajos ?? 0} legajos`;
+
+const metaLiquidacionesVac = (m) => {
+  const periodos = m?.periodos || [];
+  const periodo = periodos.length === 1
+    ? esc(periodos[0].split('-').reverse().join('/'))
+    : periodos.length > 1
+      ? `<span class="badge badge--warning">mezcla períodos: ${esc(periodos.map(p => p.split('-').reverse().join('/')).join(', '))}</span>`
+      : '<span class="badge badge--warning">período no detectado</span>';
+  return `${m?.totalRows ?? 0} registros · ${m?.uniqueLegajos ?? 0} legajos · ${m?.conceptos?.length ?? 0} conceptos`
+    + ` &nbsp;·&nbsp; ${periodo}`;
+};
 
 // ── Las fichas ───────────────────────────────────────────────────────────────
 
@@ -685,6 +708,31 @@ export const FILE_TYPES = {
     detectHeaders: detectHeadersTotalesConceptoCruce,
     autoDetect: null,
     meta: metaTotalesConceptoCruce,
+    fields: [],
+  },
+
+  // Saldo de vacaciones (COTY): los dos archivos de Axton. Bajan como .xls que es
+  // HTML (Liquidaciones, también como .xlsx real) y se leen por nombre de
+  // encabezado. No hay columnas que mapear, pero pasan por la vista previa:
+  // ver los encabezados que se leyeron es lo único que le confirma al analista
+  // que subió el archivo que era (mismo criterio que `acreditaciones_file`).
+  vacaciones_axton_file: {
+    label: 'Reporte de Vacaciones (export de Axton)',
+    siglas: ['VACACIONES'],
+    parse: parseVacaciones,
+    detectHeaders: detectHeadersVacaciones,
+    autoDetect: null,
+    meta: metaVacaciones,
+    fields: [],
+  },
+
+  liquidaciones_vac_file: {
+    label: 'Reporte de Liquidaciones — totales por concepto (export de Axton)',
+    siglas: ['LIQUIDACIONES'],
+    parse: parseLiquidacionesVac,
+    detectHeaders: detectHeadersLiquidaciones,
+    autoDetect: null,
+    meta: metaLiquidacionesVac,
     fields: [],
   },
 

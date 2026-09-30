@@ -233,6 +233,12 @@ import {
   renderContaDesglosadaResults,
 } from './contaDesglosada.js';
 
+import {
+  runSaldoVacaciones,
+  summarizeSaldoVacaciones,
+  renderSaldoVacacionesResults,
+} from './saldoVacaciones.js';
+
 import { renderContaDesglosadaConfigEditor } from '../ui/contaDesglosadaConfigEditor.js';
 
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
@@ -1190,6 +1196,51 @@ export const CONTROL_REGISTRY = {
     run:           runContaDesglosada,
     summarize:     summarizeContaDesglosada,
     renderResults: renderContaDesglosadaResults,
+  },
+
+  // ── Saldo de vacaciones (COTY) ────────────────────────────────────────────
+  // Arma el "Saldo vac MM-AAAA.xlsx" desde dos archivos de Axton (Vacaciones y
+  // Liquidaciones). Genera un archivo y no cruza contra el Tabulado: sin
+  // tabulado, y su única validación es que la suma cierre con el TOTAL GENERAL
+  // del propio archivo. Ver specs/saldo-vacaciones-coty.md.
+  saldo_vacaciones: {
+    id:          'saldo_vacaciones',
+    // No compara importes contra un umbral: el reporte sale con lo que informa
+    // Axton, y lo que se valida (la suma contra TOTAL GENERAL) es la forma del
+    // archivo, no una preferencia del analista (D-069).
+    ownTolerance: {
+      note: 'Arma el reporte con lo que informa Axton y valida la suma contra el TOTAL GENERAL del archivo, al centavo.',
+    },
+    label:       'Saldo de vacaciones',
+    ...COTY_ONLY,
+    appliesWhen: () => true,
+    description: 'Arma el Saldo de vacaciones del mes (un .xlsx con una fila por legajo) desde el reporte de '
+      + 'Vacaciones y el de Liquidaciones de Axton: saldo y provisión del mes, días que corresponden, días '
+      + 'gozados y lo que pasó en las bajas.',
+    help: {
+      what: 'Reemplaza el armado a mano del saldo de vacaciones. Toma del reporte de Liquidaciones la '
+        + 'provisión de vacaciones de cada legajo (cantidad e importe) y las vacaciones no gozadas de las '
+        + 'bajas, del reporte de Vacaciones el ingreso, el egreso, los días y los gozados, y los junta por '
+        + 'legajo. Antes de armarlo controla que la suma de Liquidaciones cierre con su TOTAL GENERAL. '
+        + 'Las altas del mes y las bajas salen marcadas: su criterio todavía está por definir.',
+      how: [
+        'Bajá de Axton el reporte de Vacaciones del período.',
+        'Bajá de Axton el reporte de Liquidaciones (totales por concepto) con las liquidaciones de provisiones y bajas del mismo período.',
+        'Cargá los dos en el Paso 2, tal cual se bajan (.xls o .xlsx).',
+        'Ejecutá, revisá los avisos de altas, bajas y legajos sin provisión, y descargá el .xlsx desde el resultado.',
+      ],
+    },
+    group:       { id: 'saldo_vacaciones', label: 'Saldo de vacaciones', mode: 'Generar Reporte', primary: true },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'vacaciones',    label: 'Reporte de Vacaciones (export de Axton)',
+        fileType: 'vacaciones_axton_file' },
+      { key: 'liquidaciones', label: 'Reporte de Liquidaciones — totales por concepto (export de Axton)',
+        fileType: 'liquidaciones_vac_file' },
+    ],
+    run:           runSaldoVacaciones,
+    summarize:     summarizeSaldoVacaciones,
+    renderResults: renderSaldoVacacionesResults,
   },
 
   control_netos: {

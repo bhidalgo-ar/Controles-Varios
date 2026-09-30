@@ -2211,6 +2211,9 @@ async function executeControls(state, container, root) {
           // sin código de la planilla de novedades (D-070)— y sin esto el
           // control no tiene con qué informarlo: quedaría ignorado en silencio.
           mapping[`${fileSpec.key}Meta`] = fileData.parseMetadata || {};
+          // El nombre del archivo, para los controles que lo dejan escrito en el
+          // entregable (la hoja de notas del Saldo de vacaciones).
+          mapping[`${fileSpec.key}FileName`] = fileData.fileName || null;
         }
       }
 
