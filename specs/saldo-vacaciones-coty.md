@@ -47,7 +47,7 @@ encabezado completo; cuál es el de la provisión y cuál el de la baja lo decid
 ## 2. Reglas generales
 
 - **Clave de legajo:** `makeLegajoKey(mapping.legajoKeyMode)`, la **misma** para los dos archivos. Por
-  default «0656» y «656» son el mismo empleado.
+  default «007» y «7» son el mismo empleado.
 - **Consolidar sumando en Liquidaciones** (`groupRowsByLegajo` + `sumColumn` de `consolidate.js`): un
   legajo con la liquidación de provisiones y la de su baja aparece en dos filas y se **suman**. En
   Vacaciones se espera una fila por legajo; si hay dos, corta (no elige una en silencio).

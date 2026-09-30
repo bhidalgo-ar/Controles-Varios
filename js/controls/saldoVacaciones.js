@@ -20,7 +20,7 @@
 // **Consolidar por legajo, los dos lados.** Liquidaciones trae una fila por
 // legajo × liquidación (la de provisiones y la de la baja del mismo mes): se
 // SUMA con `consolidate.js`, y los dos archivos se cruzan con la **misma** clave
-// de legajo del cliente (D-038/D-042), así «0656» y «656» son el mismo empleado.
+// de legajo del cliente (D-038/D-042), así «007» y «7» son el mismo empleado.
 //
 // **`null` no es `0`.** Un dato que no existe en ninguna de las dos fuentes (el
 // alta, los días y el saldo de un legajo que sólo está en Liquidaciones) sale
@@ -267,7 +267,8 @@ function armarSaldoVacaciones(vacRows, mapping) {
     const esBaja = tieneBaja || !v || !!egreso;
 
     const obs = [];
-    if (esAlta) obs.push('Alta del mes: se tomó la provisión de Axton; criterio a revisar.');
+    if (esAlta && tieneProvision) obs.push('Alta del mes: se tomó la provisión de Axton; criterio a revisar.');
+    else if (esAlta) obs.push('Alta del mes: criterio a revisar.');
     if (esBaja) {
       const falta = [];
       if (!v) falta.push('no figura en el reporte de Vacaciones (sin alta, días ni saldo)');
