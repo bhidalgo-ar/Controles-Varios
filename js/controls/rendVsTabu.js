@@ -754,14 +754,10 @@ export function leyendaDeConceptos(host, { cols, meta }) {
 }
 
 function renderRendVsTabuPlanilla(container, { rows, results }) {
-  // §11.1 — de las 5 columnas componentes se ocultan las que no tienen ninguna
-  // diferencia en ningún CC (COSTO TOTAL siempre se muestra: es el agregado). Sin
-  // ninguna diferencia en absoluto se muestran todas — no tiene sentido ocultar
-  // todo.
-  const conDif = COMPONENT_COLS.filter(c => rows.some(r => hasDiff(r[c.dKey])));
-  const visibles = conDif.length > 0 ? conDif : COMPONENT_COLS;
-  const ocultas = COMPONENT_COLS.length - visibles.length;
-  const cols = [...visibles, COLS[COLS.length - 1]];   // + COSTO TOTAL, siempre al final
+  // Las seis categorías se ven siempre, cierren o no, igual que en el .xlsx.
+  // Antes se ocultaban las que no tenían diferencia en ningún CC, y el analista
+  // no encontraba las provisiones ni el estímulo aunque estuvieran controlados.
+  const cols = COLS;
 
   const suma = (key) => rows.reduce((acc, r) => acc + (r[key] ?? 0), 0);
 
@@ -801,12 +797,6 @@ function renderRendVsTabuPlanilla(container, { rows, results }) {
     empty: 'Sin datos.',
     beforeTable: (host) => {
       leyendaDeConceptos(host, { cols, meta: results.meta });
-      if (ocultas === 0) return;
-      const nota = document.createElement('p');
-      nota.className = 'text-muted';
-      nota.style.cssText = 'font-size:var(--text-sm);padding:0 var(--sp-3);';
-      nota.textContent = `Se ocultan ${ocultas} columna${ocultas === 1 ? '' : 's'} sin ninguna diferencia. El .xlsx exportado incluye las 6.`;
-      host.appendChild(nota);
     },
     onExport: (exportEl) => renderExportMenu(exportEl, {
       onExcel: () => exportRendVsTabuToXlsx(results),
