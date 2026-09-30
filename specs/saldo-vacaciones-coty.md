@@ -96,7 +96,8 @@ personas**.
 
 | Caso | Texto |
 |---|---|
-| Alta del mes (Ingreso dentro del mes del período) | `Alta del mes: se tomó la provisión de Axton; criterio a revisar.` |
+| Alta del mes (Ingreso dentro del mes del período) con 800172 | `Alta del mes: se tomó la provisión de Axton; criterio a revisar.` |
+| Alta del mes sin 800172 | `Alta del mes: criterio a revisar.` (seguido de `Sin provisión en Liquidaciones.` si no es baja) |
 | Baja (el legajo tiene 503310, **o** sólo está en Liquidaciones, **o** tiene Egreso) | `Baja: criterio a definir.` + qué falta, p. ej. ` No figura en el reporte de Vacaciones (sin alta, días ni saldo); sin provisión 800172 en Liquidaciones.` |
 | Figura en Vacaciones y no tiene 800172 (y no es baja) | `Sin provisión en Liquidaciones.` |
 
