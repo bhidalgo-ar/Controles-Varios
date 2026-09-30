@@ -7,6 +7,23 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(rendimiento): el código de CC del Reporte se puede elegir en el Paso 2, y los resultados vuelven a la configuración — 2026-09-30
+
+- **Código de CC:** el Reporte de Rendimiento (lo usan Rendimiento vs Tabulado, Rendimiento vs Asiento y
+  Rendimiento x EE) trae el código de centro de costo en la primera columna, sin título. El Paso 2 no la
+  ofrecía (el título vacío se leía como "sin elegir") y el código quedaba en "⚠ sin asignar"; en los
+  resultados no aparecía el ID del CC. Ahora esa columna se ofrece como "(sin título — columna 1)" y el
+  código sale en cada CC. Verificado con el Reporte real de abril 2026: los 10 CC salen con código.
+  Funciona tanto si la celda del título no existe como si existe vacía.
+- **Si el cliente ya tenía perfil guardado** con esa columna vacía, ve "⚠ sin asignar" una vez: elige
+  "(sin título — columna 1)" y queda guardado.
+- **Botón de la pantalla de resultados:** antes "← Volver a los controles" y "Reconfigurar" llevaban al
+  inicio del wizard y se perdían los archivos cargados. Ahora, si la configuración de esa corrida sigue en
+  memoria, el botón dice "← Volver a la configuración" y lleva al Paso 2 con los mismos controles,
+  archivos, período y notas; "Reconfigurar" hace lo mismo. Esa configuración vive sólo en memoria (no en
+  IndexedDB): si se recarga la página, el botón vuelve a decir "← Volver a los controles" e ir al inicio.
+- **No cambia:** "Ejecutar de nuevo" sigue yendo al inicio del wizard. Ningún cálculo ni semáforo. Ver D-098.
+
 ### fix(rend-vs-tabu): la planilla de pantalla muestra siempre las seis categorías — 2026-09-30
 
 - **Antes:** en la solapa Planilla de Rendimiento vs Tabulado se ocultaban las categorías que no tenían

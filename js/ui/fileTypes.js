@@ -62,7 +62,7 @@ import { parseCatEmpleados, autoDetectCatMapping } from '../parsers/catEmpleados
 import { parseBrutos, autoDetectBrutosMapping } from '../parsers/brutosParser.js';
 import { parseGsPers, autoDetectGsPersMapping } from '../parsers/gsPersParser.js';
 import { parseNr, autoDetectNrMapping } from '../parsers/nrParser.js';
-import { parseRendimiento, autoDetectRendimientoMapping } from '../parsers/rendimientoParser.js';
+import { parseRendimiento, autoDetectRendimientoMapping, detectHeadersRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal, autoDetectCostoTotalMapping } from '../parsers/costoTotalParser.js';
 import { parseConta } from '../parsers/contaExcel.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
@@ -419,7 +419,7 @@ export const FILE_TYPES = {
     label: 'Reporte de Rendimiento',
     siglas: ['RENDIMIENTO', 'REND'],
     parse: parseRendimiento,
-    detectHeaders: detectHeadersXlsx,
+    detectHeaders: detectHeadersRendimiento,
     autoDetect: autoDetectRendimientoMapping,
     meta: metaRegistros,
     fields: [

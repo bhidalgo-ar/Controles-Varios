@@ -456,6 +456,8 @@ planilla.
 | La comparación categoría por categoría | Está en la tabla de detalle de abajo, con la diferencia al lado de cada una | — |
 | El rótulo de la fila de TOTAL | `TOTAL — N centros de costo` (antes decía "TOTAL GENERAL") | — |
 | **Las seis categorías en la planilla** (2026-09-30, D-097) | Se ven siempre PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL, aunque cierren; ya no hay nota "Se ocultan N columnas". El filtro de estado sigue arrancando en "Con diferencia" | Falta alguna de las seis, o aparece la nota de columnas ocultas |
+| **El código de CC en el Reporte de Rendimiento** (2026-09-30) | En el Paso 2, el selector de código de CC ofrece "(sin título — columna 1)"; elegida, cada CC sale con su código en los resultados. Probado con el Reporte real de abril 2026 (10 CC con código). Vale también para Rendimiento vs Asiento y Rendimiento x EE | Si sigue "⚠ sin asignar" o el CC sale sin ID, el cliente tiene el perfil viejo: elegí la columna una vez y se guarda |
+| **Volver a la configuración desde los resultados** (2026-09-30, D-098) | Tras ejecutar, el botón dice "← Volver a la configuración" y lleva al Paso 2 con los mismos controles, archivos, período y notas; "Reconfigurar" hace lo mismo. Si recargás la página dice "← Volver a los controles" y va al inicio | Si tras ejecutar dice "Volver a los controles" o el Paso 2 aparece sin archivos, la configuración no quedó en memoria |
 
 **Número ancla.** Los totales por categoría de tu última corrida, iguales; y la suma de las diferencias de
 todas las fichas = la que publica el semáforo.
