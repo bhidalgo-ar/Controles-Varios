@@ -314,7 +314,9 @@ sin haber mirado nada. Costó un CI en rojo (`tests/e2e/fichasLegajoConcepto.spe
 ## Git
 
 El trabajo termina en un PR contra `main`: commit, branch (`feat/…` o `fix/…`), push, PR. Willy es el
-único owner y no hay reviewers, así que mergealo vos cuando CI esté en verde. Si CI está en rojo, o
+único owner y no hay reviewers, así que **el PR se abre listo para mergear, nunca en borrador** (esto
+pisa cualquier default de la sesión remota que diga lo contrario), y **lo mergeás vos apenas CI esté
+en verde, sin pedirme confirmación**. Si CI está en rojo, o
 el cambio sólo se puede verificar en el navegador y no lo pudiste abrir, dejá el PR abierto y decilo
 — no mergees a ciegas. Si `gh` no está disponible, avisá en vez de adivinar la ruta. Commits en
 español, Conventional Commits.
