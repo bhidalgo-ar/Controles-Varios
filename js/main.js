@@ -77,7 +77,9 @@ async function handleRoute() {
       await renderGrouperEditor(root, Number(parts[1]));
     } else if (parts[0] === 'controls' && parts[1]) {
       // #/controls/:clientId → wizard de controles
-      await renderControlsWizard(root, Number(parts[1]));
+      // #/controls/:clientId/run/:runId → el wizard retomando esa corrida
+      const volverDeRun = parts[2] === 'run' && parts[3] ? Number(parts[3]) : null;
+      await renderControlsWizard(root, Number(parts[1]), { volverDeRun });
     } else if (parts[0] === 'control-results' && parts[1]) {
       // #/control-results/:runId → resultados de controles
       await renderControlsResults(root, Number(parts[1]));

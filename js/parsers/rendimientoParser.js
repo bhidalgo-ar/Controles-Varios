@@ -4,7 +4,28 @@
 //   PRECIO, ASIGNACIÓN ESTIMULO, RETIROS, CARGAS SOCIALES, PROVISIÓN MES,
 //   PROVISIÓN CARGAS SOCIALES MES, COSTO TOTAL
 /* global XLSX */
-export { detectHeaders } from './nominaMaestra.js';
+import { detectHeaders } from './nominaMaestra.js';
+export { detectHeaders };
+
+/**
+ * Los encabezados del Reporte de Rendimiento, con las columnas SIN título
+ * nombradas como las nombra `sheet_to_json` al parsear ('__EMPTY', '__EMPTY_1'…).
+ * El reporte trae el código de CC en la primera columna sin encabezado: con el
+ * título vacío, el Paso 2 no podía ofrecerla (se confundía con "sin elegir") y
+ * el código de CC quedaba sin asignar para siempre.
+ */
+export function detectHeadersRendimiento(arrayBuffer) {
+  const { headers, preview } = detectHeaders(arrayBuffer);
+  return { headers: nombrarColumnasSinTitulo(headers), preview };
+}
+
+export function nombrarColumnasSinTitulo(headers) {
+  let emptyCount = 0;
+  return headers.map(h => {
+    if (h !== '') return h;
+    return emptyCount++ === 0 ? '__EMPTY' : `__EMPTY_${emptyCount - 1}`;
+  });
+}
 
 // Mapa de nombre de columna (uppercase) → clave de mapping
 const REND_COL_MAP = {

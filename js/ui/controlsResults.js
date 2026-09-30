@@ -28,6 +28,7 @@ import { mountResultsHeader, renderResultsTabs, runMetaLabel } from './resultsHe
 import { buildRunExportItems, EXPORT_PRIVACY_NOTE } from './runExport.js';
 import { columnWarningsOf } from './runWarnings.js';
 import { fileTypeLabel } from './fileTypes.js';
+import { getRunSession } from './runSession.js';
 
 const TIER_RANK = { error: 0, warn: 1, ok: 2, info: 3 };
 const TIER_DOT  = { error: 'error', warn: 'warn', ok: 'ok', info: 'neutral' };
@@ -60,7 +61,13 @@ export async function renderControlsResults(root, runId) {
         hour: '2-digit', minute: '2-digit',
       })
     : '';
-  const backTarget = { label: '← Volver a los controles', href: `#/controls/${client?.id ?? ''}` };
+  // Si la configuración de esta corrida sigue en memoria, volver lleva al Paso 2
+  // con los mismos archivos (runSession.js); si no, al inicio del wizard.
+  const puedeRetomar = !!(client && getRunSession(client.id, runId));
+  const configHref   = puedeRetomar ? `#/controls/${client.id}/run/${Number(runId)}` : `#/controls/${client?.id ?? ''}`;
+  const backTarget   = puedeRetomar
+    ? { label: '← Volver a la configuración', href: configHref }
+    : { label: '← Volver a los controles', href: configHref };
 
   root.innerHTML = `
     <div id="js-results-tabs"></div>
@@ -103,7 +110,7 @@ export async function renderControlsResults(root, runId) {
         // antes de que el campo existiera no los trae y la sección sale vacía.
         warnings: run.warnings || [],
         onToggleDefinitive: () => toggleDefinitive(tier, verdictLine, exportItems),
-        onReconfigure: () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
+        onReconfigure: () => { window.location.hash = configHref; },
         onRerun:       () => { window.location.hash = `#/controls/${client?.id ?? ''}`; },
       },
     });
