@@ -7,6 +7,19 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(rend-vs-tabu): la planilla de pantalla muestra siempre las seis categorías — 2026-09-30
+
+- **Antes:** en la solapa Planilla de Rendimiento vs Tabulado se ocultaban las categorías que no tenían
+  diferencia en ningún centro de costo, con la nota "Se ocultan N columnas sin ninguna diferencia". Una
+  analista corrió Septiembre, vio diferencias en PRECIO y no encontró Provisiones ni Asig. Estímulo:
+  estaban en el Excel y cerraban, pero ella lo leyó como que el control no las detallaba.
+- **Ahora:** se ven siempre PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL,
+  cierren o no, igual que en el `.xlsx`. La nota de columnas ocultas ya no aparece.
+- **No cambia:** el filtro de estado sigue arrancando en "Con diferencia"; los centros de costo que
+  cierran se ven con "Todos" o "Al centavo", como en el resto de las pantallas. Tampoco cambia el
+  semáforo ni ningún cálculo. Los otros controles que ocultan conceptos sin valores (NR, Variaciones,
+  Acumuladores de Ganancias) quedan como estaban. Ver D-097.
+
 ### feat(conta): también la línea sin importe sale con Importe, DEBE y HABER en 0,00 en el archivo de la Contabilidad Desglosada — 2026-09-16
 
 - **Cae la excepción del cambio de ayer (D-096).** Hasta ahora, en el `.xlsx`, el CSV y el "Copiar" de
