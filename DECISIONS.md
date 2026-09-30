@@ -3900,3 +3900,45 @@ vacía en un rango es lo que complica esa forma de trabajo. Ya no queda pendient
 
 **Detalle:** `js/controls/contaDesglosada.js` (`lineasDelArchivoDesglosada`),
 `tests/contaDesglosadaControl.test.js` (sección 15), `specs/conta-desglosada-asiento.md` §4, D-036.
+
+---
+
+## D-097 — Saldo de vacaciones de COTY: se informa lo que provisiona Axton, sin recalcular; altas y bajas quedan abiertas
+
+**Fecha:** 2026-09-30. **Decidió:** Willy.
+
+**Contexto:** el `Saldo vac MM-AAAA.xlsx` de COTY se armaba a mano. Ahora lo genera el control
+`saldo_vacaciones` desde los exports de Vacaciones y Liquidaciones de Axton (`specs/saldo-vacaciones-coty.md`).
+Había que decidir de dónde salen el saldo y la provisión de cada legajo.
+
+**Decisión:**
+- **Saldo_vacaciones** = la cantidad del concepto 800172 que trae Axton, con 2 decimales. No se recalcula.
+- **Prov_vac** = el importe del 800172 tal cual lo trae Axton.
+- **Altas del mes:** se usa lo que trae Axton (p. ej. 3,75 días para un ingreso del 01/09 con 5 días por año).
+  **PENDIENTE:** revisar contra el criterio de 1 día por cada 20 trabajados (LCT). No está verificado contra
+  la configuración de Axton de COTY. La fila sale con la observación «Alta del mes: se tomó la provisión de
+  Axton; criterio a revisar.».
+- **Bajas: PENDIENTE de definir.** Hoy salen con alta, saldo y provisión vacíos (no figuran en el reporte de
+  Vacaciones) y con días e importe del concepto 503310. La fecha de baja no viene en ninguno de los dos
+  archivos, así que `Fecha_baja` sólo se completa con el Egreso de Vacaciones. Observación: «Baja: criterio a definir.».
+
+**Alternativa descartada:** el criterio del armado anterior del equipo —parte entera de los días y provisión
+recalculada como valor día × días enteros—. En 09-2026 daba 251.232.691,33 contra 262.764.464,21 que
+provisionó Axton: unos 11,5 millones menos que lo que quedó asentado.
+
+**Por qué esta y no la otra:** el cruce contra la Contabilidad desglosada 09-2026 muestra que Axton contabiliza
+el concepto 898850 (cuenta 215100180) por 262.764.464,21, igual al importe del 800172, en 122 de 122 legajos; y
+el 503310 por 17.653.187,52 en 3 de 3. La reversión (898855) de un legajo es igual a su provisión del mes
+anterior: Axton provisiona el acumulado y revierte el del mes anterior. Un reporte que recalcula no cierra con lo
+asentado.
+
+**Deudas conocidas:** los códigos 800172 y 503310 son semilla en el módulo (`DEFAULT_SALDO_VAC_CONFIG`) y todavía
+no tienen editor en el Paso 2 (D-035/D-039); la pantalla no pasó por mockup previo; falta que un usuario real
+(Gaby o las analistas) lo use con un mes real — ése es el criterio de terminado.
+
+**Aprendido:** el `.xls` de Vacaciones reenviado por mail llegó vacío (el filtro de seguridad lo reemplazó por un
+texto de 85 bytes), y el conector de SharePoint no lee ese `.xls` (es HTML) ni entrega más de ~1.660 filas de un
+`.xlsx`. Los archivos reales hay que subirlos a mano a la sesión.
+
+**Detalle:** `js/controls/saldoVacaciones.js`, `js/parsers/saldoVacacionesParser.js`,
+`tests/saldoVacacionesControl.test.js`, `specs/saldo-vacaciones-coty.md` §3, §6 y §7.

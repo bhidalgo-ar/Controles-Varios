@@ -167,6 +167,21 @@ cliente venía recibiendo (D-095).
 
 ---
 
+## 2 bis · Saldo de vacaciones (COTY, Axton) — nuevo al 2026-09-30
+
+**Qué es.** Arma el `Saldo vac MM-AAAA.xlsx` desde el reporte de Vacaciones y el de Liquidaciones de Axton
+(D-097). Con los archivos reales de 09-2026 reproduce el Excel aprobado y cruza contra la desglosada; **lo
+que nadie hizo es usarlo con un mes real ni mirar la pantalla** (se armó sin mockup).
+
+| Qué mirar | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| Correrlo con los dos archivos de un mes nuevo (Gaby o las analistas) | El `.xlsx` baja con una fila por legajo y los totales de 800172 y 503310 coinciden con el `TOTAL GENERAL` de Liquidaciones | Si corta con un error de encabezados o de período, el export de Axton cambió de forma |
+| Las filas marcadas «Alta del mes» | La provisión es la de Axton | Decidir si corresponde 1 día cada 20 trabajados (D-097, pendiente) |
+| Las filas marcadas «Baja» | Salen con saldo y provisión vacíos, y días e importe del 503310 | Decidir qué saldo y provisión llevan (D-097, pendiente); la fecha de baja no viene en los archivos |
+| Los códigos 800172 y 503310 | Se toman solos | Si COTY los renumera no hay editor en el Paso 2: hoy se cambia en el código |
+
+Los archivos reales hay que subirlos a mano a la sesión: el mail los deja vacíos y SharePoint no los entrega.
+
 ## 3 · Monto de diferencia (el panel "Umbrales") — afecta a los 19 controles
 
 **Qué es.** El número que escribís en "Umbrales" y que significa "de acá para abajo no me interesa".

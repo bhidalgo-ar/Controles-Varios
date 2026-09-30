@@ -3,7 +3,7 @@
 **Estado:** implementado el 2026-09-30 — control `saldo_vacaciones` del `CONTROL_REGISTRY` (modo
 "Generar Reporte", solo para COTY), cubierto por `tests/saldoVacacionesControl.test.js` y
 `tests/e2e/saldoVacaciones.spec.js`. Verificado contra los archivos reales de agosto y septiembre de
-2026 (ver §7). **Pendientes de criterio, sin resolver:** altas del mes y bajas (§6). Falta que Willy
+2026 (ver §7). Criterio de saldo y provisión decidido en D-097. **Pendientes de criterio, sin resolver:** altas del mes y bajas (§6). Falta que Willy
 confirme la pantalla de resultados: se armó con las piezas estándar (Resumen + Planilla), sin mockup
 previo.
 
