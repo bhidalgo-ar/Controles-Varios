@@ -144,5 +144,15 @@ const fila = (over = {}) => ({
     res.rows.length === 1 && res.summary.total === 1);
 }
 
+// ── 6) La columna sin título del Reporte (el código de CC) se puede elegir ───
+// El Paso 2 y el parser la tienen que nombrar igual: si no, el código de CC
+// elegido no se encuentra al leer las filas.
+{
+  const { nombrarColumnasSinTitulo } = await import('./js/parsers/rendimientoParser.js');
+  const n = nombrarColumnasSinTitulo(['', 'CENTRO COSTO', '', 'PRECIO']);
+  assert('las columnas sin título se nombran como las nombra sheet_to_json',
+    n.join('|') === '__EMPTY|CENTRO COSTO|__EMPTY_1|PRECIO');
+}
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);
