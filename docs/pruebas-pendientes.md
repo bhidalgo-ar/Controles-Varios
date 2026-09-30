@@ -455,6 +455,7 @@ planilla.
 | Una **corrida vieja** reabierta | La tabla del Tabulado por concepto dice explícitamente que esa corrida no guardó el dato | Si completara con ceros, sería el default silencioso que el proyecto prohíbe |
 | La comparación categoría por categoría | Está en la tabla de detalle de abajo, con la diferencia al lado de cada una | — |
 | El rótulo de la fila de TOTAL | `TOTAL — N centros de costo` (antes decía "TOTAL GENERAL") | — |
+| **Las seis categorías en la planilla** (2026-09-30, D-097) | Se ven siempre PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL, aunque cierren; ya no hay nota "Se ocultan N columnas". El filtro de estado sigue arrancando en "Con diferencia" | Falta alguna de las seis, o aparece la nota de columnas ocultas |
 
 **Número ancla.** Los totales por categoría de tu última corrida, iguales; y la suma de las diferencias de
 todas las fichas = la que publica el semáforo.
