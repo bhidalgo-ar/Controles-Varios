@@ -12,8 +12,10 @@
 //   · Saldo_vacaciones = la CANTIDAD del concepto de provisión (800172), tal
 //     cual la informa Axton — no se rehace Días × mes / 12.
 //   · Prov_vac = el IMPORTE de ese mismo concepto.
-//   · Vac_Proporcionales_(Baja) / 3553_Vacaciones = cantidad / importe del
-//     concepto de vacaciones no gozadas (503310), o 0 si el legajo no lo tiene.
+//   · Vac_Proporcionales_(Baja) = cantidad del concepto de vacaciones no
+//     gozadas (503310), o 0 si el legajo no lo tiene.
+//   · 3553_Vacaciones = 0 siempre: si el empleado es baja va en 0 (lo pidió
+//     quien usa el reporte), y sólo las bajas traen 503310.
 //   · VAC_A_DIC = "Dias" y Vac_Liq_en_el_MES = "Gozados", del reporte de
 //     Vacaciones.
 //
@@ -291,7 +293,10 @@ function armarSaldoVacaciones(vacRows, mapping) {
       dias:    v ? v.dias : null,
       gozados: v ? v.gozados : null,
       bajaDias:    grupoLiq ? (tieneBaja ? round2Opt(bajaCant) : 0) : 0,
-      bajaImporte: grupoLiq ? (tieneBaja ? round2Opt(bajaImp) : 0) : 0,
+      // Importe del 503310: no sale en el archivo (la 3553 de una baja va en 0,
+      // pedido de Gaby 2026-10-01), pero alimenta el chequeo contra TOTAL GENERAL.
+      importeNoGozadas: grupoLiq ? (tieneBaja ? round2Opt(bajaImp) : 0) : 0,
+      bajaImporte: 0,
       obs: obs.join(' ') || null,
     };
     filas.push(fila);
@@ -339,7 +344,7 @@ function armarSaldoVacaciones(vacRows, mapping) {
     },
     totales: {
       provCant: sumaFilas('saldo'), provImp: sumaFilas('prov'),
-      bajaCant: sumaFilas('bajaDias'), bajaImp: sumaFilas('bajaImporte'),
+      bajaCant: sumaFilas('bajaDias'), bajaImp: sumaFilas('importeNoGozadas'),
       general: totalGeneralDe(liqMeta.totales, { hProv, hBaja }),
       cierra: true,
     },
@@ -471,7 +476,7 @@ function agregarHojaNotas(wb, results) {
     ['VAC_A_DIC', 'Dias (primera columna Dias de Vacaciones) = días de vacaciones que corresponden en el año.'],
     ['Vac_Liq_en_el_MES', 'Gozados (Vacaciones).'],
     ['Vac_Proporcionales_(Baja)', `Cantidad del concepto ${hB} (Liquidaciones); 0 si el legajo no lo tiene.`],
-    ['3553_Vacaciones', `Importe del concepto ${hB} (Liquidaciones); 0 si el legajo no lo tiene. El concepto 3553 no existe en el layout de Coty; se usó ${results.codigos.codigoBaja} como equivalente funcional.`],
+    ['3553_Vacaciones', `0. Si el empleado es baja, va en 0 aunque tenga ${hB}; los días de la baja van en Vac_Proporcionales_(Baja).`],
     ['Celdas vacías', 'Un dato que no existe en ninguna fuente queda vacío (no 0) y se explica en Observaciones.'],
     [],
     ['Pendientes:', null, true],
@@ -639,7 +644,7 @@ function renderPlanillaTab(panel, results) {
     { key: 'dias', label: 'VAC_A_DIC', sub: 'Dias (Vacaciones)', band: 'Días', num: true },
     { key: 'gozados', label: 'Vac_Liq_en_el_MES', sub: 'Gozados (Vacaciones)', band: 'Días', num: true, close: true },
     { key: 'bajaDias', label: 'Vac_Proporcionales_(Baja)', sub: `cantidad ${results.codigos.codigoBaja}`, band: 'Baja', num: true },
-    { key: 'bajaImporte', label: '3553_Vacaciones', sub: `importe ${results.codigos.codigoBaja}`, band: 'Baja', num: true, close: true },
+    { key: 'bajaImporte', label: '3553_Vacaciones', sub: '0 en las bajas', band: 'Baja', num: true, close: true },
     { key: 'obs', label: 'Observaciones', band: 'Observaciones', cell: f => esc(f.obs ?? '') },
   ];
 

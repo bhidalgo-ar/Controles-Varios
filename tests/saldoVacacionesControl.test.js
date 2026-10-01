@@ -186,13 +186,14 @@ assert('alta del mes: Ingreso dentro del mes → observación y marca',
 
 const f2 = de(r, 2);
 assert('baja con 503310 y egreso: observación "Baja: criterio a definir."', f2.obs === 'Baja: criterio a definir.', f2.obs);
-assert('baja: cantidad e importe del 503310 tal cual', f2.bajaDias === 5.25 && f2.bajaImporte === 2500.5 && f2.egreso === '2026-09-10', f2);
+assert('baja: los días del 503310 tal cual y la 3553 en 0 (si es baja, 3553 = 0)', f2.bajaDias === 5.25 && f2.bajaImporte === 0 && f2.egreso === '2026-09-10', f2);
+assert('baja: el importe del 503310 no se pierde, alimenta el chequeo contra TOTAL GENERAL', f2.importeNoGozadas === 2500.5, f2);
 assert('baja: conserva su provisión 800172 (8,00 / 800,00)', f2.saldo === 8 && f2.prov === 800);
 
 const f3 = de(r, 3);
 assert('legajo sólo en Liquidaciones: alta, días, gozados y saldo VACÍOS (null, no 0)',
   f3.ingreso === null && f3.egreso === null && f3.dias === null && f3.gozados === null && f3.saldo === null && f3.prov === null, f3);
-assert('legajo sólo en Liquidaciones: el nombre de Liquidaciones tal cual, y su 503310', f3.nombre === 'URZI AGUSTIN' && f3.bajaDias === 1 && f3.bajaImporte === 300);
+assert('legajo sólo en Liquidaciones: el nombre de Liquidaciones tal cual, y su 503310', f3.nombre === 'URZI AGUSTIN' && f3.bajaDias === 1 && f3.bajaImporte === 0 && f3.importeNoGozadas === 300);
 assert('legajo sólo en Liquidaciones: la observación explica qué falta',
   f3.obs === 'Baja: criterio a definir. No figura en el reporte de Vacaciones (sin alta, días ni saldo); sin provisión 800172 en Liquidaciones.', f3.obs);
 

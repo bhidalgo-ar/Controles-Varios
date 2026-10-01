@@ -3903,7 +3903,35 @@ vacía en un rango es lo que complica esa forma de trabajo. Ya no queda pendient
 
 ---
 
-## D-097 — Saldo de vacaciones de COTY: se informa lo que provisiona Axton, sin recalcular; altas y bajas quedan abiertas
+## D-097 — Rendimiento vs Tabulado muestra siempre las seis categorías en la planilla, aunque cierren
+
+**Fecha:** 2026-09-30.
+
+**Contexto:** la planilla de pantalla ocultaba las categorías componentes sin diferencia en ningún centro
+de costo (criterio de "ocultar columnas sin valor real", el mismo que usa Control NR) y avisaba con una
+nota. Una analista corrió Septiembre, vio diferencias en PRECIO y no encontró Provisiones ni Asig.
+Estímulo en pantalla; estaban en el `.xlsx` y cerraban, y lo leyó como que el control no las detallaba.
+
+**Decisión (Willy):** en la solapa Planilla se muestran siempre las seis categorías —PRECIO, ASIG.
+ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES y COSTO TOTAL—, cierren o no, igual que el `.xlsx`. Se
+saca la nota de columnas ocultas. Vale **sólo** para este control: `nr`, `variaciones` y
+`acumuladoresGanancias` siguen ocultando conceptos sin valores.
+
+**Lo que no cambia, por decisión explícita:** el filtro de estado sigue arrancando en "Con diferencia";
+los que cierran se ven con "Todos" o "Al centavo" (misma regla que el resto de las pantallas). No se
+mostró todo por default.
+
+**Alternativa descartada:** arrancar el filtro de estado de este control en "Todos" — Willy eligió
+mantener la misma regla que el resto de las pantallas.
+
+**Motivo:** que una categoría que cierra se vea cerrada y no ausente: la ausencia se lee como "no
+controlado".
+
+**Detalle:** `js/controls/rendVsTabu.js` (`renderRendVsTabuPlanilla`), commit `3bf68f5`. Entrada vieja de
+CHANGELOG que describía el comportamiento anterior: "Rendimiento vs Tabulado oculta las columnas sin
+ninguna diferencia" (no se reescribe; queda superada por ésta).
+
+## D-098 — Saldo de vacaciones de COTY: se informa lo que provisiona Axton, sin recalcular; altas y bajas quedan abiertas
 
 **Fecha:** 2026-09-30. **Decidió:** Willy.
 

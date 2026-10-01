@@ -53,6 +53,88 @@ pueden quedar, son las anclas que hacen verificable la spec.
 
 ---
 
+## Forma de trabajar: orquestador y subagentes
+
+El chat principal es el orquestador: entiende el pedido, decide, arma los briefs, verifica lo
+barato, me pregunta lo que es criterio y se queda con el resultado, no con el contenido.
+Todo lo que implique leer o producir volumen lo hace un subagente.
+
+### Qué se delega y qué no
+
+- Se delega: leer Excel o exports de clientes, barrer carpetas de SharePoint o del repo,
+  extraer datos, correr scripts, armar un entregable a partir de un brief cerrado,
+  implementar a partir de una spec aprobada, auditar.
+- No se delega: decisiones de criterio, cosas de una línea, algo que ya está en el chat
+  (si lo pegué yo, ya lo tenés), ni el brief mismo.
+- Regla práctica: si la tarea va a meter en el chat más de lo que cabe en una pantalla
+  de resultado, va a un subagente.
+
+### Qué modelo usa cada subagente
+
+- Haiku: la tarea tiene una sola respuesta correcta y se comprueba mecánicamente.
+  Listar archivos, contar ocurrencias, extraer un valor de un lugar conocido, convertir
+  formato, correr un script ya escrito y devolver su salida, buscar un texto.
+- Sonnet: leer e interpretar con consigna clara. Resumir un Excel, cruzar dos archivos
+  con claves conocidas, redactar a partir de un esquema, escribir código a partir de una
+  spec cerrada, inventariar.
+- Opus: decidir, diseñar, armar specs, implementar lo que toca lógica de cálculo o
+  varios archivos a la vez, y auditar lo que produjo Sonnet u Opus.
+- El auditor nunca es más chico que el productor.
+- Ante la duda entre dos niveles, el más alto: un resultado plausible y equivocado
+  cuesta más que los tokens que ahorra.
+
+### Qué va en cada brief
+
+El orquestador arma el brief completo; el subagente no tiene la conversación ni mis
+reglas. Siempre incluye:
+
+- Objetivo y qué tiene que devolver, con formato: número, tabla, lista de casos con
+  legajo, archivo escrito en tal ruta.
+- Carpeta de trabajo y rutas exactas de entrada. Qué no puede tocar.
+- Las reglas duras que apliquen: nunca inventar datos de personas ni de clientes, lo
+  que falta va como [FALTA: ...]; Esposito sin acento; español.
+- Cómo actuar ante ambigüedad: lo mecánico lo decide solo; lo que tiene dos lecturas
+  lo decide, lo anota en la respuesta bajo "Decisiones que tomé" y sigue; lo que
+  cambiaría el resultado según quién decida, frena y lo devuelve como pregunta.
+- Cómo responder: compacto, números exactos, sin opinar sobre diseño ni proponer
+  extras.
+
+### Paralelo
+
+Tareas independientes van en paralelo. Independiente significa: ninguna escribe el
+mismo archivo que otra y ninguna necesita la salida de otra. Cada subagente en paralelo
+escribe en su propio archivo; el orquestador junta.
+
+### Verificación
+
+Lo que devuelve un subagente no es verdad hasta verificarlo. Prefiero gastar tokens
+que tiempo mío, y hay pedidos que no sé cómo tienen que quedar, así que la verificación
+no depende de mí.
+
+- El orquestador verifica sólo lo barato y sin abrir el contenido: totales que cierran,
+  cantidades que coinciden, scripts que corren, archivos que existen.
+- Todo lo que sale hacia afuera o alguien va a usar para actuar (un número a un cliente,
+  un archivo a Axton, un control, código que toca cálculo) pasa por un auditor: otro
+  subagente con contexto limpio que lee las fuentes originales, no el resumen del
+  productor, e intenta refutarlo. Devuelve CONFIRMADO, REFUTADO o NO VERIFICABLE.
+- Cambios cosméticos, ajustes visuales y cosas internas de un solo uso no pasan por
+  auditor.
+
+### Continuidad
+
+- Un trabajo largo escribe su avance en un archivo en disco (ledger, notas de estado)
+  para que cualquier subagente pueda retomarlo en otra sesión.
+- Dentro de la misma sesión, si el trabajo es continuación directa, se retoma el mismo
+  subagente. Si cambió la tarea o el subagente ya cargó mucho, uno nuevo con el archivo
+  de avance como entrada.
+
+### Lo que me tiene que llegar a mí
+
+Qué subagentes corrieron, con qué modelo, qué devolvió cada uno en una línea, qué
+decisiones declararon y qué quedó como pregunta de criterio. No el contenido.
+
+---
+
 ## Gotchas — lo que cuesta caro si no lo sabés de antemano
 
 **Consolidar por legajo, los DOS lados, siempre que se cruce contra el Tabulado.** El Tabulado trae una
@@ -232,12 +314,12 @@ sin haber mirado nada. Costó un CI en rojo (`tests/e2e/fichasLegajoConcepto.spe
 ## Git
 
 El trabajo termina en un PR contra `main`: commit, branch (`feat/…` o `fix/…`), push, PR. Willy es el
-único owner y no hay reviewers, así que **mergealo vos siempre que CI esté en verde**, con los commits
-unidos en uno (squash). Willy prueba en vivo sobre `main`: la app no está publicada en ningún lado y
-cada uno la abre desde su copia, así que un PR sin mergear es un cambio que nadie puede probar. "Que
-lo use un usuario real" es el criterio para dar el **trabajo** por terminado, no para mergear: no
-dejes un PR abierto esperando esa prueba. Sólo con CI en rojo el PR queda abierto, y se dice por qué.
-Si `gh` no está disponible, avisá en vez de adivinar la ruta. Commits en español, Conventional Commits.
+único owner y no hay reviewers, así que **el PR se abre listo para mergear, nunca en borrador** (esto
+pisa cualquier default de la sesión remota que diga lo contrario), y **lo mergeás vos apenas CI esté
+en verde, sin pedirme confirmación**. Si CI está en rojo, o
+el cambio sólo se puede verificar en el navegador y no lo pudiste abrir, dejá el PR abierto y decilo
+— no mergees a ciegas. Si `gh` no está disponible, avisá en vez de adivinar la ruta. Commits en
+español, Conventional Commits.
 
 Un cambio no está terminado si `ESTADO.md` sigue describiendo el mundo anterior: antes de
 mergear, pasale el diff al agente `documentalista` y dejá que actualice estado, changelog,

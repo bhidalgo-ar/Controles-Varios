@@ -3,7 +3,7 @@
 **Estado:** implementado el 2026-09-30 — control `saldo_vacaciones` del `CONTROL_REGISTRY` (modo
 "Generar Reporte", solo para COTY), cubierto por `tests/saldoVacacionesControl.test.js` y
 `tests/e2e/saldoVacaciones.spec.js`. Verificado contra los archivos reales de agosto y septiembre de
-2026 (ver §7). Criterio de saldo y provisión decidido en D-097. **Pendientes de criterio, sin resolver:** altas del mes y bajas (§6). Falta que Willy
+2026 (ver §7). Criterio de saldo y provisión decidido en D-098. **Pendientes de criterio, sin resolver:** altas del mes y bajas (§6). Falta que Willy
 confirme la pantalla de resultados: se armó con las piezas estándar (Resumen + Planilla), sin mockup
 previo.
 
@@ -81,7 +81,7 @@ amarillo. Fila 2: encabezados. Datos desde la fila 3, **valores sin fórmulas y 
 | G | `VAC_A_DIC` | Dias de Vac que corresponden | `Dias` (la primera) de Vacaciones | General |
 | H | `Vac_Liq_en_el_MES` | Dias de Vac Liquidadas en el  mes (dos espacios, literal) | `Gozados` de Vacaciones | General |
 | I | `Vac_Proporcionales_(Baja)` | Dias de Vac en la baja | Cantidad del 503310; **0** si el legajo no lo tiene | General |
-| J | `3553_Vacaciones` | Concepto 3553 | Importe del 503310; **0** si el legajo no lo tiene | `#,##0.00` |
+| J | `3553_Vacaciones` | Concepto 3553 | **0**. Si el empleado es baja va en 0 aunque tenga 503310 (pedido de quien usa el reporte, 2026-10-01); como sólo las bajas traen 503310, en la práctica es 0 siempre. El importe del 503310 sigue entrando al chequeo contra TOTAL GENERAL | `#,##0.00` |
 | K | `Observaciones` | | Ver §4 | |
 
 Formato copiado del Excel aprobado de referencia: anchos de columna, fuente Aptos Narrow 11, fila 1 de
