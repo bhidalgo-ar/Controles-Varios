@@ -56,9 +56,9 @@
 
 ## Saldo de vacaciones (COTY) — construido y verificado con 09-2026; falta que lo use un usuario real
 - Qué es: control `saldo_vacaciones` (22º, "Generar Reporte", sólo COTY) que arma el `Saldo vac MM-AAAA.xlsx` desde los exports de Vacaciones y Liquidaciones de Axton, sin Tabulado.
-- Punto: reproduce el Excel aprobado de 09-2026 celda por celda y cruza contra la desglosada (898850: 262.764.464,21 en 122 de 122). Saldo y provisión = 800172 tal cual Axton (D-098). **Abierto:** altas del mes (¿1 día cada 20 trabajados?) y bajas (hoy salen con saldo y provisión vacíos). Códigos 800172/503310 sin editor en el Paso 2; pantalla sin mockup.
+- Punto: reproduce el Excel aprobado de 09-2026 celda por celda y cruza contra la desglosada (898850: 262.764.464,21 en 122 de 122). Saldo y provisión = 800172 tal cual Axton (D-099). **Abierto:** altas del mes (¿1 día cada 20 trabajados?) y bajas (hoy salen con saldo y provisión vacíos). Códigos 800172/503310 sin editor en el Paso 2; pantalla sin mockup.
 - Próximo paso: que Willy abra la pantalla y que Gaby o las analistas lo corran con un mes real; con eso cerrar altas y bajas. Los archivos reales se suben a mano (el mail y SharePoint no los entregan).
-- Detalle: `specs/saldo-vacaciones-coty.md`, **D-098**.
+- Detalle: `specs/saldo-vacaciones-coty.md`, **D-099**.
 
 ## Control de Netos (Sportline) — verificado contra los 3 Tabulados reales de Comercio: cierra completo; Detalle rediseñado en Fichas (mergeado)
 - Qué es: rearma el recibo teórico de cada legajo desde el Tabulado (sueldo + AFA, antigüedad, presentismo, acuerdo no remunerativo, retenciones) y verifica que el neto liquidado coincida una vez descontados los conceptos del mes. Reemplaza el control manual en Excel de Meli.

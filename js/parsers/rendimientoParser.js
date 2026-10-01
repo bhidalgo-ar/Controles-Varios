@@ -4,7 +4,28 @@
 //   PRECIO, ASIGNACIÓN ESTIMULO, RETIROS, CARGAS SOCIALES, PROVISIÓN MES,
 //   PROVISIÓN CARGAS SOCIALES MES, COSTO TOTAL
 /* global XLSX */
-export { detectHeaders } from './nominaMaestra.js';
+import { detectHeaders } from './nominaMaestra.js';
+export { detectHeaders };
+
+/**
+ * Los encabezados del Reporte de Rendimiento, con las columnas SIN título
+ * nombradas como las nombra `sheet_to_json` al parsear ('__EMPTY', '__EMPTY_1'…).
+ * El reporte trae el código de CC en la primera columna sin encabezado: con el
+ * título vacío, el Paso 2 no podía ofrecerla (se confundía con "sin elegir") y
+ * el código de CC quedaba sin asignar para siempre.
+ */
+export function detectHeadersRendimiento(arrayBuffer) {
+  const { headers, preview } = detectHeaders(arrayBuffer);
+  return { headers: nombrarColumnasSinTitulo(headers), preview };
+}
+
+export function nombrarColumnasSinTitulo(headers) {
+  let emptyCount = 0;
+  return headers.map(h => {
+    if (h !== '') return h;
+    return emptyCount++ === 0 ? '__EMPTY' : `__EMPTY_${emptyCount - 1}`;
+  });
+}
 
 // Mapa de nombre de columna (uppercase) → clave de mapping
 const REND_COL_MAP = {
@@ -64,7 +85,15 @@ export function autoDetectRendimientoMapping(headers) {
 export function parseRendimiento(arrayBuffer, mapping) {
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
   const sheet    = workbook.Sheets[workbook.SheetNames[0]];
-  const rawRows  = XLSX.utils.sheet_to_json(sheet, { defval: null });
+  // Los nombres de columna salen de la misma cuenta que usa el Paso 2
+  // (`nombrarColumnasSinTitulo`), y no de `sheet_to_json` a secas: si la celda
+  // del título existe pero está vacía, SheetJS nombra la columna `''` en vez de
+  // `__EMPTY`, y el código de CC elegido en el Paso 2 no se encontraba.
+  const encabezados = (XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })[0] || [])
+    .map(h => (h !== null ? String(h).trim() : ''));
+  const rawRows  = XLSX.utils.sheet_to_json(sheet, {
+    header: nombrarColumnasSinTitulo(encabezados), range: 1, defval: null,
+  });
 
   if (rawRows.length === 0) throw new Error('El archivo está vacío o no tiene filas de datos.');
 

@@ -831,6 +831,15 @@ function wireOmitToggles(scope, omitted) {
   });
 }
 
+// Una columna sin título llega nombrada como la nombra `sheet_to_json`
+// ('__EMPTY', '__EMPTY_1'…, ver `nombrarColumnasSinTitulo` del Reporte de
+// Rendimiento). Al analista se le muestra por su posición, no por ese nombre.
+function headerLabel(h, headers) {
+  if (!/^__EMPTY(_\d+)?$/.test(h)) return h;
+  const pos = (headers || []).indexOf(h) + 1;
+  return pos > 0 ? `(sin título — columna ${pos})` : '(sin título)';
+}
+
 function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   const { fileName, parseMetadata, fileType, mapping, headers, preview, arrayBuffer, clientCode: dataClientCode } = existingData;
   const warns = parseMetadata?.warnings?.length
@@ -850,7 +859,7 @@ function renderAlreadyLoaded(container, existingData, onReplace, onComplete) {
   // mapeo, "sin elegir" no cambió de significado.
   const placeholder = `Elegí la columna del ${fileTypeLabel(fileType)}…`;
   const opts = (selected = '') => ['', ...((headers) || [])]
-    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || escHtml(placeholder)}</option>`)
+    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(headerLabel(h, headers)) || escHtml(placeholder)}</option>`)
     .join('');
 
   // Omisiones declaradas (⊘) del mapeo confirmado — mismo Set y mismo cableado
@@ -1008,7 +1017,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
       </summary>
       <div style="overflow-x:auto;">
         <table class="data-table data-table--compact">
-          <thead><tr>${headers.map(h => `<th>${escHtml(h)}</th>`).join('')}</tr></thead>
+          <thead><tr>${headers.map(h => `<th>${escHtml(headerLabel(h, headers))}</th>`).join('')}</tr></thead>
           <tbody>
             ${(preview || []).slice(0, 3).map(row =>
               `<tr>${headers.map((_, i) => `<td>${escHtml(fmtPreviewCell(row[i]))}</td>`).join('')}</tr>`
@@ -1022,7 +1031,7 @@ function renderMappingForm(container, { headers, preview, fileType, savedMapping
   // Construir opciones del selector de columnas
   const placeholder = `Elegí la columna del ${fileTypeLabel(fileType)}…`;
   const opts = (selected = '') => ['', ...headers]
-    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(h) || escHtml(placeholder)}</option>`)
+    .map(h => `<option value="${escHtml(h)}" ${h === selected ? 'selected' : ''}>${escHtml(headerLabel(h, headers)) || escHtml(placeholder)}</option>`)
     .join('');
 
   // Muestra de valores reales de la columna elegida + aviso si su contenido no

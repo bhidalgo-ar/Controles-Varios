@@ -58,6 +58,7 @@ import { showToast, showConfirm }          from './toast.js';
 import { renderHelpPopover, CONTROL_HELP }  from './helpPopover.js';
 import { mountResultsHeader }      from './resultsHeader.js';
 import { setHeader }               from './appHeader.js';
+import { saveRunSession, getRunSession } from './runSession.js';
 
 // ── Caché de sesión del Tabulado ─────────────────────────────────────────────
 // Evita re-subir el Tabulado entre runs mientras la página esté activa.
@@ -172,7 +173,7 @@ function valeGuardar(value) {
   return typeof value !== 'object' || Object.keys(value).length > 0;
 }
 
-export async function renderControlsWizard(root, clientId) {
+export async function renderControlsWizard(root, clientId, { volverDeRun = null } = {}) {
   const client = await getClient(clientId);
   if (!client) {
     root.innerHTML = `
@@ -267,6 +268,18 @@ export async function renderControlsWizard(root, clientId) {
     lastRunIsDefinitive:       false,      // si el último run está marcado como definitivo
     quickRun:                  false,      // si está marcado, no se guarda nada (modo prueba)
   };
+
+  // "Volver a la configuración" desde los resultados: se retoma la corrida en el
+  // Paso 2 con los mismos controles y archivos, si siguen en memoria (ver
+  // runSession.js). Si no están (se recargó la página), arranca como siempre.
+  const previa = volverDeRun != null ? getRunSession(clientId, volverDeRun) : null;
+  if (previa) {
+    state.selectedControls = [...previa.selectedControls];
+    state.controlFiles     = { ...previa.controlFiles };
+    state.period           = previa.period;
+    state.notes            = previa.notes;
+    state.step             = 1;
+  }
 
   mountWizardShell(root, client);
   render(root, state);
@@ -2302,6 +2315,11 @@ async function executeControls(state, container, root) {
     ui.elapsedMs = performance.now() - t0;
     ui.onSeeResults = () => {
       if (runId != null) {
+        saveRunSession({
+          clientId: state.clientId, runId,
+          selectedControls: state.selectedControls, controlFiles: state.controlFiles,
+          period: state.period, notes: state.notes,
+        });
         window.location.hash = `#/control-results/${runId}`;
         return;
       }

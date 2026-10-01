@@ -3931,7 +3931,32 @@ controlado".
 CHANGELOG que describía el comportamiento anterior: "Rendimiento vs Tabulado oculta las columnas sin
 ninguna diferencia" (no se reescribe; queda superada por ésta).
 
-## D-098 — Saldo de vacaciones de COTY: se informa lo que provisiona Axton, sin recalcular; altas y bajas quedan abiertas
+---
+
+## D-098 — En los resultados, el botón de volver se convirtió en "Volver a la configuración" en vez de sumar un segundo botón
+
+**Fecha:** 2026-09-30.
+
+**Contexto:** desde la pantalla de resultados, "← Volver a los controles" y "Reconfigurar" llevaban al
+inicio del wizard y el analista perdía los archivos cargados.
+
+**Decisión (tomada al implementar; Willy pidió una de las dos opciones):** se cambió el comportamiento del botón que ya existía. Si la configuración de esa
+corrida sigue en memoria (`js/ui/runSession.js`), el botón dice "← Volver a la configuración" y lleva al
+Paso 2 (ruta `#/controls/:clientId/run/:runId`) con los mismos controles, archivos, período y notas;
+"Reconfigurar" hace lo mismo. Si no está (se recargó la página), queda "← Volver a los controles" hacia el
+inicio, como antes.
+
+**Alternativa descartada:** sumar un segundo botón al lado del existente. No hacía falta: desde el Paso 2
+el botón "Anterior" ya lleva a la elección de controles, así que el inicio sigue a un clic.
+
+**Límite conocido:** la configuración se guarda sólo en memoria, no en IndexedDB (mismo criterio que la
+caché del Tabulado): no sobrevive a recargar la página ni a cerrar la pestaña. "Ejecutar de nuevo" no se
+tocó.
+
+**Detalle:** `js/ui/runSession.js`, `js/ui/controlsResults.js`, `js/ui/controlsWizard.js`, `js/main.js`.
+Commit `536e4e9`.
+
+## D-099 — Saldo de vacaciones de COTY: se informa lo que provisiona Axton, sin recalcular; altas y bajas quedan abiertas
 
 **Fecha:** 2026-09-30. **Decidió:** Willy.
 
