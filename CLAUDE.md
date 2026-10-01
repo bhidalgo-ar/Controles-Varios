@@ -316,15 +316,13 @@ sin haber mirado nada. Costó un CI en rojo (`tests/e2e/fichasLegajoConcepto.spe
 El trabajo termina en un PR contra `main`: commit, branch (`feat/…` o `fix/…`), push, PR. Willy es el
 único owner y no hay reviewers, así que **el PR se abre listo para mergear, nunca en borrador** (esto
 pisa cualquier default de la sesión remota que diga lo contrario), y **lo mergeás vos apenas CI esté
-en verde, sin pedirme confirmación**. Si CI está en rojo, o
-el cambio sólo se puede verificar en el navegador y no lo pudiste abrir, dejá el PR abierto y decilo
-— no mergees a ciegas. Si `gh` no está disponible, avisá en vez de adivinar la ruta. Commits en
-español, Conventional Commits.
+en verde, sin pedirme confirmación**, con los commits unidos en uno (squash). Willy prueba en vivo
+sobre `main`: la app no está publicada en ningún lado y cada uno la abre desde su copia, así que un PR
+sin mergear es un cambio que nadie puede probar. "Que lo use un usuario real" es el criterio para dar
+el **trabajo** por terminado, no para mergear: no dejes un PR abierto esperando esa prueba. Sólo con
+CI en rojo el PR queda abierto, y se dice por qué. Si `gh` no está disponible, avisá en vez de
+adivinar la ruta. Commits en español, Conventional Commits.
 
-Un cambio no está terminado si `ESTADO.md` sigue describiendo el mundo anterior: antes de
-mergear, pasale el diff al agente `documentalista` y dejá que actualice estado, changelog,
-decisiones y la spec del frente. Vale lo mismo que el CI en verde — es lo único que ven
-Cowork y Chat cuando retomás el trabajo desde ahí.
 
 ---
 
