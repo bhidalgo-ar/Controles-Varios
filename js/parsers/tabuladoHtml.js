@@ -56,7 +56,7 @@ export function decodeHtmlTabulado(arrayBuffer) {
 }
 
 /** Saca tags y entidades de una celda y normaliza los espacios duros. */
-function textoDeCelda(html) {
+export function textoDeCelda(html) {
   return decodeEntities(html.replace(/<[^>]*>/g, '')).replace(NBSP, ' ').trim();
 }
 

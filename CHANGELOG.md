@@ -7,6 +7,42 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(saldo-vacaciones): la columna 3553_Vacaciones de una baja sale en $0 — 2026-10-01
+
+- **Antes:** la 3553 de una baja traía el importe de vacaciones no gozadas (503310).
+- **Ahora:** si el empleado es baja, la 3553 va en 0. Los días de la baja siguen en
+  `Vac_Proporcionales_(Baja)`, y el importe del 503310 se sigue controlando contra el TOTAL GENERAL en
+  pantalla. Pedido de quien usa el reporte. Con los archivos de 09-2026 cambian sólo esas tres celdas.
+
+### feat(saldo-vacaciones): reporte nuevo "Saldo de vacaciones" para COTY, armado desde los exports de Vacaciones y Liquidaciones de Axton — 2026-09-30
+
+- **Qué ve el analista.** En el checklist de COTY aparece un control nuevo, "Saldo de vacaciones" (22º del
+  registry, modo "Generar Reporte"). Se suben dos archivos de Axton tal cual se bajan —el reporte de
+  Vacaciones y el de Liquidaciones por concepto— y la app arma el `Saldo vac MM-AAAA.xlsx` que hasta ahora
+  se armaba a mano: una fila por legajo, sin fórmulas y sin fila de total. No lleva Tabulado.
+- **Acepta los dos formatos que Axton entrega:** `.xls` que por dentro es una tabla HTML y `.xlsx` real
+  (Liquidaciones de septiembre vino así). El período sale del texto de la columna `liquidacion`
+  (`Provisiones 09-2026`); si no hay período o hay más de uno, corta con un error en pantalla.
+- **Columnas del Excel:** Legajo (sin ceros), NOMBRE, FECHA_ALTA, Fecha_baja, Saldo_vacaciones, Prov_vac,
+  VAC_A_DIC, Vac_Liq_en_el_MES, Vac_Proporcionales_(Baja), 3553_Vacaciones y Observaciones. Saldo_vacaciones
+  es la cantidad del concepto 800172 con 2 decimales y Prov_vac su importe, los dos tal cual los trae
+  Axton (D-099). Segunda hoja `Notas` con los archivos de origen y el mapeo aplicado, sin nombres.
+- **Qué corta antes de armar el archivo:** encabezados que no son los esperados (dice cuáles esperaba y
+  cuáles encontró), un legajo repetido en Vacaciones, una fecha que no es `dd/mm/aaaa`, y que la suma de
+  las filas de Liquidaciones no dé el `TOTAL GENERAL` del propio archivo para 800172 y 503310.
+- **Observaciones que marca:** altas del mes (se tomó la provisión de Axton, criterio a revisar), bajas
+  ("criterio a definir", con qué le falta) y legajos sin provisión en Liquidaciones.
+- **Verificado con los archivos reales de 09-2026:** el reporte reproduce el Excel aprobado celda por
+  celda (1.397 celdas) salvo 3 nombres con espacio duro, que la app normaliza a espacio común. Contra la
+  Contabilidad desglosada 09-2026: el concepto 898850 (cuenta 215100180) suma 262.764.464,21 y coincide
+  en 122 de 122 legajos; el 503310 suma 17.653.187,52 y coincide en 3 de 3. Totales del mes: 800172 =
+  1.500,00 días / 262.764.464,21; 503310 = 32,63 / 17.653.187,52.
+- **Lo que queda abierto, dicho en la propia pantalla y en el Excel:** cómo se calculan las altas del mes y
+  las bajas (D-099); los códigos 800172 y 503310 son semilla sin editor en el Paso 2; la pantalla no pasó
+  por mockup y no la vio un usuario real con un mes real.
+- **Sin cambios para el resto:** ningún otro control ni archivo de salida se movió. `tests/saldoVacacionesControl.test.js`
+  entró a la cadena de `test:unit` y el conteo del registry pasó de 21 a 22.
+
 ### fix(rendimiento): el código de CC del Reporte se puede elegir en el Paso 2, y los resultados vuelven a la configuración — 2026-09-30
 
 - **Código de CC:** el Reporte de Rendimiento (lo usan Rendimiento vs Tabulado, Rendimiento vs Asiento y

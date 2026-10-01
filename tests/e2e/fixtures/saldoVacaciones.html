@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- Fixture de tests/e2e/saldoVacaciones.spec.js — NO es una pantalla de la app.
+     Monta la pantalla de resultados del "Saldo de vacaciones" (COTY) con lo que
+     salen de leer dos archivos de Axton: un legajo con dos filas en Liquidaciones,
+     una alta del mes, una baja, uno sólo en Liquidaciones y uno sin provisión.
+     Datos 100% inventados (lista de jugadores de Banfield de CLAUDE.md). -->
+<html lang="es"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../../css/tokens.css">
+<link rel="stylesheet" href="../../../css/base.css">
+<link rel="stylesheet" href="../../../css/components.css">
+<link rel="stylesheet" href="../../../css/results.css">
+</head><body>
+<div style="max-width:1180px;margin:0 auto;padding:16px;"><div class="card" style="padding:16px;">
+  <div id="host"></div>
+</div></div>
+<script type="module">
+import { runSaldoVacaciones, renderSaldoVacacionesResults, summarizeSaldoVacaciones }
+  from '../../../js/controls/saldoVacaciones.js';
+
+const PROV = '800172 - Provision Vacaciones';
+const BAJA = '503310 - Vac. no gozadas 2026';
+const LIQ_PROV = 'x Provisiones Septiembre 2026 (Provisiones 09-2026)  - (v)';
+const LIQ_BAJA = 'Liq. Final c/sueldo Septiembre 2026 (Bajas 09-2026)  - (c)';
+const liq = (legajo, nombre, liquidacion, p, b, fila) => ({
+  legajo, nombre, liquidacion, fila,
+  valores: { [PROV]: { cant: p?.[0] ?? null, imp: p?.[1] ?? null }, [BAJA]: { cant: b?.[0] ?? null, imp: b?.[1] ?? null } },
+});
+
+const vacaciones = [
+  { legajo: '0001', nombre: 'SANGUINETTI,JAVIER', ingreso: '01/03/2015', egreso: '', dias: 35, gozados: 5, fila: 2 },
+  { legajo: '007', nombre: 'ALBELLA,GUSTAVO', ingreso: '15/09/2026', egreso: '', dias: 12, gozados: 0, fila: 3 },
+  { legajo: '2', nombre: 'FALCIONI,JULIO CESAR', ingreso: '10/02/2010', egreso: '10/09/2026', dias: 28, gozados: 3.5, fila: 4 },
+  { legajo: '4', nombre: 'CARRANZA,JULIAN', ingreso: '02/05/2019', egreso: '', dias: 20, gozados: 0, fila: 5 },
+];
+const liquidaciones = [
+  liq('1', 'SANGUINETTI JAVIER', LIQ_PROV, [10.5, 1000], null, 4),
+  liq('0001', 'SANGUINETTI JAVIER', LIQ_BAJA, [2, 500], null, 5),
+  liq('7', 'ALBELLA GUSTAVO', LIQ_PROV, [1.5, 123456.78], null, 6),
+  liq('2', 'FALCIONI JULIO CESAR', LIQ_BAJA, [8, 800], [5.25, 2500.5], 7),
+  liq('3', 'URZI AGUSTIN', LIQ_BAJA, null, [1, 300], 8),
+];
+const liquidacionesMeta = {
+  conceptos: [PROV, BAJA],
+  totales: [{ [PROV]: { cant: 22, imp: 125756.78 }, [BAJA]: { cant: 6.25, imp: 2800.5 } }],
+};
+
+const results = runSaldoVacaciones(vacaciones, [], {
+  legajoKeyMode: 'sin_ceros', liquidacionesRows: liquidaciones, liquidacionesMeta,
+  vacacionesFileName: 'Vacaciones.prueba.xls', liquidacionesFileName: 'Liquidaciones.prueba.xlsx',
+});
+window.__results = results;
+window.__summary = summarizeSaldoVacaciones(results);
+renderSaldoVacacionesResults(results, document.getElementById('host'));
+</script></body></html>
