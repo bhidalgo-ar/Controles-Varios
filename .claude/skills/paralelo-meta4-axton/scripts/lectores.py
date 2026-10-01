@@ -117,15 +117,54 @@ def leerMeta4(path, cfg, modoLegajo='sinCeros'):
             'codigos': sorted(cols, key=lambda x: int(x)), 'headers': hdr}
 
 
-# ------------------------------------------------------------- Axton: .xls
+# --------------------------------------------------- Axton: .xls y .xlsx
 
 def leerAxton(path, modoLegajo='sinCeros'):
-    """Tabulado de Axton ("Resumen de Liquidacion").
+    """Tabulado de Axton ("Resumen de Liquidacion"), en cualquiera de sus dos formas.
 
-    Viene con extension .xls pero es HTML: una tabla, la fila TOTAL GENERAL
-    ANTES de los encabezados, despues una fila de encabezados 'CODIGO - Nombre'
-    y una subfila 'Imp'/'Cant'. Se ubica por firma, nunca por posicion.
+    El cliente lo exporta de dos maneras y las dos llegan: un .xls que en
+    realidad es HTML, y un .xlsx de verdad. La estructura logica es la misma
+    —fila TOTAL GENERAL, fila de encabezados 'CODIGO - Nombre', subfila
+    'Imp'/'Cant', despues los datos— asi que se decide por el contenido del
+    archivo y no por la extension, que en este cliente miente.
+
+    Ojo con lo que se pierde en el .xlsx: no trae el preambulo, y ahi vive el
+    campo 'Liquidacion:' (Vigentes / Todas / Confirmadas) que es el primer
+    lugar donde mirar cuando faltan liquidaciones.
     """
+    if open(path, 'rb').read(2) == b'PK':          # un .xlsx es un zip
+        return _leerAxtonXlsx(path, modoLegajo)
+    return _leerAxtonHtml(path, modoLegajo)
+
+
+def _leerAxtonXlsx(path, modoLegajo):
+    """La misma tabla, en un .xlsx de verdad. Se ubica por firma, no por fila."""
+    ws = openpyxl.load_workbook(path, data_only=True).active
+
+    def celdas(fila):
+        return [('' if c.value is None else str(c.value).strip()) for c in fila]
+
+    header, sub, total, data = None, None, None, []
+    for fila in ws.iter_rows():
+        cc = celdas(fila)
+        if not any(cc):
+            continue
+        if header is None and cc[0].startswith('Legajo'):
+            header = cc
+            continue
+        if cc[0].upper().startswith('TOTAL GENERAL'):
+            total = cc
+            continue
+        if set(x for x in cc if x) <= {'Imp', 'Cant'}:
+            sub = cc
+            continue
+        if cc[0]:
+            data.append(cc)
+    return _armarAxton(header, sub, total, data, '', modoLegajo)
+
+
+def _leerAxtonHtml(path, modoLegajo):
+    """El .xls que es HTML. Codificacion ISO-8859-1, no UTF-8."""
     raw = open(path, 'rb').read().decode('iso-8859-1', errors='replace')
     doc = LH.fromstring(raw)
     spans = doc.xpath('//span')
@@ -151,6 +190,11 @@ def leerAxton(path, modoLegajo='sinCeros'):
         if cc and cc[0]:
             data.append(cc)
 
+    return _armarAxton(header, sub, total, data, preambulo, modoLegajo)
+
+
+def _armarAxton(header, sub, total, data, preambulo, modoLegajo):
+    """De filas de texto a la estructura del cruce. Comun a las dos formas."""
     if header is None:
         raise SystemExit(
             "No encontre la fila de encabezados del Tabulado de Axton "
@@ -303,3 +347,50 @@ def leerEquivalencias(path):
     return {'pares': pares, 'sinAxton': sinAx, 'sinMeta4': sinM4,
             'porAxton': dict(porAxton),
             'porMeta4': {p['meta4']: p for p in pares}}
+
+
+# ------------------------------- Meta4: control de cargas sociales
+
+def leerCargas(path, cfg, modoLegajo='sinCeros'):
+    """Export 'Control de cargas sociales' de Meta4 (.xlsx).
+
+    Fila 1 encabezados y una columna por concepto de carga, con el NOMBRE del
+    concepto y no su codigo: es otro export, no el Tabulado. Igual que el
+    Tabulado trae UNA FILA POR LIQUIDACION, asi que no consolidar aca.
+
+    Ademas de las contribuciones trae los aportes del empleado (TOT_JUB,
+    TOT_LEY, TOT_OS). Esos no se cruzan contra Axton —ya viajan en el
+    Tabulado— pero sirven de ancla: si no dan iguales a los del Tabulado, el
+    archivo es de otra corrida y no se puede cruzar nada.
+    """
+    ws = openpyxl.load_workbook(path, data_only=True).active
+    hdr = [('' if c.value is None else str(c.value).strip()) for c in ws[1]]
+
+    def idx(nombre):
+        if nombre not in hdr:
+            raise SystemExit(
+                f"El control de cargas sociales no trae la columna '{nombre}'.\n"
+                f"Encontre estos encabezados: {', '.join(h for h in hdr if h)}\n"
+                "Corregir el nombre en el bloque 'contribuciones' del config."
+            )
+        return hdr.index(nombre)
+
+    iLeg = idx(cfg['columnaLegajo'])
+    iNom = hdr.index(cfg['columnaNombre']) if cfg.get('columnaNombre') in hdr else None
+    columnas = [h for h in hdr if h and h != cfg['columnaLegajo'] and h != cfg.get('columnaNombre')]
+
+    rows = []
+    for r in ws.iter_rows(min_row=2, values_only=True):
+        if all(v is None or str(v).strip() == '' for v in r):
+            continue
+        leg = legajoKey(r[iLeg], modoLegajo)
+        if not leg:
+            continue
+        rows.append({
+            'legajo': leg,
+            'nombre': '' if iNom is None else str(r[iNom] or '').strip(),
+            'valores': {h: toNum(r[hdr.index(h)]) for h in columnas},
+        })
+    if not rows:
+        raise SystemExit("El control de cargas sociales no trajo ninguna fila de datos.")
+    return {'rows': rows, 'columnas': columnas, 'headers': hdr}

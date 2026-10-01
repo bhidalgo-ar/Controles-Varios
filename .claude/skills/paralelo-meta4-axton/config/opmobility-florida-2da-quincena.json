@@ -1,0 +1,224 @@
+{
+  "_comentario": [
+    "Config del paralelo de la 2DA QUINCENA de OPmobility C-Power Argentina (Florida).",
+    "Ni el config de la 1ra quincena ni el del mensual sirven: la 2da quincena liquida",
+    "jornal (1063) con sus unidades (1061), feriados (4453 importe / 4450 unidades),",
+    "provisiones contables y otro juego de retenciones sindicales y judiciales.",
+    "Verificado contra la 2da Quincena de Agosto 2026: con esta clasificacion las 79 filas",
+    "de Meta4 cierran sus dos identidades (suma de descuentos = TOTAL_DESCUENTO y",
+    "haberes - descuentos = NETO), las 69 de Axton cierran bruto - retenciones + exento =",
+    "Neto, y el Excel reproduce exacto el 'Total Netos' del PDF (85.274.028,00 en 79 fichas,",
+    "cero legajos con diferencia).",
+    "Los codigos son SEMILLA, no identidad: si el cliente renumera, se corrige aca.",
+    "Ningun dato de empleado vive en este archivo: son codigos de concepto."
+  ],
+  "cliente": "OPmobility C-Power Argentina S.A. (Florida) - 2da Quincena",
+  "modoLegajo": "sinCeros",
+  "meta4": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "APPELIDO Y NOMBRE",
+    "columnaNeto": "NETO",
+    "columnaTotalDescuento": "TOTAL_DESCUENTO",
+    "_descuentos": "Lo que resta del neto. 8500 puede venir NEGATIVO (el adelanto que se paga, no el que se descuenta): por eso se lee con toNum y no se fuerza el signo.",
+    "descuentos": [
+      "6005",
+      "6018",
+      "6041",
+      "7005",
+      "8500",
+      "8510",
+      "8522",
+      "8537",
+      "8540",
+      "8541"
+    ],
+    "_noSonConceptos": [
+      "Dias, unidades y porcentajes; acumuladores; provisiones contables (35xx/36xx) y",
+      "contribuciones patronales (6050/6105/6142). 1345 y 4450 son unidades aunque el",
+      "nombre no lo diga: contarlas como haber corre el neto en pesos enteros."
+    ],
+    "noSonConceptos": [
+      "401",
+      "402",
+      "465",
+      "500",
+      "540",
+      "616",
+      "618",
+      "624",
+      "626",
+      "628",
+      "630",
+      "631",
+      "638",
+      "644",
+      "685",
+      "686",
+      "740",
+      "1061",
+      "1331",
+      "1334",
+      "1345",
+      "4420",
+      "4430",
+      "4450",
+      "3570",
+      "3572",
+      "3574",
+      "3576",
+      "3670",
+      "3672",
+      "3674",
+      "3676",
+      "4050",
+      "5810",
+      "5815",
+      "5820",
+      "5825",
+      "5840",
+      "5850",
+      "5911",
+      "5921",
+      "8900",
+      "6090",
+      "6050",
+      "6105",
+      "6142"
+    ]
+  },
+  "axton": {
+    "_retenciones": "605700 (anticipo), 605694 (farmacia), 605710/605712 (judiciales) y 600005 (Resol 227/01) son las que esta quincena usa de verdad. 605701 y 605715 son los mismos conceptos con otro codigo ('DC'): el cliente movio el anticipo y el embargo ahi a mitad del paralelo, asi que van declarados los dos.",
+    "retenciones": [
+      "600000",
+      "600005",
+      "600050",
+      "605110",
+      "605120",
+      "605130",
+      "605694",
+      "605700",
+      "605701",
+      "605710",
+      "605712",
+      "605715",
+      "609995"
+    ],
+    "_exentos": "599997 es el SOBREGIRO: Axton lo agrega cuando el neto le daria negativo, para dejarlo en cero. Es exento y sin el la validacion 1 no cierra.",
+    "exentos": [
+      "502003",
+      "502018",
+      "599997",
+      "599999"
+    ],
+    "prefijosDeBase": [
+      "8",
+      "9"
+    ]
+  },
+  "mapeosDeclarados": {
+    "605700": [
+      "605701"
+    ],
+    "605710": [
+      "605715"
+    ]
+  },
+  "_mapeosDeclarados": [
+    "Axton mudo el anticipo de 605700 a 605701 y el embargo de 605710 a 605715 a mitad del",
+    "paralelo, sin que la tabla de equivalencias cambie. Los importes del codigo nuevo",
+    "reprodujeron exacto los de Meta4 (-900.000,00 el anticipo y 151.548,57 el embargo), asi",
+    "que se comparan contra la SUMA de los dos codigos y salen listados en el Excel para que",
+    "el analista corrija la tabla, que es el documento del cliente."
+  ],
+  "_contribuciones": [
+    "El cruce de las contribuciones patronales. Cada par declara de donde sale el lado de",
+    "Meta4: 'meta4' es una columna del control de cargas sociales (que las trae todas) y",
+    "'tabulado' un codigo de concepto del Tabulado (que en la quincena trae solo 6105, 6142 y",
+    "6050). Si el control de cargas no vino, se cruza lo que el Tabulado alcance y el resto sale",
+    "listado como no cruzable.",
+    "'codigoBaseTabulado' es 5840 (TOT_HAB_CON_AP): la remuneracion sobre la que Meta4",
+    "contribuye, que se compara contra el Bruto de Axton para saber si una diferencia viene de",
+    "la base o del calculo."
+  ],
+  "contribuciones": {
+    "columnaLegajo": "ID_EMPLEADO",
+    "columnaNombre": "NOMBRE",
+    "columnaBase": "TOT_HAB_CON_AP",
+    "codigoBaseTabulado": "5840",
+    "aportesDeControl": [
+      {
+        "meta4": "TOT_JUB",
+        "tabulado": "6005"
+      },
+      {
+        "meta4": "TOT_LEY",
+        "tabulado": "6018"
+      },
+      {
+        "meta4": "TOT_OS",
+        "tabulado": "6041"
+      }
+    ],
+    "pares": [
+      {
+        "nombre": "Contribución Jubilación",
+        "meta4": "TOT_CONT_JUB",
+        "tabulado": "6105",
+        "axton": [
+          "880011"
+        ]
+      },
+      {
+        "nombre": "Contribución F.N.E.",
+        "meta4": "TOT_CONT_FNE",
+        "tabulado": "6142",
+        "axton": [
+          "880014"
+        ]
+      },
+      {
+        "nombre": "Aporte A.R.T. (fijo)",
+        "meta4": "APORTE_ART",
+        "tabulado": "6050",
+        "axton": [
+          "880021"
+        ]
+      },
+      {
+        "nombre": "Contribución Obra Social",
+        "meta4": "TOT_CONT_OS",
+        "axton": [
+          "880015"
+        ]
+      },
+      {
+        "nombre": "Contribución Ley 19032",
+        "meta4": "TOT_CONT_LEY",
+        "axton": [
+          "880012"
+        ]
+      },
+      {
+        "nombre": "Contribución ANSES",
+        "meta4": "TOT_CONT_ANSES",
+        "axton": [
+          "880013"
+        ]
+      },
+      {
+        "nombre": "A.R.T. variable",
+        "meta4": "TOT_ART_VARI",
+        "axton": [
+          "880022"
+        ]
+      },
+      {
+        "nombre": "Seguro de vida obligatorio",
+        "meta4": "SEGURO_VIDA",
+        "axton": [
+          "880025"
+        ]
+      }
+    ]
+  }
+}

@@ -72,7 +72,27 @@ forma más rápida de armar la clasificación de un cliente nuevo sin adivinar.
 
 ---
 
-## 3. Tabulado de Axton — `Tabulado_AXTON.xls`
+## 3. Tabulado de Axton — `.xls` (HTML) o `.xlsx` de verdad
+
+**Llegan las dos formas y hay que aceptar las dos.** `leerAxton()` decide por el contenido del
+archivo (un `.xlsx` empieza con `PK`, porque es un zip) y nunca por la extensión, que en este
+cliente miente. La estructura lógica es idéntica en las dos: fila `TOTAL GENERAL`, fila de
+encabezados `CODIGO - Nombre`, subfila `Imp`/`Cant`, después los datos.
+
+Tres cosas que cambian en el `.xlsx` y hay que tener presentes:
+
+- **No trae el preámbulo.** Ahí vive el campo `Liquidacion:` (`Vigentes` / `Todas` /
+  `Confirmadas`), que es el primer lugar donde mirar cuando faltan liquidaciones (patrón 2).
+  Con el `.xlsx` ese dato se pierde: queda sólo la columna `liquidacion` de cada fila, que dice
+  el tipo pero no el filtro.
+- **La fila `TOTAL GENERAL` aparece dos veces**, al principio y al final. Se descarta por firma
+  las dos veces; si se la leyera como dato saldría un legajo fantasma llamado "TOTAL GENERAL".
+- **Puede venir con menos columnas de concepto que el `.xls`.** Pasó: un export se llevó 8
+  columnas que tenían plata y la suma de las columnas dejó de llegar al `Bruto` que el propio
+  archivo declara. La validación 1 lo agarra y hay que **pedir el export de nuevo**: con un
+  tercio de los haberes afuera, el detalle por concepto sale mal y coherente.
+
+### El `.xls` que es HTML
 
 **Tiene extensión `.xls` pero es HTML** (`file` lo confirma: "HTML document, ISO-8859 text").
 Una sola `<table>`. Codificación **ISO-8859-1**, no UTF-8.
