@@ -197,6 +197,24 @@ for (const [desc, buf] of [
     m === null);
 }
 
+// Hoja con filas vacías arriba: el área usada arranca en la fila 3. Los datos
+// se cuentan desde la fila de títulos, no desde la fila 1 de la hoja — si no,
+// la fila de títulos entraba como un legajo más.
+{
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['LEGAJO', 'COSTO TOTAL'],
+    ['1',      1500000.5],
+    ['2',      2300000],
+  ], { origin: 'A3' });
+  ws['!ref'] = 'A3:B5';
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hoja1');
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const { parsedRows } = parseCostoTotal(buf, { legajoColumn: 'LEGAJO', costoTotalColumn: 'COSTO TOTAL' });
+  assert('parseo con filas vacías arriba: la fila de títulos no entra como dato (2 legajos)',
+    parsedRows.length === 2 && String(parsedRows[0].LEGAJO) === '1');
+}
+
 // ── Resultado ─────────────────────────────────────────────────────────────────
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail) process.exit(1);

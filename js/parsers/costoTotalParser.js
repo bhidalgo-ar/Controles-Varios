@@ -74,8 +74,12 @@ export function parseCostoTotal(arrayBuffer, mapping) {
   // `__EMPTY`, y el legajo elegido en el Paso 2 no se encontraba.
   const encabezados = (XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })[0] || [])
     .map(h => (h !== null ? String(h).trim() : ''));
+  // Los datos arrancan en la fila siguiente a la de títulos, contada desde
+  // donde empieza el área usada de la hoja y no desde la fila 1: si la hoja
+  // trae filas vacías arriba, `range: 1` metía la fila de títulos como dato.
+  const filaTitulos = XLSX.utils.decode_range(sheet['!ref'] || 'A1').s.r;
   const rawRows  = XLSX.utils.sheet_to_json(sheet, {
-    header: nombrarColumnasSinTitulo(encabezados), range: 1, defval: null,
+    header: nombrarColumnasSinTitulo(encabezados), range: filaTitulos + 1, defval: null,
   });
 
   if (rawRows.length === 0) throw new Error('El archivo está vacío o no tiene filas de datos.');
