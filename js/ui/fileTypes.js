@@ -63,7 +63,7 @@ import { parseBrutos, autoDetectBrutosMapping } from '../parsers/brutosParser.js
 import { parseGsPers, autoDetectGsPersMapping } from '../parsers/gsPersParser.js';
 import { parseNr, autoDetectNrMapping } from '../parsers/nrParser.js';
 import { parseRendimiento, autoDetectRendimientoMapping, detectHeadersRendimiento } from '../parsers/rendimientoParser.js';
-import { parseCostoTotal, autoDetectCostoTotalMapping } from '../parsers/costoTotalParser.js';
+import { parseCostoTotal, autoDetectCostoTotalMapping, detectHeadersCostoTotal } from '../parsers/costoTotalParser.js';
 import { parseConta } from '../parsers/contaExcel.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
@@ -462,11 +462,13 @@ export const FILE_TYPES = {
     label: 'Reporte de Costo Total (por empleado)',
     siglas: ['COSTO_TOTAL', 'COSTO'],
     parse: parseCostoTotal,
-    detectHeaders: detectHeadersXlsx,
+    // Trae el legajo en la primera columna, sin título: el detector la nombra
+    // para que el Paso 2 la pueda ofrecer (mismo caso que `rend_file`).
+    detectHeaders: detectHeadersCostoTotal,
     autoDetect: autoDetectCostoTotalMapping,
     meta: metaRegistros,
     fields: [
-      { key: 'legajoColumn',     label: 'Columna de Legajo (ID Empleado)', required: true },
+      { key: 'legajoColumn',     label: 'Columna de Legajo (ID Empleado, suele ser la 1ª col., sin título)', required: true },
       { key: 'costoTotalColumn', label: 'Columna de COSTO TOTAL',          required: true },
     ],
   },
@@ -790,6 +792,20 @@ FILE_TYPES.tab_empresa2_file = {
 FILE_TYPES.tab_empresa3_file = {
   ...FILE_TYPES.tab_control,
   label: 'Tabulado — tercera empresa',
+  aliasOf: 'tab_control',
+};
+
+// Tabulado de la otra empresa del cliente para Rendimiento x EE (Marval liquida
+// por dos empresas y el Reporte de Costo Total trae a las dos juntas). Es el
+// MISMO archivo que el Tabulado, de la otra empresa: comparte la ficha como
+// `tab_empresa2_file`, y no reusa ése por dos motivos. La zona de drop se rotula
+// con la etiqueta del TIPO, y "segunda empresa" no es como lo dice este control
+// (acá no hay primera ni segunda: da igual cuál va en cada casillero). Y un run
+// guarda un archivo por tipo: si Netos y Rend x EE corrieran juntos con el mismo
+// tipo, el segundo pisaría al primero en la corrida guardada.
+FILE_TYPES.tab_otra_empresa_file = {
+  ...FILE_TYPES.tab_control,
+  label: 'Tabulado — la otra empresa (01 o 03)',
   aliasOf: 'tab_control',
 };
 

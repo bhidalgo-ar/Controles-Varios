@@ -1140,6 +1140,8 @@ export const DEFAULT_SIN_ARCHIVO = {
   cc_x_ee_file: 'Sin él, el centro de costo de cada empleado sale del asiento contable.',
   cuentas_redefinicion_file:
     'Sin él sale la Contabilidad Desglosada, pero NO el Asiento Contable: el código de cada cuenta sale de acá.',
+  tab_otra_empresa_file:
+    'El control corre igual, pero los legajos de la otra empresa salen sin comparar (sin datos en el Tabulado).',
 };
 
 /**
@@ -1540,7 +1542,8 @@ function renderStepFiles(container, state, root) {
       editorDiv,
       state.tab.parsedRows,
       state.rendVsTabuGrouping,
-      (newGrouping) => { state.rendVsTabuGrouping = newGrouping; }
+      (newGrouping) => { state.rendVsTabuGrouping = newGrouping; },
+      { clientCode: state.client?.code },
     );
   }
 
