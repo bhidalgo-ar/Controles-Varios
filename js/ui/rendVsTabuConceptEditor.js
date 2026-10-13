@@ -12,8 +12,11 @@
 //     el grupo y siguen sumando o restando igual.
 
 import { DEFAULT_CONCEPT_CONFIG } from '../controls/rendVsTabu.js';
-import { showConfirm }            from './toast.js';
+import { showConfirm, showToast } from './toast.js';
 import { renderHelpPopover }      from './helpPopover.js';
+import {
+  serializeConceptGrouping, parseConceptGroupingTransfer,
+} from './conceptGroupingTransfer.js';
 
 // `key` es la clave de la agrupación que viaja al control — no se toca. `name`
 // es cómo lo diría un analista; en la tabla de resultados y en el export las
@@ -82,14 +85,24 @@ const AYUDA_AGRUPACION = {
   `,
 };
 
-export function renderConceptGroupingEditor(container, tabRows, currentGrouping, onChange) {
+/**
+ * @param {{ clientCode?: string }} [opts] — el cliente de la corrida, para que
+ *   el texto de "Copiar configuración" diga de quién es la agrupación.
+ */
+export function renderConceptGroupingEditor(container, tabRows, currentGrouping, onChange, { clientCode = null } = {}) {
   const colByCode = buildColByCode(tabRows[0] || {});
   const allCodes  = Object.keys(colByCode).sort((a, b) => Number(a) - Number(b));
 
   let grouping = currentGrouping ? deepClone(currentGrouping) : deepClone(DEFAULT_CONCEPT_CONFIG);
   // `expanded` es puramente visual: qué grupos muestran todos sus chips. No
-  // toca la agrupación ni lo que se guarda.
-  let uiState  = { sort: 'num', hideNotFound: false, expanded: new Set() };
+  // toca la agrupación ni lo que se guarda. Lo de copiar/pegar vive acá porque
+  // cada edición redibuja el panel entero: sin guardarlo, lo que el analista
+  // estaba pegando se borraría con el primer clic en un chip.
+  let uiState  = {
+    sort: 'num', hideNotFound: false, expanded: new Set(),
+    pasteOpen: false, pasteText: '', pasteError: '',
+    copyFallback: '',   // el texto para copiar a mano, si el portapapeles falló
+  };
 
   function getAssignedCodes() {
     const s = new Set();
@@ -237,6 +250,15 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
             ${fueraDelTab > 0
               ? `<span class="wizard-panel__warn">⚠ ${fueraDelTab} concepto${fueraDelTab !== 1 ? 's' : ''} fuera del Tabulado</span>`
               : ''}
+            <button type="button" id="js-rtv-copy" class="btn btn--ghost btn--sm" style="white-space:nowrap;"
+              title="Copia la agrupación de esta pantalla como texto, para mandarla por ticket">
+              ⧉ Copiar configuración
+            </button>
+            <button type="button" id="js-rtv-paste" class="btn btn--ghost btn--sm" style="white-space:nowrap;"
+              aria-expanded="${uiState.pasteOpen}"
+              title="Reemplaza la agrupación de esta pantalla por una que te mandaron como texto">
+              Pegar configuración
+            </button>
             <button type="button" id="js-rtv-restore" class="btn btn--ghost btn--sm" style="white-space:nowrap;">
               ↺ Restaurar defaults
             </button>
@@ -245,6 +267,30 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
         <p class="wizard-panel__sub">
           Qué conceptos del Tabulado suma cada grupo del Rendimiento. Se guarda por cliente.
         </p>
+        ${uiState.copyFallback ? `
+          <div class="alert alert--warning" style="margin-bottom:var(--sp-3);padding:var(--sp-3) var(--sp-4);flex-direction:column;align-items:stretch;gap:var(--sp-2);color:var(--color-text);">
+            <span>No se pudo copiar solo. Seleccioná todo el texto de abajo y copialo con Ctrl+C.</span>
+            <textarea id="js-rtv-copy-fallback" class="form-textarea" rows="8" readonly
+              style="box-sizing:border-box;font-family:var(--font-mono, monospace);font-size:var(--text-sm);"
+              aria-label="Configuración para copiar a mano">${esc(uiState.copyFallback)}</textarea>
+            <div><button type="button" id="js-rtv-copy-fallback-close" class="btn btn--ghost btn--sm">Listo</button></div>
+          </div>` : ''}
+        ${uiState.pasteOpen ? `
+          <div class="alert alert--info" style="margin-bottom:var(--sp-3);padding:var(--sp-3) var(--sp-4);flex-direction:column;align-items:stretch;gap:var(--sp-2);color:var(--color-text);">
+            <label for="js-rtv-paste-text">
+              Pegá el texto de una configuración copiada con «Copiar configuración». Reemplaza la agrupación de
+              esta pantalla entera, y se guarda al ejecutar como cualquier cambio.
+            </label>
+            <textarea id="js-rtv-paste-text" class="form-textarea${uiState.pasteError ? ' form-input--error' : ''}" rows="8"
+              style="box-sizing:border-box;font-family:var(--font-mono, monospace);font-size:var(--text-sm);"
+              placeholder='{ "tipo": "agrupacion-conceptos-rendimiento", … }'
+              ${uiState.pasteError ? 'aria-describedby="js-rtv-paste-error"' : ''}>${esc(uiState.pasteText)}</textarea>
+            ${uiState.pasteError ? `<div id="js-rtv-paste-error" class="form-error" role="alert" style="margin-top:0;">${esc(uiState.pasteError)}</div>` : ''}
+            <div style="display:flex;gap:var(--sp-2);">
+              <button type="button" id="js-rtv-paste-apply" class="btn btn--primary btn--sm">Aplicar</button>
+              <button type="button" id="js-rtv-paste-cancel" class="btn btn--ghost btn--sm">Cancelar</button>
+            </div>
+          </div>` : ''}
         ${warningBanner}
         <div class="grouping-toolbar">
           <span class="grouping-toolbar__label">Ordenar:</span>
@@ -324,6 +370,70 @@ export function renderConceptGroupingEditor(container, tabRows, currentGrouping,
       grouping = deepClone(DEFAULT_CONCEPT_CONFIG);
       onChange(deepClone(grouping));
       renderEditor();
+    });
+
+    // ── Copiar / pegar la configuración (para mandarla por ticket) ───────────
+    // Copiar no cambia nada; pegar reemplaza la agrupación entera y pasa por el
+    // mismo `onChange` que cualquier edición, así que se guarda al ejecutar.
+    container.querySelector('#js-rtv-copy')?.addEventListener('click', async () => {
+      const text = serializeConceptGrouping(grouping, { clientCode });
+      try {
+        await navigator.clipboard.writeText(text);
+        uiState.copyFallback = '';
+        renderEditor();
+        showToast('Configuración copiada. Pegala en el ticket tal cual, sin editarla.', 'success');
+      } catch {
+        // Sin permiso de portapapeles (o un navegador que no lo da): el texto se
+        // muestra para copiarlo a mano, en vez de decir "copiado" sin serlo.
+        uiState.copyFallback = text;
+        renderEditor();
+        const area = container.querySelector('#js-rtv-copy-fallback');
+        area?.focus();
+        area?.select();
+      }
+    });
+    container.querySelector('#js-rtv-copy-fallback')?.addEventListener('focus', e => e.target.select());
+    container.querySelector('#js-rtv-copy-fallback-close')?.addEventListener('click', () => {
+      uiState.copyFallback = '';
+      renderEditor();
+    });
+
+    container.querySelector('#js-rtv-paste')?.addEventListener('click', () => {
+      uiState.pasteOpen = !uiState.pasteOpen;
+      uiState.pasteError = '';
+      renderEditor();
+      container.querySelector('#js-rtv-paste-text')?.focus();
+    });
+    container.querySelector('#js-rtv-paste-text')?.addEventListener('input', e => {
+      uiState.pasteText = e.target.value;
+    });
+    container.querySelector('#js-rtv-paste-cancel')?.addEventListener('click', () => {
+      uiState.pasteOpen = false;
+      uiState.pasteText = '';
+      uiState.pasteError = '';
+      renderEditor();
+    });
+    container.querySelector('#js-rtv-paste-apply')?.addEventListener('click', async () => {
+      const res = parseConceptGroupingTransfer(uiState.pasteText);
+      if (!res.ok) {
+        uiState.pasteError = res.error;
+        renderEditor();
+        container.querySelector('#js-rtv-paste-text')?.focus();
+        return;
+      }
+      // La agrupación es por cliente: pegar la de otro es posible (Marval tiene
+      // la misma forma en todas sus corridas), pero no tiene que pasar sin verlo.
+      if (res.clientCode && clientCode && res.clientCode !== clientCode
+          && !await showConfirm(`Esta configuración se copió del cliente ${res.clientCode} y estás en ${clientCode}. ¿Aplicarla igual?`)) {
+        return;
+      }
+      grouping = res.grouping;
+      uiState.pasteOpen = false;
+      uiState.pasteText = '';
+      uiState.pasteError = '';
+      onChange(deepClone(grouping));
+      renderEditor();
+      showToast('Configuración pegada. Se guarda para este cliente al ejecutar.', 'success');
     });
 
     container.querySelectorAll('[data-sort]').forEach(btn => {

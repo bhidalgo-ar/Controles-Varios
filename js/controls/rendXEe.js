@@ -6,6 +6,12 @@
 // usando la misma agrupación de conceptos, y compara contra el Costo Total del reporte.
 //
 // Dif = Costo Total (Reporte) − Costo Total (Calculado del Tabulado).
+//
+// Marval liquida por dos empresas (01 y 03) y el reporte trae a la gente de las
+// dos juntas: el Tabulado de la otra empresa entra por un casillero opcional
+// (`tab2`). Sin él, los legajos de esa empresa salen como "del reporte sin datos
+// en Tabulado", y el control lo avisa para que "sin diferencias" no se lea como
+// "revisé a todos" (D-036).
 
 import { DEFAULT_CONCEPT_CONFIG, leyendaDeConceptos } from './rendVsTabu.js';
 import { diffStats } from './semaforo.js';
@@ -20,7 +26,7 @@ import { formatAmount as fmt, toNum } from '../utils/currency.js';
 import { periodSuffix } from '../utils/dates.js';
 import { resumenStats } from './resumenStats.js';
 import {
-  renderVerdict, renderTiles, renderIssues, renderResumenDetalle,
+  renderVerdict, renderTiles, renderIssues, renderChecks, renderResumenDetalle,
   mvClass, mvArrow, fmtSigned,
 } from '../ui/resultBlocks.js';
 
@@ -64,10 +70,23 @@ export function summarizeRendXEe(results) {
     row => `leg. ${row.legajo}`
   );
 
+  // Cuántos Tabulados entraron (D-036). Una corrida guardada antes del segundo
+  // casillero no lo trae: ahí no se afirma nada.
+  const nTab = results.tabulados;
+  const unSoloTab = nTab === 1;
+  const insightTabulados = nTab == null ? [] : [{
+    type:  nTab === 2 ? 'info' : 'warning',
+    label: nTab === 2 ? 'Tabulados cruzados (las dos empresas)'
+      : unSoloTab ? 'Tabulado cruzado — falta el de la otra empresa: sus legajos salen sin comparar'
+      : 'Tabulados cruzados',
+    value: nTab,
+  }];
+
   return {
     status:   anyIssue ? 'warning' : 'success',
     headline: `${s.total} legajos · ${s.conDif} con diferencias de Costo Total`,
     insights: [
+      ...insightTabulados,
       {
         type:  s.conDif > 0 ? 'warning' : 'success',
         label: 'legajos con diferencia Reporte vs Calculado',
@@ -89,7 +108,9 @@ export function summarizeRendXEe(results) {
     unitsWithDiff,
     diffTotalAmount,
     worstCase,
-    contextNote: null,
+    contextNote: unSoloTab
+      ? 'un solo Tabulado: los legajos de la otra empresa salen sin comparar'
+      : null,
     resumen: resumenDelRendXEe(results),
   };
 }
@@ -98,46 +119,78 @@ export function summarizeRendXEe(results) {
 
 export function runRendXEe(ctRows, tabRows, mapping) {
   const cm = mapping.costoTotal;
-  const tm = mapping.tab;
 
   // Clave de comparación de legajo para este cliente (D-038) — antes era un
-  // `normId` local, uno de los tres criterios que convivían en el repo.
+  // `normId` local, uno de los tres criterios que convivían en el repo. La
+  // misma para los dos Tabulados y para el reporte: con claves distintas por
+  // lado, el control informa faltantes que no faltan.
   const normId = makeLegajoKey(mapping.legajoKeyMode);
 
   // Misma agrupación de conceptos que Rend vs Tabulado (personalizada o default)
   const conceptConfig = mapping.conceptGrouping || DEFAULT_CONCEPT_CONFIG;
 
-  // Resolver columnas del Tabulado por código de concepto
-  const sampleRow = tabRows[0] || {};
-  const colByCode = buildColByCode(sampleRow);
-
-  const catCols = {};
-  for (const [catKey, entries] of Object.entries(conceptConfig)) {
-    catCols[catKey] = entries
-      .map(e => ({ col: colByCode[e.code] || null, sign: e.sign, code: e.code }))
-      .filter(e => e.col !== null);
+  // Los Tabulados que entraron: el principal del wizard y, si se cargó, el de la
+  // otra empresa. No importa cuál empresa va en cuál casillero. Cada archivo
+  // tiene su propio mapeo de columnas (el que confirmó el analista al subirlo)
+  // y su propio orden de columnas, así que la columna de legajo y las de
+  // concepto se resuelven POR Tabulado — asumir las del primero para el
+  // segundo leería otra columna sin avisar.
+  const avisos = [];
+  const tabulados = [];
+  for (const t of [
+    { rows: tabRows || [],          map: mapping.tab  || {} },
+    { rows: mapping.tab2Rows || [], map: mapping.tab2 || {}, otra: true },
+  ]) {
+    if (t.rows.length === 0) continue;
+    if (!t.map.empleadoColumn) {
+      avisos.push(`${t.otra ? 'El Tabulado de la otra empresa' : 'El Tabulado'} no tiene indicada la `
+        + 'columna de legajo, así que no se usó. Confirmala al cargar el archivo y volvé a ejecutar.');
+      continue;
+    }
+    tabulados.push(t);
   }
 
-  // ── Agrupar Tabulado por legajo ────────────────────────────────────────────
+  // Columna de cada concepto en cada Tabulado, por código. La leyenda de la
+  // planilla usa la unión: el nombre de un concepto sale del primero que lo trae.
+  const colByCode = {};
+  for (const t of tabulados) {
+    t.colByCode = buildColByCode(t.rows[0] || {});
+    for (const [code, col] of Object.entries(t.colByCode)) {
+      if (!colByCode[code]) colByCode[code] = col;
+    }
+    t.catCols = {};
+    for (const [catKey, entries] of Object.entries(conceptConfig)) {
+      t.catCols[catKey] = entries
+        .map(e => ({ col: t.colByCode[e.code] || null, sign: e.sign, code: e.code }))
+        .filter(e => e.col !== null);
+    }
+  }
+
+  // ── Agrupar los Tabulados por legajo ───────────────────────────────────────
+  // Un solo mapa para los dos archivos: un legajo con varias liquidaciones se
+  // suma, no se pisa (CLAUDE.md, "consolidar por legajo").
   const tabByLegajo = new Map();  // normId(legajo) → bucket de sumas
 
-  for (const row of tabRows) {
-    const rawLegajo = norm(row[tm.empleadoColumn]);
-    const key = normId(rawLegajo);
-    if (!key) continue;
+  for (const t of tabulados) {
+    const tm = t.map;
+    for (const row of t.rows) {
+      const rawLegajo = norm(row[tm.empleadoColumn]);
+      const key = normId(rawLegajo);
+      if (!key) continue;
 
-    if (!tabByLegajo.has(key)) {
-      tabByLegajo.set(key, {
-        legajo: rawLegajo,
-        nombre: tm.apellidoNombreColumn ? norm(row[tm.apellidoNombreColumn]) : '',
-        precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
-      });
-    }
-    const g = tabByLegajo.get(key);
+      if (!tabByLegajo.has(key)) {
+        tabByLegajo.set(key, {
+          legajo: rawLegajo,
+          nombre: tm.apellidoNombreColumn ? norm(row[tm.apellidoNombreColumn]) : '',
+          precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+        });
+      }
+      const g = tabByLegajo.get(key);
 
-    for (const cat of CATS) {
-      for (const { col, sign } of (catCols[cat.key] || [])) {
-        g[cat.key] += (toNum(row[col]) ?? 0) * sign;
+      for (const cat of CATS) {
+        for (const { col, sign } of (t.catCols[cat.key] || [])) {
+          g[cat.key] += (toNum(row[col]) ?? 0) * sign;
+        }
       }
     }
   }
@@ -207,6 +260,12 @@ export function runRendXEe(ctRows, tabRows, mapping) {
 
   return {
     summary, rows, period: mapping.period || '', meta: { conceptConfig, colByCode },
+    // Cuántos Tabulados entraron de verdad (D-036): con uno solo, los legajos
+    // de la otra empresa salen como "sin datos en Tabulado" porque faltó el
+    // archivo, no por una diferencia de la liquidación. Las pantallas lo leen
+    // de acá en vez de deducirlo.
+    tabulados: tabulados.length,
+    avisos,
     // El modo de clave de legajo del cliente (D-038), para los cortes cruzados
     // del Resumen.
     legajoKeyMode: mapping.legajoKeyMode || null,
@@ -214,12 +273,16 @@ export function runRendXEe(ctRows, tabRows, mapping) {
     // Reporte (D-086: `rows` ya trae los `sinTabData`/`soloEnTab` con `dif:
     // null`, así que la diferencia comparada no los cuenta como cero del lado
     // que falta).
-    bridge: bridgeDelRunRendXEe(rows),
+    bridge: bridgeDelRunRendXEe(rows, tabulados.length),
   };
 }
 
-/** El puente del Resumen (D-086), sobre los mismos `rows` que ya arma este `run()`. */
-function bridgeDelRunRendXEe(rows) {
+/**
+ * El puente del Resumen (D-086), sobre los mismos `rows` que ya arma este `run()`.
+ * Con un solo Tabulado el total calculado es el de una empresa sola, y el
+ * tablero lo dice ahí mismo: es lo primero que se lee de la corrida.
+ */
+function bridgeDelRunRendXEe(rows, nTabulados) {
   if (rows.length === 0) return null;
 
   const totalCalc = rows.reduce((s, r) => s + (r.calcTotal ?? 0), 0);
@@ -232,7 +295,10 @@ function bridgeDelRunRendXEe(rows) {
 
   return {
     steps: [
-      { label: 'Total Calculado', amount: totalCalc, tone: 'ink' },
+      { label: 'Total Calculado', amount: totalCalc, tone: 'ink',
+        ...(nTabulados === 1
+          ? { note: 'de un solo Tabulado: los legajos de la otra empresa quedan sin comparar' }
+          : {}) },
       { label: 'Diferencia comparada', amount: diffComparada, tone: 'error' },
       { label: 'Total Reporte', amount: totalRep, tone: 'ink' },
     ],
@@ -286,9 +352,14 @@ export function renderRendXEeResults(results, container) {
         title: diffRows.length === 0
           ? 'El Costo Total del reporte coincide con el calculado desde el Tabulado.'
           : `${diffRows.length} de ${matchedRows.length} legajos tienen diferencia en Costo Total.`,
-        body: diffRows.length === 0
+        body: (diffRows.length === 0
           ? `${matchedRows.length} legajo${matchedRows.length === 1 ? '' : 's'} verificados, sin diferencias.`
-          : `Diferencia total de <strong>${fmt(totDif)}</strong> (Reporte − Calculado). El detalle completo está en la solapa «Planilla».`,
+          : `Diferencia total de <strong>${fmt(totDif)}</strong> (Reporte − Calculado). El detalle completo está en la solapa «Planilla».`)
+          // Con un solo Tabulado el veredicto no puede hablar de "todos": lo
+          // dice acá, donde se lee sin abrir nada.
+          + (results.tabulados === 1
+            ? ' <strong>Se cruzó un solo Tabulado:</strong> los legajos de la otra empresa salen sin comparar.'
+            : ''),
       });
 
       renderTiles(panel, [
@@ -313,6 +384,21 @@ export function renderRendXEeResults(results, container) {
             right: `<span class="${mvClass(r.dif)}">${mvArrow(r.dif)} ${fmtSigned(r.dif)}</span>`,
           })),
         });
+      }
+
+      // Cuántos Tabulados entraron (D-036). Una corrida guardada antes del
+      // segundo casillero no trae el dato y no se muestra nada.
+      if (results.tabulados != null) {
+        const checks = [
+          { label: 'Tabulados', ok: results.tabulados === 2,
+            detail: results.tabulados === 2
+              ? 'Se cruzaron los dos Tabulados (las dos empresas) contra el reporte.'
+              : results.tabulados === 1
+                ? 'Se cruzó uno solo. El Tabulado de la otra empresa es opcional, pero sin él sus legajos quedan sin comparar.'
+                : 'No entró ningún Tabulado al cruce.' },
+          ...(results.avisos || []).map(a => ({ label: 'Aviso', ok: false, detail: a })),
+        ];
+        renderChecks(panel, { heading: 'Chequeos', items: checks });
       }
     },
     planilla(panel) { renderRendXEePlanilla(panel, { rows, totDif, results }); },

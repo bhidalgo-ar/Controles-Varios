@@ -89,6 +89,76 @@ test('ocultar los que no están deja sólo los conceptos que el Tabulado trae', 
   expect(errores).toEqual([]);
 });
 
+// ── Copiar / pegar la configuración (para mandarla por ticket) ───────────────
+
+/** Reemplaza el portapapeles por uno que guarda lo copiado (o que falla). */
+async function portapapeles(page, { falla = false } = {}) {
+  await page.evaluate((falla) => {
+    window.__copiado = null;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (t) => { if (falla) throw new Error('sin permiso'); window.__copiado = t; } },
+    });
+  }, falla);
+}
+
+test('"Copiar configuración" copia la agrupación de la pantalla y "Pegar" la vuelve a aplicar', async ({ page }) => {
+  await portapapeles(page);
+  await expect(page.locator('#js-rtv-copy')).toBeVisible();
+  await expect(page.locator('#js-rtv-paste')).toBeVisible();
+
+  await page.locator('#js-rtv-copy').click();
+  await expect(page.locator('.toast', { hasText: 'Configuración copiada' })).toBeVisible();
+  const copiado = await page.evaluate(() => window.__copiado);
+  const env = JSON.parse(copiado);
+  expect(env.tipo).toBe('agrupacion-conceptos-rendimiento');
+  expect(env.cliente).toBe('BANFIELD');
+  expect(env.agrupacion).toEqual(await page.evaluate(() => window.__grouping));
+
+  // La vuelta "corregida": 1003 pasa a restar en Precio.
+  env.agrupacion.precio.find(e => e.code === '1003').sign = -1;
+  const cambiosAntes = await page.evaluate(() => window.__cambios);
+  await page.locator('#js-rtv-paste').click();
+  await page.locator('#js-rtv-paste-text').fill(JSON.stringify(env, null, 2));
+  await page.locator('#js-rtv-paste-apply').click();
+
+  await expect(page.locator('.toast', { hasText: 'Configuración pegada' })).toBeVisible();
+  await expect(page.locator('#js-rtv-paste-text')).toHaveCount(0);
+  // Viaja por el mismo onChange que cualquier edición: es lo que se guarda al ejecutar.
+  expect(await page.evaluate(() => window.__signo('precio', '1003'))).toBe(-1);
+  expect(await page.evaluate(() => window.__cambios)).toBe(cambiosAntes + 1);
+  await expect(page.locator('#grouping .concept-chip', { hasText: '1003' }).first()
+    .locator('.concept-chip__sign')).toHaveText('−');
+  expect(errores).toEqual([]);
+});
+
+test('un texto pegado que no es una configuración se rechaza en pantalla y no cambia nada', async ({ page }) => {
+  const antes = await page.evaluate(() => JSON.stringify(window.__grouping));
+  const cambiosAntes = await page.evaluate(() => window.__cambios);
+
+  await page.locator('#js-rtv-paste').click();
+  await page.locator('#js-rtv-paste-text').fill('{ "tipo": "agrupacion-conceptos-rendimiento", "agrup');
+  await page.locator('#js-rtv-paste-apply').click();
+
+  await expect(page.locator('#js-rtv-paste-error')).toContainText('no se puede leer');
+  // Lo pegado sigue ahí para corregirlo, y la agrupación no se tocó.
+  await expect(page.locator('#js-rtv-paste-text')).toHaveValue(/agrup$/);
+  expect(await page.evaluate(() => JSON.stringify(window.__grouping))).toBe(antes);
+  expect(await page.evaluate(() => window.__cambios)).toBe(cambiosAntes);
+  expect(errores).toEqual([]);
+});
+
+test('si el portapapeles falla, el texto se muestra para copiarlo a mano', async ({ page }) => {
+  await portapapeles(page, { falla: true });
+  await page.locator('#js-rtv-copy').click();
+
+  const area = page.locator('#js-rtv-copy-fallback');
+  await expect(area).toBeVisible();
+  expect(JSON.parse(await area.inputValue()).tipo).toBe('agrupacion-conceptos-rendimiento');
+  await expect(page.locator('.toast', { hasText: 'Configuración copiada' })).toHaveCount(0);
+  expect(errores).toEqual([]);
+});
+
 // ── Clasificación por cuenta contable (Rendimiento vs Asiento) ────────────────
 
 test('cada clasificación dice cuántas filas de la Contabilidad matchea', async ({ page }) => {

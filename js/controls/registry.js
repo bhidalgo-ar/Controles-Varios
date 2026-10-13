@@ -614,6 +614,8 @@ export const CONTROL_REGISTRY = {
       how: [
         'Bajá el Reporte de Costo Total por empleado de M4.',
         'Cargalo en el Paso 2 cuando te lo pida.',
+        '(Opcional) Cargá el Tabulado de la otra empresa en su casillero: el reporte trae a la gente '
+          + 'de las dos empresas juntas, y sin ese Tabulado sus legajos salen sin comparar.',
         '(Opcional) Ajustá la agrupación de conceptos — es la misma que usa Rend vs Tabulado.',
         'Ejecutá. Las diferencias se muestran en rojo dentro de la columna Dif.',
       ],
@@ -621,6 +623,13 @@ export const CONTROL_REGISTRY = {
     tabRequired: true,
     additionalFiles: [
       { key: 'costoTotal', label: 'Reporte de Costo Total (por empleado)', fileType: 'costo_total_file' },
+      // La otra empresa del cliente (Marval liquida por la 01 y la 03, y el
+      // reporte trae a las dos juntas). Da igual cuál va en el Tabulado
+      // principal y cuál acá: no hay lógica de empresa, a propósito (Willy,
+      // 2026-10-13). Opcional: sin él el control corre y avisa que los legajos
+      // de la otra empresa quedan sin comparar (D-036).
+      { key: 'tab2', label: 'Tabulado — la otra empresa (01 o 03, opcional)',
+        fileType: 'tab_otra_empresa_file', optional: true },
     ],
     // Agrupación de conceptos de Rendimiento. La comparten Rend vs Tabulado y
     // Rend x EE, que son quienes la editan y la guardan; Rend vs Asiento la lee.
