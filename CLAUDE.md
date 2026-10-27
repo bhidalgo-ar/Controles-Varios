@@ -199,7 +199,7 @@ un solo lado, mirá esto antes que nada.
 
 **Lo que va a Finanzas no lleva información de HR.** Cuando el archivo que genera un control lo
 recibe Finanzas/tesorería del cliente y no el equipo de Payroll, va sólo lo necesario para pagar:
-legajo, nombre, CUIT, CBU, banco, importe y fecha. Nada de dotación, conteos, altas y bajas ni
+legajo, nombre, CUIL, CBU, banco, importe y fecha. Nada de dotación, conteos, altas y bajas ni
 atributos del empleado — en muchos clientes Finanzas no tiene acceso a eso. El resto se muestra en la
 pantalla de resultados, que la ve el analista (D-020).
 
@@ -243,9 +243,9 @@ nunca jugó en Banfield. El apellido también sirve solo, para un consultor o un
 (`Erviti`, `Cvitanich`).
 
 **Antes de commitear corre un chequeo automático** (`scripts/check-datos-sensibles.mjs`): frena
-planillas (`.xlsx`, `.csv`, `.xls`), textos con CBU o CUIT, y **`legajo` seguido de un número** (los
-`tests/` quedan afuera de esa última regla: ahí los datos inventados son la política). Se activa una
-sola vez por máquina con `npm run hooks:install` — **en una sesión remota el contenedor es nuevo, así
+planillas (`.xlsx`, `.csv`, `.xls`), textos con CBU o con un CUIT/CUIL, y **`legajo` seguido de un
+número** (los `tests/` quedan afuera de esa última regla: ahí los datos inventados son la política).
+Se activa una sola vez por máquina con `npm run hooks:install` — **en una sesión remota el contenedor es nuevo, así
 que hay que instalarlo de nuevo**; CI lo repite sobre los archivos del PR, así que si alguien no lo
 instaló, el PR sale en rojo. No cubre nombres ni sueldos —eso no se detecta por patrón—: para una
 captura de pantalla o un ejemplo en una spec, los datos se inventan siempre, aunque el repo sea privado.
@@ -335,8 +335,10 @@ adivinar la ruta. Commits en español, Conventional Commits.
 - `ARCHITECTURE.md` — identidad de cliente, ciclo de vida, seed, los tres niveles del control.
 - `DECISIONS.md` — por qué algo está como está; los módulos citan estas entradas (D-0xx).
 - `ROADMAP.md` — lo que viene, incluido el plan de escalabilidad por fases.
-- `.claude/skills/nuevo-control/` — los 5 puntos de integración para sumar un control o una variante
-  (más el condicional: las columnas nuevas del Tabulado necesitan su nombre en criollo en `fieldHelp.js`).
+- `.claude/skills/nuevo-control/` — los 6 puntos de integración para sumar un control o una variante,
+  y el mockup que Willy aprueba antes de escribir el módulo (más el condicional: las columnas nuevas
+  del Tabulado necesitan su nombre en criollo en `fieldHelp.js`).
 - `specs/` — una spec por control o feature grande; cada una declara su estado en la primera línea.
 - `docs/traspaso-controles-equipo.md` — cómo traer al repo un control que el equipo prototipó en Claude
-  Chat como HTML standalone: los prompts de arranque y de cierre, y la ficha de traspaso que viaja.
+  Chat como HTML standalone: el prompt de arranque (A), el de un control ya armado (B), el que se pega
+  acá al integrarlo (C), y la ficha de traspaso que viaja.
