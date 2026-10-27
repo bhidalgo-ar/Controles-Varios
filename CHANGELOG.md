@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### docs(traspaso): los tres prompts del traspaso de controles del equipo, rehechos — 2026-10-27
+
+- **Prompt A (arranque):** suma que en el Tabulado de Meta4 el no liquidado viene en 0; el monto de
+  diferencia deja de ser un 0,01 fijo; los conceptos tampoco se ubican por posición de columna; la
+  verificación contra una planilla va de a un caso (D-064); la ficha pide qué formato de Tabulado es.
+- **Prompt B (control ya armado):** se pega entero, sin ir a buscar la ficha al A; pide el HTML si no
+  está en el chat, y pregunta cinco comportamientos del prototipo en vez de dos.
+- **Prompt C (en el repo):** al día con la skill `nuevo-control` (6 puntos y el mockup), y cierra el
+  círculo: spec, `ESTADO.md`, `pruebas-pendientes.md` y el `id` para el catálogo en monday.
+- **CUIL y CUIT según corresponda:** el dato del empleado es CUIL (lo que va a Finanzas y lo que no va
+  en la ficha). `CLAUDE.md` corregido en ese punto y en el índice de "Dónde está el resto".
+
 ### fix(saldo-vacaciones): la columna 3553_Vacaciones de una baja sale en $0 — 2026-10-01
 
 - **Antes:** la 3553 de una baja traía el importe de vacaciones no gozadas (503310).
