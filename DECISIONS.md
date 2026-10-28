@@ -4049,5 +4049,14 @@ trae la fila. No se completan por analogía: salen sin código y avisadas.
   Indemnizaciones. **Falta definir quién da de alta esas filas en Axton** (se le preguntó al equipo). Mientras
   tanto se resuelven como excepciones en el Paso 2.
 
+**Definido el mismo 2026-10-28.** Willy confirmó 710100252 para los diez centros de FS SH C+L, y Contabilidad
+de COTY respondió por mail las otras dos (referencia guardada en Coty/CONTABILIDAD/OK Cuenta Bono BA e
+Indemnizaciones 28-10-2026): el Bono Anual del 104 va a **645100111 Bonus local Beauty advisors**, y las
+indemnizaciones se imputan a la **cuenta de sueldos** del centro ("yo luego me ocupo"); para el 771 es
+710100325 SUELDOS FS SH C+L, la misma del ejemplo del cliente. Ninguna de las tres está en el Reporte de Cuentas
+de Axton: hasta que se carguen ahí, van como excepción en el Paso 2. Queda por confirmar si el criterio de
+indemnizaciones a sueldos vale sólo para centros sin cuenta de indemnización o para todos (el reporte manda las
+del 104 y el 656 a 645100210).
+
 **Tests:** `tests/contaDesglosadaControl.test.js` pasó de 114 a 134 asserts. Detalle en
 `specs/conta-desglosada-asiento.md` §3.
