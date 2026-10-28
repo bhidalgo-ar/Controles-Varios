@@ -205,6 +205,15 @@ const soloConta = (res, nombre) => res.ccsSoloEnConta.find(o => o.ccName === nom
   assert('el aviso pide subir el listado', res.avisosReparto[0].queHacer.includes('subilo'));
   const s = summarizeRendVsAsiento(res);
   assert('el semáforo sigue contando centros de costo', s.unit === 'cc' && s.unitsTotal === 1);
+
+  // Un redirect por nombre del mismo centro no lo esconde: el aviso dice que sale
+  // entero como «sólo en CONTA», y eso tiene que ser cierto.
+  const conRedirect = correr([rendFila('34', 'Servicios Legales', 0)], [
+    conta('1', '13', 'Directores', 500),
+  ], { rvaConfig: { ...DEFAULT_RVA_CONFIG, ccRedirects: [{ from: 'Directores', to: 'Servicios Legales' }] } });
+  assert('sin listado, un redirect por nombre no se lleva a Directores',
+    casi(soloConta(conRedirect, 'Directores')?.cPrecio, 500)
+    && fila(conRedirect, 'Servicios Legales')?.cPrecio == null);
 }
 
 // ── 9) Filas sin código: exactamente como hoy (por nombre y redirects) ───────

@@ -651,11 +651,12 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     // persona, para todas las filas, como siempre); (b) la tabla por código de
     // CC; (c) el CC_NOMBRE tal cual, con los redirects por nombre.
     const centroPersona = overrideTodo ? null : matchCcCode(porPersona, row.id_centro_costo);
-    let ccRaw, porCodigo = null;
+    let ccRaw, porCodigo = null, noRepartida = false;
     if (enListado && (overrideTodo || centroPersona)) {
       ccRaw = ccOverride.get(empleado);
     } else {
       if (centroPersona) {
+        noRepartida = true;
         const k = centroPersona.code;
         if (!sinRepartir.has(k)) sinRepartir.set(k, { code: k, ccNombre, legajos: new Set() });
         sinRepartir.get(k).legajos.add(empleado || '(sin legajo)');
@@ -670,8 +671,10 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     if (!origKey) continue;
 
     // Aplicar redirect de CC según la config. Lo que se tradujo por código ya
-    // es el nombre del Rendimiento: no pasa por los redirects.
-    const nameKey = porCodigo ? origKey : (ccRedir.get(origKey) ?? origKey);
+    // es el nombre del Rendimiento: no pasa por los redirects. Lo que no se pudo
+    // repartir por persona tampoco: el aviso dice que sale entero como "sólo en
+    // CONTA", y un redirect lo escondería adentro de un área.
+    const nameKey = (porCodigo || noRepartida) ? origKey : (ccRedir.get(origKey) ?? origKey);
     const wasRedirected = nameKey !== origKey;
     // El CC con el que vino la fila, para el detalle, cuando se tradujo.
     const ccOriginal = (porCodigo || ccRaw !== ccNombre) ? ccNombre
