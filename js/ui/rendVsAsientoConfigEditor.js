@@ -10,7 +10,7 @@
 // matchea ningún código no se pierde: sale aparte en los resultados. Por eso el
 // código que no encuentra filas avisa y no traba (D-036).
 
-import { DEFAULT_RVA_CONFIG } from '../controls/rendVsAsiento.js';
+import { DEFAULT_RVA_CONFIG, resolveRvaConfig } from '../controls/rendVsAsiento.js';
 import { renderHelpPopover }  from './helpPopover.js';
 
 function esc(str) {
@@ -67,6 +67,9 @@ const parseRedirects = s => String(s || '').split(/\r?\n/)
   })
   .filter(Boolean);
 
+/** `04 → Asesoramiento`, una por línea → `[{ code, to }]` (mismo formato que los redirects). */
+const parseCodeMap = s => parseRedirects(s).map(({ from, to }) => ({ code: from, to }));
+
 /**
  * Renderiza el editor de clasificación. Cada cambio dispara onChange(newConfig).
  *
@@ -87,8 +90,10 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
     onChange = () => {},
   } = opts;
 
-  // Clon mutable que el editor va modificando
-  let current = JSON.parse(JSON.stringify(config));
+  // Clon mutable que el editor va modificando. `resolveRvaConfig` completa la
+  // tabla por código y los centros por persona de una config guardada antes de
+  // que existieran: el analista ve —y guarda— lo mismo que va a usar la corrida.
+  let current = JSON.parse(JSON.stringify(resolveRvaConfig(config)));
   if (!current.cuentaCats) current.cuentaCats = {};
   if (!current.provCcssConcepts) current.provCcssConcepts = [];
   if (!current.ccRedirects) current.ccRedirects = [];
@@ -127,6 +132,8 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
 
   function renderInner() {
     const ccRedirText = current.ccRedirects.map(r => `${r.from} → ${r.to}`).join('\n');
+    const codeMapText = current.ccCodeMap.map(r => `${r.code} → ${r.to}`).join('\n');
+    const porPersonaText = current.ccPorPersona.join(', ');
 
     // El texto largo se dice UNA vez — en el primero que no matchea. Repetirlo en
     // los cinco lo convierte en ruido y deja de leerse.
@@ -234,6 +241,36 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
           Uno por línea, para los CC que en la Contabilidad se llaman distinto. Ejemplo: <code>Finanzas → Servicios Legales</code>
         </div>
       </div>
+      <div class="rva-redirects">
+        <div class="field__head">
+          <span class="field__label">Centro de costo de la Contabilidad → área del Rendimiento (por código)</span>
+          <span class="field__code">ID_CENTRO_COSTO</span>
+        </div>
+        <textarea class="form-input rva-redirects__area" data-rva-cc-codes
+          rows="${Math.max(current.ccCodeMap.length + 1, 3)}"
+          placeholder="Uno por línea — formato: código → área del Rendimiento"
+          aria-label="Centro de costo por código">${esc(codeMapText)}</textarea>
+        <div class="field__help field__help--muted">
+          Uno por línea. El código toma también sus sub-centros: <code>04 → Asesoramiento</code> junta
+          el 04.01, el 04.02… (y el 4), pero el 1 no toma al 10 ni al 13. Si un sub-centro va a otra área,
+          escribilo aparte (<code>04.03 → …</code>): gana el más específico. Lo que no está acá se busca
+          por nombre, como siempre.
+        </div>
+      </div>
+      <div class="rva-redirects">
+        <div class="field__head">
+          <span class="field__label">Centros que se reparten persona por persona (con el listado de CC x Empleado)</span>
+          <span class="field__code">ID_CENTRO_COSTO</span>
+        </div>
+        <input type="text" class="form-input rva-input" data-rva-por-persona
+          value="${esc(porPersonaText)}" placeholder="ej: 13"
+          aria-label="Centros que se reparten persona por persona">
+        <div class="field__help field__help--muted">
+          Códigos separados por coma. Cada empleado de estos centros va al área que diga el listado de
+          CC x Empleado; el listado no toca a nadie más. Si queda vacío, el listado cambia el centro de
+          todos los empleados que trae.
+        </div>
+      </div>
     `;
 
     renderHelpPopover(panel.querySelector('[data-rva-help]'), AYUDA_CLASIFICACION);
@@ -260,6 +297,16 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
 
     panel.querySelector('[data-rva-cc-redirects]')?.addEventListener('change', e => {
       current.ccRedirects = parseRedirects(e.target.value);
+      onChange(current);
+    });
+
+    panel.querySelector('[data-rva-cc-codes]')?.addEventListener('change', e => {
+      current.ccCodeMap = parseCodeMap(e.target.value);
+      onChange(current);
+    });
+
+    panel.querySelector('[data-rva-por-persona]')?.addEventListener('change', e => {
+      current.ccPorPersona = parseList(e.target.value);
       onChange(current);
     });
 
