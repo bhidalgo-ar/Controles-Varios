@@ -811,6 +811,31 @@ tanto.
 
 ---
 
+## 10 bis · Rendimiento vs Asiento (Marval) — nuevo al 2026-10-28
+
+**Qué es.** El control ahora junta la Contabilidad con el Rendimiento por código de centro de costo, reparte
+Directores persona por persona con el listado de Marval y reconoce las columnas de provisión SAC renombradas
+(D-101). Se verificó con los archivos reales de 10-2026 contra el código; **nadie lo abrió todavía en pantalla**.
+
+| Qué mirar | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| El Paso 2 del Rendimiento, **si el cliente ya tenía el mapeo guardado** | Las dos columnas de provisión ("PROVISIÓN SAC MES" y "PROVISIÓN SAC CARGAS SOCIALES MES") hay que elegirlas a mano la primera vez; con un cliente sin mapeo guardado salen reconocidas solas | Si siguen "⚠ sin asignar" aun eligiéndolas, avisar |
+| Los dos campos nuevos del Paso 2: tabla por código y centros "por persona" | Aparecen cargados (`01`, `3`, `04`, `05`, `6`… y `13`); editar una línea y volver a correr cambia el resultado | Si un cliente con config vieja los ve vacíos, la semilla no se aplicó |
+| Correr 10-2026 con la Contabilidad completa y el listado de Marval en CC x Empleado | Cierran al centavo Marcas, Patentes, Contencioso, Asesoramiento, Sistemas, RRHH y Marketing; ningún centro "sólo en CONTA"; 0 filas no categorizadas | Un área que no cierra o un centro sin asiento: pasar el caso |
+| Servicios Legales y Servicios Comunes | −5.933.141,04 y +5.933.141,05: un legajo que la Contabilidad tiene en Servicios Comunes y el Rendimiento en Servicios Legales | Es una diferencia real, no del control; consulta abierta con Marval |
+| Administración | +105.556,00, sólo en la columna de precio: un legajo cuyo precio el Rendimiento cuenta menor que el asiento | Para revisar en Meta4 |
+| Correr **sin** el listado de CC x Empleado | Directores sale "sólo en CONTA" por 223.675.424,65 y Resultados trae el aviso "no se pudieron repartir persona por persona", con el chip de arriba | Si sale en silencio, el aviso no se está dibujando |
+| El listado de Marval como archivo | Se lee con las hojas Activos y Bajas; con un archivo de otra forma, el error dice qué encabezados esperaba | Si no lo reconoce, mandar los encabezados de la fila 1 |
+
+**Lo que espera una decisión externa.** Los centros FS 002/003 (código `01`): Araceli propone Administración y el
+Rendimiento de 10-2026 los trae en Servicios Legales, donde la semilla los deja. Cuando Marval confirme, se
+cambia en el Paso 2. En noviembre la distribución de Directores cambia (aviso de Ana): hay que pedir el listado
+nuevo.
+
+**Detalle:** D-101, `specs/rendimiento-vs-asiento-por-codigo.md`.
+
+---
+
 ## 11 · Lo que NO deja nada para probar (para que no lo busques)
 
 Varios de los PRs recientes son documentación o andamiaje interno. **Ninguno cambia lo que ves en la

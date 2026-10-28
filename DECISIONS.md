@@ -4060,3 +4060,70 @@ del 104 y el 656 a 645100210).
 
 **Tests:** `tests/contaDesglosadaControl.test.js` pasó de 114 a 134 asserts. Detalle en
 `specs/conta-desglosada-asiento.md` §3.
+
+---
+
+## D-101 — Rendimiento vs Asiento (Marval): la Contabilidad se cruza con el Rendimiento por código de centro de costo, y Directores se reparte persona por persona con el listado de Marval
+
+**Fecha:** 2026-10-28. **Decidió:** Willy ("vamos por código"; Directores: "subir el listado de Marval tal cual").
+
+**Contexto:** desde 10-2026 la Contabilidad Desglosada de Marval parte los centros de costo en sub-centros con
+código y nombre nuevos (`04.01` "Asesoramiento BAN", `05.05` "Contencioso PRE", `01.01` "Finanzas 002"…). El control
+juntaba la Contabilidad con el Rendimiento por **nombre** de centro: Asesoramiento y Contencioso quedaban sin
+asiento y los sub-centros salían sueltos como "sólo en CONTA" (16 en 10-2026). Además el Rendimiento renombró dos
+columnas de provisión y el Paso 2 dejó de reconocerlas. Y Directores (centro 13) no es un área: cada director va a
+una de cuatro áreas distintas del Rendimiento.
+
+**Decisión:**
+- **Se traduce por código de centro (`ID_CENTRO_COSTO`)**, con la tabla `ccCodeMap` de la config del control
+  (`código → área del Rendimiento`), editable por cliente en el Paso 2 y con semilla de Marval (D-035: la semilla
+  no es identidad; D-039: lo que confirmó el analista gana). El match es **por segmentos separados por punto**,
+  sin ceros a la izquierda: `04` toma `04.01`…`04.08` y también `4`, pero `1` **no** toma `10`, `11`, `12` ni `13`.
+  Gana la entrada más específica (`04.03` le gana a `04`). Lo que no matchea ningún código no se completa con nada:
+  sigue por nombre y, si tampoco, sale como "sólo en CONTA".
+- **Directores se reparte persona por persona.** El analista sube el listado de Marval ("Asignación de dimensiones
+  y rendimiento", columnas `ID_EMPLEADO`, `ID_CC_CONTA`, `RENDIMIENTO`, en todas las hojas: Activos y Bajas) como
+  CC x Empleado, y `ccPorPersona` (semilla: `13`) declara qué centros se reparten así. **El listado sólo pisa esos
+  centros.** Si `ccPorPersona` queda vacío, el listado pisa todas las filas, como antes de este cambio.
+- **Si un centro "por persona" no se puede repartir** (no se subió el listado, o el legajo no figura en él), las
+  filas quedan con su nombre y salen "sólo en CONTA", y el resultado lleva un aviso que dice cuántos legajos de
+  qué centro y qué hacer. Sin listado, Directores sale entero "sólo en CONTA" por 223.675.424,65 (10-2026).
+- **Alias de columnas del Rendimiento:** "PROVISIÓN SAC MES" → provisión mes y "PROVISIÓN SAC CARGAS SOCIALES MES" →
+  provisión cargas sociales (con y sin tilde). Los nombres viejos siguen funcionando.
+- **Config guardada antes de este cambio:** si no trae las claves nuevas (`undefined`) toma la semilla; si las trae
+  y están en `[]`, se respeta vacío. Sin esto, el cliente que ya había guardado su config nunca vería el cambio.
+- **Lo traducido por código no pasa por los redirects por nombre** (ya es el nombre del Rendimiento), **ni lo que no
+  se pudo repartir por persona** (un redirect lo escondería adentro de un área y el aviso diría algo falso). Las filas
+  sin código se comportan exactamente como antes.
+
+**Alternativas descartadas:**
+- **Seguir por nombre, sumando un redirect por cada sub-centro nuevo.** Es lo que había: no escala con una
+  Contabilidad que renumera y renombra, y no resuelve Directores.
+- **Que el listado de CC x Empleado pise todas las filas**, que era el comportamiento de siempre. Con el listado
+  completo de la empresa subido taparía diferencias reales: un legajo que la Contabilidad tiene en un área y el
+  Rendimiento en otra dejaría de saltar.
+
+**Por qué el listado de Marval tal cual para Directores** (Willy eligió entre tres opciones: subir el listado
+tal cual, pedirle a Marval otro formato con los encabezados de siempre, o dejar Directores sin repartir hasta
+noviembre): el analista sube el mismo archivo que ya manda Marval, sin rearmarlo, y como el listado sólo pisa
+los centros declarados "por persona", un legajo mal asignado en otra área sigue saltando como diferencia en
+vez de quedar tapado. Pedir otro formato dependía de que el archivo llegara bien armado cada mes.
+
+**Abierto con Marval:**
+- **Centro `01` (Finanzas 002/003).** Araceli propone Administración; el Rendimiento de 10-2026 todavía los trae en
+  Servicios Legales y cierran ahí, así que la semilla los manda a **Servicios Legales**. Si Marval confirma
+  Administración se cambia desde la pantalla, sin commit.
+- **Noviembre:** Ana avisó que la distribución de Directores cambia; el listado se vuelve a pedir.
+
+**Efecto, con los archivos reales de 10-2026** (config por defecto, columnas del Rendimiento reconocidas solas,
+Contabilidad completa y el listado de Marval): 7 de 10 áreas cierran al centavo (Marcas, Patentes, Contencioso,
+Asesoramiento, Sistemas, RRHH, Marketing). Quedan dos diferencias, ninguna es del control:
+- **Servicios Legales −5.933.141,04 y Servicios Comunes +5.933.141,05:** un legajo que la Contabilidad tiene en
+  Servicios Comunes y el Rendimiento en Servicios Legales. Consulta abierta con Marval. Salta justamente porque el
+  listado ya no pisa a todos.
+- **Administración +105.556,00, sólo en precio:** un legajo cuyo precio el Rendimiento cuenta menor que el asiento.
+  Para revisar en Meta4.
+- Sin centros "sólo en CONTA" y con 0 filas no categorizadas.
+
+**Tests:** `tests/rendVsAsientoCcCode.test.js` (nuevo, en la cadena de `npm run test:unit`). Detalle en
+`specs/rendimiento-vs-asiento-por-codigo.md`.
