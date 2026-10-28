@@ -15,7 +15,9 @@
 //      empleado, negativo que cambia de lado, y el importe que conserva su signo.
 //   3. El cruce nombre → código en sus cuatro variantes (patrimonial por nombre,
 //      código único, ambiguo por centro de costo, comodín) y la excepción del
-//      analista por encima de todas.
+//      analista por encima de todas. Primero contra "Cuenta a Reemplazar" (lo
+//      que escribe Axton) y, si no cruza, contra "Nombre"; en el asiento la
+//      cuenta de resultado sale con el nombre del plan del cliente.
 //   4. Una cuenta sin código NO se inventa: la línea suma al balance y sale
 //      listada (y el semáforo la cuenta como unidad con diferencia).
 //   5. El encabezado de dos filas del reporte se aplana bien — si se corriera una
@@ -44,6 +46,7 @@ const {
   runContaDesglosada,
   summarizeContaDesglosada,
   lineasDelArchivoDesglosada,
+  fichasDeCuentas,
   DEFAULT_CONTA_DESGLOSADA_CONFIG,
 } = await import('./js/controls/contaDesglosada.js');
 
@@ -357,6 +360,106 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
     DEFAULT_CONTA_DESGLOSADA_CONFIG.excepciones.length === 0);
 }
 
+// ── 6b. "Cuenta a Reemplazar": el nombre de Axton → la cuenta del plan ──────
+// El reporte del cliente nombra dos cuentas por fila: la que escribe Axton
+// ("Cuenta a Reemplazar") y la definitiva del plan ("Nombre" + su código). Con
+// el cruce sólo por "Nombre", las de resultado casi no cruzaban: Axton escribe
+// "Sueldos y Jornales" y el plan dice "SUELDOS VENTAS" o "SUELDOS MARKETING"
+// según el centro. Las patrimoniales sí, porque Axton ya escribe el nombre
+// definitivo ("Anticipo de sueldos"), y eso tiene que seguir andando.
+{
+  const cuentasRef = [
+    { cuenta_reemplazar: 'Sueldos y Jornales', nombre: 'SUELDOS VENTAS',    codigo: '710100110', centro_costo: '10' },
+    { cuenta_reemplazar: 'Sueldos y Jornales', nombre: 'SUELDOS MARKETING', codigo: '710100120', centro_costo: '20' },
+    // Dos nombres de Axton que van a la MISMA cuenta del plan en el mismo centro.
+    { cuenta_reemplazar: 'Bonos',              nombre: 'BONUS VENTAS',      codigo: '710100130', centro_costo: '10' },
+    { cuenta_reemplazar: 'Gratificaciones',    nombre: 'BONUS VENTAS',      codigo: '710100130', centro_costo: '10' },
+    // Bonos no tiene fila para el centro 20 (ni comodín).
+    { cuenta_reemplazar: 'Bonos',              nombre: 'BONUS FINANZAS',    codigo: '710100140', centro_costo: '30' },
+    // El mismo texto como "Cuenta a Reemplazar" y como "Nombre" de otra fila:
+    // gana "Cuenta a Reemplazar", que es lo que escribe Axton.
+    { cuenta_reemplazar: 'Cargas sociales',    nombre: 'CARGAS SOCIALES VENTAS', codigo: '710100150', centro_costo: '10' },
+    { cuenta_reemplazar: 'Contribuciones',     nombre: 'Cargas sociales',   codigo: '645100120', centro_costo: '10' },
+    // Patrimoniales: Axton escribe el nombre definitivo, no el a reemplazar.
+    { cuenta_reemplazar: 'ANTICIPOS AL PERSONAL', nombre: 'Anticipo de sueldos', codigo: '115100100', centro_costo: null },
+    // La cuenta del neto, con otro nombre en el plan.
+    { cuenta_reemplazar: 'Sueldos a pagar',    nombre: 'Remuneraciones a pagar', codigo: '215100100', centro_costo: null },
+  ];
+
+  const rows = [
+    fila({ legajo: '1', nro: '100', concepto: 'Sueldo', importe: '1.000,00', ceco: '10',
+           debe: 'Sueldos y Jornales', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '2', nro: '100', concepto: 'Sueldo', importe: '2.000,00', ceco: '20',
+           debe: 'SUELDOS Y JORNALES', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '200', concepto: 'Bono', importe: '300,00', ceco: '10',
+           debe: 'Bonos', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '210', concepto: 'Gratificación', importe: '50,00', ceco: '10',
+           debe: 'Gratificaciones', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '2', nro: '200', concepto: 'Bono', importe: '400,00', ceco: '20',
+           debe: 'Bonos', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '300', concepto: 'Contribución', importe: '70,00', ceco: '10',
+           debe: 'Cargas sociales', haber: 'Sueldos a pagar' }),
+    fila({ legajo: '1', nro: '400', concepto: 'Anticipo', importe: '100,00', ceco: '10',
+           debe: 'Sueldos a pagar', haber: 'Anticipo de sueldos' }),
+  ];
+
+  const r = runContaDesglosada(rows, [], { ...MAPPING, cuentas_refRows: cuentasRef });
+  const a = r.asiento;
+  const porCodigo = (codigo) => a.filas.filter(f => f.nro === codigo);
+
+  assert('Cuenta a Reemplazar + centro: "Sueldos y Jornales" del centro 10 toma el código de su fila',
+    porCodigo('710100110').length === 1 && porCodigo('710100110')[0].debe === 1000
+    && porCodigo('710100110')[0].centro_costo === '10');
+  assert('…y en el asiento sale con el nombre del plan del cliente, no con el de Axton',
+    porCodigo('710100110')[0].cuenta === 'SUELDOS VENTAS');
+  assert('…y el centro 20 toma el suyo, con su propio nombre del plan (y sin importar mayúsculas)',
+    porCodigo('710100120').length === 1 && porCodigo('710100120')[0].cuenta === 'SUELDOS MARKETING'
+    && porCodigo('710100120')[0].debe === 2000);
+
+  const desglosadaSueldo = r.lineas.find(l => l.legajo === '1' && l.nro === '100');
+  assert('la Desglosada conserva el nombre de Axton y sólo gana el número de cuenta',
+    desglosadaSueldo.cuenta === 'Sueldos y Jornales' && desglosadaSueldo.codigo === '710100110');
+
+  assert('dos nombres de Axton que van a la misma cuenta del plan y centro hacen UNA línea, sumada',
+    porCodigo('710100130').length === 1 && porCodigo('710100130')[0].debe === 350
+    && porCodigo('710100130')[0].cuenta === 'BONUS VENTAS');
+  assert('"Cuenta a Reemplazar" gana sobre un "Nombre" igual de otra fila',
+    porCodigo('710100150').length === 1 && porCodigo('645100120').length === 0);
+
+  const anticipo = porCodigo('115100100');
+  assert('patrimonial escrita con el nombre definitivo: sigue cruzando por "Nombre"',
+    anticipo.length === 1 && anticipo[0].cuenta === 'Anticipo de sueldos' && anticipo[0].centro_costo === '0');
+
+  assert('una cuenta sin fila para su centro (ni comodín) queda sin código, no toma el de otro centro',
+    a.sinCodigo.length === 1 && a.sinCodigo[0].cuenta === 'Bonos' && a.sinCodigo[0].centro_costo === '20'
+    && a.sinCodigo[0].debe === 400 && porCodigo('710100140').length === 0);
+  const bonosSinCodigo = a.filas.find(f => !f.nro);
+  assert('…y en el asiento sigue con el nombre de Axton',
+    bonosSinCodigo.cuenta === 'Bonos' && bonosSinCodigo.debe === 400);
+  assert('…y su importe suma igual: el asiento cierra', a.cierraBruto && a.cierraNeteado);
+
+  const neto = porCodigo('215100100');
+  assert('la cuenta del neto sale con el nombre del plan del cliente',
+    neto.length === 1 && neto[0].cuenta === 'Remuneraciones a pagar');
+  const fichaNeto = fichasDeCuentas(r).find(f => f.numero === '215100100');
+  assert('…y su ficha se sigue reconociendo como la del neto (por el nombre de la liquidación)',
+    !!fichaNeto && fichaNeto.esNeto === true);
+
+  // El mismo caso con un reporte VIEJO, sin la columna "Cuenta a Reemplazar":
+  // se comporta como antes — cruza sólo por "Nombre".
+  const viejo = cuentasRef.map(({ cuenta_reemplazar, ...resto }) => resto);
+  const rv = runContaDesglosada(rows, [], { ...MAPPING, cuentas_refRows: viejo });
+  const av = rv.asiento;
+  assert('reporte sin "Cuenta a Reemplazar": las de resultado que Axton nombra distinto quedan sin código',
+    av.sinCodigo.some(s => s.cuenta === 'Sueldos y Jornales')
+    && !av.filas.some(f => f.nro === '710100110' || f.nro === '710100120'));
+  assert('…la patrimonial escrita con el nombre definitivo cruza igual',
+    av.filas.some(f => f.nro === '115100100' && f.cuenta === 'Anticipo de sueldos'));
+  assert('…y "Cargas sociales" cruza por "Nombre", como antes',
+    av.filas.some(f => f.nro === '645100120' && f.cuenta === 'Cargas sociales'));
+  assert('…y lo que no cruza sale con el nombre de Axton', av.filas.some(f => !f.nro && f.cuenta === 'Bonos'));
+}
+
 // ── 7. Sin el reporte de cuentas: la desglosada sale, el asiento no ──────────
 {
   const rows = [
@@ -470,6 +573,25 @@ const MAPPING = { period: '2026-05', legajoKeyMode: 'sin_ceros', contaDesglosada
   assert('…y se lee el centro de costo de la fila', parsedRows[0].centro_costo === '10');
   assert('una cuenta sin código todavía no se inventa: se cuenta y se informa',
     parseMetadata.filasIgnoradas === 1);
+  assert('"Cuenta a Reemplazar" se lee por encabezado, y su "Codigo" viejo no se usa',
+    parsedRows[0].cuenta_reemplazar === 'SUELDOS VIEJO' && parsedRows[0].codigo !== '5.1.1');
+  assert('…y la metadata dice que el reporte trae la columna',
+    parseMetadata.sinCuentaAReemplazar === false && parseMetadata.cuentasAReemplazar === 1);
+
+  // Un reporte viejo, sin la columna: se lee igual, sin error.
+  const aoaViejo = [
+    ['Reporte de Cuentas de Redefinición Cliente Inventado 19/08/2026'],
+    [],
+    ['EA', 'Cargo', 'Centro de costo', 'Nombre', 'Codigo'],
+    ['Cliente', '', '10', 'Sueldos Ventas', '710100110'],
+  ];
+  const wbViejo = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbViejo, XLSX.utils.aoa_to_sheet(aoaViejo), 'Plan');
+  const viejo = parseCuentasRedefinicion(XLSX.write(wbViejo, { type: 'array', bookType: 'xlsx' }));
+  assert('reporte sin "Cuenta a Reemplazar": se lee igual y la fila cruza sólo por "Nombre"',
+    viejo.parsedRows.length === 1 && viejo.parsedRows[0].codigo === '710100110'
+    && viejo.parsedRows[0].cuenta_reemplazar === null);
+  assert('…y la metadata lo avisa', viejo.parseMetadata.sinCuentaAReemplazar === true);
 }
 
 // ── 12. El control está cableado en el registry ──────────────────────────────

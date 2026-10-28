@@ -6,17 +6,32 @@
 // van por nombre), pero no se puede armar el asiento: el asiento se agrupa por
 // código.
 //
-// Layout del export (confirmado contra el reporte real de COTY del 19/08/2026):
+// Layout del export (confirmado contra el reporte real de COTY del 19/08/2026
+// y del 28/10/2026):
 //   fila 0    título ("Reporte de Cuentas de Redefinición <cliente> <fecha>")
 //   fila 1    vacía
-//   fila 2    encabezados
+//   fila 2    encabezados: EA | Cargo | Centro de costo | … | Cuenta a Reemplazar
+//             | Codigo | Cuenta Reemplazante | Codigo | Nombre | Codigo | …
 //   fila 3+   una fila por (cuenta, centro de costo)
+//
+// Qué se lee de cada fila:
+//   · **Cuenta a Reemplazar** — el nombre que escribe Axton en la liquidación
+//     ("Sueldos y Jornales", "Bonos"). Es la clave principal del cruce (ver
+//     `buscarCodigo` en contaDesglosada.js). Si el reporte no trae la columna
+//     (exports viejos), el cruce sigue sólo por "Nombre", como antes.
+//   · **Nombre** — la cuenta definitiva del plan del cliente ("SUELDOS SUPPLY
+//     CHAIN"). Es el nombre que sale en el asiento, y también la clave de
+//     respaldo: Axton escribe así las patrimoniales ("Anticipo de sueldos").
+//   · **Codigo** — el de la cuenta definitiva.
+//   · **Centro de costo**.
 //
 // El encabezado repite "Codigo" tres veces —una por cada cuenta que nombra la
 // fila (a reemplazar, reemplazante, y la definitiva)—, así que la columna de
 // código se busca como **la primera "Codigo" que viene después de "Nombre"**, y
 // no por posición: la posición fija del prototipo (K/L) se rompe con una columna
-// agregada al principio, el nombre no.
+// agregada al principio, el nombre no. El "Codigo" de "Cuenta a Reemplazar" trae
+// códigos viejos ("2130101", "5.1.2") y no se usa; "Cuenta Reemplazante" viene
+// vacía y tampoco.
 
 /* global XLSX */
 import { isHtmlTabulado, decodeHtmlTabulado } from './tabuladoHtml.js';
@@ -24,6 +39,7 @@ import { isHtmlTabulado, decodeHtmlTabulado } from './tabuladoHtml.js';
 const NOMBRE_HEADERS = ['nombre'];
 const CODIGO_HEADERS = ['codigo'];
 const CECO_HEADERS   = ['centro de costo', 'centro de costos', 'ceco'];
+const REEMPLAZAR_HEADERS = ['cuenta a reemplazar'];
 
 function normHeader(h) {
   return String(h ?? '')
@@ -68,7 +84,7 @@ export function parseCuentasRedefinicion(arrayBuffer) {
   const filas = leerFilas(arrayBuffer);
 
   // Fila de encabezados: la primera que tenga "Nombre" y, después, un "Codigo".
-  let idxHeader = -1, colNombre = -1, colCodigo = -1, colCeco = -1;
+  let idxHeader = -1, colNombre = -1, colCodigo = -1, colCeco = -1, colReemplazar = -1;
   for (let i = 0; i < filas.length; i++) {
     const fila = filas[i] || [];
     const nombre = fila.findIndex(c => NOMBRE_HEADERS.includes(normHeader(c)));
@@ -79,6 +95,7 @@ export function parseCuentasRedefinicion(arrayBuffer) {
     colNombre = nombre;
     colCodigo = codigo;
     colCeco   = fila.findIndex(c => CECO_HEADERS.includes(normHeader(c)));
+    colReemplazar = fila.findIndex(c => REEMPLAZAR_HEADERS.includes(normHeader(c)));
     break;
   }
 
@@ -91,6 +108,7 @@ export function parseCuentasRedefinicion(arrayBuffer) {
 
   const parsedRows = [];
   const nombres = new Set();
+  const aReemplazar = new Set();
   let filasIgnoradas = 0;
 
   for (let i = idxHeader + 1; i < filas.length; i++) {
@@ -104,12 +122,17 @@ export function parseCuentasRedefinicion(arrayBuffer) {
       if (nombre || codigo) filasIgnoradas++;
       continue;
     }
+    const cuentaReemplazar = colReemplazar === -1 ? '' : String(fila[colReemplazar] ?? '').trim();
     parsedRows.push({
       nombre,
       codigo,
       centro_costo: colCeco === -1 ? null : (String(fila[colCeco] ?? '').trim() || null),
+      // `null` = el reporte no trae la columna, o la fila la trae vacía: esa
+      // fila cruza sólo por "Nombre".
+      cuenta_reemplazar: cuentaReemplazar || null,
     });
     nombres.add(nombre.toLowerCase());
+    if (cuentaReemplazar) aReemplazar.add(cuentaReemplazar.toLowerCase());
   }
 
   if (parsedRows.length === 0) {
@@ -127,6 +150,11 @@ export function parseCuentasRedefinicion(arrayBuffer) {
       nombresDistintos: nombres.size,
       filasIgnoradas,
       sinCentroCosto:   colCeco === -1,
+      // Sin la columna "Cuenta a Reemplazar" las cuentas de resultado sólo
+      // cruzan si Axton las escribe con el nombre del plan: se informa en la
+      // tarjeta del archivo para que se entienda por qué quedan sin código.
+      sinCuentaAReemplazar:  colReemplazar === -1,
+      cuentasAReemplazar:    aReemplazar.size,
     },
   };
 }

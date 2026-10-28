@@ -1,7 +1,7 @@
 # Contabilidad Desglosada + Asiento — COTY (Axton)
 
 **Estado:** implementado — control `conta_desglosada` del `CONTROL_REGISTRY`, cubierto por
-`tests/contaDesglosadaControl.test.js` (114 asserts). Verificado el 2026-08-19 contra los dos
+`tests/contaDesglosadaControl.test.js` (134 asserts). Verificado el 2026-08-19 contra los dos
 archivos reales de COTY del período 05/2026: reproduce **exactas** las cinco anclas del prototipo
 (ver §7). **Gana su solapa Fichas por cuenta contable el 2026-08-21** (tanda 7 de
 `specs/vista-estandar-resultados.md`, D-084), cubierta por `tests/fichasCuentaContable.test.js`, y de
@@ -123,14 +123,40 @@ de los 130 legajos).
 ## 3. Paso 2 — de nombre de cuenta a código
 
 La liquidación de Axton escribe el **nombre** de la cuenta; el asiento se agrupa por **código**. El
-cruce, por línea y en este orden:
+Reporte de Cuentas de Redefinición nombra dos cuentas por fila (encabezados de la fila 2:
+`… | Centro de costo | … | Cuenta a Reemplazar | Codigo | Cuenta Reemplazante | Codigo | Nombre | Codigo | …`):
+
+- **Cuenta a Reemplazar** — el nombre que escribe Axton en "Cuenta Debe" / "Cuenta Haber"
+  ("Sueldos y Jornales", "Bonos", "Cargas Sociales").
+- **Nombre** + el **Codigo** a su derecha — la cuenta definitiva del plan del cliente. Ej.: centro 10,
+  "Sueldos y Jornales" → "SUELDOS SUPPLY CHAIN", `710100264`.
+
+El "Codigo" que sigue a "Cuenta a Reemplazar" trae códigos viejos ("2130101", "5.1.2") y no se usa;
+"Cuenta Reemplazante" viene vacía y tampoco. Las columnas se buscan por encabezado, nunca por posición.
+
+El cruce, por línea y en este orden:
 
 1. Una **excepción** cargada por el analista (con su centro de costo, o con `*` para cualquiera).
-2. Cuentas **patrimoniales** (código que empieza con 1 o 2): cruzan sólo por nombre. Se reconocen
-   porque *todos* los códigos de ese nombre empiezan con 1 o 2 — no se declaran en ningún lado.
-3. Nombre con un **único** código: cruza por nombre.
-4. Nombre **ambiguo** (varios códigos): cruza por nombre + centro de costo. Si el reporte trae ese
-   nombre con el centro vacío, ese código es el **comodín**.
+2. El nombre de la línea contra **"Cuenta a Reemplazar"**.
+3. Si por ahí no cruza, contra **"Nombre"**. Es lo que resuelve las patrimoniales, que Axton ya escribe
+   con el nombre definitivo ("Anticipo de sueldos", cuya Cuenta a Reemplazar es "ANTICIPOS AL
+   PERSONAL"), y es el único cruce cuando el reporte es viejo y no trae "Cuenta a Reemplazar".
+
+En 2 y 3 valen las mismas reglas, sobre las filas de ese nombre:
+
+- Cuentas **patrimoniales** (código que empieza con 1 o 2): cruzan sólo por nombre. Se reconocen
+  porque *todos* los códigos de ese nombre empiezan con 1 o 2 — no se declaran en ningún lado.
+- Nombre con un **único** código: cruza por nombre.
+- Nombre **ambiguo** (varios códigos): cruza por nombre + centro de costo. Si el reporte trae ese
+  nombre con el centro vacío, ese código es el **comodín**. Si no hay fila para ese centro ni comodín,
+  ese índice no cruza (y se pasa al siguiente): nunca se toma el código de otro centro.
+
+Hasta octubre de 2026 el cruce era sólo por "Nombre", y con los archivos reales de COTY del período
+10/2026 las cuentas de resultado casi no cruzaban: 296 de las 318 líneas del asiento salían sin
+número, porque sólo cruzaban cuando el nombre del plan coincidía por casualidad con el que escribe
+Axton. Con "Cuenta a Reemplazar" primero, el mismo mes queda en 12 líneas sin número (53.058.124,91 al
+DEBE): "Bonos" en 11 centros y "INDEMNIZACIONES POR ANTIGUEDAD DESPIDO" en uno, todos sin fila en el
+reporte para su centro. Los totales del asiento no se movieron: cambiaron sólo número y nombre.
 
 Lo que no se resuelve **no se completa**: la línea igual suma al asiento (para que el balance no se
 maquille) y sale listada como "sin código" en la pantalla de resultados, con cuántas líneas y por
@@ -151,7 +177,12 @@ ni en el Tabulado ni en el reporte de cuentas. Sembrarlas sería inventar un có
 - **Patrimoniales** (1x/2x): una sola línea por código, centro de costo en `0`, y el **nombre oficial
   del reporte de cuentas** — que es lo que unifica las variantes de mayúsculas con las que la
   liquidación escribe la misma cuenta.
-- **Las demás** (resultado, 6x/7x…): agrupadas por código + nombre + centro de costo.
+- **Las demás** (resultado, 6x/7x…): agrupadas por código + nombre + centro de costo. Con código, el
+  nombre es el **del plan del cliente** (el "Nombre" de la fila del reporte que dio el código): Axton
+  dice "Sueldos y Jornales", el asiento dice "SUELDOS SUPPLY CHAIN". Sin código, el de la liquidación.
+  Una excepción del analista no trae nombre del plan: conserva el de la liquidación.
+- **La Contabilidad Desglosada no cambia de nombre**: sigue con el de Axton en la columna Cuenta y
+  sólo gana el número (Nro Cuenta), que es el mismo que el del asiento.
 - **Neteo de cada línea**: `neto = HABER − DEBE`; negativo va a NETO DEBE en positivo, positivo a
   NETO HABER, y si da cero las dos columnas quedan en `0,00`.
 - **Orden**: por código de cuenta y después por centro de costo. Lo que quedó sin código va al final.

@@ -3995,3 +3995,59 @@ texto de 85 bytes), y el conector de SharePoint no lee ese `.xls` (es HTML) ni e
 
 **Detalle:** `js/controls/saldoVacaciones.js`, `js/parsers/saldoVacacionesParser.js`,
 `tests/saldoVacacionesControl.test.js`, `specs/saldo-vacaciones-coty.md` §3, §6 y §7.
+
+
+---
+
+## D-100 — El asiento de COTY cruza la cuenta de Axton contra "Cuenta a Reemplazar"; el asiento sale con el nombre del plan del cliente y la desglosada se queda con el de Axton
+
+**Fecha:** 2026-10-28. **Decidió:** Willy (el nombre en el asiento); el orden del cruce sale del arreglo del
+bug, sin alternativa evaluada en el repo.
+
+**Contexto:** con el asiento de COTY de 10/2026, 296 de las 318 filas del Asiento Contable salieron sin
+número de cuenta. El control buscaba el nombre que escribe Axton en Cuenta Debe/Haber ("Sueldos y
+Jornales", "Bonos") contra la columna "Nombre" del Reporte de Cuentas de Redefinición, que es la cuenta
+definitiva del plan del cliente ("SUELDOS SUPPLY CHAIN", 710100264). El nombre de Axton está en otra columna:
+"Cuenta a Reemplazar". Sólo cruzaban las patrimoniales (Axton ya las escribe con el nombre definitivo) y las de
+resultado cuyo nombre coincidía por casualidad (Cargas Sociales, SAC y Vacaciones en tres centros). En 05/2026
+no se vio: se liquidó en pocos centros y casi todos eran de los que coinciden (D-066).
+
+**Decisión:**
+- **El parser lee "Cuenta a Reemplazar"**, por encabezado y no por posición. Un reporte sin esa columna sigue
+  funcionando como antes (cruce sólo por "Nombre") y la tarjeta del archivo avisa "sin columna Cuenta a
+  Reemplazar".
+- **Orden del cruce:** excepción del analista → "Cuenta a Reemplazar" → "Nombre". En los dos índices valen las
+  mismas reglas de siempre (patrimonial, único código, nombre + centro de costo, centro vacío como comodín).
+  "Nombre" queda de respaldo porque es lo que resuelve las patrimoniales y los reportes viejos.
+- **El Asiento Contable sale con el nombre del plan del cliente** para las cuentas de resultado con código
+  ("SUELDOS SUPPLY CHAIN", no "Sueldos y Jornales"). Sin código, o con excepción del analista, conserva el
+  nombre de la liquidación.
+- **La Contabilidad Desglosada mantiene el nombre de Axton** y sólo gana el número de cuenta.
+- La marca de "cuenta del neto" de las fichas se decide por el nombre de la liquidación (el configurado por el
+  analista) y se guarda como `esNeto` en la fila del asiento, porque el nombre de la fila ya no es el de Axton.
+  Una corrida guardada antes no trae `esNeto` y se resuelve como antes.
+
+**Alternativa descartada:** dejar el nombre de Axton también en el asiento y sólo sumar el número. Es lo que
+hacía el control hasta 09/2026.
+
+**Por qué el nombre del plan en el asiento:** el asiento lo contabiliza Contaduría del cliente, que trabaja
+con su plan de cuentas; es lo que ya pasaba con las patrimoniales, y es como salieron todos los asientos
+que el estudio entregó a COTY entre 09/2025 y 09/2026 (relevados en SharePoint). La desglosada no se tocó
+porque el pedido fue sólo el asiento: sigue siendo el mismo archivo que el cliente venía recibiendo (D-095).
+
+**Efecto, con los archivos reales de 10/2026:** 306 de 318 filas con número (antes 22). Los totales no se
+movieron: DEBE = HABER = 2.116.051.635,23 y neteados 1.060.309.247,45. Cambian sólo número y nombre de cuenta.
+
+**Abierto — quedan 12 filas sin número, por 53.058.124,91 al DEBE**, porque el Reporte de Cuentas de Axton no
+trae la fila. No se completan por analogía: salen sin código y avisadas.
+- Bono Anual (2503) y SAC s/Bono Anual (2504) en "Bonos", centros 104, 342, 701, 710, 735, 754, 764, 765, 770,
+  781 y 782.
+- SAC s/Preaviso (510012) en "Indemnizaciones", centro 771.
+- Para los diez centros del grupo FS SH C+L, la planilla de nómina fy27 del cliente indica 710100252 BONUS LOCAL
+  FS SH C+L (y así salió en 10/2024 para 710 y 735), pero esa cuenta no está en el reporte de Axton. El 104
+  (Beauty Advisors) no tiene cuenta de bono en ningún archivo del cliente; el 771 no tiene cuenta para
+  Indemnizaciones. **Falta definir quién da de alta esas filas en Axton** (se le preguntó al equipo). Mientras
+  tanto se resuelven como excepciones en el Paso 2.
+
+**Tests:** `tests/contaDesglosadaControl.test.js` pasó de 114 a 134 asserts. Detalle en
+`specs/conta-desglosada-asiento.md` §3.

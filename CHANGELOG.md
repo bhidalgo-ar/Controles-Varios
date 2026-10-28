@@ -7,6 +7,27 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(conta-desglosada): el Asiento Contable de COTY salía casi sin número de cuenta — 2026-10-28
+
+- **Antes:** con el asiento de 10/2026, 296 de las 318 filas salían sin número de cuenta y listadas como
+  "sin código". El control buscaba el nombre que escribe Axton ("Sueldos y Jornales", "Bonos") en la
+  columna "Nombre" del Reporte de Cuentas de Redefinición, que es la cuenta definitiva del cliente. Sólo
+  cruzaban las patrimoniales y las de resultado cuyo nombre coincidía por casualidad. En 05/2026 no se
+  vio porque se liquidó en pocos centros.
+- **Ahora:** el control lee también la columna "Cuenta a Reemplazar" del reporte, que es el nombre de
+  Axton, y cruza primero por ahí; si no cruza, cae a "Nombre" como antes. Un reporte sin esa columna se
+  comporta como antes, y la tarjeta del archivo en el Paso 2 avisa "sin columna Cuenta a Reemplazar".
+- **El nombre de la cuenta en el Asiento Contable cambia:** las cuentas de resultado con número salen con
+  el nombre del plan del cliente ("SUELDOS SUPPLY CHAIN" en vez de "Sueldos y Jornales"). La Contabilidad
+  Desglosada no cambia de nombre: sigue con el de Axton y sólo gana el número (D-100).
+- **Con los archivos de 10/2026:** 306 de 318 filas con número (antes 22). Los totales no se movieron:
+  DEBE = HABER = 2.116.051.635,23 y neteados 1.060.309.247,45.
+- **Quedan 12 filas sin número, por 53.058.124,91 al DEBE**, porque el reporte de Axton no trae la
+  fila: Bono Anual (2503) y SAC s/Bono Anual (2504) en "Bonos" en 11 centros, y SAC s/Preaviso (510012) en
+  "Indemnizaciones" en el 771. No se inventan: salen sin código y avisadas, y se resuelven con una
+  excepción en el Paso 2. Falta definir quién las da de alta en Axton.
+- Tests: `tests/contaDesglosadaControl.test.js` pasa de 114 a 134 asserts.
+
 ### docs(traspaso): los tres prompts del traspaso de controles del equipo, rehechos — 2026-10-27
 
 - **Prompt A (arranque):** suma que en el Tabulado de Meta4 el no liquidado viene en 0; el monto de
