@@ -437,46 +437,64 @@ function armarNetos(rows, cfg, keyFn, meta4) {
 // ── Paso 2: el asiento ────────────────────────────────────────────────────────
 
 /**
- * Índice del reporte de cuentas del cliente: nombre de cuenta → centro de costo
- * → código. El nombre es la clave porque es lo único que la liquidación de Axton
- * escribe en las columnas de cuenta.
+ * Índices del reporte de cuentas del cliente: nombre de cuenta → centro de
+ * costo → { código, nombre del plan }. Hay dos, porque el reporte nombra dos
+ * cuentas por fila:
+ *   · `porReemplazar` — por "Cuenta a Reemplazar", que es el nombre que escribe
+ *     Axton en la liquidación ("Sueldos y Jornales"). Es el cruce principal.
+ *   · `porNombre` — por "Nombre", la cuenta definitiva del plan ("SUELDOS
+ *     SUPPLY CHAIN"). Es el respaldo: Axton escribe así las patrimoniales
+ *     ("Anticipo de sueldos"), y un reporte viejo sin "Cuenta a Reemplazar" sólo
+ *     tiene éste.
+ * En los dos, el `nombre` guardado es el "Nombre" de la fila que dio el código:
+ * es el que sale en el asiento.
  */
 function indexarCuentas(cuentasRef) {
-  const porNombre = new Map();     // norm(nombre) → Map(centro de costo → código)
+  const porReemplazar = new Map(); // norm(cuenta a reemplazar) → Map(centro → { codigo, nombre })
+  const porNombre = new Map();     // norm(nombre) → Map(centro → { codigo, nombre })
   const nombreOficial = new Map(); // norm(nombre) → el nombre tal como lo escribe el cliente
   let empates = 0;                 // mismo nombre + centro con dos códigos distintos
+
+  const agregar = (indice, clave, ceco, entrada) => {
+    if (!indice.has(clave)) indice.set(clave, new Map());
+    const previo = indice.get(clave).get(ceco);
+    if (previo !== undefined && previo.codigo !== entrada.codigo) empates++;
+    indice.get(clave).set(ceco, entrada);
+  };
 
   for (const ref of cuentasRef) {
     const nombre = String(ref.nombre ?? '').trim();
     const codigo = String(ref.codigo ?? '').trim();
     if (!nombre || !codigo) continue;
-    const clave = norm(nombre);
     const ceco = String(ref.centro_costo ?? '').trim();
-    if (!porNombre.has(clave)) porNombre.set(clave, new Map());
-    const previo = porNombre.get(clave).get(ceco);
-    if (previo !== undefined && previo !== codigo) empates++;
-    porNombre.get(clave).set(ceco, codigo);
-    nombreOficial.set(clave, nombre);
+    const entrada = { codigo, nombre };
+    agregar(porNombre, norm(nombre), ceco, entrada);
+    nombreOficial.set(norm(nombre), nombre);
+    const aReemplazar = String(ref.cuenta_reemplazar ?? '').trim();
+    if (aReemplazar) agregar(porReemplazar, norm(aReemplazar), ceco, entrada);
   }
 
-  return { porNombre, nombreOficial, empates };
+  return { porReemplazar, porNombre, nombreOficial, empates };
 }
 
 /**
- * Código de una cuenta, en este orden:
+ * Código de una cuenta, y el nombre del plan del cliente que le corresponde, en
+ * este orden:
  *   1. Una **excepción** configurada por el analista (con su centro de costo, o
- *      para cualquier centro).
- *   2. Cuentas **patrimoniales** (código que empieza con 1 o 2): cruzan sólo por
- *      nombre. Se reconocen porque TODOS los códigos de ese nombre empiezan con
- *      1 o 2 — no se declaran en ningún lado.
- *   3. Nombre con un único código: cruza por nombre.
- *   4. Nombre con varios códigos: cruza por nombre + centro de costo. Si el
- *      reporte trae ese nombre con el centro vacío, ese código es el comodín.
+ *      para cualquier centro). No trae nombre del plan: la cuenta conserva el de
+ *      la liquidación.
+ *   2. El nombre de la línea contra **"Cuenta a Reemplazar"** del reporte.
+ *   3. Si por ahí no cruza, contra **"Nombre"** (las patrimoniales, que Axton
+ *      escribe con el nombre definitivo, y los reportes sin "Cuenta a
+ *      Reemplazar").
+ * En 2 y 3 las reglas son las mismas (`buscarEnIndice`).
  *
  * Devuelve `null` cuando no se puede resolver: la línea igual suma al asiento y
  * sale listada como "sin código", nunca con uno inventado.
+ *
+ * @returns {{ codigo: string, nombre: string|null }|null}
  */
-function buscarCodigo(cuenta, centroCosto, { porNombre }, excepciones) {
+function buscarCodigo(cuenta, centroCosto, { porReemplazar, porNombre }, excepciones) {
   const clave = norm(cuenta);
   const ceco = String(centroCosto ?? '').trim();
 
@@ -485,18 +503,35 @@ function buscarCodigo(cuenta, centroCosto, { porNombre }, excepciones) {
     const excCeco = exc.centroCosto === null || exc.centroCosto === undefined
       ? null
       : String(exc.centroCosto).trim();
-    if (excCeco === null || excCeco === '' || excCeco === ceco) return String(exc.codigo).trim();
+    if (excCeco === null || excCeco === '' || excCeco === ceco) {
+      return { codigo: String(exc.codigo).trim(), nombre: null };
+    }
   }
 
-  const porCeco = porNombre.get(clave);
-  if (!porCeco) return null;
+  return buscarEnIndice(porReemplazar.get(clave), ceco)
+    || buscarEnIndice(porNombre.get(clave), ceco);
+}
 
-  const codigos = [...porCeco.values()];
-  if (codigos.every(c => /^[12]/.test(c))) return codigos[0];
-  if (new Set(codigos).size === 1) return codigos[0];
-  if (porCeco.has(ceco)) return porCeco.get(ceco);
-  if (porCeco.has('')) return porCeco.get('');
-  return null;
+/**
+ * Las reglas del cruce dentro de un índice, para un nombre ya encontrado:
+ *   1. Cuentas **patrimoniales** (código que empieza con 1 o 2): cruzan sólo por
+ *      nombre. Se reconocen porque TODOS los códigos de ese nombre empiezan con
+ *      1 o 2 — no se declaran en ningún lado.
+ *   2. Nombre con un único código: cruza por nombre.
+ *   3. Nombre con varios códigos: cruza por nombre + centro de costo. Si el
+ *      reporte trae ese nombre con el centro vacío, ese código es el comodín.
+ * Con un único código, el nombre del plan es el de la fila del mismo centro de
+ * costo si la hay (el mismo código puede llamarse distinto según el centro),
+ * después el de la fila sin centro, y si no, el de la primera. Una patrimonial
+ * con varios códigos toma la primera fila, código y nombre, como siempre.
+ */
+function buscarEnIndice(porCeco, ceco) {
+  if (!porCeco) return null;
+  const entradas = [...porCeco.values()];
+  const codigos = entradas.map(e => e.codigo);
+  if (new Set(codigos).size === 1) return porCeco.get(ceco) || porCeco.get('') || entradas[0];
+  if (codigos.every(c => /^[12]/.test(c))) return entradas[0];
+  return porCeco.get(ceco) || porCeco.get('') || null;
 }
 
 /** ¿Es una cuenta patrimonial (código 1x/2x)? Van consolidadas, sin centro de costo. */
@@ -511,7 +546,9 @@ const esPatrimonial = (codigo) => /^[12]/.test(String(codigo || ''));
  *     que unifica las variantes de mayúsculas con las que las escribe la
  *     liquidación.
  *   · **Las demás** (resultado: 6x/7x…) — agrupadas por código + nombre +
- *     centro de costo, porque el gasto se imputa a su centro.
+ *     centro de costo, porque el gasto se imputa a su centro. Con código, el
+ *     nombre es el del plan del cliente (el "Nombre" de la fila del reporte que
+ *     lo dio); sin código, el de la liquidación.
  */
 function armarAsiento(lineas, cuentasRef, cfg) {
   const index = indexarCuentas(cuentasRef);
@@ -519,7 +556,8 @@ function armarAsiento(lineas, cuentasRef, cfg) {
   const sinCodigo = new Map();
 
   for (const l of lineas) {
-    const codigo = buscarCodigo(l.cuenta, l.centro_costo, index, cfg.excepciones);
+    const cruce = buscarCodigo(l.cuenta, l.centro_costo, index, cfg.excepciones);
+    const codigo = cruce?.codigo || null;
     // El código se escribe **en la línea de la desglosada**, no en una copia:
     // desde el pedido de Contaduría (D-095) la desglosada lleva el número de
     // cuenta al lado del nombre, así que hay un solo archivo y una sola tabla.
@@ -536,21 +574,35 @@ function armarAsiento(lineas, cuentasRef, cfg) {
       sinCodigo.set(clave, previo);
     }
 
+    // El nombre que sale en el asiento es el del plan del cliente (el "Nombre"
+    // de la fila del reporte que dio el código): para una patrimonial es lo que
+    // unifica las variantes de mayúsculas de la liquidación, y para una de
+    // resultado es la cuenta definitiva ("Sueldos y Jornales" del centro 10 →
+    // "SUELDOS SUPPLY CHAIN"). La desglosada NO cambia: sigue con el nombre de
+    // Axton y sólo gana el número. Una excepción del analista no trae nombre del
+    // plan, y una cuenta sin código no tiene de dónde sacarlo: las dos siguen
+    // con el de la liquidación.
     const patrimonial = esPatrimonial(codigo);
-    const nombre = patrimonial
-      ? (index.nombreOficial.get(norm(l.cuenta)) || l.cuenta)
-      : l.cuenta;
+    // (La patrimonial que resolvió una excepción busca su nombre oficial por
+    // "Nombre", como antes de que el cruce devolviera el nombre del plan.)
+    const nombre = cruce?.nombre
+      || (patrimonial ? index.nombreOficial.get(norm(l.cuenta)) : null)
+      || l.cuenta;
     const ceco = patrimonial ? '0' : String(l.centro_costo ?? '').trim();
     const clave = patrimonial ? `P⋮${codigo}` : `R⋮${codigo || ''}⋮${norm(nombre)}⋮${ceco}`;
 
     const g = grupos.get(clave)
-      || { nro: codigo || null, cuenta: nombre, centro_costo: ceco, debe: 0, haber: 0, conceptos: new Map() };
+      || { nro: codigo || null, cuenta: nombre, centro_costo: ceco, debe: 0, haber: 0, conceptos: new Map(),
+           esNeto: false };
     g.debe  += l.debe  || 0;
     g.haber += l.haber || 0;
     // El desglose por concepto se acumula en la MISMA pasada que el saldo (ver
     // cuentaConceptos.js): es lo que abre la ficha por cuenta, y sumando acá no
     // puede desalinearse del saldo que dice explicar.
     acumularConcepto(g.conceptos, l);
+    // Si es la cuenta del neto se decide por el nombre de la LIQUIDACIÓN, que
+    // es el que configura el analista: el del plan del cliente puede ser otro.
+    if (norm(l.cuenta) === norm(cfg.cuentaNeto)) g.esNeto = true;
     grupos.set(clave, g);
   }
 
@@ -986,7 +1038,9 @@ function cuentasDeLaCorrida(results) {
       cuenta:       f.cuenta,
       centro_costo: f.centro_costo,
       sinCodigo:    !f.nro,
-      esNeto:       norm(f.cuenta) === norm(results.cuentaNeto),
+      // `esNeto` lo marca el asiento por el nombre de la liquidación (el de la
+      // fila es el del plan del cliente); una corrida guardada antes no lo trae.
+      esNeto:       f.esNeto ?? norm(f.cuenta) === norm(results.cuentaNeto),
       conceptos:    f.conceptos || [],
       conciliacion: conciliarCuenta(f),
       // El neteo que el control ya calculó, para poder mostrarlo con la misma

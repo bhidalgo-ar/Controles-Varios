@@ -182,7 +182,9 @@ const metaTotalesConceptoCruce = (m) =>
     ? ' &nbsp;·&nbsp; <span class="badge badge--warning">sin columna Cantidad</span>' : '');
 
 const metaCuentasRedefinicion = (m) =>
-  `${m?.cuentas ?? 0} cuentas · ${m?.nombresDistintos ?? 0} nombres distintos`;
+  `${m?.cuentas ?? 0} cuentas · ${m?.nombresDistintos ?? 0} nombres distintos`
+  + (m?.sinCuentaAReemplazar === true
+    ? ' &nbsp;·&nbsp; <span class="badge badge--warning">sin columna Cuenta a Reemplazar</span>' : '');
 
 // El reporte de Vacaciones informa cuántos legajos leyó; el de Liquidaciones,
 // además, el período que declara su columna `liquidacion`: es lo que le permite
