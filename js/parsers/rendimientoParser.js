@@ -3,6 +3,9 @@
 // Columnas clave: CC code (primera col, sin encabezado), CENTRO COSTO,
 //   PRECIO, ASIGNACIÓN ESTIMULO, RETIROS, CARGAS SOCIALES, PROVISIÓN MES,
 //   PROVISIÓN CARGAS SOCIALES MES, COSTO TOTAL
+// Desde 10-2026 M4 nombra las dos provisiones "PROVISIÓN SAC MES" y "PROVISIÓN
+// SAC CARGAS SOCIALES MES": es el mismo contenido renombrado, así que se
+// reconocen los dos nombres (los viejos siguen funcionando).
 /* global XLSX */
 import { detectHeaders } from './nominaMaestra.js';
 export { detectHeaders };
@@ -39,6 +42,10 @@ const REND_COL_MAP = {
   'PROVISION MES':                   'provMesColumn',
   'PROVISIÓN CARGAS SOCIALES MES':   'provCcssColumn',
   'PROVISION CARGAS SOCIALES MES':   'provCcssColumn',
+  'PROVISIÓN SAC MES':                     'provMesColumn',
+  'PROVISION SAC MES':                     'provMesColumn',
+  'PROVISIÓN SAC CARGAS SOCIALES MES':     'provCcssColumn',
+  'PROVISION SAC CARGAS SOCIALES MES':     'provCcssColumn',
   'COSTO TOTAL':                     'costoTotalColumn',
 };
 

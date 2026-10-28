@@ -7,6 +7,44 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(rend-vs-asiento): Marval 10-2026 — centros por código, provisiones SAC y Directores persona por persona — 2026-10-28
+
+- **Antes:** con la Contabilidad de 10-2026 de Marval, Asesoramiento y Contencioso quedaban sin asiento y 16
+  sub-centros ("Asesoramiento BAN", "Contencioso PRE", "Finanzas 002"…) salían sueltos como "sólo en CONTA",
+  porque el control juntaba por nombre de centro y la Contabilidad pasó a nombres y códigos nuevos. En el Paso 2
+  las columnas de provisión del Rendimiento quedaban "⚠ sin asignar": el Rendimiento las renombró. Y Directores
+  salía entero como un área aparte, aunque cada director va a un área distinta del Rendimiento.
+- **Ahora, por código de centro:** el Paso 2 tiene un campo nuevo, "Centro de costo de la Contabilidad → área
+  del Rendimiento (por código)", una línea por código (`04 → Asesoramiento`). El código toma sus sub-centros
+  (`04` junta el 04.01, el 04.02…) pero `1` no toma `10`; si un sub-centro va a otra área, se escribe aparte y
+  gana el más específico. Viene sembrado para Marval y se cambia sin tocar código. El detalle de cada importe
+  muestra el centro con el que vino de la Contabilidad. Resultados lista la tabla aplicada.
+- **Directores, persona por persona:** otro campo nuevo, "Centros que se reparten persona por persona" (viene
+  con `13`). CC x Empleado acepta ahora el listado de Marval tal cual lo manda (`ID_EMPLEADO`, `ID_CC_CONTA`,
+  `RENDIMIENTO`, en todas las hojas: Activos y Bajas). **El listado sólo mueve a los centros declarados "por
+  persona"**: antes, con un listado cargado, cambiaba el centro de todos los empleados que traía. Si ese campo
+  se deja vacío, el listado vuelve a mover a todos, como antes.
+- **Aviso cuando no se pudo repartir:** si hay empleados de un centro "por persona" y no se subió el listado,
+  o no figuran en él, salen "sólo en CONTA" **y** Resultados trae un aviso ("N legajos del centro 13 no se
+  pudieron repartir persona por persona", con qué hacer) y un chip arriba. Los redirects por nombre no los
+  esconden dentro de un área.
+- **Columnas del Rendimiento:** el Paso 2 reconoce "PROVISIÓN SAC MES" y "PROVISIÓN SAC CARGAS SOCIALES MES"
+  (con o sin tilde). Los nombres viejos siguen andando. **Ojo:** si el cliente ya tenía guardado el mapeo de
+  columnas del Rendimiento, el reconocimiento automático no corre: hay que elegir a mano esas dos columnas la
+  primera vez.
+- **Config ya guardada:** un cliente que había guardado la configuración del control antes de este cambio toma
+  la tabla y los centros "por persona" sembrados. Si los dejó vacíos a propósito, se respeta vacío.
+- **Con los archivos reales de 10-2026:** 7 de 10 áreas cierran al centavo. Quedan Servicios Legales
+  −5.933.141,04 y Servicios Comunes +5.933.141,05 (un legajo que la Contabilidad tiene en Servicios Comunes y el
+  Rendimiento en Servicios Legales; consulta abierta con Marval) y Administración +105.556,00, sólo en precio (un
+  legajo cuyo precio el Rendimiento cuenta menor que el asiento; para revisar en Meta4). Sin el listado,
+  Directores sale "sólo en CONTA" por 223.675.424,65 y aparece el aviso.
+- **Pendiente de Marval:** los centros FS 002/003 (código `01`). Araceli propone Administración; el Rendimiento
+  de 10-2026 todavía los trae en Servicios Legales, y la semilla los deja ahí. Se cambia desde el Paso 2. Ana
+  avisó que en noviembre cambia la distribución de Directores.
+- Decisión: D-101. Spec: `specs/rendimiento-vs-asiento-por-codigo.md`. Tests: `tests/rendVsAsientoCcCode.test.js`
+  (nuevo, en la cadena de `npm run test:unit`).
+
 ### fix(conta-desglosada): el Asiento Contable de COTY salía casi sin número de cuenta — 2026-10-28
 
 - **Antes:** con el asiento de 10/2026, 296 de las 318 filas salían sin número de cuenta y listadas como

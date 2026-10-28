@@ -46,7 +46,70 @@ export const DEFAULT_RVA_CONFIG = {
     { from: 'Finanzas',   to: 'Servicios Legales' },
     { from: 'Facilities', to: 'Administración' },
   ],
+  // CC de la CONTA → área del Rendimiento, por CÓDIGO (ID_CENTRO_COSTO). Desde
+  // 10-2026 la CONTA parte los centros en sub-centros con nombre propio
+  // ("Asesoramiento BAN" es el 04.01): por nombre no matchean, por código sí.
+  // `'04'` agarra `'04.01'`…`'04.08'` y también `'4'`; `'1'` NO agarra `'10'`
+  // (ver `ccCodeSegments`). Es semilla, no identidad (D-035): una renumeración
+  // del cliente se corrige desde la pantalla. El 01 (Finanzas 002/003) va a
+  // Servicios Legales porque así lo trae el Rendimiento de 10-2026; si Marval
+  // confirma que va a Administración, se cambia ahí, sin commit.
+  ccCodeMap: [
+    { code: '01', to: 'Servicios Legales' },
+    { code: '3',  to: 'Administración' },
+    { code: '04', to: 'Asesoramiento' },
+    { code: '05', to: 'Contencioso' },
+    { code: '6',  to: 'Marcas-Teconología-PI' },   // así, con el typo, lo nombra el Rendimiento
+    { code: '7',  to: 'Marketing' },
+    { code: '8',  to: 'Patentes' },
+    { code: '9',  to: 'RRHH' },
+    { code: '10', to: 'Servicios Comunes' },
+    { code: '11', to: 'Servicios Legales' },
+    { code: '12', to: 'Sistemas' },
+  ],
+  // Centros que no son un área sino gente repartida en varias (Directores): sus
+  // filas van al área que diga el listado de CC x Empleado, persona por persona.
+  // Con esta lista vacía, el listado pisa el CC de TODAS las filas, como antes.
+  ccPorPersona: ['13'],
 };
+
+/**
+ * La config que usa la corrida, con las claves que una config guardada ANTES
+ * de que existieran no tiene (D-039: lo guardado gana). Clave ausente → la
+ * semilla; clave presente, aunque sea `[]` → lo guardado tal cual. Sin esto, el
+ * cliente que ya había guardado su config nunca vería la tabla por código.
+ */
+export function resolveRvaConfig(config) {
+  const base = config || DEFAULT_RVA_CONFIG;
+  const semilla = key => JSON.parse(JSON.stringify(DEFAULT_RVA_CONFIG[key]));
+  return {
+    ...base,
+    ccCodeMap:    base.ccCodeMap    == null ? semilla('ccCodeMap')    : base.ccCodeMap,
+    ccPorPersona: base.ccPorPersona == null ? semilla('ccPorPersona') : base.ccPorPersona,
+  };
+}
+
+/**
+ * Un código de CC partido en segmentos, sin ceros a la izquierda en cada uno:
+ * `'04.01'` → `['4', '1']`, `3` → `['3']`. `null` si no hay código.
+ */
+export function ccCodeSegments(v) {
+  const segs = String(v ?? '').split('.').map(p => p.trim()).filter(Boolean)
+    .map(p => p.replace(/^0+/, '') || '0');
+  return segs.length ? segs : null;
+}
+
+/**
+ * La entrada de la lista que corresponde a un código: la que tiene sus
+ * segmentos como prefijo de los del código —por segmento, no por texto: `'1'`
+ * no agarra `'10'`— y, entre varias, la más específica (más segmentos).
+ * `entries` viene ordenado de más a menos segmentos (ver `buildIndexes`).
+ */
+function matchCcCode(entries, code) {
+  const segs = ccCodeSegments(code);
+  if (!segs) return null;
+  return entries.find(e => e.segs.length <= segs.length && e.segs.every((s, i) => s === segs[i])) || null;
+}
 
 /**
  * Construye índices rápidos desde la config para uso en runRendVsAsiento.
@@ -57,6 +120,8 @@ function buildIndexes(config) {
   const provCcss    = new Set();
   const ccRedir     = new Map();   // normKey → normKey
   const ccRedirLbl  = new Map();   // normKey destino → label legible
+  const ccPorCodigo = [];          // { code, segs, to } — más específico primero
+  const porPersona  = [];          // { code, segs }
 
   for (const [catKey, codes] of Object.entries(config?.cuentaCats || {})) {
     for (const code of (codes || [])) {
@@ -76,7 +141,19 @@ function buildIndexes(config) {
       ccRedirLbl.set(tk, String(to).trim());
     }
   }
-  return { cuentaToCat, provCcss, ccRedir, ccRedirLbl };
+  for (const { code, to } of (config?.ccCodeMap || [])) {
+    const segs = ccCodeSegments(code);
+    const dest = norm(to);
+    if (segs && dest) ccPorCodigo.push({ code: norm(code), segs, to: dest });
+  }
+  // `sort` es estable: a igual cantidad de segmentos, gana la que vino primero.
+  ccPorCodigo.sort((a, b) => b.segs.length - a.segs.length);
+  for (const code of (config?.ccPorPersona || [])) {
+    const segs = ccCodeSegments(code);
+    if (segs) porPersona.push({ code: norm(code), segs });
+  }
+  porPersona.sort((a, b) => b.segs.length - a.segs.length);
+  return { cuentaToCat, provCcss, ccRedir, ccRedirLbl, ccPorCodigo, porPersona };
 }
 
 // ── Definición de columnas comparadas ────────────────────────────────────────
@@ -402,6 +479,32 @@ function openDrillModal({ detalle, ccKey, catKey, ccLabel, cellValue }) {
 // ── Panel de mapeo (visible en Archivos y en Resultados) ─────────────────────
 
 /**
+ * La tabla por código de CC y los centros que se reparten por persona, tal
+ * como se aplicaron. La comparten el panel de mapeo y el de cuentas utilizadas
+ * de Resultados. Vacío si la config no trae ninguna de las dos.
+ */
+function ccPorCodigoHtml(config) {
+  // Sin `resolveRvaConfig` a propósito: una corrida guardada antes de que
+  // existiera la tabla por código no la aplicó, y mostrarle la semilla sería
+  // afirmar algo que no pasó.
+  const cfg = config || {};
+  const porCodigo = (cfg.ccCodeMap || []).filter(e => norm(e?.code) && norm(e?.to));
+  const porPersona = (cfg.ccPorPersona || []).map(norm).filter(Boolean);
+  if (porCodigo.length === 0 && porPersona.length === 0) return '';
+  const lista = porCodigo.length === 0 ? '' : `
+    <p style="margin:var(--sp-3) 0 var(--sp-2);font-size:var(--text-sm);font-weight:var(--fw-semibold);">Centro de costo de la Contabilidad → área del Rendimiento (por código)</p>
+    <ul style="margin:0;padding-left:var(--sp-5);font-size:var(--text-sm);line-height:1.8;">
+      ${porCodigo.map(e => `<li><code>${esc(e.code)}</code> en CONTA → <code>${esc(e.to)}</code> en Rendimiento</li>`).join('')}
+    </ul>`;
+  const persona = porPersona.length === 0 ? '' : `
+    <p style="margin:var(--sp-3) 0 0;font-size:var(--text-sm);">
+      <span style="font-weight:var(--fw-semibold);">Se reparten persona por persona (con el listado de CC x Empleado):</span>
+      ${porPersona.map(c => `<code>${esc(c)}</code>`).join(', ')}
+    </p>`;
+  return lista + persona;
+}
+
+/**
  * Renderiza un panel informativo con el mapeo de CONTA → Rendimiento.
  * @param {HTMLElement} container - dónde insertar el panel
  * @param {Object} opts
@@ -475,6 +578,7 @@ export function renderRendVsAsientoMappingPanel(container, { accountNames = {}, 
         <tbody>${categoryRowsHtml}</tbody>
       </table>
       ${ccRedirHtml}
+      ${ccPorCodigoHtml(config)}
       <p style="margin:var(--sp-3) 0 0;font-size:var(--text-sm);color:var(--color-text-muted);font-style:italic;">
         Estos códigos son fijos según el plan de cuentas estándar de M4. Si en tu caso son distintos, avisanos.
       </p>
@@ -496,13 +600,13 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   const rm        = mapping.rend || {};
   const contaRows = mapping.contaRows || [];
   const ccXEeRows = mapping.ccXEeRows || [];
-  const config    = mapping.rvaConfig || DEFAULT_RVA_CONFIG;
+  const config    = resolveRvaConfig(mapping.rvaConfig);
   // El override de CC x Empleado cruza legajos entre dos archivos del cliente,
   // así que usa la clave de legajo del cliente y no `trim` a secas (D-038): con
   // un archivo que rellena con ceros y otro que no, el override no se aplicaba y
   // el CC caía al del asiento sin ningún aviso.
   const legajoKeyOf = makeLegajoKey(mapping.legajoKeyMode);
-  const { cuentaToCat, provCcss, ccRedir, ccRedirLbl } = buildIndexes(config);
+  const { cuentaToCat, provCcss, ccRedir, ccRedirLbl, ccPorCodigo, porPersona } = buildIndexes(config);
 
   if (!rendRows?.length)  return { error: 'No hay datos del Reporte de Rendimiento.' };
   if (!contaRows?.length) return { error: 'No hay datos de Contabilidad Desglosada (CONTA).' };
@@ -515,6 +619,17 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     if (emp && cc) ccOverride.set(emp, cc);
   }
   const hasOverride = ccOverride.size > 0;
+  // Con centros "por persona" declarados, el listado pisa SÓLO las filas de esos
+  // centros. Pisar todo, con el listado completo de la empresa subido, taparía
+  // diferencias reales: un legajo que la Contabilidad tiene en un área y el
+  // Rendimiento en otra tiene que seguir saltando. Sin centros declarados, el
+  // listado pisa todas las filas, como siempre.
+  const overrideTodo = porPersona.length === 0;
+
+  // Las filas de un centro "por persona" que no se pudieron repartir: no se
+  // completan con nada (quedan con su CC_NOMBRE y salen "sólo en CONTA"), pero
+  // tampoco pasan en silencio — van como aviso. centro → { ccNombre, legajos }
+  const sinRepartir = new Map();
 
   // ── Agrupar CONTA por CC × categoría ─────────────────────────────────────
   const contaGroups  = new Map();   // nameKey → bucket
@@ -528,17 +643,42 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
 
   for (const row of contaRows) {
     const empleado = legajoKeyOf(row.id_empleado);
-    const ccRaw    = hasOverride && empleado && ccOverride.has(empleado)
-      ? ccOverride.get(empleado)
-      : norm(row.cc_nombre);
+    const ccNombre = norm(row.cc_nombre);
+    const enListado = hasOverride && empleado && ccOverride.has(empleado);
+
+    // A qué área del Rendimiento va la fila, en este orden: (a) el listado de
+    // CC x Empleado, si el centro se reparte por persona (o, sin centros por
+    // persona, para todas las filas, como siempre); (b) la tabla por código de
+    // CC; (c) el CC_NOMBRE tal cual, con los redirects por nombre.
+    const centroPersona = overrideTodo ? null : matchCcCode(porPersona, row.id_centro_costo);
+    let ccRaw, porCodigo = null, noRepartida = false;
+    if (enListado && (overrideTodo || centroPersona)) {
+      ccRaw = ccOverride.get(empleado);
+    } else {
+      if (centroPersona) {
+        noRepartida = true;
+        const k = centroPersona.code;
+        if (!sinRepartir.has(k)) sinRepartir.set(k, { code: k, ccNombre, legajos: new Set() });
+        sinRepartir.get(k).legajos.add(empleado || '(sin legajo)');
+      } else {
+        porCodigo = matchCcCode(ccPorCodigo, row.id_centro_costo);
+      }
+      ccRaw = porCodigo ? porCodigo.to : ccNombre;
+    }
     if (!ccRaw) continue;
 
     const origKey = normCCName(ccRaw);
     if (!origKey) continue;
 
-    // Aplicar redirect de CC según la config
-    const nameKey = ccRedir.get(origKey) ?? origKey;
+    // Aplicar redirect de CC según la config. Lo que se tradujo por código ya
+    // es el nombre del Rendimiento: no pasa por los redirects. Lo que no se pudo
+    // repartir por persona tampoco: el aviso dice que sale entero como "sólo en
+    // CONTA", y un redirect lo escondería adentro de un área.
+    const nameKey = (porCodigo || noRepartida) ? origKey : (ccRedir.get(origKey) ?? origKey);
     const wasRedirected = nameKey !== origKey;
+    // El CC con el que vino la fila, para el detalle, cuando se tradujo.
+    const ccOriginal = (porCodigo || ccRaw !== ccNombre) ? ccNombre
+      : (wasRedirected ? ccRaw : '');
 
     if (!contaGroups.has(nameKey)) {
       contaGroups.set(nameKey, {
@@ -580,7 +720,7 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
       detalle.push({
         ccKey:             nameKey,
         ccRendimiento:     g.ccLabel,
-        ccOriginal:        wasRedirected ? ccRaw : '',
+        ccOriginal,
         categoria:         CAT_LABEL[catKey] || catKey,
         cuentaContab:      cuentaCode,
         nCuentaContable:   norm(row.n_cuenta_contable),
@@ -656,6 +796,25 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     }
   }
 
+  // Un aviso por centro "por persona" con legajos sin repartir. Que el listado
+  // no esté es una cosa y que un legajo no figure en él es otra: cada una dice
+  // qué hacer.
+  const avisosReparto = [...sinRepartir.values()].map(({ code, ccNombre, legajos }) => {
+    const n = legajos.size;
+    const centro = ccNombre ? `${code} (${ccNombre})` : code;
+    const queHacer = hasOverride
+      ? (n === 1 ? 'El legajo no figura en el listado de CC x Empleado.' : 'Esos legajos no figuran en el listado de CC x Empleado.')
+        + ` ${n === 1 ? 'Sumalo' : 'Sumalos'} al listado y volvé a correr; mientras tanto sus importes salen como «sólo en CONTA».`
+      : 'No se subió el listado de CC x Empleado: subilo en el Paso 2 y volvé a correr.'
+        + ' Mientras tanto, el centro sale entero como «sólo en CONTA».';
+    return {
+      code, ccNombre, legajos: n,
+      motivo: hasOverride ? 'fuera_del_listado' : 'sin_listado',
+      texto: `${n} legajo${n === 1 ? '' : 's'} del centro ${centro} no se ${n === 1 ? 'pudo' : 'pudieron'} repartir persona por persona.`,
+      queHacer,
+    };
+  });
+
   const summary = {
     total:          rows.length,
     sinContaData:   rows.filter(r => r.sinContaData).length,
@@ -668,10 +827,12 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     difProvCcss: rows.filter(r => hasDiff(r.dProvCcss)).length,
     difTotal:    rows.filter(r => hasDiff(r.dTotal)).length,
     usoCCXEE:    hasOverride,
+    legajosSinRepartir: avisosReparto.reduce((acc, a) => acc + a.legajos, 0),
   };
 
   return {
     summary, rows, ccsSoloEnConta,
+    avisosReparto,
     period: mapping.period || '',
     meta: {
       accountNames: Object.fromEntries(accountNames),
@@ -820,6 +981,21 @@ export function renderRendVsAsientoResults(results, container) {
       if (ccsSoloEnConta?.length) tiles.push({ label: 'CCs sólo en CONTA', value: ccsSoloEnConta.length, tone: 'warn' });
       renderTiles(panel, tiles);
 
+      // Los centros que se reparten por persona y no se pudieron repartir: el
+      // analista lo lee acá, y no recién al ver un "sólo en CONTA" sin explicación.
+      if (results.avisosReparto?.length) {
+        renderIssues(panel, {
+          heading: 'Avisos de la corrida',
+          items: results.avisosReparto.map(a => ({
+            sev: 'hi',
+            who: `Centro ${a.code}${a.ccNombre ? ` — ${a.ccNombre}` : ''}`,
+            sub: 'se reparte persona por persona',
+            what: a.texto,
+            why: a.queHacer,
+          })),
+        });
+      }
+
       if (ccsWithDiff.length > 0) {
         const top = [...ccsWithDiff].sort((a, b) => Math.abs(b.dTotal ?? 0) - Math.abs(a.dTotal ?? 0)).slice(0, 5);
         renderIssues(panel, {
@@ -946,6 +1122,10 @@ function renderRendVsAsientoPlanilla(container, results) {
 function renderBadges(host, summary) {
   const badges = [];
   if (summary?.usoCCXEE) badges.push('<span class="badge badge--info">↺ CC x Empleado aplicado</span>');
+  if (summary?.legajosSinRepartir > 0) {
+    const n = summary.legajosSinRepartir;
+    badges.push(`<span class="badge badge--warning">${n} legajo${n === 1 ? '' : 's'} sin repartir por persona</span>`);
+  }
   if (summary?.noCategorizadas > 0) badges.push(`<span class="badge badge--warning">${summary.noCategorizadas} filas CONTA no categorizadas</span>`);
   if (!badges.length) return;
   const el = document.createElement('div');
@@ -1040,9 +1220,10 @@ function renderPanelDeCuentas(host, { meta, accountNames, conceptNames }) {
   det.style.cssText = 'margin:0 var(--sp-3) var(--sp-3);';
   det.innerHTML = `
     <summary style="cursor:pointer;font-size:var(--text-sm);font-weight:var(--fw-semibold);color:var(--color-primary);user-select:none;">
-      Cuentas y conceptos utilizados
+      Cuentas, conceptos y centros de costo utilizados
     </summary>
     <div style="margin-top:var(--sp-2);overflow-x:auto;" data-mapa-cuentas>${tablaHtml()}</div>
+    <div style="margin-top:var(--sp-2);">${ccPorCodigoHtml(meta?.config || DEFAULT_RVA_CONFIG)}</div>
   `;
   host.appendChild(det);
 

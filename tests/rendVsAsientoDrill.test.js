@@ -207,7 +207,9 @@ const synthResults = runRendVsAsiento(
   {
     rend:      { ccCodeColumn: 'CC', ccNameColumn: 'CENTRO COSTO', precioColumn: 'PRECIO' },
     contaRows: synthConta.parsedRows,
-    rvaConfig: DEFAULT_RVA_CONFIG,
+    // Sin la tabla por código: el fixture inventa un CC 10 que se llama
+    // PATENTES, y la semilla mandaría el 10 a Servicios Comunes.
+    rvaConfig: { ...DEFAULT_RVA_CONFIG, ccCodeMap: [], ccPorPersona: [] },
     period:    '2026-04',
   }
 );
