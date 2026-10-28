@@ -23,5 +23,33 @@
       "Bash(git stash list:*)",
       "Bash(git ls-files:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__.*__read_resource$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hook-archivo-incompleto.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Revisando que el archivo haya llegado entero..."
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "^mcp__.*__read_resource$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hook-archivo-incompleto.mjs\"",
+            "timeout": 30,
+            "statusMessage": "Revisando que el archivo haya llegado entero..."
+          }
+        ]
+      }
+    ]
   }
 }
