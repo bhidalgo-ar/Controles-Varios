@@ -51,6 +51,19 @@ de DECISIONS el caso se nombra por lo que le pasa —"el legajo con doble quince
 movimiento en el mes"—, nunca por su número: el chequeo automático lo frena. Los importes del caso sí
 pueden quedar, son las anclas que hacen verificable la spec.
 
+### Si el archivo llegó incompleto, frená antes de analizar
+
+Antes de sacar una sola conclusión, confirmá que tenés el archivo **entero**. Si llegó cortado —el
+conector de SharePoint/OneDrive devolvió sólo las primeras filas ("were not shown", "[truncated:"), un
+adjunto vino como binario que no se puede leer ("Binary attachment"), falta una hoja, faltan filas— o
+falta directamente un archivo que el análisis necesita, **pará y avisale a Willy**: qué archivo, qué
+parte falta (cuántas filas de cuántas, qué hoja) y cómo pasártelo entero, que casi siempre es subirlo
+a la sesión. No se analiza con la muestra parcial, ni "mientras tanto", ni con conclusiones
+"provisorias": una conclusión sobre 1.135 filas de 25.143 se lee igual que una sobre el total, y
+nadie se acuerda después de que era parcial. Un hook (`scripts/hook-archivo-incompleto.mjs`) frena
+solo cuando la lectura por el conector de Microsoft 365 trae esas señales; la regla vale igual para
+cualquier otra vía.
+
 ---
 
 ## Forma de trabajar: orquestador y subagentes
