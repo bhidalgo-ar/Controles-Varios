@@ -39,9 +39,8 @@
   Rendimiento en Servicios Legales; consulta abierta con Marval) y Administración +105.556,00, sólo en precio (un
   legajo cuyo precio el Rendimiento cuenta menor que el asiento; para revisar en Meta4). Sin el listado,
   Directores sale "sólo en CONTA" por 223.675.424,65 y aparece el aviso.
-- **Pendiente de Marval:** los centros FS 002/003 (código `01`). Araceli propone Administración; el Rendimiento
-  de 10-2026 todavía los trae en Servicios Legales, y la semilla los deja ahí. Se cambia desde el Paso 2. Ana
-  avisó que en noviembre cambia la distribución de Directores.
+- Los centros FIN 002/003 (código `01`) van a Servicios Legales: Marval lo confirmó el 2026-10-29 y es lo
+  que ya hace la semilla. Ana avisó que en noviembre cambia la distribución de Directores.
 - Decisión: D-101. Spec: `specs/rendimiento-vs-asiento-por-codigo.md`. Tests: `tests/rendVsAsientoCcCode.test.js`
   (nuevo, en la cadena de `npm run test:unit`).
 

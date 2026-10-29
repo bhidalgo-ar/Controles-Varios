@@ -52,8 +52,7 @@ export const DEFAULT_RVA_CONFIG = {
   // `'04'` agarra `'04.01'`…`'04.08'` y también `'4'`; `'1'` NO agarra `'10'`
   // (ver `ccCodeSegments`). Es semilla, no identidad (D-035): una renumeración
   // del cliente se corrige desde la pantalla. El 01 (Finanzas 002/003) va a
-  // Servicios Legales porque así lo trae el Rendimiento de 10-2026; si Marval
-  // confirma que va a Administración, se cambia ahí, sin commit.
+  // Servicios Legales: lo confirmó Marval (D-101).
   ccCodeMap: [
     { code: '01', to: 'Servicios Legales' },
     { code: '3',  to: 'Administración' },
