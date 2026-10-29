@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### fix(rend-x-ee): columna RETIROS para la empresa 03 de Marval, y aviso cuando un Tabulado no trae ningún concepto — 2026-10-29
+
+- **Antes:** con el Tabulado de la empresa 03 de 10-2026 cargado en el casillero de la otra empresa, los 73
+  legajos de la 03 salían con 0,00 en todas las columnas y el Costo Total entero como diferencia
+  (710.482.759,03 en total). El control encontraba a cada persona pero ningún concepto: la 03 sólo trae
+  9200-APOYO_FINAN, 9205-RETIRO, 7116, 7117, 8802 y 9210, y ninguno está en la agrupación de Rendimiento.
+- **Ahora:** Rendimiento x EE tiene una columna **RETIROS** (9200 + 9205) entre ASIG. ESTÍMULO y CARGAS SS,
+  como el Reporte de Rendimiento, y entra en el Costo Total calculado. Con los archivos reales de 10-2026, los
+  73 legajos de la 03 cierran al centavo. También en el .xlsx.
+- **Aviso:** si un Tabulado no trae ningún concepto de la agrupación, Resultados lo dice en Chequeos en vez de
+  mostrar ceros (D-102).
+
 ### feat(rend-vs-asiento): Marval 10-2026 — centros por código, provisiones SAC y Directores persona por persona — 2026-10-28
 
 - **Antes:** con la Contabilidad de 10-2026 de Marval, Asesoramiento y Contencioso quedaban sin asiento y 16

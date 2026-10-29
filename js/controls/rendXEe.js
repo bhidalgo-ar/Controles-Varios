@@ -3,7 +3,8 @@
 // Cruza el Reporte de Costo Total por empleado de M4 contra el Costo Total
 // calculado desde el Tabulado. Por cada legajo suma los 5 totalizadores de
 // Rend vs Tabulado (PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES)
-// usando la misma agrupación de conceptos, y compara contra el Costo Total del reporte.
+// usando la misma agrupación de conceptos, más RETIROS, y compara contra el
+// Costo Total del reporte.
 //
 // Dif = Costo Total (Reporte) − Costo Total (Calculado del Tabulado).
 //
@@ -40,10 +41,21 @@ import {
 const CATS = [
   { key: 'precio',   label: 'PRECIO' },
   { key: 'estimulo', label: 'ASIG. ESTÍMULO' },
+  { key: 'retiros',  label: 'RETIROS' },
   { key: 'cargas',   label: 'CARGAS SS' },
   { key: 'provMes',  label: 'PROV. MES' },
   { key: 'provCcss', label: 'PROV. CCSS MES' },
 ];
+
+// RETIROS: lo que cobra la gente de la empresa 03 de Marval, que no tiene sueldo
+// ni cargas. Es una columna propia del Reporte de Rendimiento (entre ASIG.
+// ESTÍMULO y CARGAS SOCIALES) y entra en el Costo Total por empleado: con el
+// Tabulado de la 03 de 10-2026, 9200-APOYO_FINAN + 9205-RETIRO reproduce al
+// centavo el Costo Total del reporte en los 73 legajos. No está en la
+// agrupación compartida porque Rend vs Tabulado compara su COSTO TOTAL sin
+// retiros (y su editor sólo ofrece los conceptos del Tabulado principal).
+// Si una agrupación guardada trae `retiros`, manda ésa (D-035: esto es semilla).
+const RETIROS_SEED = [{ code: '9200', sign: 1 }, { code: '9205', sign: 1 }];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -127,7 +139,8 @@ export function runRendXEe(ctRows, tabRows, mapping) {
   const normId = makeLegajoKey(mapping.legajoKeyMode);
 
   // Misma agrupación de conceptos que Rend vs Tabulado (personalizada o default)
-  const conceptConfig = mapping.conceptGrouping || DEFAULT_CONCEPT_CONFIG;
+  const grouping = mapping.conceptGrouping || DEFAULT_CONCEPT_CONFIG;
+  const conceptConfig = { ...grouping, retiros: grouping.retiros || RETIROS_SEED };
 
   // Los Tabulados que entraron: el principal del wizard y, si se cargó, el de la
   // otra empresa. No importa cuál empresa va en cuál casillero. Cada archivo
@@ -164,6 +177,15 @@ export function runRendXEe(ctRows, tabRows, mapping) {
         .map(e => ({ col: t.colByCode[e.code] || null, sign: e.sign, code: e.code }))
         .filter(e => e.col !== null);
     }
+    // Un Tabulado sin NINGÚN concepto de la agrupación sumaría 0,00 en todas
+    // las columnas para todos sus legajos, y cada uno saldría con el Costo
+    // Total entero como diferencia, sin decir por qué (pasó con la 03 en
+    // 10-2026). Se avisa; los legajos siguen en el cruce.
+    if (CATS.every(c => (t.catCols[c.key] || []).length === 0)) {
+      avisos.push(`${t.otra ? 'En el Tabulado de la otra empresa' : 'En el Tabulado'} no se encontró `
+        + 'ningún concepto de la agrupación: sus legajos suman 0,00 en todas las columnas. '
+        + 'Revisá que sea el archivo correcto o agregá sus conceptos a la agrupación.');
+    }
   }
 
   // ── Agrupar los Tabulados por legajo ───────────────────────────────────────
@@ -182,7 +204,7 @@ export function runRendXEe(ctRows, tabRows, mapping) {
         tabByLegajo.set(key, {
           legajo: rawLegajo,
           nombre: tm.apellidoNombreColumn ? norm(row[tm.apellidoNombreColumn]) : '',
-          precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+          precio: 0, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0,
         });
       }
       const g = tabByLegajo.get(key);
@@ -195,9 +217,9 @@ export function runRendXEe(ctRows, tabRows, mapping) {
     }
   }
 
-  // COSTO TOTAL calculado por legajo = suma de las 5 categorías
+  // COSTO TOTAL calculado por legajo = suma de las 6 categorías
   for (const g of tabByLegajo.values()) {
-    g.calcTotal = g.precio + g.estimulo + g.cargas + g.provMes + g.provCcss;
+    g.calcTotal = g.precio + g.estimulo + g.retiros + g.cargas + g.provMes + g.provCcss;
   }
 
   // ── Cruzar con el Reporte de Costo Total ───────────────────────────────────
@@ -221,6 +243,7 @@ export function runRendXEe(ctRows, tabRows, mapping) {
       repTotal,
       precio:    tab ? tab.precio    : null,
       estimulo:  tab ? tab.estimulo  : null,
+      retiros:   tab ? tab.retiros   : null,
       cargas:    tab ? tab.cargas    : null,
       provMes:   tab ? tab.provMes   : null,
       provCcss:  tab ? tab.provCcss  : null,
@@ -240,6 +263,7 @@ export function runRendXEe(ctRows, tabRows, mapping) {
       repTotal:  null,
       precio:    g.precio,
       estimulo:  g.estimulo,
+      retiros:   g.retiros,
       cargas:    g.cargas,
       provMes:   g.provMes,
       provCcss:  g.provCcss,
@@ -332,7 +356,7 @@ export function renderRendXEeResults(results, container) {
   }
 
   // Totales para las tiles y la fila TOTAL GENERAL
-  const totals = { repTotal: 0, precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
+  const totals = { repTotal: 0, precio: 0, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
   for (const r of rows) {
     for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0;
   }
@@ -408,7 +432,7 @@ export function renderRendXEeResults(results, container) {
 // ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
 //
 // Tres bandas: lo que informa el reporte de M4, lo que sale de sumar el Tabulado
-// (con sus cinco categorías abiertas) y el control. **Qué conceptos componen
+// (con sus seis categorías abiertas) y el control. **Qué conceptos componen
 // cada categoría** ya no vive adentro del `<th>` de la banda —ahí no entra— sino
 // en la leyenda de arriba, la misma que usa Rendimiento vs Tabulado.
 const COLS_REND_X_EE = [
@@ -422,7 +446,7 @@ const COLS_REND_X_EE = [
     key: c.key, label: c.label, sub: 'la suma de sus conceptos en el Tabulado',
     band: 'Calculado desde el Tabulado', num: true,
   })),
-  { key: 'calcTotal', label: 'COSTO TOTAL', sub: 'la suma de las cinco categorías',
+  { key: 'calcTotal', label: 'COSTO TOTAL', sub: 'la suma de las seis categorías',
     band: 'Calculado desde el Tabulado', num: true, close: true },
 ];
 
@@ -506,7 +530,7 @@ async function exportRendXEeToXlsx(results) {
   wb.creator = 'H&A Controles Nómina';
   wb.created = new Date();
 
-  const totals = { repTotal: 0, precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
+  const totals = { repTotal: 0, precio: 0, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0, calcTotal: 0 };
   for (const r of rows) {
     for (const k of Object.keys(totals)) totals[k] += r[k] ?? 0;
   }

@@ -413,13 +413,13 @@ assert('NR Reporte: la columna spacer (A) sigue sin ningún estilo con el contra
 {
   const contract = EXPORT_CONTRACTS.rend_x_ee;
   const rows = [
-    { legajo: '1', nombre: 'Sanguinetti', repTotal: 1000, precio: 800, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    { legajo: '1', nombre: 'Sanguinetti', repTotal: 1000, precio: 800, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0,
       calcTotal: 800, dif: 200, sinTabData: false, soloEnTab: false },
-    { legajo: '2', nombre: 'Falcioni', repTotal: null, precio: 500, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    { legajo: '2', nombre: 'Falcioni', repTotal: null, precio: 500, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0,
       calcTotal: 500, dif: null, sinTabData: false, soloEnTab: true },
   ];
   const totalRow = {
-    legajo: 'TOTAL GENERAL', nombre: '', repTotal: 1000, precio: 1300, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
+    legajo: 'TOTAL GENERAL', nombre: '', repTotal: 1000, precio: 1300, estimulo: 0, retiros: 0, cargas: 0, provMes: 0, provCcss: 0,
     calcTotal: 1300, dif: -300,
   };
   const ws = writeGroupedContractSheet(new FakeWorkbook(), contract, rows, {
@@ -434,15 +434,18 @@ assert('NR Reporte: la columna spacer (A) sigue sin ningún estilo con el contra
   assert('Rend x EE: PRECIO lleva su color de categoría en el encabezado',
     ws.rows[0].cells[3].fill.fgColor.argb === 'FFCCE0F5');
   assert('Rend x EE: Dif lleva el verde propio (no el de ninguna categoría)',
-    ws.rows[0].cells[9].fill.fgColor.argb === 'FFA9D08E');
+    ws.rows[0].cells[10].fill.fgColor.argb === 'FFA9D08E');
+  assert('Rend x EE: RETIROS va entre ASIG. ESTÍMULO y CARGAS SS',
+    ws.rows[0].cells[4].value === 'ASIG. ESTÍMULO' && ws.rows[0].cells[5].value === 'RETIROS'
+    && ws.rows[0].cells[6].value === 'CARGAS SS');
   assert('Rend x EE: fila soloEnTab (Falcioni) queda atenuada, incluido Legajo',
     ws.rows[2].cells[0].font.color.argb === 'FF999999');
   assert('Rend x EE: TOTAL — headerRows:1 pinta TODA la fila, incluidas Legajo/Nombre (igual que el encabezado)',
     ws.rows[3].cells[0].fill.fgColor.argb === 'FFE0E0E0' && ws.rows[3].cells[0].font.bold === true);
   assert('Rend x EE: TOTAL — Dif en rojo (dif = -300)',
-    ws.rows[3].cells[9].font.bold === true && ws.rows[3].cells[9].font.color.argb === 'FFCC0000');
+    ws.rows[3].cells[10].font.bold === true && ws.rows[3].cells[10].font.color.argb === 'FFCC0000');
   assert('Rend x EE: TOTAL — valores planos, sin fórmula (a diferencia de Rend vs Asiento/EE x CATEG)',
-    ws.rows[3].cells[9].value === -300);
+    ws.rows[3].cells[10].value === -300);
 }
 
 // ── EE x CATEG — writeContractSheet con fórmulas + resaltado de fila completa ─

@@ -4127,3 +4127,33 @@ Asesoramiento, Sistemas, RRHH, Marketing). Quedan dos diferencias, ninguna es de
 
 **Tests:** `tests/rendVsAsientoCcCode.test.js` (nuevo, en la cadena de `npm run test:unit`). Detalle en
 `specs/rendimiento-vs-asiento-por-codigo.md`.
+
+## D-102 — Rendimiento x EE suma RETIROS (9200 + 9205) como sexta columna, fuera de la agrupación compartida
+
+**Fecha:** 2026-10-29 · **Decidió:** Willy delegó el criterio ("resolvelo vos") y se tomó con los archivos reales.
+
+**Problema:** la gente de la empresa 03 de Marval no tiene sueldo ni cargas: su Tabulado sólo trae
+9200-APOYO_FINAN, 9205-RETIRO, 7116-COSTO_OMINT, 7117-COSTO_OSDE, 8802-GTOS_PERSONAL y 9210-IMP_GCIAS_3A.
+Ninguno está en la agrupación de Rendimiento, así que Rendimiento x EE sumaba 0,00 para los 73 legajos.
+
+**Qué se verificó:** con el Tabulado de la 03 y el reporte de Costo Total por empleado de 10-2026 se probaron
+todas las combinaciones de los seis conceptos (suma, resta, afuera). Sólo **9200 + 9205** reproduce al centavo
+el Costo Total en los 73 legajos; ninguna otra pasa de 69. Coincide con lo que ya decía la ayuda de Rend vs
+Tabulado ("RETIROS se calcula de conceptos 9200 + 9205 sólo para filas EMPRESA = 03") y con la columna RETIROS
+propia del Reporte de Rendimiento.
+
+**Decisión:** columna RETIROS propia en Rendimiento x EE, entre ASIG. ESTÍMULO y CARGAS SS, que entra en el
+Costo Total calculado. Los códigos son semilla del módulo (`RETIROS_SEED` en `rendXEe.js`); una agrupación
+guardada que traiga `retiros` manda.
+
+**Descartado:** meter 9200 y 9205 en PRECIO de la agrupación compartida. El total habría dado igual, pero la
+planilla habría mostrado retiros como precio, y la agrupación la comparten Rend vs Tabulado (que compara su
+COSTO TOTAL sin retiros) y Rend vs Asiento.
+
+**Además:** si un Tabulado no resuelve ningún concepto de ninguna columna, el control lo avisa en Chequeos. Los
+ceros silenciosos de la 03 son justo el "default silencioso" que CLAUDE.md prohíbe.
+
+**Deuda:** RETIROS no se edita desde el editor de agrupación (que sólo ofrece los conceptos del Tabulado
+principal). Falta confirmar con el Tabulado de la 01 que no traiga 9200/9205 con importe: si los trajera, esos
+legajos sumarían RETIROS también.
+
