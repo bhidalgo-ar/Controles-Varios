@@ -150,5 +150,57 @@ const baseMapping = () => ({
     s.contextNote === null && !s.insights.some(i => /Tabulado cruzado/.test(i.label)), s.insights);
 }
 
+// ── 6) RETIROS: la gente que sólo cobra retiro / apoyo financiero ────────────
+// Con el Tabulado de la 03 de Marval (10-2026) el Costo Total del reporte es
+// 9200-APOYO_FINAN + 9205-RETIRO. Ninguno está en la agrupación compartida:
+// sin la columna RETIROS el control sumaba 0,00 y daba el Costo Total entero
+// como diferencia.
+{
+  const TAB_RETIRO = [
+    { LEG: '5', NOMBRE: 'LUCCHETTI CRISTIAN', '9200-APOYO_FINAN': 0,      '9205-RETIRO': 1000000, '8802-GTOS_PERSONAL': 7000 },
+    { LEG: '6', NOMBRE: 'ERVITI WALTER',      '9200-APOYO_FINAN': 250000, '9205-RETIRO': 800000,  '8802-GTOS_PERSONAL': 0 },
+  ];
+  const reporte = [...REPORTE, { Legajo: '5', CostoTotal: 1000000 }, { Legajo: '6', CostoTotal: 1050000 }];
+  const mapping = { ...baseMapping(), tab2: { empleadoColumn: 'LEG', apellidoNombreColumn: 'NOMBRE' }, tab2Rows: TAB_RETIRO };
+  const res = runRendXEe(reporte, TAB_A, mapping);
+  const fila = (leg) => res.rows.find(r => r.legajo === leg);
+
+  assert('RETIROS suma 9200 + 9205', casi(fila('6').retiros, 1050000), fila('6'));
+  assert('RETIROS entra en el Costo Total calculado y cierra contra el reporte',
+    casi(fila('5').calcTotal, 1000000) && casi(fila('5').dif, 0) && casi(fila('6').dif, 0),
+    [fila('5'), fila('6')]);
+  assert('un concepto fuera de la agrupación (8802) no suma', casi(fila('5').precio, 0), fila('5'));
+  assert('los legajos de la otra empresa sin retiro tienen RETIROS en 0, no null',
+    fila('7').retiros === 0, fila('7'));
+  assert('la leyenda conoce los conceptos de RETIROS',
+    res.meta.conceptConfig.retiros.map(e => e.code).join() === '9200,9205'
+    && res.meta.colByCode['9205'] === '9205-RETIRO', res.meta);
+  assert('con conceptos hallados no hay aviso de "ningún concepto"',
+    !res.avisos.some(a => /ningún concepto/.test(a)), res.avisos);
+}
+
+// ── 6 bis) Un código de RETIROS que la agrupación ya tiene no se cuenta dos veces
+{
+  const TAB_RETIRO = [{ LEG: '5', NOMBRE: 'LUCCHETTI CRISTIAN', '9200-APOYO_FINAN': 200, '9205-RETIRO': 1000 }];
+  const grouping = { ...GROUPING, precio: [...GROUPING.precio, { code: '9205', sign: 1 }] };
+  const mapping = { ...baseMapping(), conceptGrouping: grouping,
+    tab2: { empleadoColumn: 'LEG', apellidoNombreColumn: 'NOMBRE' }, tab2Rows: TAB_RETIRO };
+  const res = runRendXEe([{ Legajo: '5', CostoTotal: 1200 }], [], mapping);
+  const f = res.rows.find(r => r.legajo === '5');
+  assert('9205 ya en PRECIO: va sólo a PRECIO, y RETIROS se queda con 9200',
+    casi(f.precio, 1000) && casi(f.retiros, 200) && casi(f.dif, 0), f);
+}
+
+// ── 7) Un Tabulado sin ningún concepto de la agrupación se avisa ─────────────
+{
+  const TAB_SIN = [{ LEG: '3', NOMBRE: 'FALCIONI JULIO CESAR', '7777-OTRO': 400000 }];
+  const mapping = { ...baseMapping(), tab2: { empleadoColumn: 'LEG', apellidoNombreColumn: 'NOMBRE' }, tab2Rows: TAB_SIN };
+  const res = runRendXEe(REPORTE, TAB_A, mapping);
+  assert('se avisa que el Tabulado de la otra empresa no trae ningún concepto',
+    res.avisos.some(a => /otra empresa/.test(a) && /ningún concepto/.test(a)), res.avisos);
+  assert('el Tabulado principal, que sí trae conceptos, no se avisa',
+    !res.avisos.some(a => a.startsWith('En el Tabulado no')), res.avisos);
+}
+
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

@@ -409,6 +409,9 @@ const rendXEeControlar = {
     meta:      { headerColor: 'FFE0E0E0' },                      // Legajo / Nombre / COSTO TOTAL (Reporte): sin fondo de dato
     precio:    REND_CAT_GROUPS.precio,
     estimulo:  REND_CAT_GROUPS.estimulo,
+    // RETIROS es sólo de Rend x EE (la gente de la empresa 03): no está en
+    // `COLS`, así que su color vive acá.
+    retiros:   { label: 'RETIROS', headerColor: 'FFFCE4D6', dataColor: 'FFFEF4EC' },
     cargas:    REND_CAT_GROUPS.cargas,
     provMes:   REND_CAT_GROUPS.provMes,
     provCcss:  REND_CAT_GROUPS.provCcss,
@@ -419,11 +422,14 @@ const rendXEeControlar = {
     { label: 'Legajo', key: 'legajo', width: 10, from: ['legajoColumn'], fromFile: 'costo_total_file',         necessity: NECESSITY.CLAVE,    type: 'txt', group: 'meta' },
     { label: 'Nombre', key: 'nombre', width: 30, from: ['apellidoNombreColumn'], fromFile: 'tab_control', necessity: NECESSITY.OPCIONAL, type: 'txt', group: 'meta' },
     { label: 'COSTO TOTAL (Reporte)', key: 'repTotal', width: 18, from: ['costoTotalColumn'], fromFile: 'costo_total_file', necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'meta' },
-    // Las 5 categorías salen del Tabulado por código de concepto, igual que en
+    // Las categorías salen del Tabulado por código de concepto, igual que en
     // Rend vs Tabulado — ninguna sale de una columna mapeada.
-    ...COLS.filter(c => c.key !== 'total').map(c => ({
-      label: c.label, key: c.key, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key,
-    })),
+    // RETIROS va entre ASIG. ESTÍMULO y CARGAS SS, como en el Reporte de Rendimiento.
+    ...COLS.filter(c => c.key !== 'total').flatMap(c => {
+      const col = { label: c.label, key: c.key, width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: c.key };
+      return c.key !== 'estimulo' ? [col]
+        : [col, { label: 'RETIROS', key: 'retiros', width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'retiros' }];
+    }),
     { label: 'COSTO TOTAL (Calculado)',   key: 'calcTotal', width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'calcTotal' },
     { label: 'Dif (Reporte − Calculado)', key: 'dif',       width: 18, from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', group: 'dif', diffHighlight: true },
   ],

@@ -605,11 +605,12 @@ export const CONTROL_REGISTRY = {
     ...MARVAL_ONLY,
     appliesWhen: () => true,
     description: 'Cruza el Costo Total por empleado del reporte de M4 contra el Costo Total '
-      + 'calculado desde el Tabulado (PRECIO + ASIG. ESTÍMULO + CARGAS SS + PROV. MES + PROV. CCSS MES).',
+      + 'calculado desde el Tabulado (PRECIO + ASIG. ESTÍMULO + RETIROS + CARGAS SS + PROV. MES + PROV. CCSS MES).',
     help: {
       what: 'Toma el Reporte de Costo Total por empleado de M4 (Legajo + Costo Total) y lo contrasta '
         + 'contra el Costo Total calculado desde el Tabulado: por cada legajo suma los 5 totalizadores '
-        + 'de Rend vs Tabulado usando la misma agrupación de conceptos. La columna Dif (verde) muestra '
+        + 'de Rend vs Tabulado usando la misma agrupación de conceptos, más RETIROS (conceptos 9200 + 9205, '
+        + 'lo que cobra la gente de la empresa 03). La columna Dif (verde) muestra '
         + 'Reporte − Calculado; las diferencias se pintan en rojo.',
       how: [
         'Bajá el Reporte de Costo Total por empleado de M4.',
