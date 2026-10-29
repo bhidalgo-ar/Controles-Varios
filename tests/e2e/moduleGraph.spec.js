@@ -34,10 +34,11 @@ test('el wizard y la ficha cargan juntos en un navegador real, sin ciclo de mód
   // novedades: cargar la planilla cambia lo que ofrece su panel de conceptos.
   // Los 2 de `novedades_liquidacion` se sumaron con el cruce contra la
   // liquidación: su panel depende del importador Y del Tabulado cargados.
+  // El `rend` de `rend_vs_asiento` se sumó con los legajos en otra área (D-103).
   expect(r.specs).toEqual([
     'novedades_importador.novedades',
     'novedades_liquidacion.importador', 'novedades_liquidacion.tabAxton',
     'pop_variaciones.tab_act', 'pop_variaciones.tab_prev',
-    'rend_vs_asiento.conta', 'variaciones_conceptos.tab_prev', 'variaciones_sueldos.tab_prev',
+    'rend_vs_asiento.conta', 'rend_vs_asiento.rend', 'variaciones_conceptos.tab_prev', 'variaciones_sueldos.tab_prev',
   ]);
 });

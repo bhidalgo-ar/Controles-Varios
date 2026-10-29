@@ -70,6 +70,12 @@ export const DEFAULT_RVA_CONFIG = {
   // filas van al área que diga el listado de CC x Empleado, persona por persona.
   // Con esta lista vacía, el listado pisa el CC de TODAS las filas, como antes.
   ccPorPersona: ['13'],
+  // Legajos que el Rendimiento pone en un área distinta de la del asiento: sus
+  // filas de la Contabilidad se comparan contra el área que diga acá, venga con
+  // el centro que venga (D-103). Va vacía a propósito: el repo es público y no
+  // puede llevar legajos de empleados de clientes. El analista lo carga una vez
+  // desde el Paso 2 y queda guardado en la config del cliente.
+  legajoAreas: [],
 };
 
 /**
@@ -85,6 +91,7 @@ export function resolveRvaConfig(config) {
     ...base,
     ccCodeMap:    base.ccCodeMap    == null ? semilla('ccCodeMap')    : base.ccCodeMap,
     ccPorPersona: base.ccPorPersona == null ? semilla('ccPorPersona') : base.ccPorPersona,
+    legajoAreas:  base.legajoAreas  == null ? semilla('legajoAreas')  : base.legajoAreas,
   };
 }
 
@@ -245,6 +252,9 @@ const hasDiff = d => isDiff(d);
 
 /** El desglose contra el valor de la celda: cuadre interno, siempre al centavo. */
 const CUADRE_EPS = 0.01;
+
+/** Por debajo de medio centavo un importe movido se lee como cero: esa categoría no se muestra en el aviso. */
+const MEDIO_CENTAVO = 0.005;
 
 // ── El sub-objeto que dibuja el tablero del Resumen ─────────────────────────
 //
@@ -630,6 +640,31 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   // tampoco pasan en silencio — van como aviso. centro → { ccNombre, legajos }
   const sinRepartir = new Map();
 
+  // Legajos que el Rendimiento pone en otra área (D-103): legajo → la regla. El
+  // legajo se compara con la clave del cliente, así '007' y '7' son el
+  // mismo. Si un legajo aparece dos veces en la lista, vale la primera.
+  const porLegajo = new Map();
+  for (const e of (config.legajoAreas || [])) {
+    const k = legajoKeyOf(e?.legajo);
+    const toKey = normCCName(e?.to);
+    if (k && toKey && !porLegajo.has(k)) {
+      porLegajo.set(k, { legajo: norm(e.legajo), to: norm(e.to), toKey, motivo: norm(e?.motivo) });
+    }
+  }
+  // Qué pasó con cada legajo de la lista: cuántas filas tuvo, cuántas ya venían
+  // en el área destino y cuántas eran de un centro que se reparte por persona.
+  const usoRegla = new Map();      // legajo → { filas, enDestino, porPersona }
+  const movidos  = new Map();      // legajo → lo que se movió (para el Resumen)
+  const porArea  = new Map();      // área → { entran: Map, salen: Map } (para la Planilla)
+  const usoDe = k => {
+    if (!usoRegla.has(k)) usoRegla.set(k, { filas: 0, enDestino: 0, porPersona: 0 });
+    return usoRegla.get(k);
+  };
+  const areaDe = k => {
+    if (!porArea.has(k)) porArea.set(k, { entran: new Map(), salen: new Map() });
+    return porArea.get(k);
+  };
+
   // ── Agrupar CONTA por CC × categoría ─────────────────────────────────────
   const contaGroups  = new Map();   // nameKey → bucket
   const accountNames = new Map();   // cuenta_contab code → N_CUENTA_CONTABLE
@@ -664,24 +699,46 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
       }
       ccRaw = porCodigo ? porCodigo.to : ccNombre;
     }
-    if (!ccRaw) continue;
 
-    const origKey = normCCName(ccRaw);
-    if (!origKey) continue;
+    const origKey = ccRaw ? normCCName(ccRaw) : null;
 
     // Aplicar redirect de CC según la config. Lo que se tradujo por código ya
     // es el nombre del Rendimiento: no pasa por los redirects. Lo que no se pudo
     // repartir por persona tampoco: el aviso dice que sale entero como "sólo en
     // CONTA", y un redirect lo escondería adentro de un área.
-    const nameKey = (porCodigo || noRepartida) ? origKey : (ccRedir.get(origKey) ?? origKey);
+    let nameKey = !origKey ? null
+      : ((porCodigo || noRepartida) ? origKey : (ccRedir.get(origKey) ?? origKey));
     const wasRedirected = nameKey !== origKey;
+    let ccLabel = wasRedirected ? (ccRedirLbl.get(nameKey) ?? ccRaw) : ccRaw;
     // El CC con el que vino la fila, para el detalle, cuando se tradujo.
-    const ccOriginal = (porCodigo || ccRaw !== ccNombre) ? ccNombre
+    let ccOriginal = (porCodigo || ccRaw !== ccNombre) ? ccNombre
       : (wasRedirected ? ccRaw : '');
+
+    // Legajo que el Rendimiento pone en otra área (D-103). Gana sobre la tabla
+    // por código y sobre el nombre, pero NO sobre un centro que se reparte por
+    // persona: ahí manda el listado de CC x Empleado. Lo movido no pasa por los
+    // redirects por nombre: el área destino ya es el nombre del Rendimiento.
+    const regla = empleado ? porLegajo.get(empleado) : null;
+    let movida = null;   // { key, label } del área donde se habría comparado
+    if (regla && centroPersona) {
+      usoDe(empleado).porPersona++;
+    } else if (regla) {
+      const uso = usoDe(empleado);
+      uso.filas++;
+      if (nameKey === regla.toKey) {
+        uso.enDestino++;
+      } else {
+        movida = { key: nameKey, label: ccLabel || '' };
+        nameKey = regla.toKey;
+        ccLabel = regla.to;
+        ccOriginal = ccNombre;
+      }
+    }
+    if (!nameKey) continue;
 
     if (!contaGroups.has(nameKey)) {
       contaGroups.set(nameKey, {
-        ccLabel: wasRedirected ? (ccRedirLbl.get(nameKey) ?? ccRaw) : ccRaw,
+        ccLabel,
         precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0,
       });
     }
@@ -715,18 +772,53 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
       }
     }
 
+    const empleadoNombre = [norm(row.apellido_1), norm(row.nombre)].filter(Boolean).join(', ');
+
+    // Lo que movió la regla por legajo: por legajo para el Resumen, y por área
+    // (la que recibe y la que pierde) para las etiquetas de la Planilla.
+    if (movida) {
+      if (!movidos.has(empleado)) {
+        movidos.set(empleado, {
+          legajo: regla.legajo, nombre: '', to: regla.to, motivo: regla.motivo,
+          centros: new Map(), origenes: new Map(),
+          importes: { precio: 0, estimulo: 0, cargas: 0, provMes: 0, provCcss: 0 },
+          total: 0, filas: 0,
+        });
+      }
+      const m = movidos.get(empleado);
+      if (!m.nombre && empleadoNombre) m.nombre = empleadoNombre;
+      m.filas++;
+      const codigo = norm(row.id_centro_costo);
+      m.centros.set(`${codigo}|${ccNombre}`, { codigo, nombre: ccNombre });
+      if (movida.label) m.origenes.set(movida.key, movida.label);
+      if (catKey) { m.importes[catKey] += valor; m.total += valor; }
+
+      const sumarA = (mapa) => {
+        if (!mapa.has(empleado)) mapa.set(empleado, { legajo: regla.legajo, nombre: '', total: 0 });
+        const p = mapa.get(empleado);
+        if (!p.nombre && empleadoNombre) p.nombre = empleadoNombre;
+        if (catKey) p.total += valor;
+      };
+      sumarA(areaDe(nameKey).entran);
+      if (movida.key) sumarA(areaDe(movida.key).salen);
+    }
+
     if (catKey) {
       detalle.push({
         ccKey:             nameKey,
         ccRendimiento:     g.ccLabel,
         ccOriginal,
+        // Las filas que llevó la regla por legajo: con qué centro vinieron en el
+        // asiento, para el Excel de auditoría (el área donde se comparó es
+        // `ccRendimiento`).
+        ...(movida ? { movidoPorLegajo: true, ccCodigoOriginal: norm(row.id_centro_costo) } : {}),
         categoria:         CAT_LABEL[catKey] || catKey,
         cuentaContab:      cuentaCode,
         nCuentaContable:   norm(row.n_cuenta_contable),
         idConcepto:        concepto,
         nombreLargo:       norm(row.nombre_largo),
         idEmpleado:        empleado,
-        empleadoNombre:    [norm(row.apellido_1), norm(row.nombre)].filter(Boolean).join(', '),
+        empleadoNombre,
         debe:              toNum(row.debe)  ?? 0,
         haber:             toNum(row.haber) ?? 0,
         neto:              valor,
@@ -814,6 +906,49 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     };
   });
 
+  // Lo que movió la regla por legajo, listo para el Resumen (D-103). Es
+  // informativo: no cuenta como diferencia ni toca el semáforo.
+  const movidosPorLegajo = [...movidos.values()].map(m => ({
+    legajo:   m.legajo,
+    nombre:   m.nombre,
+    centros:  [...m.centros.values()],
+    origenes: [...m.origenes.values()],
+    to:       m.to,
+    motivo:   m.motivo,
+    importes: m.importes,
+    total:    m.total,
+    filas:    m.filas,
+  }));
+
+  // Los legajos de la lista que este mes no hizo falta mover: que alguien
+  // decida si la regla se quita.
+  const legajosSinUso = [];
+  for (const [k, r] of porLegajo) {
+    if (movidos.has(k)) continue;
+    const uso = usoRegla.get(k) || { filas: 0, enDestino: 0, porPersona: 0 };
+    let causa, porQue;
+    if (uso.filas === 0 && uso.porPersona === 0) {
+      causa = 'sin_filas';
+      porQue = 'no aparece en la Contabilidad de este mes.';
+    } else if (uso.filas === 0) {
+      causa = 'por_persona';
+      porQue = 'sus filas son de un centro que se reparte persona por persona, y ahí manda el listado de CC x Empleado.';
+    } else {
+      causa = 'ya_en_destino';
+      porQue = `ya viene en el área destino (${r.to}).`;
+    }
+    legajosSinUso.push({
+      legajo: r.legajo, to: r.to, motivo: r.motivo, causa,
+      texto: `El legajo ${r.legajo} está configurado pero este mes no hizo falta moverlo: ${porQue}`,
+    });
+  }
+
+  // Para la Planilla: por área del Rendimiento, qué legajos entraron y salieron.
+  const movimientosPorArea = {};
+  for (const [k, a] of porArea) {
+    movimientosPorArea[k] = { entran: [...a.entran.values()], salen: [...a.salen.values()] };
+  }
+
   const summary = {
     total:          rows.length,
     sinContaData:   rows.filter(r => r.sinContaData).length,
@@ -827,16 +962,21 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     difTotal:    rows.filter(r => hasDiff(r.dTotal)).length,
     usoCCXEE:    hasOverride,
     legajosSinRepartir: avisosReparto.reduce((acc, a) => acc + a.legajos, 0),
+    legajosMovidos: movidosPorLegajo.length,
+    legajosSinUso:  legajosSinUso.length,
   };
 
   return {
     summary, rows, ccsSoloEnConta,
     avisosReparto,
+    movidosPorLegajo,
+    legajosSinUso,
     period: mapping.period || '',
     meta: {
       accountNames: Object.fromEntries(accountNames),
       conceptNames: Object.fromEntries(conceptNames),
       hasOverride,
+      movimientosPorArea,   // área del Rendimiento → legajos que entran y salen (D-103)
       detalle,  // todas las filas clasificadas — usadas por las pestañas Detalle/Desglose del export
       config,   // config aplicada en este run (para que los Resultados puedan mostrar exactamente qué se usó)
     },
@@ -995,6 +1135,10 @@ export function renderRendVsAsientoResults(results, container) {
         });
       }
 
+      // Los legajos que la regla por legajo comparó en otra área, y los que no
+      // hizo falta mover. Informativo: no es una diferencia (D-103).
+      renderAvisosPorLegajo(panel, results);
+
       if (ccsWithDiff.length > 0) {
         const top = [...ccsWithDiff].sort((a, b) => Math.abs(b.dTotal ?? 0) - Math.abs(a.dTotal ?? 0)).slice(0, 5);
         renderIssues(panel, {
@@ -1018,6 +1162,105 @@ export function renderRendVsAsientoResults(results, container) {
     },
     planilla(panel) { renderRendVsAsientoPlanilla(panel, results); },
   });
+}
+
+// ── Avisos de la regla por legajo (D-103) ───────────────────────────────────
+//
+// Celeste, como todo lo informativo: lo que dice no es una diferencia y no
+// cuenta para el semáforo. Uno para los legajos que se compararon en otra área,
+// con lo movido por categoría, y otro para los que este mes no hizo falta mover.
+
+function renderAvisosPorLegajo(panel, results) {
+  const movidos = results.movidosPorLegajo || [];
+  const sinUso  = results.legajosSinUso || [];
+
+  if (movidos.length > 0) {
+    const n = movidos.length;
+    const filas = movidos.map(m => {
+      const centros = m.centros
+        .map(c => c.nombre ? `${c.nombre}${c.codigo ? ` (${c.codigo})` : ''}` : (c.codigo || '(sin centro)'))
+        .join(' · ');
+      // Sólo las categorías que dieron distinto de cero.
+      const cats = COMPONENT_COLS
+        .filter(c => Math.abs(m.importes[c.key] || 0) >= MEDIO_CENTAVO)
+        .map(c => `${c.label}: ${fmt(m.importes[c.key])}`)
+        .join(' · ');
+      return `
+        <tr>
+          <td style="font-family:monospace;white-space:nowrap;">${esc(m.legajo)}</td>
+          <td>${esc(m.nombre || '')}</td>
+          <td>${esc(centros)}</td>
+          <td>${esc(m.to)}</td>
+          <td>${esc(m.motivo || '')}</td>
+          <td style="font-size:var(--text-sm);">${esc(cats || '—')}</td>
+          <td style="text-align:right;font-weight:var(--fw-semibold);white-space:nowrap;">${esc(fmt(m.total))}</td>
+        </tr>`;
+    }).join('');
+    const el = document.createElement('div');
+    el.className = 'alert alert--info';
+    el.setAttribute('data-rva-legajos-movidos', '');
+    el.style.cssText = 'margin-top:var(--sp-3);';
+    // `.alert` acomoda sus hijos en fila: todo va en un solo bloque.
+    el.innerHTML = `<div style="flex:1;min-width:0;">
+      <p style="margin:0 0 var(--sp-2);font-weight:var(--fw-semibold);">
+        ${n} legajo${n === 1 ? '' : 's'} se ${n === 1 ? 'compara' : 'comparan'} en otra área por configuración.
+      </p>
+      <p style="margin:0 0 var(--sp-2);font-size:var(--text-sm);color:var(--color-text-muted);">
+        Sus filas de la Contabilidad se llevaron al área que dice la configuración del Paso 2 antes de comparar.
+        No es una diferencia: sus importes se siguen controlando contra el Rendimiento, en el área destino.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="data-table data-table--compact">
+          <thead>
+            <tr>
+              <th>Legajo</th><th>Apellido y Nombre</th><th>Centro del asiento</th>
+              <th>Se compara en</th><th>Motivo</th><th>Movido por categoría</th>
+              <th style="text-align:right;">Total movido</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div></div>`;
+    panel.appendChild(el);
+  }
+
+  if (sinUso.length > 0) {
+    const el = document.createElement('div');
+    el.className = 'alert alert--info';
+    el.setAttribute('data-rva-legajos-sin-uso', '');
+    el.style.cssText = 'margin-top:var(--sp-3);';
+    el.innerHTML = `<div style="flex:1;min-width:0;">
+      <ul style="margin:0;padding-left:var(--sp-5);">
+        ${sinUso.map(s => `<li>${esc(s.texto)}${s.motivo ? ` <span style="color:var(--color-text-muted);">(motivo cargado: ${esc(s.motivo)})</span>` : ''}</li>`).join('')}
+      </ul>
+      <p style="margin:var(--sp-2) 0 0;font-size:var(--text-sm);color:var(--color-text-muted);">
+        Si ya no hace falta, quitalo de «Legajos que el Rendimiento pone en otra área» en el Paso 2.
+      </p></div>`;
+    panel.appendChild(el);
+  }
+}
+
+/**
+ * La etiqueta que va al lado del nombre del área en la Planilla: cuántos legajos
+ * entraron o salieron por la regla por legajo, con el detalle al pasar el mouse.
+ */
+function etiquetasDeMovimiento(mov) {
+  if (!mov) return '';
+  const detalle = lista => lista
+    .map(p => `${p.legajo}${p.nombre ? ` — ${p.nombre}` : ''} — ${fmt(p.total)}`)
+    .join('\n');
+  const out = [];
+  if (mov.entran?.length) {
+    const n = mov.entran.length;
+    out.push(`<span class="badge badge--primary" style="margin-left:var(--sp-2);white-space:nowrap;cursor:help;"
+      data-rva-mov="entran" title="${esc(`Entran a esta área por configuración:\n${detalle(mov.entran)}`)}">+ ${n} legajo${n === 1 ? '' : 's'} de otra área</span>`);
+  }
+  if (mov.salen?.length) {
+    const n = mov.salen.length;
+    out.push(`<span class="badge badge--neutral" style="margin-left:var(--sp-2);white-space:nowrap;cursor:help;"
+      data-rva-mov="salen" title="${esc(`Se comparan en otra área por configuración:\n${detalle(mov.salen)}`)}">− ${n} legajo${n === 1 ? '' : 's'} ${n === 1 ? 'movido' : 'movidos'}</span>`);
+  }
+  return out.join('');
 }
 
 // ── La planilla (§5 de specs/vista-estandar-resultados.md) ───────────────────
@@ -1050,9 +1293,14 @@ function renderRendVsAsientoPlanilla(container, results) {
       title="Ver el desglose: conceptos y empleados">${esc(fmt(val))}</button>`;
   };
 
+  // La CONTA ya viene movida por la regla por legajo (D-103): el nombre del área
+  // lleva una etiqueta con lo que entró o salió, y el detalle al pasar el mouse.
+  const movimientos = meta?.movimientosPorArea || {};
+  const ccNameCell = r => esc(r.ccName) + etiquetasDeMovimiento(movimientos[normCCName(r.ccName)]);
+
   const columns = [
     { key: 'ccCode', label: 'CC',              band: 'Identificación' },
-    { key: 'ccName', label: 'Centro de Costo', band: 'Identificación' },
+    { key: 'ccName', label: 'Centro de Costo', band: 'Identificación', cell: ccNameCell },
     ...COLS.flatMap(c => [
       { key: c.rKey, label: 'Rend',  sub: 'del Reporte de Rendimiento', band: c.label, num: true },
       { key: c.cKey, label: 'CONTA',
@@ -1432,10 +1680,19 @@ function addDesglosePorCcSheet(wb, detalle) {
  * una fila por CC × Categoría × Cuenta × Concepto × Empleado, con autofiltro
  * para poder filtrar como tabla dinámica.
  */
+/** "Sí, desde <centro> (<código>)" para una fila movida por la regla por legajo; vacío si no. */
+function movidoDesde(d) {
+  if (!d.movidoPorLegajo) return '';
+  const centro = d.ccOriginal || '(sin centro)';
+  return `Sí, desde ${centro}${d.ccCodigoOriginal ? ` (${d.ccCodigoOriginal})` : ''}`;
+}
+
 function addDetallePorEmpleadoSheet(wb, detalle) {
   const byKey = new Map();
   for (const d of detalle) {
-    const k = [d.ccRendimiento, d.categoria, d.cuentaContab, d.idConcepto, d.idEmpleado].join('|');
+    // Las filas movidas por la regla por legajo no se juntan con las que ya
+    // venían en el área: cada una conserva de qué centro del asiento vino.
+    const k = [d.ccRendimiento, d.categoria, d.cuentaContab, d.idConcepto, d.idEmpleado, movidoDesde(d)].join('|');
     let r = byKey.get(k);
     if (!r) {
       r = {
@@ -1447,6 +1704,7 @@ function addDetallePorEmpleadoSheet(wb, detalle) {
         nombreLargo:     d.nombreLargo,
         idEmpleado:      d.idEmpleado,
         empleadoNombre:  d.empleadoNombre || '',
+        movido:          movidoDesde(d),
         debe: 0, haber: 0, neto: 0, asientos: 0,
       };
       byKey.set(k, r);
@@ -1467,7 +1725,7 @@ function addDetallePorEmpleadoSheet(wb, detalle) {
   ws.columns = [
     { width: 22 }, { width: 18 }, { width: 16 }, { width: 28 },
     { width: 14 }, { width: 28 }, { width: 12 }, { width: 28 },
-    { width: 16 }, { width: 16 }, { width: 16 }, { width: 9 },
+    { width: 16 }, { width: 16 }, { width: 16 }, { width: 9 }, { width: 34 },
   ];
 
   const solidFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
@@ -1478,7 +1736,7 @@ function addDetallePorEmpleadoSheet(wb, detalle) {
   const hdr = ws.addRow([
     'CC Rendimiento', 'Categoría', 'CUENTA_CONTAB', 'N_CUENTA_CONTABLE',
     'ID_CONCEPTO', 'NOMBRE_LARGO', 'Legajo', 'Apellido y Nombre',
-    'DEBE', 'HABER', 'NETO', 'Asientos',
+    'DEBE', 'HABER', 'NETO', 'Asientos', 'Movido por regla de legajo',
   ]);
   hdr.font = { ...bold };
   hdr.eachCell(cell => {
@@ -1491,17 +1749,17 @@ function addDetallePorEmpleadoSheet(wb, detalle) {
     const dr = ws.addRow([
       r.cc, r.cat, r.cuentaContab, r.nCuentaContable,
       r.idConcepto, r.nombreLargo, r.idEmpleado, r.empleadoNombre,
-      r.debe, r.haber, r.neto, r.asientos,
+      r.debe, r.haber, r.neto, r.asientos, r.movido,
     ]);
     dr.eachCell((cell, col) => {
       cell.font = { ...base };
       if (col >= 9 && col <= 11) cell.numFmt = numFmt;
-      if (col >= 9) cell.alignment = { horizontal: 'right' };
+      if (col >= 9 && col <= 12) cell.alignment = { horizontal: 'right' };
     });
   }
 
   ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 12 } };
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 13 } };
 }
 
 // La hoja "Resumen" migró a `writeGroupedContractSheet` (specs/contrato-export.md,

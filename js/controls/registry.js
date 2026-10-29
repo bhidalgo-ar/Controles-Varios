@@ -170,6 +170,7 @@ import {
 } from './rendVsAsiento.js';
 
 import { renderRendVsAsientoConfigEditor } from '../ui/rendVsAsientoConfigEditor.js';
+import { makeLegajoKey, DEFAULT_LEGAJO_KEY_MODE } from '../utils/legajo.js';
 
 import {
   runRendXEe,
@@ -557,7 +558,9 @@ export const CONTROL_REGISTRY = {
     },
     tabRequired: false,
     additionalFiles: [
-      { key: 'rend',  label: 'Reporte de Rendimiento',          fileType: 'rend_file' },
+      // rerenderOnLoad: con el Rendimiento cargado, el editor ofrece sus áreas
+      // como destino de los legajos que van a otra área (D-103).
+      { key: 'rend',  label: 'Reporte de Rendimiento',          fileType: 'rend_file', rerenderOnLoad: true },
       // rerenderOnLoad: con CONTA cargada, el editor de config de abajo puede mostrar
       // el nombre de cada cuenta y concepto al lado de su código.
       { key: 'conta', label: 'Contabilidad Desglosada',         fileType: 'conta_file', rerenderOnLoad: true },
@@ -590,7 +593,29 @@ export const CONTROL_REGISTRY = {
             sumar(accountStats, String(r.cuenta_contab || '').trim(), String(r.n_cuenta_contable || '').trim());
             sumar(conceptStats, String(r.id_concepto || '').trim(),   String(r.nombre_largo || '').trim());
           }
-          return { accountStats, conceptStats, contaCargada: contaRows.length > 0 };
+          // Para los legajos que van a otra área (D-103): las áreas del
+          // Rendimiento cargado y el nombre de cada legajo según la CONTA (sólo
+          // se muestra al lado, no se guarda).
+          const legajoKeyMode = state.client?.legajoKeyMode || DEFAULT_LEGAJO_KEY_MODE;
+          const legajoKeyOf = makeLegajoKey(legajoKeyMode);
+          const nombrePorLegajo = {};
+          for (const r of contaRows) {
+            const k = legajoKeyOf(r.id_empleado);
+            if (!k || nombrePorLegajo[k]) continue;
+            const nombre = [String(r.apellido_1 || '').trim(), String(r.nombre || '').trim()].filter(Boolean).join(', ');
+            if (nombre) nombrePorLegajo[k] = nombre;
+          }
+          const rend = state.controlFiles?.rend_vs_asiento?.rend;
+          const colArea = rend?.mapping?.ccNameColumn;
+          const areasRendimiento = (rend?.parsedRows?.length && colArea)
+            ? [...new Set(rend.parsedRows
+              .map(r => String(r[colArea] ?? '').trim())
+              .filter(n => n && !n.toLowerCase().startsWith('total')))]
+            : null;
+          return {
+            accountStats, conceptStats, contaCargada: contaRows.length > 0,
+            areasRendimiento, nombrePorLegajo, legajoKeyMode,
+          };
         },
       },
     ],

@@ -4157,3 +4157,57 @@ ceros silenciosos de la 03 son justo el "default silencioso" que CLAUDE.md proh�
 principal). Falta confirmar con el Tabulado de la 01 que no traiga 9200/9205 con importe: si los trajera, esos
 legajos sumarían RETIROS también.
 
+
+## D-103 — Rendimiento vs Asiento: legajos que el Rendimiento pone en otra área se comparan en esa área
+
+**Fecha:** 2026-10-29. **Decidió:** Willy (spec aprobada con las cinco respuestas de abajo).
+
+**Contexto:** Marval pidió que un legajo de Marval se impute en el asiento a Servicios Comunes (código contable
+`10`) aunque en el Rendimiento figure en Servicios Legales. El control comparaba sus filas de la Contabilidad en
+Servicios Comunes, y cada mes saltaba en las dos áreas una diferencia que no es un error: el importe es el mismo,
+sólo está en otra área. Con la regla de D-101 (el listado de CC x Empleado sólo pisa los centros "por persona") ese
+legajo ya no lo tapa nadie, que es lo correcto para un legajo mal asignado, pero no para uno asignado distinto a
+propósito.
+
+**Decisión:**
+- **Clave nueva de la config del control, `legajoAreas: [{ legajo, to, motivo }]`.** Las filas de la Contabilidad
+  de ese legajo se llevan al área `to` del Rendimiento **antes de comparar**, vengan con el centro que vengan. Así
+  su importe se sigue controlando contra el Rendimiento, en el área donde el Rendimiento lo cuenta. El legajo se
+  compara con la clave del cliente (D-038): `007` y `7` son el mismo. Config guardada sin la clave → la semilla
+  (vacía); con la clave, aunque sea `[]` → lo guardado (D-039, igual que `ccCodeMap`/`ccPorPersona`).
+- **P1, de dónde sale el legajo.** La revisión pedía la lista cargada como semilla. **Decidió Willy (29/10/2026):
+  la semilla queda vacía porque el repo es público y no puede llevar legajos de empleados de clientes; el analista
+  carga el legajo una vez desde el Paso 2.** Queda guardado en la configuración del cliente, en su navegador.
+  Alternativa descartada: pasar el repo a privado.
+- **P2, Directores.** Si la fila es de un centro que se reparte persona por persona (`ccPorPersona`, el `13`),
+  manda el listado de CC x Empleado y la regla por legajo no toca esa fila. En cualquier otro centro, la regla por
+  legajo gana sobre la tabla por código y sobre el nombre, y lo movido no pasa por los redirects por nombre.
+- **P3, Resumen.** Un aviso celeste, informativo (no es diferencia ni cuenta para el semáforo): "N legajo(s) se
+  comparan en otra área por configuración", con legajo, nombre (de la Contabilidad), centro del asiento (nombre y
+  código), área donde se compara, motivo, importe movido por categoría (las distintas de cero) y total.
+- **P4, Planilla.** La Contabilidad se muestra ya movida. El área que recibe lleva la etiqueta "+ N legajo(s) de
+  otra área" y la que pierde "− N legajo(s) movido(s)"; al pasar el mouse, legajo, nombre e importe movido. En el
+  Excel, la hoja "Detalle por empleado" suma la columna "Movido por regla de legajo" ("Sí, desde <centro> (<código>)").
+- **P5, regla sin uso.** Si un legajo de la lista no tiene filas en la Contabilidad del mes, o todas ya caen en el
+  área destino, el Resumen lo avisa ("El legajo … está configurado pero este mes no hizo falta moverlo") con el
+  motivo, para que alguien decida si se quita. Sin esto, una regla vieja quedaría cargada para siempre sin que
+  nadie la mire.
+
+**Alternativas descartadas:**
+- **Ajustar el Rendimiento con los importes de la Contabilidad** de ese legajo. El legajo cerraría contra sí mismo
+  y dejaría de controlarse: cualquier error en su importe pasaría sin saltar.
+- **Una columna aparte de "ajuste"** en la planilla. Serían cinco columnas más (una por categoría) para un caso de
+  una persona, en una tabla que ya es ancha.
+
+**Decisiones de implementación (tomadas sin Willy, para revisar en pantalla):**
+- Si un legajo de la lista sólo tiene filas en un centro "por persona", la regla tampoco se usó: sale en el aviso de
+  regla sin uso con un tercer motivo ("sus filas son de un centro que se reparte persona por persona").
+- Con `ccPorPersona` vacío (el listado pisa todas las filas, como antes de D-101), la regla por legajo le gana al
+  listado: es la configuración más específica.
+- Si el mismo legajo está dos veces en la lista, vale la primera.
+
+**Efecto, con los archivos reales de 10-2026** (config por defecto, sin el listado de CC x Empleado, el legajo
+cargado sólo para la prueba): Servicios Legales y Servicios Comunes pasan a cerrar al centavo en las cinco
+categorías; el resto de las áreas no cambia.
+
+**Tests:** `tests/rendVsAsientoLegajoArea.test.js` (nuevo, en la cadena de `npm run test:unit`).

@@ -7,6 +7,18 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(rend-vs-asiento): legajos que el Rendimiento pone en otra área — 2026-10-29
+
+- **Antes:** un legajo que Marval imputa en el asiento a Servicios Comunes pero que el Rendimiento cuenta en
+  Servicios Legales hacía saltar cada mes una diferencia en las dos áreas, aunque no fuera un error.
+- **Ahora:** el Paso 2 tiene la sección "Legajos que el Rendimiento pone en otra área" (legajo, área del
+  Rendimiento elegida de una lista, motivo). Las filas de la Contabilidad de esos legajos se comparan en el área
+  elegida, salvo en Directores, donde manda el listado de CC x Empleado. El Resumen avisa en celeste qué legajos se
+  movieron y por cuánto en cada categoría, y también los que este mes no hizo falta mover. En la Planilla, el
+  nombre del área lleva "+ N legajo(s) de otra área" / "− N legajo(s) movido(s)" con el detalle al pasar el
+  mouse, y el Excel marca cada fila movida con su centro original (D-103).
+- La lista arranca vacía: el repo es público y no lleva legajos de clientes. El analista carga el legajo una vez.
+
 ### fix(rend-x-ee): columna RETIROS para la empresa 03 de Marval, y aviso cuando un Tabulado no trae ningún concepto — 2026-10-29
 
 - **Antes:** con el Tabulado de la empresa 03 de 10-2026 cargado en el casillero de la otra empresa, los 73
