@@ -3,8 +3,8 @@
 // Cruza el Reporte de Costo Total por empleado de M4 contra el Costo Total
 // calculado desde el Tabulado. Por cada legajo suma los 5 totalizadores de
 // Rend vs Tabulado (PRECIO, ASIG. ESTÍMULO, CARGAS SS, PROV. MES, PROV. CCSS MES)
-// usando la misma agrupación de conceptos, más RETIROS, y compara contra el
-// Costo Total del reporte.
+// con la misma agrupación de conceptos, suma RETIROS (D-102) y compara contra
+// el Costo Total del reporte.
 //
 // Dif = Costo Total (Reporte) − Costo Total (Calculado del Tabulado).
 //
@@ -54,8 +54,8 @@ const CATS = [
 // centavo el Costo Total del reporte en los 73 legajos. No está en la
 // agrupación compartida porque Rend vs Tabulado compara su COSTO TOTAL sin
 // retiros (y su editor sólo ofrece los conceptos del Tabulado principal).
-// Si una agrupación guardada trae `retiros`, manda ésa (D-035: esto es semilla).
-const RETIROS_SEED = [{ code: '9200', sign: 1 }, { code: '9205', sign: 1 }];
+// Hoy es una lista fija: el editor de agrupación no la muestra (deuda, D-102).
+const RETIROS_CODES = [{ code: '9200', sign: 1 }, { code: '9205', sign: 1 }];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +140,13 @@ export function runRendXEe(ctRows, tabRows, mapping) {
 
   // Misma agrupación de conceptos que Rend vs Tabulado (personalizada o default)
   const grouping = mapping.conceptGrouping || DEFAULT_CONCEPT_CONFIG;
-  const conceptConfig = { ...grouping, retiros: grouping.retiros || RETIROS_SEED };
+  // Un código que el analista ya puso en otra columna de la agrupación no se
+  // vuelve a sumar en RETIROS: contado dos veces, el legajo daría el doble.
+  const yaAgrupados = new Set(Object.values(grouping).flat().map(e => e.code));
+  const conceptConfig = {
+    ...grouping,
+    retiros: RETIROS_CODES.filter(e => !yaAgrupados.has(e.code)),
+  };
 
   // Los Tabulados que entraron: el principal del wizard y, si se cargó, el de la
   // otra empresa. No importa cuál empresa va en cuál casillero. Cada archivo
@@ -184,7 +190,8 @@ export function runRendXEe(ctRows, tabRows, mapping) {
     if (CATS.every(c => (t.catCols[c.key] || []).length === 0)) {
       avisos.push(`${t.otra ? 'En el Tabulado de la otra empresa' : 'En el Tabulado'} no se encontró `
         + 'ningún concepto de la agrupación: sus legajos suman 0,00 en todas las columnas. '
-        + 'Revisá que sea el archivo correcto o agregá sus conceptos a la agrupación.');
+        + 'Revisá que sea el Tabulado correcto; si lo es, avisá: sus conceptos no están '
+        + 'en ninguna columna de este control.');
     }
   }
 

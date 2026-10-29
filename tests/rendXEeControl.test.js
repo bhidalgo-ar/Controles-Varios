@@ -179,6 +179,18 @@ const baseMapping = () => ({
     !res.avisos.some(a => /ningún concepto/.test(a)), res.avisos);
 }
 
+// ── 6 bis) Un código de RETIROS que la agrupación ya tiene no se cuenta dos veces
+{
+  const TAB_RETIRO = [{ LEG: '5', NOMBRE: 'LUCCHETTI CRISTIAN', '9200-APOYO_FINAN': 200, '9205-RETIRO': 1000 }];
+  const grouping = { ...GROUPING, precio: [...GROUPING.precio, { code: '9205', sign: 1 }] };
+  const mapping = { ...baseMapping(), conceptGrouping: grouping,
+    tab2: { empleadoColumn: 'LEG', apellidoNombreColumn: 'NOMBRE' }, tab2Rows: TAB_RETIRO };
+  const res = runRendXEe([{ Legajo: '5', CostoTotal: 1200 }], [], mapping);
+  const f = res.rows.find(r => r.legajo === '5');
+  assert('9205 ya en PRECIO: va sólo a PRECIO, y RETIROS se queda con 9200',
+    casi(f.precio, 1000) && casi(f.retiros, 200) && casi(f.dif, 0), f);
+}
+
 // ── 7) Un Tabulado sin ningún concepto de la agrupación se avisa ─────────────
 {
   const TAB_SIN = [{ LEG: '3', NOMBRE: 'FALCIONI JULIO CESAR', '7777-OTRO': 400000 }];

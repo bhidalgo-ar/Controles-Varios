@@ -4143,8 +4143,8 @@ Tabulado ("RETIROS se calcula de conceptos 9200 + 9205 sólo para filas EMPRESA 
 propia del Reporte de Rendimiento.
 
 **Decisión:** columna RETIROS propia en Rendimiento x EE, entre ASIG. ESTÍMULO y CARGAS SS, que entra en el
-Costo Total calculado. Los códigos son semilla del módulo (`RETIROS_SEED` en `rendXEe.js`); una agrupación
-guardada que traiga `retiros` manda.
+Costo Total calculado. Los códigos están fijos en el módulo (`RETIROS_CODES` en `rendXEe.js`). Si el analista
+ya puso 9200 o 9205 en otra columna de la agrupación, ese código va sólo ahí y no se suma dos veces.
 
 **Descartado:** meter 9200 y 9205 en PRECIO de la agrupación compartida. El total habría dado igual, pero la
 planilla habría mostrado retiros como precio, y la agrupación la comparten Rend vs Tabulado (que compara su
