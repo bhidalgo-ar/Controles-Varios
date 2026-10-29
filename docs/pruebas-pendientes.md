@@ -827,9 +827,8 @@ Directores persona por persona con el listado de Marval y reconoce las columnas 
 | Correr **sin** el listado de CC x Empleado | Directores sale "sólo en CONTA" por 223.675.424,65 y Resultados trae el aviso "no se pudieron repartir persona por persona", con el chip de arriba | Si sale en silencio, el aviso no se está dibujando |
 | El listado de Marval como archivo | Se lee con las hojas Activos y Bajas; con un archivo de otra forma, el error dice qué encabezados esperaba | Si no lo reconoce, mandar los encabezados de la fila 1 |
 
-**Lo que espera una decisión externa.** Los centros FS 002/003 (código `01`): Araceli propone Administración y el
-Rendimiento de 10-2026 los trae en Servicios Legales, donde la semilla los deja. Cuando Marval confirme, se
-cambia en el Paso 2. En noviembre la distribución de Directores cambia (aviso de Ana): hay que pedir el listado
+**Lo que espera una decisión externa.** Los centros FIN 002/003 (código `01`) ya no: Marval confirmó el
+2026-10-29 que van a Servicios Legales, que es lo que hace la semilla. En noviembre la distribución de Directores cambia (aviso de Ana): hay que pedir el listado
 nuevo.
 
 **Detalle:** D-101, `specs/rendimiento-vs-asiento-por-codigo.md`.

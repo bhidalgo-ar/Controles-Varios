@@ -4110,9 +4110,9 @@ los centros declarados "por persona", un legajo mal asignado en otra área sigue
 vez de quedar tapado. Pedir otro formato dependía de que el archivo llegara bien armado cada mes.
 
 **Abierto con Marval:**
-- **Centro `01` (Finanzas 002/003).** Araceli propone Administración; el Rendimiento de 10-2026 todavía los trae en
-  Servicios Legales y cierran ahí, así que la semilla los manda a **Servicios Legales**. Si Marval confirma
-  Administración se cambia desde la pantalla, sin commit.
+- ~~**Centro `01` (Finanzas 002/003).**~~ **Cerrado el 2026-10-29:** Marval confirmó que van a **Servicios
+  Legales**, como venían yendo (Araceli reenvió la tabla de dimensiones corregida: FIN 002 y FIN 003 pasaron de
+  Administración a Servicios Legales, sin otro cambio). Es lo que ya hacía la semilla; no cambió código.
 - **Noviembre:** Ana avisó que la distribución de Directores cambia; el listado se vuelve a pedir.
 
 **Efecto, con los archivos reales de 10-2026** (config por defecto, columnas del Rendimiento reconocidas solas,

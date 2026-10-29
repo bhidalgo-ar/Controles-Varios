@@ -29,7 +29,7 @@ Semilla (D-035: semilla, no identidad; tabla de Araceli "DIMENSIONES - Listado c
 hoja "Detalle 09-2026", más el Rendimiento real de 10-2026):
 | code | to |
 |---|---|
-| 01 | Servicios Legales |  ← FIN 002/003. Araceli propone Administración, pendiente de confirmar por Marval; el Rendimiento de 10-2026 todavía los trae en Servicios Legales y cierran ahí. Se cambia desde la pantalla, sin commit.
+| 01 | Servicios Legales |  ← FIN 002/003. Marval confirmó Servicios Legales el 2026-10-29 (antes Araceli había propuesto Administración); el Rendimiento de 10-2026 todavía los trae en Servicios Legales y cierran ahí. Se cambia desde la pantalla, sin commit.
 | 3  | Administración |
 | 04 | Asesoramiento |
 | 05 | Contencioso |
