@@ -94,6 +94,16 @@ Usar el mecanismo de avisos que ya tenga el control (buscar `issues`/`renderIssu
 rendVsAsiento.js); si hay que sumar un campo al summary, que no rompa `tests/resumenContract.test.js` ni el
 semáforo (unidad sigue siendo 'cc').
 
+## Cambio 4 — Legajos que el Rendimiento pone en otra área (2026-10-29, D-103)
+Config `legajoAreas: [{ legajo, to, motivo }]`, semilla `[]` (el repo es público: el analista carga el legajo
+una vez en el Paso 2). Las filas de la CONTA de ese legajo se comparan en el área `to`, con el legajo comparado
+por la clave del cliente. Precedencia por fila: en un centro de `ccPorPersona` manda el listado y la regla no se
+aplica; en cualquier otro centro la regla gana sobre la tabla por código y sobre el nombre, sin pasar por los
+redirects. Resumen: aviso celeste con lo movido por categoría y total, y aviso de regla sin uso (no aparece en la
+CONTA / ya viene en el área destino / sólo tiene filas de un centro por persona). Planilla: CONTA ya movida, con
+etiqueta "+ N legajo(s) de otra área" / "− N legajo(s) movido(s)" y el detalle en el `title`. Excel: columna
+"Movido por regla de legajo" en "Detalle por empleado". Test: `tests/rendVsAsientoLegajoArea.test.js`.
+
 ## Números de aceptación (archivos reales de 10-2026, verificados con el código actual + config manual)
 Con la config por defecto nueva, mapeo AUTO-detectado del Rendimiento, CONTA completa y el listado de Marval
 como CC x Empleado, el control tiene que dar exactamente:

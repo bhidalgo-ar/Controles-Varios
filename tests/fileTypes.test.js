@@ -175,11 +175,13 @@ for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
 // su panel lista los conceptos del importador cargado y marca cuáles tienen
 // columna propia en el Tabulado cargado, así que cargar cualquiera de los dos
 // cambia lo que ese panel puede mostrar.
-assert(`redibujan el paso o tienen hueco propio exactamente los 8 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
+// El `rend` de `rend_vs_asiento` se sumó con los legajos que el Rendimiento pone
+// en otra área (D-103): el editor ofrece las áreas del Rendimiento cargado.
+assert(`redibujan el paso o tienen hueco propio exactamente los 9 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
   specsDeclarados.sort().join(', ') === 'novedades_importador.novedades, '
     + 'novedades_liquidacion.importador, novedades_liquidacion.tabAxton, '
     + 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
-    + 'rend_vs_asiento.conta, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
+    + 'rend_vs_asiento.conta, rend_vs_asiento.rend, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');
 
 // El hueco del Tabulado anterior es el que existe en el layout de Variaciones.
 // Si alguien renombra el id en el HTML y no acá, el archivo cae a la lista de

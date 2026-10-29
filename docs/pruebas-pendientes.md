@@ -826,12 +826,13 @@ Directores persona por persona con el listado de Marval y reconoce las columnas 
 | Administración | +105.556,00, sólo en la columna de precio: un legajo cuyo precio el Rendimiento cuenta menor que el asiento | Para revisar en Meta4 |
 | Correr **sin** el listado de CC x Empleado | Directores sale "sólo en CONTA" por 223.675.424,65 y Resultados trae el aviso "no se pudieron repartir persona por persona", con el chip de arriba | Si sale en silencio, el aviso no se está dibujando |
 | El listado de Marval como archivo | Se lee con las hojas Activos y Bajas; con un archivo de otra forma, el error dice qué encabezados esperaba | Si no lo reconoce, mandar los encabezados de la fila 1 |
+| "Legajos que el Rendimiento pone en otra área" en el Paso 2 (D-103) | Arranca vacía; con "+ Agregar legajo" se carga el legajo, se elige el área de la lista (las del Rendimiento cargado) y al lado aparece el nombre leído de la Contabilidad. Al correr, Servicios Legales y Servicios Comunes cierran, el Resumen trae el aviso celeste con lo movido y la Planilla la etiqueta "+ 1 legajo de otra área" / "− 1 legajo movido" | Si el área no se puede elegir, cargar primero el Rendimiento; si sigue saltando la diferencia, pasar el caso |
 
 **Lo que espera una decisión externa.** Los centros FIN 002/003 (código `01`) ya no: Marval confirmó el
 2026-10-29 que van a Servicios Legales, que es lo que hace la semilla. En noviembre la distribución de Directores cambia (aviso de Ana): hay que pedir el listado
 nuevo.
 
-**Detalle:** D-101, `specs/rendimiento-vs-asiento-por-codigo.md`.
+**Detalle:** D-101, D-103, `specs/rendimiento-vs-asiento-por-codigo.md`.
 
 ---
 

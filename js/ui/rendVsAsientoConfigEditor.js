@@ -12,6 +12,7 @@
 
 import { DEFAULT_RVA_CONFIG, resolveRvaConfig } from '../controls/rendVsAsiento.js';
 import { renderHelpPopover }  from './helpPopover.js';
+import { makeLegajoKey }      from '../utils/legajo.js';
 
 function esc(str) {
   return String(str ?? '')
@@ -79,6 +80,9 @@ const parseCodeMap = s => parseRedirects(s).map(({ from, to }) => ({ code: from,
  * @param {Object}   opts.accountStats   — { [CUENTA_CONTAB]: { rows, names[] } } de la CONTA cargada
  * @param {Object}   opts.conceptStats   — { [ID_CONCEPTO]:   { rows, names[] } } de la CONTA cargada
  * @param {boolean}  opts.contaCargada   — si hay Contabilidad contra la que contar filas
+ * @param {string[]|null} opts.areasRendimiento — las áreas del Rendimiento cargado (null si no hay)
+ * @param {Object}   opts.nombrePorLegajo — { [clave de legajo]: 'APELLIDO, NOMBRE' } de la CONTA cargada
+ * @param {string}   opts.legajoKeyMode  — cómo compara legajos el cliente ('007' = '7' o no)
  * @param {Function} opts.onChange       — callback(newConfig)
  */
 export function renderRendVsAsientoConfigEditor(container, opts = {}) {
@@ -87,8 +91,12 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
     accountStats = {},
     conceptStats = {},
     contaCargada = false,
+    areasRendimiento = null,
+    nombrePorLegajo = {},
+    legajoKeyMode,
     onChange = () => {},
   } = opts;
+  const legajoKeyOf = makeLegajoKey(legajoKeyMode);
 
   // Clon mutable que el editor va modificando. `resolveRvaConfig` completa la
   // tabla por código y los centros por persona de una config guardada antes de
@@ -97,6 +105,7 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
   if (!current.cuentaCats) current.cuentaCats = {};
   if (!current.provCcssConcepts) current.provCcssConcepts = [];
   if (!current.ccRedirects) current.ccRedirects = [];
+  if (!current.legajoAreas) current.legajoAreas = [];
 
   // "Agregar clasificación" arranca plegado: el caso normal es no tocarlo.
   let agregando = false;
@@ -128,6 +137,85 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
       }
     }
     return out;
+  }
+
+  /**
+   * Las áreas que se pueden elegir como destino de un legajo: las del Rendimiento
+   * cargado y, si todavía no hay Rendimiento, los destinos de la tabla por código.
+   * No se tipea un nombre libre: un área mal escrita no matchea nada y el legajo
+   * saldría "sólo en CONTA".
+   */
+  function areasPosibles() {
+    const fuente = (areasRendimiento && areasRendimiento.length)
+      ? areasRendimiento
+      : (current.ccCodeMap || []).map(e => String(e?.to || '').trim());
+    return [...new Set(fuente.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  }
+
+  /** La tabla de legajos que el Rendimiento pone en otra área (D-103). */
+  function legajosHtml() {
+    const areas = areasPosibles();
+    const filas = current.legajoAreas.map((e, i) => {
+      const legajo = String(e?.legajo ?? '');
+      const to = String(e?.to ?? '');
+      const nombre = legajo ? (nombrePorLegajo[legajoKeyOf(legajo)] || '') : '';
+      // Un área guardada que no está entre las posibles se sigue mostrando, marcada.
+      const opciones = [...areas];
+      const fuera = to && !opciones.includes(to);
+      if (fuera) opciones.unshift(to);
+      const nombreHtml = !legajo ? ''
+        : (nombre
+          ? `<div class="col-hint">${esc(nombre)}</div>`
+          : (contaCargada ? '<div class="col-hint">No aparece en la Contabilidad cargada.</div>' : ''));
+      return `
+        <tr>
+          <td style="vertical-align:top;">
+            <input type="text" class="form-input rva-input" data-rva-leg-legajo="${i}"
+              value="${esc(legajo)}" placeholder="Legajo" aria-label="Legajo" style="max-width:9rem;">
+            ${nombreHtml}
+          </td>
+          <td style="vertical-align:top;">
+            <select class="form-select" data-rva-leg-to="${i}" aria-label="Área del Rendimiento">
+              <option value=""${to ? '' : ' selected'}>Elegí el área…</option>
+              ${opciones.map(a => `<option value="${esc(a)}"${a === to ? ' selected' : ''}>${esc(a)}${
+                a === to && fuera ? ' (no está en el Rendimiento cargado)' : ''}</option>`).join('')}
+            </select>
+          </td>
+          <td style="vertical-align:top;">
+            <input type="text" class="form-input" data-rva-leg-motivo="${i}"
+              value="${esc(e?.motivo ?? '')}" placeholder="Por qué (ej.: lo pidió el cliente)" aria-label="Motivo">
+          </td>
+          <td style="vertical-align:top;">
+            <button type="button" class="btn btn--ghost btn--sm" data-rva-leg-quitar="${i}">Quitar</button>
+          </td>
+        </tr>`;
+    }).join('');
+    const tabla = current.legajoAreas.length === 0 ? '' : `
+      <div style="overflow-x:auto;">
+        <table class="data-table data-table--compact" style="margin:var(--sp-2) 0;">
+          <thead>
+            <tr><th>Legajo</th><th>Área del Rendimiento</th><th>Motivo</th><th></th></tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+    const sinAreas = areas.length === 0
+      ? '<div class="field__help field__help--muted">Cargá el Reporte de Rendimiento para elegir el área.</div>'
+      : '';
+    return `
+      <div class="rva-redirects" data-rva-legajos>
+        <div class="field__head">
+          <span class="field__label">Legajos que el Rendimiento pone en otra área</span>
+          <span class="field__code">ID_EMPLEADO</span>
+        </div>
+        <div class="field__help field__help--muted">
+          Sus filas de la Contabilidad se comparan contra el área que digas acá, sin importar el centro
+          contable con que vengan.
+        </div>
+        ${tabla}
+        ${sinAreas}
+        <button type="button" class="rva-add__open" data-rva-leg-agregar>＋ Agregar legajo</button>
+      </div>`;
   }
 
   function renderInner() {
@@ -271,6 +359,7 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
           todos los empleados que trae.
         </div>
       </div>
+      ${legajosHtml()}
     `;
 
     renderHelpPopover(panel.querySelector('[data-rva-help]'), AYUDA_CLASIFICACION);
@@ -308,6 +397,42 @@ export function renderRendVsAsientoConfigEditor(container, opts = {}) {
     panel.querySelector('[data-rva-por-persona]')?.addEventListener('change', e => {
       current.ccPorPersona = parseList(e.target.value);
       onChange(current);
+    });
+
+    // Legajos en otra área: el legajo vuelve a dibujar (para mostrar el nombre
+    // de la persona); el área y el motivo sólo guardan.
+    panel.querySelectorAll('[data-rva-leg-legajo]').forEach(input => {
+      input.addEventListener('change', () => {
+        current.legajoAreas[Number(input.dataset.rvaLegLegajo)].legajo = input.value.trim();
+        onChange(current);
+        renderInner();
+      });
+    });
+    panel.querySelectorAll('[data-rva-leg-to]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        current.legajoAreas[Number(sel.dataset.rvaLegTo)].to = sel.value;
+        onChange(current);
+      });
+    });
+    panel.querySelectorAll('[data-rva-leg-motivo]').forEach(input => {
+      input.addEventListener('change', () => {
+        current.legajoAreas[Number(input.dataset.rvaLegMotivo)].motivo = input.value.trim();
+        onChange(current);
+      });
+    });
+    panel.querySelectorAll('[data-rva-leg-quitar]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        current.legajoAreas.splice(Number(btn.dataset.rvaLegQuitar), 1);
+        onChange(current);
+        renderInner();
+      });
+    });
+    panel.querySelector('[data-rva-leg-agregar]')?.addEventListener('click', () => {
+      current.legajoAreas.push({ legajo: '', to: '', motivo: '' });
+      onChange(current);
+      renderInner();
+      const inputs = panel.querySelectorAll('[data-rva-leg-legajo]');
+      inputs[inputs.length - 1]?.focus();
     });
 
     panel.querySelector('[data-rva-add-open]')?.addEventListener('click', () => {
