@@ -64,6 +64,14 @@
 //                                       control (el caso de las que se arman a mano,
 //                                       como el merge de `mapping.tab`)
 //                       mappingValue(state) — override del valor que viaja
+//                       perRun        — es un dato DE LA CORRIDA y no se guarda
+//                                       nunca: arranca vacío cada vez. Es el tipo
+//                                       de cambio del GTN de GSMA: precargar el del
+//                                       mes anterior daría un GTN con un tipo de
+//                                       cambio viejo, coherente y equivocado. A
+//                                       diferencia de `readOnly`, SÍ tiene editor.
+//                       affectsNav    — al cambiar, redibuja la barra del wizard
+//                                       (lo que habilita "Siguiente →" depende de él)
 //                       readOnly      — la lee pero no la guarda. Es el caso de
 //                                       rend_vs_asiento con la agrupación de
 //                                       conceptos: la usa, pero quien la edita y la
@@ -86,6 +94,14 @@
 //                                       cargó, y ahí manda el del cliente.
 //                       note          — qué se le dice al analista en el panel
 //                                       lateral, en criollo.
+//   blockers(state) — OPCIONAL. Lo que todavía impide ejecutar, con el motivo:
+//                     `[{ kind: 'concepto'|'dato', label, detail?, count }]`. Con
+//                     algún motivo, "Siguiente →" queda deshabilitado y los
+//                     motivos salen en la barra y en "Para ejecutar te falta". Es
+//                     para lo que depende de una decisión del Paso 2 que el
+//                     archivo solo no resuelve (el GTN de GSMA: un concepto del
+//                     Tabulado sin columna asignada, o el tipo de cambio). El
+//                     `run()` del control igual se defiende con `{ error }`.
 //   run(primaryRows, tabRows, mapping) → resultados
 //   summarize(results)                 → { status, headline, insights[] } para la tarjeta colapsada
 //   renderResults(results, container)  → HTML del detalle dentro del container
@@ -242,6 +258,18 @@ import {
 
 import { renderContaDesglosadaConfigEditor } from '../ui/contaDesglosadaConfigEditor.js';
 
+import {
+  runGtnGsma,
+  summarizeGtnGsma,
+  renderGtnGsmaResults,
+  GTN_NET_TOLERANCE,
+} from './gtnGsma.js';
+import { DEFAULT_GTN_GSMA_CONFIG, motivosGtnGsma } from './gtnGsmaConfig.js';
+import {
+  renderGtnGsmaTipoCambioEditor,
+  renderGtnGsmaAsignacionesEditor,
+} from '../ui/gtnGsmaConfigEditor.js';
+
 // Los 10 controles construidos contra los reportes de M4 de Marval comparten
 // clasificación: hoy se ofrecen sólo a MARVAL. Para "promover" uno a control
 // estándar de Meta4 (que lo vea cualquier cliente meta4), reemplazar su
@@ -284,6 +312,11 @@ const POP_ONLY = { scope: 'cliente', scopeMeta: { clients: ['POP'] } };
 // 'sistema' cuando un segundo cliente Axton pida el mismo asiento y se verifique
 // contra sus archivos (mismo camino que D-015).
 const COTY_ONLY = { scope: 'cliente', scopeMeta: { clients: ['COTY'] } };
+
+// GSMA. El GTN es el informe propio de GSMA (su layout, sus Element Codes y GL
+// Accounts, el 13,3 del sueldo en USD) y las asignaciones código → columna son
+// de su liquidación en Axton. No hay otro cliente que lo pida.
+const GSMA_ONLY = { scope: 'cliente', scopeMeta: { clients: ['GSMA'] } };
 
 export const CONTROL_REGISTRY = {
 
@@ -1276,6 +1309,89 @@ export const CONTROL_REGISTRY = {
     run:           runSaldoVacaciones,
     summarize:     summarizeSaldoVacaciones,
     renderResults: renderSaldoVacacionesResults,
+  },
+
+  // ── GTN GSMA desde Tabulado Axton (GSMA) ──────────────────────────────────
+  // Arma el "Gross to Net" que GSMA recibe todos los meses —el que armaba Meta4—
+  // desde el Tabulado de Axton, y controla por empleado que Net Pay cierre contra
+  // ER Net Paid. Ver specs/gtn-gsma-axton.md.
+  gtn_gsma: {
+    id:          'gtn_gsma',
+    // El neto y el ER Net Paid salen del mismo Tabulado, así que cierran al
+    // centavo: es la forma del archivo, no una preferencia del analista (D-069).
+    ownTolerance: {
+      from: () => GTN_NET_TOLERANCE,
+      note: 'Controla Net Pay contra ER Net Paid al centavo: los dos salen del mismo Tabulado, así que no es una diferencia de criterio.',
+    },
+    label:       'GTN GSMA — Generar Reporte',
+    ...GSMA_ONLY,
+    appliesWhen: () => true,
+    description: 'Arma el Excel Gross to Net (GTN) de GSMA desde el Tabulado de Axton, con el layout y las '
+      + 'fórmulas del de Meta4 más la columna Recognition Award, y controla que el neto de cada empleado '
+      + 'cierre contra ER Net Paid.',
+    help: {
+      what: 'Reemplaza el GTN que armaba Meta4. Suma los conceptos del Tabulado de Axton en las columnas del GTN '
+        + 'según la asignación de GSMA (cada código de Axton va a una columna, o queda fuera a propósito), toma '
+        + 'del GTN del mes anterior el Employee Number, el centro de costo, la locación y el sueldo en USD, y '
+        + 'arma el Excel con las mismas fórmulas y el cuadro de autorización. Controla que Net Pay (Gross menos '
+        + 'deducciones) cierre con ER Net Paid en cada empleado. Si aparece un concepto que nunca se asignó, '
+        + 'no deja ejecutar hasta que le elijas la columna.',
+      how: [
+        'Bajá de Axton el Tabulado del mes (Resumen de Liquidacion). Si baja como .xls, abrilo en Excel y guardalo como .xlsx.',
+        'Cargalo en el Paso 2, junto con el GTN que se mandó el mes anterior (el .xls de Meta4 o el .xlsx que generó la app).',
+        'Escribí el tipo de cambio del mes (ARS por USD).',
+        'Si la tabla de asignaciones marca algún concepto sin asignar, elegí su columna del GTN (o «Fuera del GTN»).',
+        'Ejecutá, revisá los avisos (empleados nuevos, nombres que no cruzaron, premios con importe) y descargá el GTN desde el resultado.',
+      ],
+    },
+    group:       { id: 'gtn_gsma', label: 'GTN GSMA', mode: 'Generar Reporte', primary: true },
+    // El Tabulado de Axton NO entra por el casillero del Tabulado (cablea el
+    // lector de Meta4): va como archivo propio, igual que en N2, y así el
+    // wizard le pasa las filas Y la metadata (los conceptos, el TOTAL GENERAL).
+    tabRequired: false,
+    additionalFiles: [
+      // additionalFiles[0] es además el `primaryRows` que recibe run().
+      // rerenderOnLoad: los conceptos del Tabulado cargado son lo que lista la
+      // tabla de asignaciones del Paso 2.
+      { key: 'tabAxton', label: 'Tabulado de Axton del mes', fileType: 'tab_axton_gtn_file',
+        rerenderOnLoad: true },
+      { key: 'gtnPrev', label: 'GTN del mes anterior', fileType: 'gtn_gsma_prev_file' },
+    ],
+    config: [
+      // El tipo de cambio va primero: es el dato del mes, el que se tipea siempre.
+      { key: 'gtn_gsma_tipo_cambio', stateKey: 'gtnGsmaTipoCambio',
+        mappingKey: 'gtnTipoCambio',
+        default: () => null,
+        mappingValue: (state) => state.gtnGsmaTipoCambio ?? null,
+        editor: renderGtnGsmaTipoCambioEditor,
+        perRun: true,
+        affectsNav: true,
+        openByDefault: true },
+      { key: 'gtn_gsma_config', stateKey: 'gtnGsmaConfig',
+        mappingKey: 'gtnConfig',
+        default: () => DEFAULT_GTN_GSMA_CONFIG(),
+        mappingValue: (state) => state.gtnGsmaConfig || DEFAULT_GTN_GSMA_CONFIG(),
+        editor: renderGtnGsmaAsignacionesEditor,
+        editorProps: (state) => ({
+          tabMeta: state.controlFiles?.gtn_gsma?.tabAxton?.parseMetadata || null,
+          tabRows: state.controlFiles?.gtn_gsma?.tabAxton?.parsedRows || [],
+        }),
+        affectsNav: true,
+        // Se abre solo cuando hay algo sin asignar: es lo único que frena.
+        openByDefault: (state) => motivosGtnGsma({
+          tabMeta: state.controlFiles?.gtn_gsma?.tabAxton?.parseMetadata || null,
+          config: state.gtnGsmaConfig,
+          tipoCambio: 1,
+        }).some(m => m.kind === 'concepto') },
+    ],
+    blockers: (state) => motivosGtnGsma({
+      tabMeta: state.controlFiles?.gtn_gsma?.tabAxton?.parseMetadata || null,
+      config: state.gtnGsmaConfig,
+      tipoCambio: state.gtnGsmaTipoCambio,
+    }),
+    run:           runGtnGsma,
+    summarize:     summarizeGtnGsma,
+    renderResults: renderGtnGsmaResults,
   },
 
   control_netos: {

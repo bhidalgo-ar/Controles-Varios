@@ -76,6 +76,12 @@ import { parseCcXEmpleado } from '../parsers/ccXEmpleadoExcel.js';
 import { parseConceptCatalog } from '../parsers/conceptCatalog.js';
 import { parseTabAxton, detectHeaders as detectHeadersTabAxton } from '../parsers/tabAxtonParser.js';
 import { readTabAxton } from '../parsers/tabAxtonReader.js';
+import {
+  parseGtnGsma,
+  detectHeadersGtnGsma,
+  readTabuladoAxtonGtn,
+  detectHeadersTabuladoAxtonGtn,
+} from '../parsers/gtnGsmaParser.js';
 import { parseVariacAxton, detectHeaders as detectHeadersVariacAxton } from '../parsers/popVariacParser.js';
 import {
   parseExpNov,
@@ -140,6 +146,20 @@ const metaTabAxtonCruce = (m) =>
   + ` &nbsp;·&nbsp; ${m?.periodo ? esc(m.periodo) : '<span class="badge badge--warning">período no detectado</span>'}`
   + (m?.cantidadesDisponibles === false
     ? ' &nbsp;·&nbsp; <span class="badge badge--warning">sólo importes, sin cantidades</span>' : '');
+
+// El Tabulado de Axton del GTN de GSMA: período, liquidaciones, legajos y
+// conceptos. Sin el aviso de "sólo importes": el GTN arma importes y nunca
+// cantidades, así que para este control no es una falta.
+const metaTabAxtonGtn = (m) =>
+  `${m?.periodo ? `Período ${esc(m.periodo.split('-').reverse().join('/'))}` : '<span class="badge badge--warning">período no detectado</span>'}`
+  + ` &nbsp;·&nbsp; ${m?.totalRows ?? 0} liquidaciones · ${m?.uniqueLegajos ?? 0} legajos · ${m?.conceptos?.length ?? 0} conceptos`;
+
+// El GTN del mes anterior: de qué mes es (la fecha de la fila 2), cuántos
+// empleados trae y si es el de Meta4 o el que generó la app.
+const metaGtnGsmaPrev = (m) =>
+  `GTN ${m?.periodo ? esc(m.periodo.split('-').reverse().join('/')) : '<span class="badge badge--warning">sin fecha</span>'}`
+  + ` &nbsp;·&nbsp; ${m?.totalRows ?? 0} empleados &nbsp;·&nbsp; ${m?.origen === 'app' ? 'generado por la app' : 'de Meta4'}`
+  + (m?.usdSinFormula ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${m.usdSinFormula} sin la fórmula del sueldo USD</span>` : '');
 
 // La escala informa cuántas categorías leyó y de qué pestaña — con un libro de
 // varias hojas, saber cuál se usó es lo que confirma que no se leyó la equivocada.
@@ -693,6 +713,37 @@ export const FILE_TYPES = {
     detectHeaders: detectHeadersTabAxton,
     autoDetect: null,
     meta: metaTabAxtonCruce,
+    fields: [],
+  },
+
+  // GTN GSMA desde Tabulado Axton (specs/gtn-gsma-axton.md §2): el Tabulado de
+  // Axton del mes, con el MISMO lector tolerante que N2 (`readTabAxton`, D-072)
+  // más un corte propio para el `.xls` que exporta Axton (una página web sin los
+  // datos adentro), que tiene que decir qué hacer y no "no encontré encabezados".
+  // Ficha propia y no alias de la de arriba: la etiqueta de la zona de drop es
+  // la del tipo, y "para cruzar novedades" acá confundiría.
+  tab_axton_gtn_file: {
+    label: 'Tabulado de Axton del mes (.xlsx)',
+    siglas: ['TABULADO', 'TAB'],
+    parse: readTabuladoAxtonGtn,
+    detectHeaders: detectHeadersTabuladoAxtonGtn,
+    autoDetect: null,
+    meta: metaTabAxtonGtn,
+    fields: [],
+  },
+
+  // El GTN de GSMA del mes anterior: el .xls de Meta4 o el .xlsx que generó la
+  // app. No hay columnas que mapear —el parser las busca por título— pero pasa
+  // por la vista previa, que es lo que le confirma al analista que subió el GTN
+  // y no otro Excel (mismo criterio que `acreditaciones_file`).
+  gtn_gsma_prev_file: {
+    label: 'GTN del mes anterior (.xls de Meta4 o el .xlsx que generó la app)',
+    dropLabel: 'GTN del mes anterior',
+    siglas: ['GTN', 'GROSS'],
+    parse: parseGtnGsma,
+    detectHeaders: detectHeadersGtnGsma,
+    autoDetect: null,
+    meta: metaGtnGsmaPrev,
     fields: [],
   },
 

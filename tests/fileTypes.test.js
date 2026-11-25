@@ -177,8 +177,10 @@ for (const [controlId, ctrl] of Object.entries(CONTROL_REGISTRY)) {
 // cambia lo que ese panel puede mostrar.
 // El `rend` de `rend_vs_asiento` se sumó con los legajos que el Rendimiento pone
 // en otra área (D-103): el editor ofrece las áreas del Rendimiento cargado.
-assert(`redibujan el paso o tienen hueco propio exactamente los 9 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
-  specsDeclarados.sort().join(', ') === 'novedades_importador.novedades, '
+// El `tabAxton` de `gtn_gsma` se sumó con el GTN de GSMA: la tabla de
+// asignaciones del Paso 2 lista los conceptos del Tabulado cargado.
+assert(`redibujan el paso o tienen hueco propio exactamente los 10 declarados (hoy: ${specsDeclarados.sort().join(', ')})`,
+  specsDeclarados.sort().join(', ') === 'gtn_gsma.tabAxton, novedades_importador.novedades, '
     + 'novedades_liquidacion.importador, novedades_liquidacion.tabAxton, '
     + 'pop_variaciones.tab_act, pop_variaciones.tab_prev, '
     + 'rend_vs_asiento.conta, rend_vs_asiento.rend, variaciones_conceptos.tab_prev, variaciones_sueldos.tab_prev');

@@ -204,7 +204,7 @@ export async function renderControlsWizard(root, clientId, { volverDeRun = null 
   // `||` y no `??`, igual que antes: una config guardada como `null` cae al
   // default en vez de quedar en null.
   const configState = Object.fromEntries(
-    declaradas.map(cfg => [cfg.stateKey, loaded[cfg.key]?.params || cfg.default()])
+    declaradas.map(cfg => [cfg.stateKey, (!cfg.perRun && loaded[cfg.key]?.params) || cfg.default()])
   );
 
   // controlConfigs por controlId — se usa para resolver qué controles aplican a
@@ -419,6 +419,11 @@ function renderWizardNav(root, state) {
   // rediseño; acá abajo queda sólo el "← Anterior" y el atajo de teclado.
   syncWizardHeader(root, state);
 
+  // El "Para ejecutar te falta" sale de la misma lista que el hint de la barra:
+  // si uno cambia, el otro también (un concepto asignado, el tipo de cambio).
+  const sideChecklist = root.querySelector('#js-side-checklist');
+  if (sideChecklist && state.step === 1) sideChecklist.innerHTML = sideChecklistHtml(state);
+
   const nav = root.querySelector('#js-wizard-nav');
   if (!nav) return;
   const isFirst = state.step === 0;
@@ -467,6 +472,7 @@ function nextStepHint(state) {
         faltan.archivo  && `${faltan.archivo} ${faltan.archivo === 1 ? 'archivo' : 'archivos'}`,
         faltan.columna  && `${faltan.columna} ${faltan.columna === 1 ? 'columna' : 'columnas'}`,
         faltan.concepto && `${faltan.concepto} ${faltan.concepto === 1 ? 'concepto' : 'conceptos'}`,
+        faltan.dato     && `${faltan.dato} ${faltan.dato === 1 ? 'dato' : 'datos'}`,
       ].filter(Boolean);
       return partes.length
         ? `Falta: ${partes.join(' · ')}`
@@ -487,11 +493,11 @@ function nextStepHint(state) {
  * esta lista es su espejo en palabras. Si alguna vez discrepan, la que manda es
  * `canGoNext`.
  *
- * @returns {{ items: Array, faltan: { archivo: number, columna: number, concepto: number } }}
+ * @returns {{ items: Array, faltan: { archivo: number, columna: number, concepto: number, dato: number } }}
  */
 function step2Checklist(state) {
   const items  = [];
-  const faltan = { archivo: 0, columna: 0, concepto: 0 };
+  const faltan = { archivo: 0, columna: 0, concepto: 0, dato: 0 };
   const push = (item) => {
     items.push(item);
     if (item.tone !== 'done') faltan[item.kind]++;
@@ -575,6 +581,12 @@ function step2Checklist(state) {
     }
   }
 
+  for (const b of pendingControlBlockers(state)) {
+    const kind = b.kind === 'dato' ? 'dato' : 'concepto';
+    items.push({ kind, tone: 'warn', label: b.label, detail: b.detail || '' });
+    faltan[kind] += b.count || 1;
+  }
+
   return { items, faltan };
 }
 
@@ -616,6 +628,21 @@ export function pendingTabRequirements(cfg, { hasBrutos, hasGsPers, hasNr }) {
   });
 }
 
+/**
+ * Los motivos que declaran los controles seleccionados (`blockers` del
+ * registry), con el control de cada uno. Lo leen `canGoNext` (decide) y
+ * `step2Checklist` (lo dice en palabras): la misma lista para los dos.
+ */
+function pendingControlBlockers(state) {
+  const out = [];
+  for (const id of state.selectedControls) {
+    const ctrl = CONTROL_REGISTRY[id];
+    if (typeof ctrl?.blockers !== 'function') continue;
+    for (const b of (ctrl.blockers(state) || [])) out.push({ ...b, controlId: id });
+  }
+  return out;
+}
+
 function canGoNext(state) {
   switch (state.step) {
     case 0:
@@ -633,6 +660,11 @@ function canGoNext(state) {
         return ctrl.additionalFiles.every(f => f.optional || state.controlFiles[id]?.[f.key] != null);
       });
       if (!allFiles) return false;
+
+      // Lo que un control declara que todavía frena (`blockers` del registry):
+      // una decisión del Paso 2 que el archivo solo no resuelve — el GTN de
+      // GSMA con un concepto del Tabulado sin columna, o sin tipo de cambio.
+      if (pendingControlBlockers(state).length > 0) return false;
 
       // Columnas del Tabulado (Brutos/GS Pers/NR): antes una lista de 4 claves
       // cableada a mano — sin la tercera rama para NR, sus 18 conceptos nunca
@@ -975,6 +1007,24 @@ function buildWizardSidebarHtml(state) {
   // "Para ejecutar te falta": el detalle de lo que el hint de la barra resume en
   // "Falta: 1 archivo · 1 columna". Sale de la misma lista, así los dos no
   // pueden decir cosas distintas. Cuando no falta nada, lo dice.
+  return `
+    <div>
+      <span class="wizard-section-label">${selectedLabels.length === 1 ? 'Control a ejecutar' : 'Controles a ejecutar'}</span>
+      <div class="control-recap-pills">${pillsHtml}</div>
+      <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Elegidos en el paso anterior — usá "← Anterior" para cambiarlos.</p>
+    </div>
+    <div id="js-side-checklist">${sideChecklistHtml(state)}</div>
+    ${thresholdsSectionHtml(state)}
+  `;
+}
+
+/**
+ * "Para ejecutar te falta" del panel lateral. Aparte del resto del panel para
+ * poder redibujarlo solo (`renderWizardNav`) cuando cambia algo del Paso 2 que
+ * no redibuja el paso entero — un concepto que se asigna, el tipo de cambio — sin
+ * tocar el campo del monto de diferencia que está al lado.
+ */
+function sideChecklistHtml(state) {
   const { items } = step2Checklist(state);
   const marcas = { done: '✓', pending: '○', warn: '⚠' };
   const checklistHtml = items.length
@@ -992,16 +1042,8 @@ function buildWizardSidebarHtml(state) {
   const todoListo = items.every(i => i.tone === 'done');
 
   return `
-    <div>
-      <span class="wizard-section-label">${selectedLabels.length === 1 ? 'Control a ejecutar' : 'Controles a ejecutar'}</span>
-      <div class="control-recap-pills">${pillsHtml}</div>
-      <p class="wizard-section-hint" style="margin-top:var(--sp-2);">Elegidos en el paso anterior — usá "← Anterior" para cambiarlos.</p>
-    </div>
-    <div>
       <span class="wizard-section-label">${todoListo ? 'Todo listo para ejecutar' : 'Para ejecutar te falta'}</span>
       ${checklistHtml}
-    </div>
-    ${thresholdsSectionHtml(state)}
   `;
 }
 
@@ -2118,6 +2160,9 @@ async function executeControls(state, container, root) {
     // (la agrupación de conceptos vista desde Rend vs Asiento, y las dos de
     // Variaciones, que guarda su propio panel al confirmar).
     for (const cfg of selectedConfigs(state, { soloEditables: true })) {
+      // Un dato de la corrida (el tipo de cambio del GTN de GSMA) no se guarda:
+      // precargado el mes siguiente sería un dato viejo con cara de nuevo.
+      if (cfg.perRun) continue;
       const value = state[cfg.stateKey];
       if (valeGuardar(value)) {
         await saveControlConfig(state.client.code, cfg.key, { params: value });
