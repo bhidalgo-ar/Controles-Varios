@@ -29,7 +29,7 @@ const ExcelJS = require('exceljs');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { runGtnGsma, summarizeGtnGsma, cruzarPorNombre, gtnParaExcel, GTN_NET_TOLERANCE } =
   await import('./js/controls/gtnGsma.js');
-const { DEFAULT_GTN_GSMA_CONFIG, motivosGtnGsma, asignar, FUERA_DEL_GTN, resolverConceptos } =
+const { DEFAULT_GTN_GSMA_CONFIG, motivosGtnGsma, asignar, FUERA_DEL_GTN, resolverConceptos, columnasNoConceptoGtn } =
   await import('./js/controls/gtnGsmaConfig.js');
 const { buildGtnGsmaWorkbook, gtnFileName, EXCHANGE_RATE_CELL, GTN_COLUMNS } =
   await import('./js/exports/gtnGsmaLayout.js');
@@ -402,6 +402,155 @@ assert('Tabulado: el .xls web de Axton corta con "Abrilo en Excel y guardalo com
 let errWebGtn = null;
 try { parseGtnGsma(web); } catch (e) { errWebGtn = e.message; }
 assert('GTN anterior: una página web sin datos también corta con un mensaje claro', /página web/.test(errWebGtn || ''));
+
+// ── Auditoría 1: columnas con forma de concepto sin «código - nombre» ───────
+
+{
+  const meta = metaDe(rowsOk);
+  const conColumna = (cols) => ({ ...meta, columnasNoConcepto: cols });
+  const sinGuion = { letra: 'Z', rotulo: '880027 Contribucion AFIP', sub: 'Imp', tipo: 'sinClasificar', celdasConImporte: 2, importe: 50 };
+  const rayaLarga = { letra: 'Z', rotulo: '880027 – Contribucion AFIP', sub: 'Imp', tipo: 'sinClasificar', celdasConImporte: 2, importe: 50 };
+  const desconocida = { letra: 'AA', rotulo: 'Ajuste manual', sub: 'Imp', tipo: 'sinClasificar', celdasConImporte: 1, importe: 10 };
+  const salFamConPlata = { letra: 'I', rotulo: 'Salario Familiar', sub: 'Imp', tipo: 'sinClasificar', celdasConImporte: 1, importe: 300 };
+  const salFamVacia = { ...salFamConPlata, celdasConImporte: 0, importe: 0 };
+  const totalMenos = { letra: 'AF', rotulo: 'TOTAL -', sub: null, tipo: 'ignorada', celdasConImporte: 2, importe: 900 };
+
+  for (const [nombre, col] of [['sin guion', sinGuion], ['con raya larga', rayaLarga]]) {
+    const m = motivosGtnGsma({ tabMeta: conColumna([col]), config: DEFAULT_GTN_GSMA_CONFIG(), tipoCambio: 1050 });
+    assert(`gate: columna ${nombre} que empieza con un código frena, nombrando la columna`,
+      m.length === 1 && m[0].kind === 'concepto' && m[0].detail.includes('880027'));
+    const r = correr(rowsOk, { meta: conColumna([col]) });
+    assert(`run(): columna ${nombre} → { error } (no sale un GTN sin ese importe)`,
+      typeof r.error === 'string' && r.error.includes('880027') && /código - nombre/.test(r.error));
+  }
+  const empiezaConCodigoVacia = { ...sinGuion, celdasConImporte: 0, importe: 0 };
+  assert('una columna que empieza con un código frena aunque venga vacía', columnasNoConceptoGtn(conColumna([empiezaConCodigoVacia])).frenan.length === 1);
+  assert('una columna desconocida con importes frena', columnasNoConceptoGtn(conColumna([desconocida])).frenan.length === 1);
+  assert('una columna desconocida sin dato del lector (con subencabezado de importe) frena',
+    columnasNoConceptoGtn({ columnasSinClasificar: [{ letra: 'AA', rotulo: 'Ajuste manual', sub: 'Imp' }] }).frenan.length === 1);
+  assert('TOTAL - con importes no frena ni avisa (es del export)', (() => {
+    const x = columnasNoConceptoGtn(conColumna([totalMenos])); return x.frenan.length === 0 && x.avisan.length === 0;
+  })());
+  const rSf = correr(rowsOk, { meta: conColumna([salFamConPlata]) });
+  assert('Salario Familiar con importe: no frena, sale como aviso', !rSf.error
+    && rSf.avisos.some(a => a.tipo === 'noConcepto' && a.what.includes('Salario Familiar')));
+  assert('…y su chequeo de lectura no sale en verde', rSf.tabLectura.noConceptoConImporte.length === 1);
+  const rSfv = correr(rowsOk, { meta: conColumna([salFamVacia]) });
+  assert('Salario Familiar vacía (lo de todos los meses): ni frena ni avisa', !rSfv.error
+    && !rSfv.avisos.some(a => a.tipo === 'noConcepto') && rSfv.tabLectura.noConceptoOk.length === 1);
+
+  // El lector del GTN cuenta los importes de esas columnas en un Tabulado de verdad.
+  const aoa = [
+    ['Legajo', 'Apellido y Nombre', '1000 - Sueldo Basico', '880027 Contribucion AFIP', 'Salario Familiar'],
+    [null, null, 'Imp', 'Imp', 'Imp'],
+    ['1', 'SANGUINETTI JAVIER', 1000, 25, null],
+    ['2', 'ALBELLA GUSTAVO', 500, 25, null],
+    ['TOTAL GENERAL', null, 1500, 50, null],
+  ];
+  const wbT = globalThis.XLSX.utils.book_new();
+  globalThis.XLSX.utils.book_append_sheet(wbT, globalThis.XLSX.utils.aoa_to_sheet(aoa), 'Liquidaciones.20261130.120000.1');
+  const bufT = globalThis.XLSX.write(wbT, { type: 'array', bookType: 'xlsx' });
+  const leidoT = readTabuladoAxtonGtn(bufT);
+  const colZ = leidoT.parseMetadata.columnasNoConcepto.find(c => c.rotulo.startsWith('880027'));
+  const colSf = leidoT.parseMetadata.columnasNoConcepto.find(c => c.rotulo === 'Salario Familiar');
+  assert('lector: cuenta los importes de la columna sin guion (2 celdas, 50)', colZ?.celdasConImporte === 2 && colZ.importe === 50);
+  assert('lector: Salario Familiar vacía cuenta 0 (no el TOTAL GENERAL)', colSf?.celdasConImporte === 0);
+  assert('lector + gate: ese Tabulado frena por la columna sin guion',
+    motivosGtnGsma({ tabMeta: leidoT.parseMetadata, config: DEFAULT_GTN_GSMA_CONFIG(), tipoCambio: 1 })
+      .some(m => m.detail.includes('880027')));
+}
+
+// ── Auditoría 3: el titular no dice "cierra en los N" si falta alguno ───────
+
+{
+  const s = summarizeGtnGsma(rSinEr);
+  assert('summarize: con un empleado sin ER Net Paid el titular lo cuenta aparte',
+    s.headline.includes('1 de 2') && s.headline.includes('1 sin comparar') && !s.headline.includes('en los 2'));
+  assert('summarize: y no sale success', s.status === 'warning');
+  const sDif2 = summarizeGtnGsma(correr([liq('1', 'SANGUINETTI JAVIER', 1000, { erDelta: 5 }), liq('2', 'ALBELLA GUSTAVO', 500, { sinEr: true })]));
+  assert('summarize: cierran, no cierran y sin comparar, los tres', sDif2.headline.includes('0 de 2')
+    && sDif2.headline.includes('1 no cierra') && sDif2.headline.includes('1 sin comparar'));
+}
+
+// ── Auditoría 4: avisos del lector y TOTAL GENERAL ──────────────────────────
+
+{
+  const meta = { ...metaDe(rowsOk), avisos: [
+    'El archivo trae 2 hojas y se leyó sólo "Liquidaciones.20261130.120000.1". No se leyeron: "Hoja2".',
+    '1 fila con datos no tiene legajo y no se leyeron (fila 9).',
+    'El Tabulado vino sólo con importes: no trae columnas "Cant", así que …',
+    '1 columna con importes no se pudo atribuir a ningún concepto: I "Salario Familiar". …',
+  ] };
+  const r = correr(rowsOk, { meta });
+  const textos = r.avisos.map(a => a.what).join(' | ');
+  assert('run(): propaga los avisos del lector (hojas no leídas, filas sin legajo)',
+    textos.includes('se leyó sólo') && textos.includes('no tiene legajo'));
+  assert('run(): no propaga "sólo importes" ni el de columnas no atribuibles (los dice con más precisión)',
+    !textos.includes('sólo con importes') && !textos.includes('no se pudo atribuir'));
+  const sinTg = correr(rowsOk, { meta: { ...metaDe(rowsOk), totalGeneral: null } });
+  assert('run(): sin TOTAL GENERAL → aviso, y el chequeo no queda en verde',
+    sinTg.avisos.some(a => a.tipo === 'totalGeneral' && /TOTAL GENERAL/.test(a.what)) && sinTg.tabLectura.totalGeneral === false);
+}
+
+// ── Auditoría 5: la fila GL Account en formato General ──────────────────────
+
+assert('layout: GL Account en formato General (se ve 200100, no 200.100,00)',
+  ws.getCell('F7').numFmt === 'General' && ws.getCell('M7').numFmt === 'General' && val('F7') === 200100);
+
+// ── Auditoría 6: la palabra de más no se resuelve por orden ─────────────────
+
+{
+  const a1 = cruzarPorNombre(gp(['FALCIONI JULIO CESAR', 'FALCIONI JULIO ALBERTO']), ax(['FALCIONI JULIO']));
+  const a2 = cruzarPorNombre(gp(['FALCIONI JULIO ALBERTO', 'FALCIONI JULIO CESAR']), ax(['FALCIONI JULIO']));
+  assert('cruce: dos filas del GTN con palabra de más hacia el mismo empleado → las dos "no cruzó, varios"',
+    a1.prevEstado.every(e => e.tipo === 'parecidoVarios') && a1.parecidos.size === 0 && a1.match.size === 0);
+  assert('…en cualquier orden', a2.prevEstado.every(e => e.tipo === 'parecidoVarios') && a2.parecidos.size === 0);
+  assert('…y el empleado de Axton queda marcado con las dos filas', a1.parecidoAmbiguo.get(0)?.length === 2);
+
+  const b = cruzarPorNombre(gp(['SILVA SANTIAGO MARTIN']), ax(['SILVA SANTIAGO', 'SILVA MARTIN']));
+  assert('cruce: un GTN con palabra de más que contiene a dos de Axton → "no cruzó, varios candidatos"',
+    b.prevEstado[0].tipo === 'parecidoVarios' && b.prevEstado[0].parecidos.length === 2 && b.parecidos.size === 0);
+
+  const prevA = [
+    { fila: 9, employeeNumber: 4021, nombre: 'FALCIONI JULIO CESAR', costCentre: 'CC-1', locationCode: 'AR-BA', usdAnual: 13300, usdValor: null, usdOrigen: 'formula' },
+    { fila: 10, employeeNumber: 4022, nombre: 'FALCIONI JULIO ALBERTO', costCentre: 'CC-1', locationCode: 'AR-BA', usdAnual: 13300, usdValor: null, usdOrigen: 'formula' },
+  ];
+  const rA = correr([liq('1', 'FALCIONI JULIO', 1000)], { prev: prevA });
+  assert('run(): las dos filas del GTN salen "no cruzó (varios candidatos)", ninguna "no vino"',
+    rA.cruce.filter(c => c.resultado === 'parecidoVarios').length === 2 && !rA.cruce.some(c => c.resultado === 'noVino'));
+  assert('run(): el empleado de Axton queda como nuevo, sin Employee Number', rA.cruce.some(c => c.resultado === 'nuevo'
+    && c.axton === 'FALCIONI JULIO') && rA.empleados[0].employeeNumber === null);
+  const rB = correr([liq('1', 'SILVA SANTIAGO', 1000), liq('2', 'SILVA MARTIN', 500)],
+    { prev: [{ ...prevA[0], nombre: 'SILVA SANTIAGO MARTIN' }] });
+  assert('run(): el GTN con dos candidatos sale "no cruzó (varios)", no "no vino"',
+    rB.cruce.some(c => c.resultado === 'parecidoVarios' && c.gtn === 'SILVA SANTIAGO MARTIN')
+    && !rB.cruce.some(c => c.resultado === 'noVino'));
+}
+
+// ── Auditoría 7: una columna guardada que ya no existe frena ─────────────────
+
+{
+  const cfgVieja = { asignaciones: { ...DEFAULT_GTN_GSMA_CONFIG().asignaciones,
+    '1000': { columna: 'columnaQueYaNoExiste', origen: 'analista', fecha: '2026-10-01' } } };
+  const r = resolverConceptos(conceptosDe(['1000']), cfgVieja)[0];
+  assert('asignación guardada a una columna que ya no existe → sin asignar, aunque 1000 sea semilla', r.estado === 'sin_asignar');
+  const m = motivosGtnGsma({ tabMeta: metaDe(rowsOk), config: cfgVieja, tipoCambio: 1050 });
+  assert('…y frena', m.some(x => x.kind === 'concepto' && x.detail.includes('1000')));
+}
+
+// ── Auditoría 8: '007' y '7', y las ramas de { error } ──────────────────────
+
+{
+  const r = correr([liq('007', 'SANGUINETTI JAVIER', 1000), liq('7', 'SANGUINETTI JAVIER', 200), liq('2', 'ALBELLA GUSTAVO', 500)]);
+  const san = r.empleados.find(e => e.nombre === 'SANGUINETTI JAVIER');
+  assert("'007' y '7' con la clave default son un empleado y se suman", r.empleados.length === 2
+    && near(san.valores.monthlySalary, 1200) && san.liquidaciones === 2 && near(san.diferencia, 0));
+  const base = { tabAxtonMeta: metaDe(rowsOk), gtnPrevRows: GTN_PREV, gtnPrevMeta: {}, gtnConfig: DEFAULT_GTN_GSMA_CONFIG(), gtnTipoCambio: 1050 };
+  assert('run(): sin Tabulado → { error }', /Tabulado/.test(runGtnGsma([], [], base).error || ''));
+  assert('run(): Tabulado sin conceptos → { error }',
+    /conceptos/.test(runGtnGsma(rowsOk, [], { ...base, tabAxtonMeta: { conceptos: [] } }).error || ''));
+  assert('run(): sin GTN anterior → { error }', /GTN del mes anterior/.test(runGtnGsma(rowsOk, [], { ...base, gtnPrevRows: [] }).error || ''));
+}
 
 console.log(`\n${ok} ✓  ${fail} ✗`);
 if (fail > 0) process.exit(1);

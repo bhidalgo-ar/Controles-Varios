@@ -14,7 +14,7 @@
 // gate del wizard: el panel lo muestra, no lo decide.
 
 import {
-  DEFAULT_GTN_GSMA_CONFIG, resolverConceptos, asignar, tipoCambioValido, nombreColumna,
+  DEFAULT_GTN_GSMA_CONFIG, resolverConceptos, asignar, tipoCambioValido, nombreColumna, columnasNoConceptoGtn,
 } from '../controls/gtnGsmaConfig.js';
 import { EXCHANGE_RATE_CELL } from '../exports/gtnGsmaLayout.js';
 import { renderAsignacionesTable } from './gtnGsmaAsignaciones.js';
@@ -125,11 +125,21 @@ export function renderGtnGsmaAsignacionesEditor(container, opts = {}) {
   const nuevosEl = details.querySelector('[data-gtn-nuevos]');
   const tablaEl = details.querySelector('[data-gtn-tabla]');
 
+  // Una columna con forma de concepto pero sin «código - nombre» no se puede
+  // asignar desde acá: frena igual, y se dice qué hacer (el export).
+  const columnasMal = tabMeta ? columnasNoConceptoGtn(tabMeta).frenan : [];
+  const columnasMalHtml = columnasMal.length ? `
+      <div class="gtn-asig__banner" role="alert" style="margin-bottom:var(--sp-3);">
+        <span aria-hidden="true">✕</span>
+        <span>${columnasMal.map(c => esc(c.motivo)).join('<br>')}</span>
+      </div>` : '';
+
   const pintarNuevos = (lista) => {
     const sin = lista.filter(c => c.estado === 'sin_asignar');
-    resumenEl.innerHTML = resumen(lista);
-    if (sin.length === 0) { nuevosEl.innerHTML = ''; return; }
-    nuevosEl.innerHTML = `
+    resumenEl.innerHTML = resumen(lista)
+      + (columnasMal.length ? ` · <span class="badge badge--danger">${columnasMal.length} columna${columnasMal.length === 1 ? '' : 's'} sin formato</span>` : '');
+    if (sin.length === 0) { nuevosEl.innerHTML = columnasMalHtml; return; }
+    nuevosEl.innerHTML = columnasMalHtml + `
       <div class="rb-issues" style="margin-bottom:var(--sp-3);">
         ${sin.map(c => `
           <div class="rb-issue">

@@ -50,7 +50,7 @@ const COLUMNAS = {
 /** Título de columna comparable: sin espacios de más, sin mayúsculas. */
 const normTitulo = (v) => String(v ?? '').replace(/ /g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 
-// La fórmula del sueldo en USD: `155035.64/13.3` (SheetJS la da sin el `=`).
+// La fórmula del sueldo en USD: `120000/13.3` (SheetJS la da sin el `=`).
 // Se acepta un `+` adelante y la coma como separador del 13,3.
 const USD_FORMULA_RE = new RegExp(
   `^=?\\+?\\s*(-?\\d+(?:\\.\\d+)?)\\s*/\\s*${String(USD_DIVISOR).replace('.', '[.,]')}\\s*$`
@@ -79,10 +79,53 @@ export function esPaginaWebSinDatos(arrayBuffer) {
 
 // ── El Tabulado de Axton ─────────────────────────────────────────────────────
 
-/** `readTabAxton` con el corte del .xls web de Axton antes de intentar leerlo. */
+/**
+ * `readTabAxton` con el corte del .xls web de Axton antes de intentar leerlo, y
+ * un dato más que el GTN necesita y el lector no da: **si las columnas que no
+ * son conceptos traen importes**. El lector separa a un costado lo que no puede
+ * atribuir a un código (`columnasSinClasificar`) y lo que saltea por ser parte
+ * del export (`columnasIgnoradas`), pero no dice si tienen plata adentro. Para
+ * el GTN eso es la diferencia entre "Salario Familiar vacío, como siempre" y "un
+ * concepto `880027 Contribucion…` sin el guion, que el GTN perdería sin que nada
+ * lo frene". Lo decide `columnasNoConceptoGtn()` (js/controls/gtnGsmaConfig.js).
+ */
 export function readTabuladoAxtonGtn(arrayBuffer) {
   if (esPaginaWebSinDatos(arrayBuffer)) throw new Error(ERROR_XLS_WEB_AXTON);
-  return readTabAxton(arrayBuffer);
+  const leido = readTabAxton(arrayBuffer);
+  const m = leido.parseMetadata;
+  m.columnasNoConcepto = contarImportesNoConcepto(arrayBuffer, m);
+  return leido;
+}
+
+/**
+ * Por cada columna que el lector dejó afuera de los conceptos: cuántas celdas de
+ * empleado traen un importe distinto de cero, y cuánto suman. Mira sólo las
+ * filas que el lector leyó como empleados (ni el TOTAL GENERAL, ni lo de abajo
+ * del total, ni las filas sin legajo, que ya salen como aviso propio).
+ */
+function contarImportesNoConcepto(arrayBuffer, m) {
+  const columnas = [
+    ...(m.columnasSinClasificar || []).map(c => ({ ...c, tipo: 'sinClasificar' })),
+    ...(m.columnasIgnoradas || []).map(c => ({ ...c, tipo: 'ignorada' })),
+  ];
+  if (columnas.length === 0) return [];
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheet = workbook.Sheets[m.sheetName];
+  const rows = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, blankrows: true }) : [];
+  const fuera = new Set([...(m.totalGeneralFilas || []), ...(m.filasPostTotal || []), ...(m.filasSinLegajo || [])]);
+  return columnas.map(c => {
+    let celdasConImporte = 0;
+    let importe = 0;
+    for (let f = (m.primeraFilaDatos || 1) - 1; f < rows.length; f++) {
+      if (fuera.has(f + 1)) continue;
+      const v = rows[f]?.[c.col];
+      // En una columna ignorada (sin subencabezado Cant/Imp) sólo cuenta un número
+      // de verdad: un texto con dígitos ("12/2026") no es un importe.
+      const n = typeof v === 'number' ? v : (c.tipo === 'sinClasificar' && typeof v === 'string' ? toNum(v) : null);
+      if (n !== null && n !== 0) { celdasConImporte++; importe += n; }
+    }
+    return { letra: c.letra, rotulo: c.rotulo || '', sub: c.sub || null, tipo: c.tipo, celdasConImporte, importe };
+  });
 }
 
 /** La vista previa del casillero del Tabulado, con el mismo corte. */

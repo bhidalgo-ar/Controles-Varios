@@ -105,14 +105,18 @@ function columnaValida(columna) {
 
 /**
  * La asignación que manda para un código: la del cliente si la eligió, si no la
- * semilla, si no ninguna. Una columna guardada que el layout ya no tiene cuenta
- * como sin asignar (no se adivina a dónde se movió).
+ * semilla, si no ninguna.
+ *
+ * Una asignación guardada a una columna que el layout ya no tiene cuenta como
+ * SIN ASIGNAR — también en un código sembrado: volver a la semilla en silencio
+ * desharía una decisión del analista sin avisarle, y no se adivina a dónde se
+ * movió la columna. Frena y se vuelve a elegir.
  *
  * @returns {{ columna: string, origen: string, fecha?: string, nota?: string }|null}
  */
 export function asignacionDe(codigo, config) {
   const guardada = config?.asignaciones?.[codigo];
-  if (guardada && columnaValida(guardada.columna)) return guardada;
+  if (guardada) return columnaValida(guardada.columna) ? guardada : null;
   const semilla = semillas()[codigo];
   return semilla || null;
 }
@@ -182,6 +186,67 @@ export function asignar(config, codigo, columna, { fecha = hoyISO() } = {}) {
   return { ...(config || {}), asignaciones };
 }
 
+// ── Columnas del Tabulado que no son conceptos ──────────────────────────────
+//
+// El lector reconoce un concepto por su encabezado `código - nombre`. Lo que no
+// tiene esa forma queda a un costado y el GTN no lo suma. Eso está bien para las
+// columnas que el export trae siempre y no son conceptos (spec §3), pero NO para
+// un concepto cuyo encabezado vino sin el guion (`880027 Contribucion…`, o con
+// raya larga): ése es plata que el GTN perdería con el semáforo en verde.
+
+/** Las columnas del export que no son conceptos (spec §3), comparadas sin mayúsculas ni espacios de más. */
+const NO_CONCEPTOS_CONOCIDOS = new Set([
+  'legajo', 'apellido y nombre', 'cuil', 'f.r.p.', 'recibo', 'mov.', 'mov', 'bruto', 'retenciones',
+  'salario familiar', 'exento', 'neto', 'total -', 'total', 'lsd', 'liquidacion', 'liquidación',
+]);
+
+const claveRotulo = (s) => String(s ?? '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Clasifica las columnas que el lector dejó afuera de los conceptos:
+ *   · `frenan`  — empiezan con un código (dígitos) sin la forma `código - nombre`,
+ *                 o traen importes y no son una columna conocida del export: no se
+ *                 pueden asignar, y generar igual dejaría plata afuera del GTN;
+ *   · `avisan`  — una columna de importe conocida que NO es concepto (Salario
+ *                 Familiar) y este mes trae importes: no entra al GTN y se tiene
+ *                 que ver;
+ *   · `ok`      — las conocidas sin importes, y las propias del export que
+ *                 siempre traen números (TOTAL -, F.R.P., LSD).
+ *
+ * Usa `parseMetadata.columnasNoConcepto` (lo agrega el lector del GTN con los
+ * importes de cada columna). Si no está, mira las listas del lector sin saber
+ * si traen plata: frena igual la que empieza con un código, y una desconocida
+ * con subencabezado de importe (no se puede afirmar que venga vacía).
+ */
+export function columnasNoConceptoGtn(tabMeta) {
+  const columnas = tabMeta?.columnasNoConcepto || [
+    ...(tabMeta?.columnasSinClasificar || []).map(c => ({ ...c, tipo: 'sinClasificar', celdasConImporte: null })),
+    ...(tabMeta?.columnasIgnoradas || []).map(c => ({ ...c, tipo: 'ignorada', celdasConImporte: null })),
+  ];
+  const frenan = [], avisan = [], ok = [];
+  for (const c of columnas) {
+    const rotulo = c.rotulo || '';
+    const conocida = NO_CONCEPTOS_CONOCIDOS.has(claveRotulo(rotulo));
+    const conImporte = (c.celdasConImporte ?? 0) > 0;
+    const desconocidoSinDato = c.celdasConImporte === null && c.tipo === 'sinClasificar';
+    if (/^\s*\d/.test(rotulo)) {
+      frenan.push({ ...c, motivo: `La columna ${c.letra} "${rotulo}" empieza con un código pero no tiene el formato `
+        + '«código - nombre»: no se puede asignar a una columna del GTN. Revisá el export del Tabulado.' });
+    } else if (!conocida && (conImporte || desconocidoSinDato)) {
+      frenan.push({ ...c, motivo: `La columna ${c.letra} "${rotulo || '(sin encabezado)'}" trae importes y no es un concepto `
+        + 'con el formato «código - nombre»: no se puede asignar a una columna del GTN. Revisá el export del Tabulado.' });
+    } else if (conocida && conImporte && c.tipo === 'sinClasificar') {
+      // Una columna de importe (con subencabezado Imp/Cant) que no es concepto,
+      // como Salario Familiar. Las columnas propias del export que siempre traen
+      // números (TOTAL -, F.R.P., LSD) son `ignorada` y no avisan.
+      avisan.push(c);
+    } else {
+      ok.push(c);
+    }
+  }
+  return { frenan, avisan, ok };
+}
+
 /** El tipo de cambio como número válido (> 0), o `null`. */
 export function tipoCambioValido(v) {
   const n = toNum(v);
@@ -192,13 +257,14 @@ export function tipoCambioValido(v) {
  * Lo que frena la corrida. Lo usan el gate del Paso 2 (con los motivos en
  * pantalla) y `run()` (que devuelve `{ error }` si igual le llega).
  *
- * @returns {{ sinAsignar: { codigo: string, nombre: string }[], faltaTipoCambio: boolean }}
+ * @returns {{ sinAsignar: { codigo: string, nombre: string }[], columnasSinFormato: object[], faltaTipoCambio: boolean }}
  */
 export function pendientesGtnGsma({ tabMeta, config, tipoCambio }) {
   const sinAsignar = (tabMeta?.conceptos || [])
     .filter(c => estadoDe(asignacionDe(c.codigo, config)) === 'sin_asignar')
     .map(c => ({ codigo: c.codigo, nombre: c.nombre }));
-  return { sinAsignar, faltaTipoCambio: tipoCambioValido(tipoCambio) === null };
+  const columnasSinFormato = tabMeta ? columnasNoConceptoGtn(tabMeta).frenan : [];
+  return { sinAsignar, columnasSinFormato, faltaTipoCambio: tipoCambioValido(tipoCambio) === null };
 }
 
 /**
@@ -207,8 +273,19 @@ export function pendientesGtnGsma({ tabMeta, config, tipoCambio }) {
  * mirar todavía: el casillero vacío ya frena por su cuenta.
  */
 export function motivosGtnGsma({ tabMeta, config, tipoCambio }) {
-  const { sinAsignar, faltaTipoCambio } = pendientesGtnGsma({ tabMeta, config, tipoCambio });
+  const { sinAsignar, columnasSinFormato, faltaTipoCambio } = pendientesGtnGsma({ tabMeta, config, tipoCambio });
   const out = [];
+  if (columnasSinFormato.length > 0) {
+    out.push({
+      kind: 'concepto',
+      label: columnasSinFormato.length === 1
+        ? `Columna ${columnasSinFormato[0].letra} sin el formato código - nombre`
+        : `${columnasSinFormato.length} columnas sin el formato código - nombre`,
+      detail: columnasSinFormato.map(c => `${c.letra} "${c.rotulo || '(sin encabezado)'}"`).join(', ')
+        + ': no se pueden asignar; revisá el export',
+      count: columnasSinFormato.length,
+    });
+  }
   if (sinAsignar.length > 0) {
     out.push({
       kind: 'concepto',

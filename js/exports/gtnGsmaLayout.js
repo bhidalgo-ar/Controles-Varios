@@ -373,7 +373,10 @@ export function buildGtnGsmaWorkbook(ExcelJS, gtn) {
     const sub = { ...head, font: font() };
     if (col.local !== null) setCell(5, col.key, col.local, sub); else setStyle(5, col.key, sub);
     if (col.element !== null) setCell(6, col.key, col.element, sub); else setStyle(6, col.key, sub);
-    if (col.gl !== null) setCell(7, col.key, col.gl, sub); else setStyle(7, col.key, sub);
+    // La cuenta contable es un número que se lee como código ("200100"), no un
+    // importe: en formato General, como en Meta4 — con `#,##0.00` saldría "200.100,00".
+    const gl = { ...sub, numFmt: 'General' };
+    if (col.gl !== null) setCell(7, col.key, col.gl, gl); else setStyle(7, col.key, gl);
     if (col.currency !== null) setCell(8, col.key, col.currency, { ...sub, numFmt: FMT_KR });
     else setStyle(8, col.key, sub);
   });

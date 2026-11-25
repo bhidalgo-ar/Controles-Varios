@@ -38,7 +38,7 @@ import {
   buildGtnGsmaWorkbook, gtnFileName,
 } from '../exports/gtnGsmaLayout.js';
 import {
-  FUERA_DEL_GTN, resolverConceptos, pendientesGtnGsma, tipoCambioValido, nombreColumna,
+  FUERA_DEL_GTN, resolverConceptos, pendientesGtnGsma, tipoCambioValido, nombreColumna, columnasNoConceptoGtn,
 } from './gtnGsmaConfig.js';
 import {
   renderResumenDetalle, renderVerdict, renderTiles, renderIssues, renderChecks, diffCellHtml,
@@ -101,19 +101,26 @@ const contieneTodas = (grande, chica) => chica.length > 0 && chica.every(w => gr
  * palabras del nombre del GTN están en el nombre de Axton (sin tildes, sin
  * mayúsculas, en cualquier orden), el candidato es ÚNICO y ningún otro empleado
  * del GTN lo pide. Todo lo demás se lista, nada se elige por orden:
- *   · ninguno → 'no_vino' (si un empleado de Axton tiene todas sus palabras
- *     dentro del nombre del GTN, se anota como `parecido`: "el GTN trae una
- *     palabra de más" — se muestra, no se cruza);
+ *   · ninguno → 'no_vino'. Si el nombre del GTN trae una palabra de más (un
+ *     empleado de Axton sin cruzar tiene todas sus palabras dentro del nombre
+ *     del GTN), NO se cruza: si el par es único en los dos sentidos se anota
+ *     como `parecido` ("no cruzó — el GTN trae una palabra de más"); si el GTN
+ *     contiene a más de un empleado de Axton, o dos filas del GTN se parecen al
+ *     mismo empleado, la fila del GTN queda 'parecidoVarios' ("no cruzó, varios
+ *     candidatos") y el empleado de Axton como nuevo (`parecidoAmbiguo`);
  *   · varios candidatos → 'varios', con los candidatos;
  *   · dos filas del GTN con el mismo nombre → 'homonimo', las dos;
  *   · dos filas del GTN que piden al mismo empleado de Axton → 'conflicto'.
  *
  * @param {{nombre: string}[]} gtnRows   empleados del GTN anterior
  * @param {{nombre: string}[]} axtonEmps empleados del Tabulado (ya consolidados)
- * @returns {{ match: Map<number, number>, prevEstado: object[], parecidos: Map<number, number> }}
+ * @returns {{ match: Map<number, number>, prevEstado: object[], parecidos: Map<number, number>,
+ *             parecidoAmbiguo: Map<number, number[]> }}
  *   `match`: índice de Axton → índice del GTN. `prevEstado[i]`: { tipo,
- *   candidatos: number[] } de cada fila del GTN. `parecidos`: índice de Axton →
- *   índice del GTN con el que se parece sin cruzar.
+ *   candidatos: number[], parecidos: number[] } de cada fila del GTN.
+ *   `parecidos`: índice de Axton → índice del GTN con el que se parece (par
+ *   único). `parecidoAmbiguo`: índice de Axton → filas del GTN que se le parecen
+ *   sin que el par sea único.
  */
 export function cruzarPorNombre(gtnRows, axtonEmps) {
   const axSets = axtonEmps.map(e => new Set(palabrasDeNombre(e.nombre)));
@@ -148,16 +155,31 @@ export function cruzarPorNombre(gtnRows, axtonEmps) {
   }
 
   // "Una palabra de más": el GTN que no cruzó con nadie y que contiene todas las
-  // palabras de un único empleado de Axton que tampoco cruzó.
-  const parecidos = new Map();
+  // palabras de algún empleado de Axton que tampoco cruzó. Se decide mirando
+  // los dos sentidos a la vez, nunca por orden de aparición: el par es
+  // `parecido` sólo si la fila del GTN contiene a UN empleado y ese empleado
+  // está contenido en UNA fila del GTN.
   prevEstado.forEach((e, i) => {
+    e.parecidos = [];
     if (e.tipo !== 'no_vino' || prevPal[i].length === 0) return;
     const set = new Set(prevPal[i]);
-    const cand = axPal.map((pal, j) => (!match.has(j) && contieneTodas(set, pal) ? j : -1)).filter(j => j >= 0);
-    if (cand.length === 1 && ![...parecidos.values()].includes(i) && !parecidos.has(cand[0])) parecidos.set(cand[0], i);
+    e.parecidos = axPal.map((pal, j) => (!match.has(j) && contieneTodas(set, pal) ? j : -1)).filter(j => j >= 0);
+  });
+  const filasQueSeParecen = new Map(); // Axton → filas del GTN que lo contienen
+  prevEstado.forEach((e, i) => e.parecidos.forEach(j => filasQueSeParecen.set(j, [...(filasQueSeParecen.get(j) || []), i])));
+  const parecidos = new Map();
+  const parecidoAmbiguo = new Map();
+  prevEstado.forEach((e, i) => {
+    if (e.parecidos.length === 0) return;
+    if (e.parecidos.length === 1 && filasQueSeParecen.get(e.parecidos[0]).length === 1) {
+      parecidos.set(e.parecidos[0], i);
+      return;
+    }
+    e.tipo = 'parecidoVarios';
+    e.parecidos.forEach(j => parecidoAmbiguo.set(j, [...(parecidoAmbiguo.get(j) || []), i]));
   });
 
-  return { match, prevEstado, parecidos };
+  return { match, prevEstado, parecidos, parecidoAmbiguo };
 }
 
 // ── run() ────────────────────────────────────────────────────────────────────
@@ -183,7 +205,13 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
 
   // La defensa del gate: un concepto sin asignar NUNCA se pierde sin aviso, ni
   // aunque la corrida llegue hasta acá por otro camino.
-  const { sinAsignar, faltaTipoCambio } = pendientesGtnGsma({ tabMeta, config, tipoCambio: mapping.gtnTipoCambio });
+  const { sinAsignar, columnasSinFormato, faltaTipoCambio } =
+    pendientesGtnGsma({ tabMeta, config, tipoCambio: mapping.gtnTipoCambio });
+  if (columnasSinFormato.length > 0) {
+    return {
+      error: `${columnasSinFormato.map(c => c.motivo).join(' ')} Sin eso, su importe no entraría al GTN.`,
+    };
+  }
   if (sinAsignar.length > 0) {
     return {
       error: `${sinAsignar.length === 1 ? 'Hay un concepto' : `Hay ${sinAsignar.length} conceptos`} del Tabulado sin asignar `
@@ -238,7 +266,7 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
   }
 
   // ── Cruce con el GTN anterior ──────────────────────────────────────────────
-  const { match, prevEstado, parecidos } = cruzarPorNombre(prevRows, empleadosAx);
+  const { match, prevEstado, parecidos, parecidoAmbiguo } = cruzarPorNombre(prevRows, empleadosAx);
   const prevDe = new Map([...match].map(([j, i]) => [j, prevRows[i]]));
 
   // Orden del GTN nuevo: los que siguen, en el orden del GTN anterior; después
@@ -271,14 +299,21 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
       const parecidoIdx = parecidos.get(j);
       const parecido = parecidoIdx !== undefined ? prevRows[parecidoIdx] : null;
       const ambiguo = prevEstado.some(e => ['varios', 'homonimo', 'conflicto'].includes(e.tipo) && e.candidatos.includes(j));
-      const nota = parecido
+      const parecidoA = (parecidoAmbiguo.get(j) || []).map(i => prevRows[i].nombre);
+      const nota = parecidoA.length
+        ? `REVISAR: no cruzó por nombre. En el GTN anterior se parece a ${parecidoA.join(' / ')}, pero no es un par único. Completar Employee Number, Cost Centre, Location Code y el sueldo en USD.`
+        : parecido
         ? `REVISAR: no cruzó por nombre con el GTN anterior (allá figura como ${parecido.nombre}). Completar Employee Number, Cost Centre, Location Code y el sueldo en USD.`
         : ambiguo
           ? 'REVISAR: el nombre coincide con más de una fila del GTN anterior y no se cruzó. Completar Employee Number, Cost Centre, Location Code y el sueldo en USD.'
           : 'REVISAR: empleado nuevo en el Tabulado de Axton, no estaba en el GTN anterior. Completar Employee Number, Cost Centre, Location Code y el sueldo en USD (fórmula importe anual / 13,3).';
       ['employeeNumber', 'costCentre', 'locationCode', 'monthlySalaryUsd'].forEach(c => marcar(c, nota));
       tipos.push(parecido || ambiguo ? 'noCruzo' : 'nuevo');
-      avisos.push(parecido
+      avisos.push(parecidoA.length
+        ? { tipo: 'nuevo', sev: 'hi', who: ax.nombre, what: 'sin Employee Number: no cruzó con el GTN anterior por nombre.',
+          why: `Se parece a ${parecidoA.join(' / ')} del GTN anterior (palabra de más), con más de un candidato: no se elige uno. `
+            + 'Completá Employee Number, Cost Centre, Location Code y sueldo USD en el Excel (quedan en amarillo).' }
+        : parecido
         ? { tipo: 'noCruzo', sev: 'hi', who: ax.nombre, what: 'no cruzó con el GTN anterior por nombre.',
           why: `El GTN trae una palabra de más (${parecido.nombre}). Quedó sin Employee Number: completalo a mano en el Excel (las celdas quedan en amarillo).` }
         : ambiguo
@@ -348,6 +383,11 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
       return { resultado: 'noCruzo', axton: e.nombreAxton, gtn: p.nombre, employeeNumber: null,
         nota: `el GTN trae una palabra de más — revisá (Employee Number ${p.employeeNumber ?? '—'} en el GTN anterior)` };
     }
+    const parecidoA = (parecidoAmbiguo.get(j) || []).map(i => prevRows[i].nombre);
+    if (parecidoA.length) {
+      return { resultado: 'nuevo', axton: e.nombreAxton, gtn: null, employeeNumber: null,
+        nota: `se parece a ${parecidoA.join(' / ')} del GTN anterior, sin un par único — no se cruzó` };
+    }
     const amb = prevEstado.map((pe, i) => ({ pe, i }))
       .filter(({ pe }) => ['varios', 'homonimo', 'conflicto'].includes(pe.tipo) && pe.candidatos.includes(j));
     if (amb.length) {
@@ -369,7 +409,12 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
         why: 'Si es una baja, está bien así.' });
       return;
     }
-    const nota = pe.tipo === 'homonimo'
+    const parecidoNombres = (pe.parecidos || []).map(j => empleadosAx[j].nombre);
+    const nota = pe.tipo === 'parecidoVarios'
+      ? (pe.parecidos.length > 1
+        ? `el GTN trae una palabra de más y se parece a más de un empleado del Tabulado (${parecidoNombres.join(', ')}): no se cruzó`
+        : `el GTN trae una palabra de más y otra fila del GTN anterior se parece al mismo empleado del Tabulado (${parecidoNombres.join(', ')}): no se cruzó ninguna`)
+      : pe.tipo === 'homonimo'
       ? 'hay otra fila del GTN anterior con el mismo nombre: no se cruzó ninguna de las dos'
       : pe.tipo === 'conflicto'
         ? `otra fila del GTN anterior pide al mismo empleado de Axton (${candidatos.join(', ')}): no se cruzó ninguna`
@@ -402,8 +447,30 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
   if (prevMeta.periodo && esperadoPrev && prevMeta.periodo !== esperadoPrev) {
     generales.push(`El GTN anterior es de ${periodoAR(prevMeta.periodo)} y se esperaba el de ${periodoAR(esperadoPrev)}: revisá que sea el último que se mandó.`);
   }
-  for (const a of prevMeta.avisos || []) generales.push(a);
+  for (const a of prevMeta.avisos || []) generales.push(`GTN anterior: ${a}`);
+  // Los avisos del lector del Tabulado viajan, como en N2 (hojas que no se
+  // leyeron, filas sin legajo, conceptos duplicados, sumas que no cierran…),
+  // salvo tres que acá se dicen con más precisión: "sólo importes" (el GTN no
+  // usa cantidades), las columnas que no se pudieron atribuir (las clasifica
+  // `columnasNoConceptoGtn`: frenan o avisan según traigan plata) y la falta de
+  // TOTAL GENERAL (aviso propio, abajo).
+  const REEMPLAZADOS = [/sólo con importes/i, /no se pudo atribuir|no se pudieron atribuir/i, /No encontré la fila TOTAL GENERAL/i];
+  for (const a of tabMeta.avisos || []) {
+    if (!REEMPLAZADOS.some(re => re.test(a))) generales.push(`Tabulado: ${a}`);
+  }
   for (const g of generales) avisos.push({ tipo: 'general', sev: 'lo', who: 'Archivos', what: g });
+  if (!tg) {
+    avisos.push({ tipo: 'totalGeneral', sev: 'hi', who: 'Tabulado',
+      what: 'El Tabulado no trae la fila TOTAL GENERAL: no se pudo controlar que se hayan leído todos los importes.',
+      why: 'Revisá que sea el export completo del Resumen de Liquidacion.' });
+  }
+  const noConcepto = columnasNoConceptoGtn(tabMeta);
+  for (const c of noConcepto.avisan) {
+    avisos.push({ tipo: 'noConcepto', sev: 'hi', who: `Columna ${c.letra}`,
+      what: `"${c.rotulo}" trae importes este mes (${c.celdasConImporte} ${c.celdasConImporte === 1 ? 'empleado' : 'empleados'}, `
+        + `${fmt(c.importe)}) y no es un concepto: no entra al GTN.`,
+      why: 'Revisá si corresponde que esté en el GTN; si es así, tiene que venir como concepto con su código.' });
+  }
 
   // ── Totales y conteos ──────────────────────────────────────────────────────
   const totalDe = (key) => sumaNullable(empleados.map(e => e[key]));
@@ -445,7 +512,8 @@ export function runGtnGsma(primaryRows, _tabRows, mapping = {}) {
     totales,
     tabLectura: {
       liquidaciones: tabRows.length,
-      sinClasificar: (tabMeta.columnasSinClasificar || []).map(c => `${c.letra} "${c.rotulo || '(sin encabezado)'}"`),
+      noConceptoOk: noConcepto.ok.map(c => `${c.letra} "${c.rotulo || '(sin encabezado)'}"`),
+      noConceptoConImporte: noConcepto.avisan.map(c => `${c.letra} "${c.rotulo}"`),
       totalGeneral: !!tg,
     },
     conteos: {
@@ -509,10 +577,19 @@ export function summarizeGtnGsma(results) {
   if (c.consolidados) insights.push({ type: 'info', label: 'empleados con más de una liquidación (se sumaron)', value: c.consolidados });
 
   const peor = conDif.slice().sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia))[0];
+  // Tres grupos, como en la pantalla de resultados: cierran, no cierran, y sin
+  // comparar (sin ER Net Paid). "Cierra en los N" sólo si no falta ninguno.
+  const sinComparar = results.empleados.filter(e => e.diferencia === null).length;
+  const cierran = c.empleados - conDif.length - sinComparar;
+  const partes = [
+    `el neto cierra con ER Net Paid en ${cierran} de ${c.empleados} empleado${c.empleados === 1 ? '' : 's'}`,
+    conDif.length ? `${conDif.length} no cierra${conDif.length === 1 ? '' : 'n'}` : null,
+    sinComparar ? `${sinComparar} sin comparar (sin ER Net Paid)` : null,
+  ].filter(Boolean);
   return {
-    status: conDif.length ? 'warning' : 'success',
-    headline: conDif.length
-      ? `GTN ${periodoAR(results.period)} generado: ${conDif.length} de ${c.empleados} empleado${c.empleados === 1 ? '' : 's'} con el neto que no cierra contra ER Net Paid`
+    status: conDif.length || sinComparar ? 'warning' : 'success',
+    headline: conDif.length || sinComparar
+      ? `GTN ${periodoAR(results.period)} generado: ${partes.join(' · ')}`
       : `GTN ${periodoAR(results.period)} generado: el neto cierra con ER Net Paid en los ${c.empleados} empleados`,
     insights,
     unit: 'legajo',
@@ -595,10 +672,11 @@ function renderResumenTab(panel, results) {
   const avisos = results.avisos;
 
   renderVerdict(panel, {
-    tone: conDif.length ? 'warn' : 'ok',
-    title: conDif.length
+    tone: conDif.length || c.sinErNetPaid ? 'warn' : 'ok',
+    title: (conDif.length
       ? `El GTN de ${periodoAR(results.period)} está listo, pero ${conDif.length} empleado${conDif.length === 1 ? '' : 's'} no cierra${conDif.length === 1 ? '' : 'n'} por $ ${fmt(t.diferencia)}`
-      : `El GTN de ${periodoAR(results.period)} está listo: el neto cierra con ER Net Paid en ${cierran} de ${c.empleados} empleados`,
+      : `El GTN de ${periodoAR(results.period)} está listo: el neto cierra con ER Net Paid en ${cierran} de ${c.empleados} empleados`)
+      + (c.sinErNetPaid ? ` · ${c.sinErNetPaid} sin comparar (sin ER Net Paid)` : ''),
     body: `${esc(results.fileName)} · ${avisos.length ? `<strong>${avisos.length} aviso${avisos.length === 1 ? '' : 's'}</strong> para revisar antes de mandarlo (abajo).` : 'Sin avisos.'} `
       + 'El color dice sólo si el neto cierra; los avisos no lo cambian.',
   });
@@ -635,6 +713,7 @@ function renderResumenTab(panel, results) {
     varios: '<span class="badge badge--danger">Varios candidatos</span>',
     homonimo: '<span class="badge badge--danger">Homónimo</span>',
     conflicto: '<span class="badge badge--danger">Conflicto</span>',
+    parecidoVarios: '<span class="badge badge--danger">No cruzó (varios candidatos)</span>',
   };
   cruceHost.innerHTML = `
     <div class="gtn-asig__scroll">
@@ -654,7 +733,7 @@ function renderResumenTab(panel, results) {
 
   const noCierran = results.conceptos.filter(k => results.checks[k.codigo]?.cierra === false);
   const items = [
-    { ok: noCierran.length === 0, label: 'Cada concepto suma igual que el TOTAL GENERAL del Tabulado',
+    { ok: results.tabLectura.totalGeneral && noCierran.length === 0, label: 'Cada concepto suma igual que el TOTAL GENERAL del Tabulado',
       detail: results.tabLectura.totalGeneral
         ? (noCierran.length ? `no cierran: ${noCierran.map(k => k.codigo).join(', ')}` : `${results.conceptos.length} conceptos`)
         : 'el Tabulado no trae TOTAL GENERAL' },
@@ -667,9 +746,14 @@ function renderResumenTab(panel, results) {
     { ok: true, label: `${c.fuera} concepto${c.fuera === 1 ? '' : 's'} fuera del GTN, a propósito`,
       detail: results.conceptos.filter(k => k.columna === FUERA_DEL_GTN).map(k => k.codigo).join(', ') || 'ninguno' },
   ];
-  if (results.tabLectura.sinClasificar.length) {
-    items.push({ ok: true, label: 'Columnas del Tabulado que no son conceptos y no entran al GTN',
-      detail: results.tabLectura.sinClasificar.join(', ') });
+  const lect = results.tabLectura;
+  if (lect.noConceptoConImporte.length) {
+    items.push({ ok: false, label: 'Columnas del Tabulado que no son conceptos y traen importes: no entran al GTN',
+      detail: lect.noConceptoConImporte.join(', ') });
+  }
+  if (lect.noConceptoOk.length) {
+    items.push({ ok: true, label: 'Columnas del Tabulado que no son conceptos (sin importes que falten en el GTN)',
+      detail: lect.noConceptoOk.join(', ') });
   }
   renderChecks(panel, { heading: 'Chequeos de lectura', items });
 }

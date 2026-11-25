@@ -4247,6 +4247,11 @@ pregunta abierta a Gaby (ver `ESTADO.md`).
   la migración y nunca se vieron en un Tabulado de Axton— **no se siembran**: cuando aparecen salen "sin asignar". La sugerencia
   del Manual se muestra al lado y **no se aplica**.
 - **Un concepto sin asignar frena:** no deja ejecutar ni generar el GTN. `run()` además devuelve error si le llega uno.
+- **También frena una columna con forma de concepto sin `código - nombre`** (empieza con dígitos, o trae importes y no es
+  una columna conocida del export): no se puede asignar, y generar igual dejaría su importe afuera con el semáforo en
+  verde. Salario Familiar con importe no frena: avisa. (Auditoría del 2026-11-25.)
+- **Una asignación guardada a una columna que el layout ya no tiene queda sin asignar**, también en un código sembrado:
+  volver a la semilla en silencio desharía una decisión del analista.
 
 **Descartado:**
 - Aplicar los ASUMIDO como en el prototipo: un código mal asignado suma importe en la columna equivocada y el neto igual
@@ -4261,7 +4266,10 @@ pregunta abierta a Gaby (ver `ESTADO.md`).
 
 **Decisión:** se cruza por nombre (todas las palabras del nombre del GTN están en el de Axton, sin tildes ni mayúsculas ni orden).
 Sin candidato → empleado nuevo / "no vino"; más de un candidato, homónimos o dos filas que piden al mismo empleado → no se cruza
-y se lista todo. Si el GTN trae una palabra de más, no cruza y se avisa. El cruce se muestra completo en resultados.
+y se lista todo. Si el GTN trae una palabra de más, no cruza y se avisa; si ese parecido no es un par único (el GTN
+contiene a dos empleados de Axton, o dos filas del GTN se parecen al mismo), las filas del GTN salen "no cruzó (varios
+candidatos)" y el empleado de Axton como nuevo — nunca se resuelve por orden de aparición. El cruce se muestra completo
+en resultados.
 
 **Descartado:** una tabla legajo de Axton ↔ Employee Number guardada como configuración. La config del cliente viaja en el seed,
 que se commitea: metería identificadores de empleados en el repo. Queda como deuda si un caso real falla.

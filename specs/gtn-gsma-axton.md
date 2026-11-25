@@ -55,6 +55,16 @@ Las columnas del Tabulado que no son conceptos (`Legajo`, `Apellido y Nombre`, `
 `Mov.`, `Bruto`, `Retenciones`, `Salario Familiar`, `Exento`, `Neto`, `TOTAL -`, `LSD`, `liquidacion`) no se
 listan. El concepto se identifica **por código** (prefijo del encabezado), nunca por nombre.
 
+Una columna que **empieza con un código pero no tiene la forma `código - nombre`** (`880027 Contribucion…`, o con
+raya larga `880027 – …`), o una columna que trae importes y no es ni concepto ni una de las de arriba, **frena**
+igual que un concepto sin asignar: "columna X sin el formato código - nombre: no se puede asignar; revisá el
+export". Si `Salario Familiar` (u otra columna de importe que no es concepto) trae importes, sale como aviso y
+su chequeo de lectura no queda en verde. Las columnas propias del export que siempre traen números (`TOTAL -`,
+`F.R.P.`, `LSD`) no avisan.
+
+Una asignación guardada a una columna del GTN que el layout ya no tiene cuenta como **sin asignar** (frena),
+también en un código sembrado: no se vuelve a la semilla en silencio.
+
 **Semillas confirmadas** (18 + 2 fuera del GTN; las 20 aparecen en el Tabulado 11/2026):
 
 | Columna GTN | Códigos Axton |
@@ -154,7 +164,9 @@ que ser único y no estar tomado. Nada se resuelve en silencio:
   se cruza, se listan (construido: no se resuelve por orden de aparición);
 - el GTN trae una palabra de más que Axton (todas las palabras de Axton están en el GTN, pero no al revés) → NO
   cruza; se muestra en una línea como "no cruzó — el GTN trae una palabra de más" para que el analista lo
-  complete a mano;
+  complete a mano. Eso vale sólo si el par es único en los dos sentidos; si el GTN contiene a más de un empleado
+  de Axton, o dos filas del GTN se parecen al mismo empleado, las filas del GTN salen "no cruzó (varios
+  candidatos)" y el empleado de Axton como nuevo, sin Employee Number. Nunca depende del orden de las filas;
 - el cruce por nombre se muestra completo en resultados (nombre Axton ↔ nombre GTN ↔ Employee Number).
 
 Se descartó una tabla legajo Axton ↔ Employee Number por ahora: la configuración del cliente viaja en el seed,
@@ -163,14 +175,17 @@ que se commitea, y metería identificadores de empleados en el repo. Queda como 
 ## 6. Qué frena y qué avisa
 
 **Frena (no deja ejecutar ni generar):** concepto del Tabulado sin asignar; falta el tipo de cambio; el
-Tabulado es el `.xls` web; el GTN anterior no tiene "Employee Number" o alguna de sus columnas. Además
-`run()` devuelve `{ error }` si le llega un concepto sin asignar (defensa: nunca un concepto se pierde sin
-aviso).
+Tabulado es el `.xls` web; el GTN anterior no tiene "Employee Number" o alguna de sus columnas; una columna
+del Tabulado sin el formato `código - nombre` (§3). Además `run()` devuelve `{ error }` si le llega un concepto
+sin asignar o una columna así (defensa: nunca un importe se pierde sin aviso).
 
 **Avisa (genera igual, lo lista para revisar):** empleado nuevo sin Employee Number; nombre que no cruzó o
 cruzó con más de uno; empleado del GTN anterior que no vino; Recognition Award o Business Referrral con
 importe; ER Net Paid faltante en un empleado (no se completa con 0 en silencio); un concepto que no cierra
-con el TOTAL GENERAL; GTN anterior cuyo sueldo USD no es la fórmula `/13.3`.
+con el TOTAL GENERAL; el Tabulado sin TOTAL GENERAL; Salario Familiar con importe; GTN anterior cuyo sueldo
+USD no es la fórmula `/13.3`; los avisos del lector del Tabulado (hojas no leídas, filas sin legajo, conceptos
+duplicados), como en N2. Si un empleado no tiene ER Net Paid, el titular del control cuenta aparte cuántos
+cierran, cuántos no y cuántos quedaron sin comparar.
 
 ## 7. Pantalla (mockup aprobado 2026-11-25)
 
