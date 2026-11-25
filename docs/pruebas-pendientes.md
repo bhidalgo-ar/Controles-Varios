@@ -182,6 +182,26 @@ que nadie hizo es usarlo con un mes real ni mirar la pantalla** (se armó sin mo
 
 Los archivos reales hay que subirlos a mano a la sesión: el mail los deja vacíos y SharePoint no los entrega.
 
+## 2 ter · GTN GSMA desde el Tabulado de Axton — nuevo al 2026-11-25
+
+**Qué es.** Un control nuevo, sólo del cliente GSMA, que arma el Excel Gross to Net que armaba Meta4 (D-104 a D-108). Se
+verificó con archivos reales de 11/2026 contra el GTN de Meta4; **nadie lo abrió todavía en pantalla ni lo usó una analista**.
+
+| Qué mirar | Cómo se ve si está bien | Si está mal |
+|---|---|---|
+| Abrir el control con el cliente GSMA y cargar el Tabulado de Axton 11/2026 (`Payroll / Empresas / Axton - Migraciones / 12 - GSMA / Paralelo Noviembre / GSMA AXTON tabulado 11-2026.xlsx`) y el GTN de Meta4 10/2026 (`Payroll / Empresas / GSMA / Liquidaciones / 2026 / 10 / 5 2026 10 GSMA Argentina GTN.xls`), tipo de cambio 1570 | El tipo de cambio arranca vacío; sin él, "Siguiente →" queda deshabilitado y la barra dice qué falta. Resultados: 11 empleados, Gross 143.597.186,80, Net 96.479.096,94 = ER Net Paid, semáforo verde | Otro conteo o un neto que no cierra: pasar el caso |
+| Bajar el GTN y compararlo contra el de Meta4 11/2026 | Misma estructura y fórmulas, con Recognition Award como única columna nueva. Diferencias sólo de importe: Variable Pay +27,75, SS 20,4% +5,99, HI 6% +1,89, Accident +0,46 | Cualquier otra diferencia, o celdas que Meta4 trae con un espacio y el generado deja vacías (ya conocido, ver abajo) |
+| La tabla de asignaciones (Paso 2 y resultados), vista por código y agrupada por columna, con los filtros | Los 20 códigos del Tabulado aparecen asignados o "Fuera del GTN"; el subtotal por columna es coherente con el GTN | Un código en la columna equivocada |
+| Probar que frena: agregar un concepto sin asignar | "Siguiente →" deshabilitado, la barra dice "Falta: 1 concepto", el panel lateral lo lista; al asignarlo se habilita sin recargar | Si deja ejecutar con un concepto sin asignar, es un bug |
+| Mirarlo en los tres temas | Legible en sobrio, intenso y oscuro | Texto o chips ilegibles |
+
+**Lo que espera una decisión externa.** La detracción fija de −2.040: ¿sigue igual con Axton? (pregunta a Gaby). Las diferencias
+de contribuciones de Axton vs Meta4 las confirma Gaby.
+
+**Detalle:** D-104 a D-108, `specs/gtn-gsma-axton.md`.
+
+---
+
 ## 3 · Monto de diferencia (el panel "Umbrales") — afecta a los 19 controles
 
 **Qué es.** El número que escribís en "Umbrales" y que significa "de acá para abajo no me interesa".

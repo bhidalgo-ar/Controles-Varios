@@ -1,6 +1,6 @@
 # Spec — GTN GSMA desde Tabulado Axton
 
-> Estado: **en construcción** (2026-11-25). Mockup aprobado por Willy el 2026-11-25. Origen: prototipo HTML
+> Estado: **construido y verificado contra archivos reales de 11/2026; falta que lo use una analista** (2026-11-25). Mockup aprobado por Willy el 2026-11-25. Origen: prototipo HTML
 > standalone de Gaby (`gtn-gsma-axton.html`, Claude Chat, noviembre 2026) y su ficha de traspaso. El HTML es
 > referencia de comportamiento, no código: lo construido sigue las reglas del repo y las diferencias están en
 > el §9.

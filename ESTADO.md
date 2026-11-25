@@ -7,6 +7,12 @@
 > Creado por el documentalista (2026-08-18) a partir de `ROADMAP.md`, specs y los últimos commits — lo
 > marcado con `?` es deducido y falta que Willy lo confirme.
 
+## GTN GSMA (Axton) — construido y verificado contra archivos reales de 11/2026; falta que lo use una analista
+- Qué es: control `gtn_gsma` (sólo GSMA, Generar Reporte) que arma el Excel Gross to Net desde el Tabulado de Axton y el GTN del mes anterior, con la columna nueva Recognition Award, y controla Net Pay contra ER Net Paid.
+- Punto: verificado con el Tabulado de Axton 11/2026 y el GTN de Meta4 10/2026: 11 empleados, Gross 143.597.186,80, Net 96.479.096,94 = ER Net Paid. Celda por celda contra el GTN de Meta4 11/2026, las únicas diferencias son de Axton vs Meta4: Variable Pay +27,75, SS 20,4% +5,99, HI 6% +1,89, Accident +0,46.
+- Próximo paso: que una analista lo use con el mes real. Abierto: la detracción fija de −2.040, ¿sigue con Axton? (pregunta a Gaby); celdas que Meta4 escribe con un espacio y el generado deja vacías; las diferencias de contribuciones Axton vs Meta4 las confirma Gaby.
+- Detalle: `specs/gtn-gsma-axton.md`, D-104 a D-108, `docs/pruebas-pendientes.md` §2 ter.
+
 ## Vista estándar de resultados — las ocho tandas hechas e integradas; falta que Willy mire las 21 pantallas
 - Qué es: que las 21 pantallas de resultados se vean iguales — tres solapas (`Resumen · Fichas · Planilla`), cinco chips de estado y el `⬇ Exportar ▾` siempre último. Sale del handoff de Netos y se generaliza a todos (D-074).
 - Punto: **las ocho tandas están hechas e integradas a `main` el 2026-08-21** (D-077 a D-087). La barra estándar quedó en los 21 controles, la planilla con bandas en 19 y la ficha en 10. Ningún cálculo ni conteo del semáforo se movió en ninguna. Al integrar siete tandas que corrieron en paralelo sin verse entre ellas hubo que unificar una pieza que dos tandas crearon por separado con el mismo nombre (`js/ui/planillaPanel.js`) y una serie de funciones duplicadas — todo eso, y la renumeración de las decisiones que chocaban, queda en **D-088**.
