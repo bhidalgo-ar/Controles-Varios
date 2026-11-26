@@ -595,6 +595,9 @@ export function summarizeGtnGsma(results) {
     unit: 'legajo',
     unitsTotal: c.empleados,
     unitsWithDiff: conDif.length,
+    // Si no se pudo comparar el neto de ningún empleado (ninguno trae ER Net
+    // Paid), el control no controló nada: no puede salir verde (D-107).
+    semaforoFloor: c.empleados > 0 && sinComparar === c.empleados ? 'warn' : null,
     diffTotalAmount: conDif.reduce((s, e) => s + Math.abs(e.diferencia), 0),
     worstCase: peor ? { legajo: peor.legajo, nombre: peor.nombre, diff: peor.diferencia } : null,
     contextNote: `${results.avisos.length} aviso${results.avisos.length === 1 ? '' : 's'} para revisar · tipo de cambio ${fmt(results.tipoCambio)}`,

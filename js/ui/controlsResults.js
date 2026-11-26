@@ -16,7 +16,7 @@
 
 import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
-import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { computeSemaforoStatus, semaforoTierOf, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { summarizeWithTolerance, renderResultsWithTolerance } from '../controls/tolerance.js';
 import { countUniqueLegajos }  from '../controls/consolidate.js';
 import { makeLegajoKey }       from '../utils/legajo.js';
@@ -162,11 +162,7 @@ export async function renderControlsResults(root, runId) {
       const summary = ctrl.summarize
         ? summarizeWithTolerance(ctrl, row.results)
         : { status: 'info', headline: '', insights: [] };
-      const tier = summary.status === 'error'
-        ? 'error'
-        : summary.unitsTotal == null
-          ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+      const tier = semaforoTierOf(summary, thresholdPct);
       return { row, ctrl, summary, tier };
     })
     .filter(Boolean)
@@ -373,11 +369,7 @@ async function getPrevTierByControlId(run, thresholdPct) {
     const ctrl = CONTROL_REGISTRY[row.controlId];
     if (!ctrl?.summarize) continue;
     const summary = summarizeWithTolerance(ctrl, row.results);
-    const tier = summary.status === 'error'
-      ? 'error'
-      : summary.unitsTotal == null
-        ? 'info'
-        : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+    const tier = semaforoTierOf(summary, thresholdPct);
     prevTierByControlId[row.controlId] = tier;
   }
   return prevTierByControlId;
@@ -432,7 +424,7 @@ async function getHistoryByControlId(run, thresholdPct) {
       // omite para ese control (no entra en cero).
       if (summary?.status === 'error' || summary?.unitsTotal == null || !summary.unitsTotal) continue;
       const pctDiff = ((summary.unitsWithDiff || 0) / summary.unitsTotal) * 100;
-      const tier = computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+      const tier = semaforoTierOf(summary, thresholdPct);
       (out[row.controlId] ||= []).push({ period, pctDiff, tier });
     }
   }

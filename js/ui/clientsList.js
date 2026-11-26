@@ -7,7 +7,7 @@
 import { getClients, getInactiveClients, createClient, hideClient, unhideClient, deleteClient, getControlRuns, getControlRunResults, exportDbBackup, importDbBackup, getConfig } from '../db.js';
 import { showToast, showConfirm } from './toast.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
-import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { semaforoTierOf, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { summarizeWithTolerance } from '../controls/tolerance.js';
 import { periodToLabel, currentPeriod, previousPeriod, nextPeriod } from '../utils/dates.js';
 import { renderHelpPopover, CONTROL_HELP } from './helpPopover.js';
@@ -374,11 +374,7 @@ async function buildClientRowData(client, period, thresholdPct) {
       const ctrl = CONTROL_REGISTRY[row.controlId];
       if (!ctrl) return null;
       const summary = ctrl.summarize ? summarizeWithTolerance(ctrl, row.results) : { status: 'info' };
-      const tier = summary.status === 'error'
-        ? 'error'
-        : summary.unitsTotal == null
-          ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+      const tier = semaforoTierOf(summary, thresholdPct);
       return { ctrl, tier, unitsWithDiff: summary.unitsWithDiff || 0 };
     }).filter(Boolean);
 

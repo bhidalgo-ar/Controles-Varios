@@ -203,7 +203,7 @@ cierran, cuántos no y cuántos quedaron sin comparar.
   código que la alimenta y su importe, expandible; y "Por código"— (pedido de Willy en la revisión),
   avisos, cruce por nombre, chequeos de lectura, planilla por empleado, export.
 - **Semáforo:** unidad `legajo` (empleado); con diferencia = Net Pay ≠ ER Net Paid. Los avisos no cambian el
-  color.
+  color. Si ningún empleado trae ER Net Paid (no se comparó ningún neto), sale amarillo, no verde (Willy, 2026-11-26; D-107).
 - **Monto de diferencia:** 0,01 fijo, constante con nombre (tolerancia estructural: los dos lados salen del
   mismo archivo). Declarado con `ownTolerance`.
 - **Export:** primero "GTN para GSMA (.xlsx)"; después la planilla de control (.xlsx · CSV · Copiar).

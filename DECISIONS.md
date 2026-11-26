@@ -4290,6 +4290,12 @@ Tabulado, así que no es un criterio del analista y el "Monto de diferencia" del
 
 **Descartado:** semáforo amarillo con cualquier aviso (el prototipo): el color deja de decir si el neto cierra.
 
+**Agregado 2026-11-26 (Willy):** si **ningún** empleado trae ER Net Paid, no se comparó ningún neto y el semáforo sale
+**amarillo**, no verde: un control que no controló nada no sale aprobado. Lo declara el control con
+`summary.semaforoFloor: 'warn'`, y las pantallas pintan el color con `semaforoTierOf(summary, umbral)` de
+`js/controls/semaforo.js` (el mismo ternario que antes repetían cinco pantallas, más ese piso). Con al menos un empleado
+comparado, el color sigue saliendo sólo del neto.
+
 ## D-108 — Registry: campos `blockers(state)` y `perRun` en la config
 
 **Fecha:** 2026-11-25. **Decidió:** surge de D-105 y de pedir el tipo de cambio. **Por qué un campo del registry:** el
