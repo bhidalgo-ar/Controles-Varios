@@ -232,7 +232,13 @@ contra el GTN de Meta4 11/2026, con la columna Recognition Award como única dif
 
 ## 10. Abierto
 
-- **Detracción:** el −2.040 fijo ("Detracción art. 23 Ley 27.541") ¿sigue igual con Axton? No es el 880001
-  (que en 11/2026 suma 77.040,48). Pregunta para Gaby.
+- **Detracción:** el −2.040 fijo ("Detracción art. 23 Ley 27.541") queda fijo por ahora (Gaby, 2026-11-26). No es
+  el 880001 (que en 11/2026 suma 77.040,48).
+- **Celdas con un espacio:** Meta4 escribe " " en Days not worked, Excedencia, Referral Fee y algunas celdas debajo de
+  los totales; el generado las deja vacías. Gaby cree que da igual; falta que lo mire.
+- **Contribuciones:** las diferencias contra Meta4 (+5,99, +1,89, +0,46 en el total de 11/2026) son de Axton,
+  confirmado por Gaby el 2026-11-26.
+- **GTN del mes anterior obligatorio** (Willy, 2026-11-26): sin él, Employee Number, Cost Centre, Location Code y
+  sueldo USD saldrían vacíos para todos los empleados y habría que completarlos a mano cada mes.
 - El 13,3 del sueldo USD y el −2.040 quedan como constantes del layout de GSMA; si cambian, se cambian ahí.
 - GSMA figura con `sourceSystem: 'meta4'` en el seed; no afecta (el control se ofrece por cliente).

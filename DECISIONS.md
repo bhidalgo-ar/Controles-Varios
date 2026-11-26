@@ -4235,6 +4235,10 @@ cumplirlo y arrastra el nombre del autor.
 **Deuda declarada:** el 13,3 y la detracción de −2.040 son constantes del layout. Si la detracción sigue igual con Axton es una
 pregunta abierta a Gaby (ver `ESTADO.md`).
 
+**Agregado 2026-11-26 (Willy):** el GTN del mes anterior queda **obligatorio**. Se evaluó hacerlo opcional: las cuatro
+columnas que Axton no trae (Employee Number, Cost Centre, Location Code, sueldo USD) saldrían vacías y en amarillo para
+todos los empleados, y completarlas a mano todos los meses es donde se cuela un error en un informe que va al cliente.
+
 ## D-105 — GTN de GSMA: las asignaciones código de Axton → columna del GTN son configuración de GSMA; sólo se siembra lo confirmado y un concepto sin asignar frena
 
 **Fecha:** 2026-11-25. **Decidió:** Willy ("no pueden quedar conceptos sin asignar"). Cita D-035 y D-039.
