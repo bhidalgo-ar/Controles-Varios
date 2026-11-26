@@ -27,6 +27,29 @@ export function computeSemaforoStatus(unitsWithDiff, unitsTotal, thresholdPct = 
 }
 
 /**
+ * El color de un control a partir de su `summary` — la única forma en que una
+ * pantalla tiene que pintarlo (las cinco pantallas repetían este ternario).
+ *
+ *   - `status: 'error'` cortocircuita a 'error'; sin `unitsTotal` → 'info'.
+ *   - si no, `computeSemaforoStatus` sobre la unidad declarada.
+ *   - `summary.semaforoFloor: 'warn'` (opcional) impide el verde: lo declara el
+ *     control que no pudo comparar ninguna unidad (GTN de GSMA sin ER Net Paid
+ *     en ningún empleado, D-107). Un control que no controló nada no sale
+ *     aprobado; si ya había diferencias, el color no cambia.
+ *
+ * @param {object|null} summary
+ * @param {number} thresholdPct
+ * @returns {'ok'|'warn'|'error'|'info'}
+ */
+export function semaforoTierOf(summary, thresholdPct = DEFAULT_SEMAFORO_THRESHOLD_PCT) {
+  if (!summary) return 'info';
+  if (summary.status === 'error') return 'error';
+  if (summary.unitsTotal == null) return 'info';
+  const tier = computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+  return tier === 'ok' && summary.semaforoFloor === 'warn' ? 'warn' : tier;
+}
+
+/**
  * Recorre `rows` y calcula, para uno o más campos numéricos de diferencia por
  * fila, las 3 métricas que necesita el hero de resultados:
  *   - unitsWithDiff:   filas con al menos un campo fuera de tolerancia

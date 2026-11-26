@@ -470,6 +470,16 @@ assert('GTN anterior: una página web sin datos también corta con un mensaje cl
   const sDif2 = summarizeGtnGsma(correr([liq('1', 'SANGUINETTI JAVIER', 1000, { erDelta: 5 }), liq('2', 'ALBELLA GUSTAVO', 500, { sinEr: true })]));
   assert('summarize: cierran, no cierran y sin comparar, los tres', sDif2.headline.includes('0 de 2')
     && sDif2.headline.includes('1 no cierra') && sDif2.headline.includes('1 sin comparar'));
+
+  // Ningún empleado con ER Net Paid: no se comparó nada, el semáforo no puede
+  // salir verde (decisión de Willy, 2026-11-26). Con alguno comparado, el color
+  // sigue saliendo sólo del neto.
+  const { semaforoTierOf } = await import('./js/controls/semaforo.js');
+  const sNinguno = summarizeGtnGsma(correr([liq('1', 'SANGUINETTI JAVIER', 1000, { sinEr: true }), liq('2', 'ALBELLA GUSTAVO', 500, { sinEr: true })]));
+  assert('semáforo: ninguno comparado → amarillo, no verde', semaforoTierOf(sNinguno, 2) === 'warn');
+  assert('semáforo: uno sin ER y el resto cierra → verde (los avisos no pintan)', semaforoTierOf(s, 2) === 'ok');
+  assert('semáforo: todos cierran → verde', semaforoTierOf(summarizeGtnGsma(correr(rowsOk)), 2) === 'ok');
+  assert('semáforo: el piso no baja un rojo', semaforoTierOf({ status: 'warning', unitsTotal: 2, unitsWithDiff: 2, semaforoFloor: 'warn' }, 2) === 'error');
 }
 
 // ── Auditoría 4: avisos del lector y TOTAL GENERAL ──────────────────────────

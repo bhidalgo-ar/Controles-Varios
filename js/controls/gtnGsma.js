@@ -595,6 +595,9 @@ export function summarizeGtnGsma(results) {
     unit: 'legajo',
     unitsTotal: c.empleados,
     unitsWithDiff: conDif.length,
+    // Si no se pudo comparar el neto de ningún empleado (ninguno trae ER Net
+    // Paid), el control no controló nada: no puede salir verde (D-107).
+    semaforoFloor: c.empleados > 0 && sinComparar === c.empleados ? 'warn' : null,
     diffTotalAmount: conDif.reduce((s, e) => s + Math.abs(e.diferencia), 0),
     worstCase: peor ? { legajo: peor.legajo, nombre: peor.nombre, diff: peor.diferencia } : null,
     contextNote: `${results.avisos.length} aviso${results.avisos.length === 1 ? '' : 's'} para revisar · tipo de cambio ${fmt(results.tipoCambio)}`,
@@ -672,7 +675,9 @@ function renderResumenTab(panel, results) {
   const avisos = results.avisos;
 
   renderVerdict(panel, {
-    tone: conDif.length || c.sinErNetPaid ? 'warn' : 'ok',
+    // Mismo criterio que el semáforo (D-107): amarillo si algún neto no cierra o
+    // si no se pudo comparar ninguno; un empleado sin comparar solo es un aviso.
+    tone: conDif.length || (c.empleados > 0 && results.empleados.every(e => e.diferencia === null)) ? 'warn' : 'ok',
     title: (conDif.length
       ? `El GTN de ${periodoAR(results.period)} está listo, pero ${conDif.length} empleado${conDif.length === 1 ? '' : 's'} no cierra${conDif.length === 1 ? '' : 'n'} por $ ${fmt(t.diferencia)}`
       : `El GTN de ${periodoAR(results.period)} está listo: el neto cierra con ER Net Paid en ${cierran} de ${c.empleados} empleados`)

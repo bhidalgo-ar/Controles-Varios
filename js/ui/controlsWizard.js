@@ -32,7 +32,7 @@ import { tabFieldParts, necessityHelp, fieldBadgeHtml } from './fieldHelp.js';
 import { renderTabuladoAnalysis } from './tabuladoAnalysis.js';
 import { CONTROL_REGISTRY }        from '../controls/registry.js';
 import { controlAppliesToClient, controlOrigin } from '../controls/scope.js';
-import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { semaforoTierOf, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import {
   resolveClientTolerance, resolveControlTolerance, normalizeTolerance,
   formatTolerance, withTolerance, stampTolerance, summarizeWithTolerance,
@@ -2316,10 +2316,7 @@ async function executeControls(state, container, root) {
       // de resultados (computeSemaforoStatus sobre la unidad declarada) — no de
       // `summary.status`, que marca amarillo con una sola diferencia.
       u.summary = summarizeWithTolerance(ctrl, runResults[controlId]);
-      u.tier = !u.summary ? 'info'
-        : u.summary.status === 'error' ? 'error'
-        : u.summary.unitsTotal == null ? 'info'
-        : computeSemaforoStatus(u.summary.unitsWithDiff, u.summary.unitsTotal, thresholdPct);
+      u.tier = semaforoTierOf(u.summary, thresholdPct);
       u.ms     = performance.now() - tCtrl;
       u.status = 'done';
       paint();
@@ -2495,7 +2492,9 @@ function runCardBadge(u) {
   if (!u.summary || u.summary.unitsTotal == null) return null;
   if (u.summary.status === 'error') return { tone: 'error', text: 'no se pudo completar' };
   const n = u.summary.unitsWithDiff || 0;
-  if (n === 0) return { tone: 'ok', text: 'sin diferencias' };
+  // Sin diferencias pero en amarillo: el control no pudo comparar ninguna
+  // unidad (`semaforoFloor`, D-107) — "sin diferencias" en verde mentiría.
+  if (n === 0) return u.tier === 'warn' ? { tone: 'warn', text: 'sin comparar' } : { tone: 'ok', text: 'sin diferencias' };
   const unidad = runUnitPlural(u.summary.unit) || `${u.summary.unit || 'unidad'}s`;
   return {
     tone: u.tier === 'error' ? 'error' : 'warn',

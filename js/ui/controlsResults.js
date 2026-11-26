@@ -16,7 +16,7 @@
 
 import { getControlRun, updateControlRun, getClientByCode, getControlRunResults, getControlRunFiles, getControlRuns, getConfig } from '../db.js';
 import { CONTROL_REGISTRY } from '../controls/registry.js';
-import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { computeSemaforoStatus, semaforoTierOf, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { summarizeWithTolerance, renderResultsWithTolerance } from '../controls/tolerance.js';
 import { countUniqueLegajos }  from '../controls/consolidate.js';
 import { makeLegajoKey }       from '../utils/legajo.js';
@@ -162,11 +162,7 @@ export async function renderControlsResults(root, runId) {
       const summary = ctrl.summarize
         ? summarizeWithTolerance(ctrl, row.results)
         : { status: 'info', headline: '', insights: [] };
-      const tier = summary.status === 'error'
-        ? 'error'
-        : summary.unitsTotal == null
-          ? 'info'
-          : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+      const tier = semaforoTierOf(summary, thresholdPct);
       return { row, ctrl, summary, tier };
     })
     .filter(Boolean)
@@ -373,11 +369,7 @@ async function getPrevTierByControlId(run, thresholdPct) {
     const ctrl = CONTROL_REGISTRY[row.controlId];
     if (!ctrl?.summarize) continue;
     const summary = summarizeWithTolerance(ctrl, row.results);
-    const tier = summary.status === 'error'
-      ? 'error'
-      : summary.unitsTotal == null
-        ? 'info'
-        : computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+    const tier = semaforoTierOf(summary, thresholdPct);
     prevTierByControlId[row.controlId] = tier;
   }
   return prevTierByControlId;
@@ -432,7 +424,7 @@ async function getHistoryByControlId(run, thresholdPct) {
       // omite para ese control (no entra en cero).
       if (summary?.status === 'error' || summary?.unitsTotal == null || !summary.unitsTotal) continue;
       const pctDiff = ((summary.unitsWithDiff || 0) / summary.unitsTotal) * 100;
-      const tier = computeSemaforoStatus(summary.unitsWithDiff, summary.unitsTotal, thresholdPct);
+      const tier = semaforoTierOf(summary, thresholdPct);
       (out[row.controlId] ||= []).push({ period, pctDiff, tier });
     }
   }
@@ -1405,6 +1397,14 @@ function verdict3aSubline(ctx) {
       + `${esc(fmtParticipio('evaluad', total, mainGroup.unit))}: ninguna diferencia arriba de la tolerancia.`;
   }
 
+  // Amarillo sin ninguna diferencia: el control no pudo comparar ninguna unidad
+  // (`semaforoFloor`, D-107). El porcentaje sobre el umbral no explica nada acá;
+  // lo explica el titular del propio control.
+  if (nDiff === 0 && overallTier === 'warn') {
+    return `${esc(controlSummaries[0]?.summary?.headline || '')} `
+      + 'No se pudo comparar ninguna unidad: por eso no sale en verde.';
+  }
+
   const veces = thresholdPct > 0 ? Math.round(pct / thresholdPct) : null;
   const contraUmbral = veces !== null && veces >= 2
     ? ` El corte de rojo es ${fmtThreshold(thresholdPct)} % de los ${esc(unitNames(mainGroup.unit).many)}: `
@@ -1746,7 +1746,10 @@ function buildCtrlCardHtml(item, index, prevTierByControlId, reduceMotion, opts 
     const bits = [];
     bits.push(nDiff > 0
       ? `<strong>${esc(`${fmtInt(nDiff)} de ${fmtUnitCount(total, summary.unit)}`)}</strong>`
-      : esc(`${fmtUnitCount(total, summary.unit)} ${fmtParticipio('evaluad', total, summary.unit)}, sin diferencias`));
+      : tier === 'warn'
+        // Amarillo sin diferencias = no se pudo comparar ninguna (D-107).
+        ? esc(`${fmtUnitCount(total, summary.unit)}, ninguna se pudo comparar`)
+        : esc(`${fmtUnitCount(total, summary.unit)} ${fmtParticipio('evaluad', total, summary.unit)}, sin diferencias`));
     if (summary.diffTotalAmount > 0) bits.push(formatAmount(summary.diffTotalAmount));
     const note = summary.contextNote
       || (summary.worstCase ? `mayor: ${summary.worstCase.label} ($ ${formatAmount(summary.worstCase.amount)})` : null)

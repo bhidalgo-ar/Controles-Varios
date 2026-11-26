@@ -4250,9 +4250,9 @@ pregunta abierta a Gaby (ver `ESTADO.md`).
 - **También frena una columna con forma de concepto sin `código - nombre`** (empieza con dígitos, o trae importes y no es
   una columna conocida del export): no se puede asignar, y generar igual dejaría su importe afuera con el semáforo en
   verde. Salario Familiar con importe no frena: avisa. (Regla agregada al corregir la auditoría del 2026-11-25;
-  **falta que Willy la confirme**.)
+  confirmada por Willy el 2026-11-26.)
 - **Una asignación guardada a una columna que el layout ya no tiene queda sin asignar**, también en un código sembrado:
-  volver a la semilla en silencio desharía una decisión del analista. (Misma corrección; falta que Willy la confirme.)
+  volver a la semilla en silencio desharía una decisión del analista. (Misma corrección; confirmada por Willy el 2026-11-26.)
 
 **Descartado:**
 - Aplicar los ASUMIDO como en el prototipo: un código mal asignado suma importe en la columna equivocada y el neto igual
@@ -4270,7 +4270,7 @@ Sin candidato → empleado nuevo / "no vino"; más de un candidato, homónimos o
 y se lista todo. Si el GTN trae una palabra de más, no cruza y se avisa; si ese parecido no es un par único (el GTN
 contiene a dos empleados de Axton, o dos filas del GTN se parecen al mismo), las filas del GTN salen "no cruzó (varios
 candidatos)" y el empleado de Axton como nuevo — nunca se resuelve por orden de aparición (este caso fino se
-agregó al corregir la auditoría; falta que Willy lo confirme). El cruce se muestra completo
+agregó al corregir la auditoría; confirmado por Willy el 2026-11-26). El cruce se muestra completo
 en resultados.
 
 **Descartado:** una tabla legajo de Axton ↔ Employee Number guardada como configuración. La config del cliente viaja en el seed,
@@ -4289,6 +4289,12 @@ La tolerancia es **0,01 fija** (`GTN_NET_TOLERANCE`), declarada con `ownToleranc
 Tabulado, así que no es un criterio del analista y el "Monto de diferencia" del cliente no la mueve.
 
 **Descartado:** semáforo amarillo con cualquier aviso (el prototipo): el color deja de decir si el neto cierra.
+
+**Agregado 2026-11-26 (Willy):** si **ningún** empleado trae ER Net Paid, no se comparó ningún neto y el semáforo sale
+**amarillo**, no verde: un control que no controló nada no sale aprobado. Lo declara el control con
+`summary.semaforoFloor: 'warn'`, y las pantallas pintan el color con `semaforoTierOf(summary, umbral)` de
+`js/controls/semaforo.js` (el mismo ternario que antes repetían cinco pantallas, más ese piso). Con al menos un empleado
+comparado, el color sigue saliendo sólo del neto.
 
 ## D-108 — Registry: campos `blockers(state)` y `perRun` en la config
 

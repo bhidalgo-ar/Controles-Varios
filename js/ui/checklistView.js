@@ -8,7 +8,7 @@ import { getClient, getControlRuns, getControlRunResults, getControlConfigsForCl
 import { CONTROL_REGISTRY }              from '../controls/registry.js';
 import { filterControlsForClient }       from '../controls/scope.js';
 import { periodToLabel, periodOptions }  from '../utils/dates.js';
-import { computeSemaforoStatus, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
+import { semaforoTierOf, DEFAULT_SEMAFORO_THRESHOLD_PCT } from '../controls/semaforo.js';
 import { summarizeWithTolerance } from '../controls/tolerance.js';
 import { setHeader } from './appHeader.js';
 
@@ -84,11 +84,7 @@ export async function renderChecklist(root, clientId) {
           // 'warning' con UNA sola diferencia sin mirar el porcentaje (el
           // mismo control podía salir verde en las otras tres pantallas y
           // amarillo acá).
-          const tier = s.status === 'error'
-            ? 'error'
-            : s.unitsTotal == null
-              ? 'info'
-              : computeSemaforoStatus(s.unitsWithDiff, s.unitsTotal, thresholdPct);
+          const tier = semaforoTierOf(s, thresholdPct);
           status = tier === 'ok' ? 'success' : tier === 'warn' ? 'warning' : tier;
         }
         m.set(r.controlId, { runId: run.id, status, headline, isDraft: !run.isDefinitive });
