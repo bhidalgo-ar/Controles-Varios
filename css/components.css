@@ -343,6 +343,9 @@
 .control-card__insights .badge {
   padding: var(--sp-1) var(--sp-3);
   font-size: var(--text-sm);
+  /* En un celular el aviso largo baja de renglón en vez de cortarse. */
+  white-space: normal;
+  max-width: 100%;
 }
 
 .control-card__detail {
