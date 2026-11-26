@@ -23,6 +23,7 @@
 
 import { NR_CONCEPTS } from '../controls/nr.js';
 import { COLS } from '../controls/rendVsTabu.js';
+import { GTN_COLUMNS } from './gtnGsmaLayout.js';
 
 /** 'precio' → 'Precio', para armar las claves rPrecio/cPrecio/dPrecio. */
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -549,6 +550,50 @@ const acreditacionesReporte = {
   ],
 };
 
+// ── GSMA · GTN (Gross to Net) desde el Tabulado de Axton ──────────────────────
+//
+// La tabla del GTN: las 42 columnas de la fila 4 (las del GTN de Meta4 + la
+// columna Recognition Award), en orden. Sale de `GTN_COLUMNS` del layout, que es
+// la fuente única de la forma del archivo: el contrato no la copia, la describe.
+//
+// **Escribe su .xlsx a mano, por diseño y no por deuda** (`SIN_WRITER_POR_DISENO`):
+// es el layout que GSMA recibe desde Meta4 y no lo elige el writer. Lo que
+// `writeContractSheet` no describe, con este único consumidor:
+//   1. siete filas antes de la tabla (título, fecha del período, rótulos de
+//      bloque) y cuatro DESPUÉS del encabezado que no son datos (Local Language,
+//      Element Code, GL Account, Currency);
+//   2. fórmulas por fila (sueldo USD = anual/13,3, Gross Pay, deducciones, Net
+//      Pay, Net Pay on Payslips, Employer Total costs, TOTAL COST) y una fila de
+//      totales con SUM por columna, todo armado según la cantidad de empleados;
+//   3. la detracción fija 3 filas debajo de los totales y el cuadro de
+//      autorización a la derecha de la tabla (AW1:BB10) con el tipo de cambio;
+//   4. columnas que van vacías y columnas que van en 0 cuando no hay importe,
+//      igual que Meta4;
+//   5. celdas en amarillo con comentario para lo que el analista completa a mano.
+//
+// `audience: 'payroll'`: lo recibe GSMA como informe de payroll (lleva nombres,
+// Employee Number y sueldos), no es un archivo de pago para Finanzas.
+//
+// Que vaya a mano no lo deja sin verificar: `tests/exportSinWriterConformidad.test.js`
+// arma el libro y comprueba que la fila 4 sean EXACTAMENTE estas columnas, que
+// ninguna fila de la tabla escriba más allá de TOTAL COST y que a la derecha
+// sólo esté el cuadro.
+const gtnGsma = {
+  exportId: 'gtn_gsma',
+  sheet: 'GSMA',
+  layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: GTN_COLUMNS.map(c => ({
+    // La columna sin título a la derecha de Income Tax: en Meta4 no tiene celda
+    // en la fila 4, así que su rótulo es vacío a propósito (`spacer`).
+    label: c.header === null ? '' : c.header,
+    ...(c.header === null ? { spacer: true } : {}),
+    key: c.key,
+    from: [],
+    necessity: NECESSITY.OBLIGATORIA,
+    type: c.kind === 'id' ? 'txt' : 'num',
+  })),
+};
+
 // ── FINADIET · Asiento de Remuneraciones ──────────────────────────────────────
 //
 // Las DOS solapas planas del asiento, sobre `writeContractSheet` desde que
@@ -692,6 +737,8 @@ export const EXPORT_CONTRACTS = {
   // COTY · Contabilidad Desglosada + Asiento
   conta_desglosada:        contaDesglosada,
   conta_asiento:           contaAsiento,
+  // GSMA · GTN desde el Tabulado de Axton (a mano, por diseño)
+  gtn_gsma:                gtnGsma,
 };
 
 // ── Cómo se escribe cada export: por el writer, o a mano por diseño (D-051) ───
@@ -749,6 +796,13 @@ export const SIN_WRITER_POR_DISENO = {
     + 'numFmt por columna (CUIT/CBU como texto, Fecha con formato de fecha), fila en blanco '
     + 'antes del TOTAL, TOTAL sin borde superior y autoFilter. Las 6 tienen este único '
     + 'consumidor; el detalle está en el comentario de `acreditacionesReporte` acá arriba.',
+  gtn_gsma:
+    'Es el layout del GTN que GSMA recibe desde Meta4: filas de título y de bloque antes del encabezado, '
+    + 'cuatro filas de códigos (Local Language, Element Code, GL Account, Currency) después, fórmulas por fila '
+    + 'y de totales armadas según la cantidad de empleados, la detracción fija debajo de los totales, el '
+    + 'cuadro de autorización a la derecha con el tipo de cambio, columnas vacías o en 0 como Meta4 y celdas '
+    + 'amarillas con comentario. Ninguna tiene otro consumidor; el detalle está en el comentario de `gtnGsma` '
+    + 'acá arriba.',
 };
 
 /**

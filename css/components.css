@@ -2432,3 +2432,63 @@ table.rb-grid.rb-grid--stick2 thead tr:first-child > [colspan]:not([colspan="1"]
   border-radius: var(--radius-full); padding: 2px 8px; margin-left: 6px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── GTN GSMA: tabla de asignaciones Axton → GTN y tipo de cambio ─────────── */
+/* La misma tabla en el Paso 2 (se asigna) y en resultados (se lee): ver
+   js/ui/gtnGsmaAsignaciones.js. Todo color sale de tokens.css. */
+.gtn-card {
+  margin-top: var(--sp-3); padding: var(--sp-4);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.gtn-card--destacada { border-color: var(--celeste-border); box-shadow: var(--shadow-sm); }
+.gtn-card__title { font-family: var(--font-display); font-size: var(--text-lg); color: var(--ink); margin: 0 0 var(--sp-1); }
+.gtn-card__intro { font-size: var(--text-sm); color: var(--t2); margin: 0 0 var(--sp-3); max-width: 110ch; }
+.gtn-tc__label {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--celeste-deeper); margin-bottom: var(--sp-2);
+}
+.gtn-tc__input { max-width: 240px; font-variant-numeric: tabular-nums; }
+.gtn-tc__input--falta { border-color: var(--color-danger); background: var(--error-bg); }
+.gtn-tc__msg { font-size: var(--text-sm); margin-top: var(--sp-1); color: var(--t2); }
+.gtn-tc__msg--falta { color: var(--color-danger); }
+
+.gtn-asig { display: flex; flex-direction: column; gap: var(--sp-3); }
+.gtn-asig__banner {
+  display: flex; gap: var(--sp-2); align-items: baseline;
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
+  border: 1px solid var(--color-danger); background: var(--color-danger-bg); color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+.gtn-asig__controls { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-5); align-items: flex-end; }
+.gtn-asig__ctl { display: flex; flex-direction: column; gap: 4px; }
+.gtn-asig__ctl[hidden] { display: none; }
+.gtn-asig__lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--t3); }
+.gtn-asig__colsel { max-width: 280px; padding: 4px var(--sp-2); font-size: var(--text-sm); }
+.gtn-asig__scroll { overflow-x: auto; }
+.gtn-asig__table { width: 100%; }
+.gtn-asig__filters th { padding-top: 0; }
+.gtn-asig__filters input { padding: 3px var(--sp-2); font-size: 12px; min-width: 70px; }
+.gtn-asig__cod { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--t1); }
+.gtn-asig__num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gtn-asig__select { min-width: 230px; max-width: 300px; padding: 4px var(--sp-2); font-size: var(--text-sm); }
+.gtn-asig__sug { font-size: 11.5px; font-style: italic; color: var(--t3); margin-top: 3px; max-width: 46ch; }
+.gtn-asig__nota { font-size: 11.5px; color: var(--t3); }
+.gtn-asig__row--sin td { background: var(--error-bg); }
+.gtn-asig__row--sin td:first-child { box-shadow: inset 3px 0 0 var(--color-danger); }
+.gtn-asig__row--fuera td { color: var(--t2); }
+.gtn-asig__grp td { background: var(--celeste-dim); padding: 6px var(--sp-3); }
+.gtn-asig__grp--sin td { background: var(--error-bg); color: var(--color-danger); }
+.gtn-asig__grp--fuera td { background: var(--color-bg-subtle); }
+.gtn-asig__toggle {
+  appearance: none; border: none; background: none; cursor: pointer; padding: 0;
+  font: inherit; color: inherit; display: inline-flex; gap: 6px; align-items: baseline; text-align: left;
+}
+.gtn-asig__toggle:focus-visible { outline: 3px solid var(--celeste); outline-offset: 2px; }
+.gtn-asig__grp--sin .gtn-asig__toggle strong { color: var(--color-danger); }
+.gtn-asig__caret { width: 1em; display: inline-block; }
+.gtn-asig__grpmeta { color: var(--t2); font-variant-numeric: tabular-nums; }
+.gtn-asig__note { font-size: 11.5px; color: var(--t3); margin: 0; }
+.gtn-asig__links { font-size: var(--text-sm); }
+.gtn-card__caret { display: inline-block; transition: transform .22s cubic-bezier(.4, 0, .2, 1); }
+details[open] > summary .gtn-card__caret { transform: rotate(90deg); }

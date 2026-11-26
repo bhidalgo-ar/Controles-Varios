@@ -4211,3 +4211,98 @@ cargado sólo para la prueba): Servicios Legales y Servicios Comunes pasan a cer
 categorías; el resto de las áreas no cambia.
 
 **Tests:** `tests/rendVsAsientoLegajoArea.test.js` (nuevo, en la cadena de `npm run test:unit`).
+
+
+## D-104 — GTN de GSMA: generador por cliente con el layout de Meta4 escrito como código, más la columna Recognition Award
+
+**Fecha:** 2026-11-25. **Decidió:** Willy, con la analista de GSMA (Gaby) para la columna nueva. Spec: `specs/gtn-gsma-axton.md`.
+
+**Contexto:** GSMA pasó su liquidación de Meta4 a Axton y sigue recibiendo el Excel "Gross to Net" (GTN) que armaba Meta4.
+El prototipo que trajo Gaby (HTML standalone de Claude Chat) lo generaba a partir de una plantilla `.xlsx` embebida.
+
+**Decisión:**
+- Control propio `gtn_gsma`, **sólo para GSMA** (`scope: 'cliente'`): el layout, los Element Codes, los GL Accounts, el 13,3
+  del sueldo en USD y la detracción son del informe de GSMA; ningún otro cliente lo pide.
+- El layout del GTN de Meta4 11/2026 está **escrito como código** (`js/exports/gtnGsmaLayout.js`), con una columna
+  insertada: **Recognition Award** a la derecha de Referral Bonus, con Element Code `D0159`, GL Account `200360` y moneda
+  ARS (los de Bonus), dentro del Gross. Lo de Bonus hacia la derecha corre una columna.
+- **Sin plantilla binaria en el repo.** Un `.xlsx` lo frena el chequeo de datos sensibles, y la plantilla del prototipo traía
+  en sus propiedades el nombre de quien la creó.
+
+**Descartado:** embeber la plantilla del prototipo en base64 (es lo que hacía el HTML): esquiva el chequeo en vez de
+cumplirlo y arrastra el nombre del autor.
+
+**Deuda declarada:** el 13,3 y la detracción de −2.040 son constantes del layout. Si la detracción sigue igual con Axton es una
+pregunta abierta a Gaby (ver `ESTADO.md`).
+
+## D-105 — GTN de GSMA: las asignaciones código de Axton → columna del GTN son configuración de GSMA; sólo se siembra lo confirmado y un concepto sin asignar frena
+
+**Fecha:** 2026-11-25. **Decidió:** Willy ("no pueden quedar conceptos sin asignar"). Cita D-035 y D-039.
+
+**Decisión:**
+- Cada código del Tabulado de Axton va a una columna del GTN, o a "Fuera del GTN" a propósito. Es config de GSMA en
+  `controlConfigs`, editable desde el Paso 2; los códigos se identifican por código, no por nombre.
+- **Se siembran sólo las asignaciones confirmadas contra un archivo real** (18 columnas + 2 códigos fuera del GTN, las 20 vistas
+  en el Tabulado 11/2026 y contra meses de Meta4). Las marcadas ASUMIDO en la ficha de traspaso —salen del Manual de Conceptos de
+  la migración y nunca se vieron en un Tabulado de Axton— **no se siembran**: cuando aparecen salen "sin asignar". La sugerencia
+  del Manual se muestra al lado y **no se aplica**.
+- **Un concepto sin asignar frena:** no deja ejecutar ni generar el GTN. `run()` además devuelve error si le llega uno.
+- **También frena una columna con forma de concepto sin `código - nombre`** (empieza con dígitos, o trae importes y no es
+  una columna conocida del export): no se puede asignar, y generar igual dejaría su importe afuera con el semáforo en
+  verde. Salario Familiar con importe no frena: avisa. (Regla agregada al corregir la auditoría del 2026-11-25;
+  **falta que Willy la confirme**.)
+- **Una asignación guardada a una columna que el layout ya no tiene queda sin asignar**, también en un código sembrado:
+  volver a la semilla en silencio desharía una decisión del analista. (Misma corrección; falta que Willy la confirme.)
+
+**Descartado:**
+- Aplicar los ASUMIDO como en el prototipo: un código mal asignado suma importe en la columna equivocada y el neto igual
+  cierra, así que no salta en ningún control.
+- Dejar el concepto sin columna y generar igual con aviso (el prototipo lo marcaba en naranja): el GTN sale con plata afuera.
+
+## D-106 — GTN de GSMA: el cruce con el GTN anterior es por nombre y no resuelve nada en silencio; se descartó la tabla legajo ↔ Employee Number
+
+**Fecha:** 2026-11-25. **Decidió:** Willy.
+
+**Contexto:** el GTN anterior trae Employee Number y nombre, pero no el legajo ni el CUIL de Axton.
+
+**Decisión:** se cruza por nombre (todas las palabras del nombre del GTN están en el de Axton, sin tildes ni mayúsculas ni orden).
+Sin candidato → empleado nuevo / "no vino"; más de un candidato, homónimos o dos filas que piden al mismo empleado → no se cruza
+y se lista todo. Si el GTN trae una palabra de más, no cruza y se avisa; si ese parecido no es un par único (el GTN
+contiene a dos empleados de Axton, o dos filas del GTN se parecen al mismo), las filas del GTN salen "no cruzó (varios
+candidatos)" y el empleado de Axton como nuevo — nunca se resuelve por orden de aparición (este caso fino se
+agregó al corregir la auditoría; falta que Willy lo confirme). El cruce se muestra completo
+en resultados.
+
+**Descartado:** una tabla legajo de Axton ↔ Employee Number guardada como configuración. La config del cliente viaja en el seed,
+que se commitea: metería identificadores de empleados en el repo. Queda como deuda si un caso real falla.
+
+**Descartado también:** lo que hacía el prototipo con homónimos (descartar la segunda fila sin aviso).
+
+## D-107 — GTN de GSMA: el semáforo mide sólo el neto y los avisos no cambian el color; 0,01 fijo como tolerancia estructural
+
+**Fecha:** 2026-11-25. **Decidió:** Willy. Cita D-069.
+
+**Decisión:** unidad `legajo`; con diferencia = Net Pay distinto de ER Net Paid (concepto 605203). El color sale de
+`computeSemaforoStatus` como en el resto. Los avisos (empleado nuevo, nombre que no cruzó, Recognition Award o Business
+Referrral con importe, ER Net Paid faltante, concepto que no cierra con el TOTAL GENERAL) se listan y no pintan el semáforo.
+La tolerancia es **0,01 fija** (`GTN_NET_TOLERANCE`), declarada con `ownTolerance` en el registry: los dos lados salen del mismo
+Tabulado, así que no es un criterio del analista y el "Monto de diferencia" del cliente no la mueve.
+
+**Descartado:** semáforo amarillo con cualquier aviso (el prototipo): el color deja de decir si el neto cierra.
+
+## D-108 — Registry: campos `blockers(state)` y `perRun` en la config
+
+**Fecha:** 2026-11-25. **Decidió:** surge de D-105 y de pedir el tipo de cambio. **Por qué un campo del registry:** el
+wizard no tenía ninguna forma declarativa de frenar por una decisión pendiente del Paso 2; la alternativa era un
+`if (controlId === 'gtn_gsma')` en `controlsWizard.js`, que es exactamente lo que la Fase 4 sacó de ahí (la skill
+`nuevo-control` prohíbe nombrar tipos o controles en el wizard). Con el campo, el próximo control que necesite frenar lo
+declara y no toca el wizard.
+
+- **`blockers(state)`** (opcional, por control): devuelve la lista de motivos que todavía impiden ejecutar
+  (`{ kind: 'concepto' | 'dato', label, detail?, count }`). Con algún motivo "Siguiente →" queda deshabilitado, la barra dice
+  "Falta: 1 concepto · 1 dato" y "Para ejecutar te falta" los lista. Es para lo que depende de una decisión del Paso 2 que el
+  archivo solo no resuelve. La misma lista alimenta la barra y el panel, para que no digan cosas distintas. `run()` igual se
+  defiende con `{ error }`.
+- **`perRun: true`** en una config: es un dato de la corrida, **no se guarda ni se precarga**; arranca vacío cada vez (a
+  diferencia de `readOnly`, tiene editor). Es el tipo de cambio de GSMA: precargado el mes siguiente sería un tipo de cambio
+  viejo con cara de nuevo, coherente y equivocado. Hoy lo usa sólo `gtn_gsma`.

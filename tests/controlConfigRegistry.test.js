@@ -40,8 +40,11 @@ assert(`hay controles con config declarada (${conConfig.length})`, conConfig.len
 // La 14ª es `novedades_liquidacion_config`, del cruce de novedades contra la
 // liquidación (D-070): los conceptos que no se comparan por unidad distinta y los
 // que no llegan a la liquidación.
-assert(`son 14 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
-  porClave.size === 14);
+// La 15ª y la 16ª son del GTN de GSMA: `gtn_gsma_config` (las asignaciones
+// código de Axton → columna del GTN) y `gtn_gsma_tipo_cambio`, que se declara
+// para tener editor y viajar a run() pero es `perRun`: no se guarda nunca.
+assert(`son 16 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
+  porClave.size === 16);
 
 // ── Forma de cada declaración ───────────────────────────────────────────────
 
@@ -149,6 +152,7 @@ const ESPERADO = {
   acumuladores_ganancias: ['acumuladoresConfig'],
   finadiet_asiento:       ['finadietAsientoConfig'],
   variaciones_sueldos:    [],
+  gtn_gsma:               ['gtnConfig', 'gtnTipoCambio'],
 };
 for (const [controlId, claves] of Object.entries(ESPERADO)) {
   assert(`${controlId}: run() recibe exactamente [${claves.join(', ') || '—'}]`,
@@ -171,6 +175,21 @@ assert('finadiet_asiento recibe la config aunque sea null (el run() lo distingue
   && mappingDe('finadiet_asiento', sinConfigurar).finadietAsientoConfig === null);
 assert('la agrupación de conceptos sin configurar NO viaja (no le dice nada al control)',
   !('conceptGrouping' in mappingDe('rend_vs_tabu', sinConfigurar)));
+
+// ── `perRun`: se edita, viaja a run() y NO se guarda nunca ──────────────────
+// El tipo de cambio del GTN de GSMA es un dato del mes: guardado, el mes
+// siguiente arrancaría precargado con uno viejo y el GTN saldría con un tipo de
+// cambio coherente y equivocado. El wizard lo saltea al guardar y al cargar.
+const perRun = todas.filter(c => c.perRun);
+assert('la única config perRun es el tipo de cambio del GTN de GSMA',
+  perRun.map(c => c.key).join(',') === 'gtn_gsma_tipo_cambio');
+assert('…tiene editor y le llega al control', perRun.every(c => typeof c.editor === 'function' && !!c.mappingKey));
+{
+  const { readFileSync } = await import('node:fs');
+  const wizardSrc = readFileSync('js/ui/controlsWizard.js', 'utf8');
+  assert('el wizard no guarda las perRun al ejecutar', /if \(cfg\.perRun\) continue;/.test(wizardSrc));
+  assert('…ni las carga de la base al entrar', /!cfg\.perRun && loaded\[cfg\.key\]/.test(wizardSrc));
+}
 
 // ── Toda config declarada tiene un control que la use ───────────────────────
 // Una clave huérfana se carga en cada entrada al wizard y no la lee nadie.

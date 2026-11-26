@@ -86,6 +86,7 @@ globalThis.window = { ExcelJS: { Workbook: FakeWorkbook } };
 const { EXPORT_CONTRACTS, SIN_WRITER_POR_DISENO } = await import('./js/exports/contracts.js');
 const { CONTROL_REGISTRY } = await import('./js/controls/registry.js');
 const { buildAcreditacionesWorkbook } = await import('./js/controls/acreditaciones.js');
+const { buildGtnGsmaWorkbook, CUADRO_COLUMNS, GTN_WIDTH } = await import('./js/exports/gtnGsmaLayout.js');
 
 // ── Datos de prueba (inventados, sin datos de empleados reales) ──────────────
 // Mismo fixture que `tests/acreditacionesControl.test.js`: 4 listas más un grupo
@@ -117,6 +118,24 @@ const acredRows = [
 
 const acredResults = CONTROL_REGISTRY.acreditaciones_reporte.run(acredRows, [], { period: '2026-07' });
 
+// GTN de GSMA: dos empleados inventados, uno con el Employee Number del mes
+// anterior y uno nuevo (con sus celdas marcadas en amarillo).
+const gtnInput = {
+  period: '2026-11',
+  tipoCambio: 1050,
+  filas: [
+    { employeeNumber: 4011, nombre: 'SANGUINETTI JAVIER', costCentre: 'CC-1', locationCode: 'AR-BA',
+      usd: { anual: 100000, valor: null },
+      valores: { monthlySalary: 1000, variablePay: 200, socialSecurity: 110, healthInsurance: 30,
+        law19032: 30, incomeTax: 50, erNetPaid: 980, ssEmployer: 240 },
+      marcas: [] },
+    { employeeNumber: null, nombre: 'ALBELLA GUSTAVO', costCentre: null, locationCode: null,
+      usd: { anual: null, valor: null },
+      valores: { monthlySalary: 500, socialSecurity: 55, erNetPaid: 445 },
+      marcas: [{ col: 'employeeNumber', nota: 'REVISAR: empleado nuevo' }] },
+  ],
+};
+
 // ── Los casos ────────────────────────────────────────────────────────────────
 //
 // Uno por export de `SIN_WRITER_POR_DISENO`. Declarar un caso es lo que el
@@ -138,6 +157,29 @@ const CASOS = [
     hojasSinContrato: ['CONTROL'],
     hojasDelContrato: wb => wb.worksheets.filter(ws => ws.name !== 'CONTROL'),
     filaEncabezado: 2,
+  },
+  {
+    exportId: 'gtn_gsma',
+    label: 'GTN GSMA',
+    build: () => buildGtnGsmaWorkbook(globalThis.window.ExcelJS, gtnInput),
+    hojasSinContrato: [],
+    hojasDelContrato: wb => wb.worksheets,
+    // Filas 1 a 3: título, período y rótulos de bloque — el motivo de la excepción.
+    filaEncabezado: 4,
+    // Lo único que se escribe a la derecha de la tabla es el cuadro de
+    // autorización (filas 1 a 10, columnas AW/AX/BB). Una columna de datos que se
+    // cuele a la derecha de TOTAL COST, por `getCell`, la ataja esto.
+    extra: (wb) => {
+      const ws = wb.worksheets[0];
+      const permitidas = new Set([CUADRO_COLUMNS.label, CUADRO_COLUMNS.sublabel, CUADRO_COLUMNS.value]);
+      const fuera = [];
+      ws.rows.forEach((r, i) => r.cells.forEach((c, j) => {
+        const col = j + 1;
+        if (col <= GTN_WIDTH || c.value === null || c.value === undefined) return;
+        if (i + 1 > 10 || !permitidas.has(col)) fuera.push(`fila ${i + 1} col ${col}`);
+      }));
+      return { ok: fuera.length === 0, detalle: fuera.join(', ') };
+    },
   },
 ];
 
@@ -189,6 +231,12 @@ for (const caso of CASOS) {
     assert(`${caso.label} · "${ws.name}": ninguna fila escribe más allá de la columna ${n}`
       + (anchas.length ? ` — ${anchas.length} fila(s) escriben hasta ${Math.max(...anchas.map(r => r.written))} valores` : ''),
       anchas.length === 0);
+
+    if (caso.extra) {
+      const { ok: extraOk, detalle } = caso.extra(wb);
+      assert(`${caso.label} · "${ws.name}": a la derecha de la tabla sólo está el cuadro de autorización`
+        + (extraOk ? '' : ` — sobra: ${detalle}`), extraOk);
+    }
 
     // Si la fila del encabezado no es la 1, lo que hay antes es lo que dejó a
     // este export afuera del writer. Que siga estando es parte de la excepción:

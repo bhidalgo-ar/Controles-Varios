@@ -7,6 +7,33 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(gtn-gsma): GTN de GSMA armado desde el Tabulado de Axton — 2026-11-25
+
+- **Antes:** el Excel "Gross to Net" (GTN) que GSMA recibe todos los meses lo armaba Meta4. Con la liquidación en
+  Axton no había forma de generarlo desde la app.
+- **Ahora:** hay un control nuevo, **GTN GSMA — Generar Reporte**, que sólo ve el cliente GSMA. En el Paso 2 se
+  cargan el Tabulado de Axton del mes (Resumen de Liquidacion), el GTN del mes anterior (el .xls de Meta4 o el
+  .xlsx que bajó la app) y se escribe el tipo de cambio. En resultados se baja "GTN para GSMA (.xlsx)": mismo
+  layout y mismas fórmulas que el de Meta4, con el cuadro de autorización y la detracción, más la columna nueva
+  **Recognition Award** (Element Code D0159, GL Account 200360) a la derecha de Referral Bonus.
+- **Tabla de asignaciones** en el Paso 2 y en resultados: cada código de Axton va a una columna del GTN o queda
+  "Fuera del GTN". Se ve por código o agrupada por columna, con filtros. Los códigos confirmados contra archivos
+  reales vienen cargados; los que sólo figuran en el Manual de Conceptos salen "sin asignar", con la sugerencia
+  del Manual al lado sin aplicar. **Un concepto sin asignar no deja ejecutar**: "Siguiente →" queda
+  deshabilitado y la barra y "Para ejecutar te falta" dicen qué falta (D-105, D-108).
+- **El tipo de cambio arranca vacío cada mes**: no se guarda entre corridas (D-108).
+- **El semáforo mide una sola cosa:** que Net Pay cierre con ER Net Paid en cada empleado, al centavo. Los
+  avisos (empleado nuevo sin Employee Number, nombre que no cruzó con el GTN anterior, premios con importe, ER
+  Net Paid faltante) se listan pero no cambian el color (D-107).
+- **El cruce con el GTN anterior es por nombre** y no resuelve nada en silencio: lo que no cruza o cruza con más
+  de uno se lista, no se adivina (D-106).
+- Si el Tabulado se sube como el .xls que exporta Axton (una página web sin datos), el control lo dice y pide
+  guardarlo como .xlsx.
+- Verificado con el Tabulado de Axton 11/2026 y el GTN de Meta4 10/2026: 11 empleados, Gross 143.597.186,80,
+  Net 96.479.096,94 = ER Net Paid. Contra el GTN de Meta4 de 11/2026 las únicas diferencias de importe son de
+  Axton vs Meta4: Variable Pay +27,75, Social Security 20,4% +5,99, Health Insurance 6% +1,89, Accident +0,46.
+  Detalle: `specs/gtn-gsma-axton.md`, D-104 a D-108.
+
 ### feat(rend-vs-asiento): legajos que el Rendimiento pone en otra área — 2026-10-29
 
 - **Antes:** un legajo que Marval imputa en el asiento a Servicios Comunes pero que el Rendimiento cuenta en

@@ -35,7 +35,10 @@ test('el wizard y la ficha cargan juntos en un navegador real, sin ciclo de mód
   // Los 2 de `novedades_liquidacion` se sumaron con el cruce contra la
   // liquidación: su panel depende del importador Y del Tabulado cargados.
   // El `rend` de `rend_vs_asiento` se sumó con los legajos en otra área (D-103).
+  // El `tabAxton` de `gtn_gsma` se sumó con el GTN de GSMA: la tabla de
+  // asignaciones del Paso 2 lista los conceptos del Tabulado cargado.
   expect(r.specs).toEqual([
+    'gtn_gsma.tabAxton',
     'novedades_importador.novedades',
     'novedades_liquidacion.importador', 'novedades_liquidacion.tabAxton',
     'pop_variaciones.tab_act', 'pop_variaciones.tab_prev',
