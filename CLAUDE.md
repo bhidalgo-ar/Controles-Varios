@@ -178,7 +178,8 @@ mal pero coherente no lo detecta nadie. Matiz que costó dos PRs seguidos (D-036
 exista en un período **es** resultado válido y se informa; lo que no puede pasar en silencio es que
 el control no tenga forma de resolverlo.
 
-**El color del semáforo sale de `computeSemaforoStatus(unitsWithDiff, unitsTotal)`, nunca de
+**El color del semáforo sale de `semaforoTierOf(summary, umbral)` (que aplica
+`computeSemaforoStatus(unitsWithDiff, unitsTotal)` y el piso `summary.semaforoFloor`, D-107), nunca de
 `summary.status`.** Cuatro pantallas pintan el estado del mismo control (checklist, wizard,
 resultados, lista de clientes); con el status crudo el mismo control sale de distinto color según
 dónde lo mires, porque marca `'warning'` con una sola diferencia sin mirar el porcentaje. El status

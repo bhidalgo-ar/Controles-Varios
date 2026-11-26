@@ -675,7 +675,9 @@ function renderResumenTab(panel, results) {
   const avisos = results.avisos;
 
   renderVerdict(panel, {
-    tone: conDif.length || c.sinErNetPaid ? 'warn' : 'ok',
+    // Mismo criterio que el semáforo (D-107): amarillo si algún neto no cierra o
+    // si no se pudo comparar ninguno; un empleado sin comparar solo es un aviso.
+    tone: conDif.length || (c.empleados > 0 && results.empleados.every(e => e.diferencia === null)) ? 'warn' : 'ok',
     title: (conDif.length
       ? `El GTN de ${periodoAR(results.period)} está listo, pero ${conDif.length} empleado${conDif.length === 1 ? '' : 's'} no cierra${conDif.length === 1 ? '' : 'n'} por $ ${fmt(t.diferencia)}`
       : `El GTN de ${periodoAR(results.period)} está listo: el neto cierra con ER Net Paid en ${cierran} de ${c.empleados} empleados`)

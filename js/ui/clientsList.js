@@ -391,7 +391,9 @@ async function buildClientRowData(client, period, thresholdPct) {
     } else if (overallTier === 'error') {
       status = { tier: 'error', label: `${totalDiffUnits} dif${totalDiffUnits === 1 ? '' : 's'} · revisar` };
     } else if (overallTier === 'warn') {
-      status = { tier: 'warn', label: `${totalDiffUnits} dif${totalDiffUnits === 1 ? '' : 's'} · en revisión` };
+      status = { tier: 'warn', label: totalDiffUnits === 0
+        ? 'sin comparar · en revisión'   // amarillo sin difs: no se comparó nada (D-107)
+        : `${totalDiffUnits} dif${totalDiffUnits === 1 ? '' : 's'} · en revisión` };
     } else {
       status = { tier: 'neutral', label: statusRun.isDefinitive ? 'Definitivo' : 'Borrador' };
     }

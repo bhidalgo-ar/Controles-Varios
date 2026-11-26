@@ -2492,7 +2492,9 @@ function runCardBadge(u) {
   if (!u.summary || u.summary.unitsTotal == null) return null;
   if (u.summary.status === 'error') return { tone: 'error', text: 'no se pudo completar' };
   const n = u.summary.unitsWithDiff || 0;
-  if (n === 0) return { tone: 'ok', text: 'sin diferencias' };
+  // Sin diferencias pero en amarillo: el control no pudo comparar ninguna
+  // unidad (`semaforoFloor`, D-107) — "sin diferencias" en verde mentiría.
+  if (n === 0) return u.tier === 'warn' ? { tone: 'warn', text: 'sin comparar' } : { tone: 'ok', text: 'sin diferencias' };
   const unidad = runUnitPlural(u.summary.unit) || `${u.summary.unit || 'unidad'}s`;
   return {
     tone: u.tier === 'error' ? 'error' : 'warn',

@@ -200,10 +200,12 @@ pasar en silencio es no tener forma de resolverlo.
   cálculo. `diffStats()` de `./semaforo.js` sirve cuando hay una fila por unidad (el caso de `nr.js`).
   Cuando no la hay — `agrupadores` produce legajo × agrupador — contalas a mano sobre la unidad real
   (`legajoStats` en `agrupadores.js`). Contar filas ahí daba 1000 "legajos" sobre 100 empleados.
-- El color del semáforo **no** sale de `status`: sale de `computeSemaforoStatus(unitsWithDiff,
-  unitsTotal)`. `status` alimenta la tarjeta colapsada, y `'error'` es la única rama que lo
-  cortocircuita. Si agregás una pantalla que pinte el estado de un control, usá
-  `computeSemaforoStatus` o va a discrepar con las otras cuatro.
+- El color del semáforo **no** sale de `status`: sale de `semaforoTierOf(summary, umbral)`
+  (`./semaforo.js`), que aplica `computeSemaforoStatus(unitsWithDiff, unitsTotal)`. `status` alimenta
+  la tarjeta colapsada, y `'error'` es la única rama que lo cortocircuita. Si tu control puede terminar
+  sin haber comparado ninguna unidad, declará `semaforoFloor: 'warn'` en el summary: un control que no
+  controló nada no sale verde (D-107). Si agregás una pantalla que pinte el estado de un control, usá
+  `semaforoTierOf` o va a discrepar con las otras cinco.
 
 En una variante "Generar Reporte" no llega archivo primario: nombralo `_primaryRows`, el `status` es
 `'info'` y `unit`/`unitsTotal`/`unitsWithDiff`/`diffTotalAmount`/`worstCase`/`contextNote` van en

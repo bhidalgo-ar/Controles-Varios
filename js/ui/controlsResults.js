@@ -1397,6 +1397,14 @@ function verdict3aSubline(ctx) {
       + `${esc(fmtParticipio('evaluad', total, mainGroup.unit))}: ninguna diferencia arriba de la tolerancia.`;
   }
 
+  // Amarillo sin ninguna diferencia: el control no pudo comparar ninguna unidad
+  // (`semaforoFloor`, D-107). El porcentaje sobre el umbral no explica nada acá;
+  // lo explica el titular del propio control.
+  if (nDiff === 0 && overallTier === 'warn') {
+    return `${esc(controlSummaries[0]?.summary?.headline || '')} `
+      + 'No se pudo comparar ninguna unidad: por eso no sale en verde.';
+  }
+
   const veces = thresholdPct > 0 ? Math.round(pct / thresholdPct) : null;
   const contraUmbral = veces !== null && veces >= 2
     ? ` El corte de rojo es ${fmtThreshold(thresholdPct)} % de los ${esc(unitNames(mainGroup.unit).many)}: `
@@ -1738,7 +1746,10 @@ function buildCtrlCardHtml(item, index, prevTierByControlId, reduceMotion, opts 
     const bits = [];
     bits.push(nDiff > 0
       ? `<strong>${esc(`${fmtInt(nDiff)} de ${fmtUnitCount(total, summary.unit)}`)}</strong>`
-      : esc(`${fmtUnitCount(total, summary.unit)} ${fmtParticipio('evaluad', total, summary.unit)}, sin diferencias`));
+      : tier === 'warn'
+        // Amarillo sin diferencias = no se pudo comparar ninguna (D-107).
+        ? esc(`${fmtUnitCount(total, summary.unit)}, ninguna se pudo comparar`)
+        : esc(`${fmtUnitCount(total, summary.unit)} ${fmtParticipio('evaluad', total, summary.unit)}, sin diferencias`));
     if (summary.diffTotalAmount > 0) bits.push(formatAmount(summary.diffTotalAmount));
     const note = summary.contextNote
       || (summary.worstCase ? `mayor: ${summary.worstCase.label} ($ ${formatAmount(summary.worstCase.amount)})` : null)
