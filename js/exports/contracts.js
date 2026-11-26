@@ -710,6 +710,25 @@ const contaAsiento = {
   ],
 };
 
+/** Marval · Neteo del asiento. Las siete columnas del asiento que Marval ya
+ * recibe (la tabla dinámica de hoy), con la fila "Total general" al final.
+ * `audience: 'payroll'` y no `'finanzas'`: la dimensión (ID_CONTA) lleva el
+ * legajo en su 7mo tramo, porque así la arma Marval — mismo caso que la
+ * Contabilidad Desglosada de COTY, que también llega a Contaduría con legajo. */
+const neteoAsientoMarval = {
+  exportId: 'neteo_asiento_marval', sheet: 'Asiento neteado',
+  layout: LAYOUT_FIJO, audience: 'payroll',
+  columns: [
+    { label: 'CUENTA_CONTAB',     key: 'cuenta_contab',     from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 16 },
+    { label: 'N_CUENTA_CONTABLE', key: 'n_cuenta_contable', from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 36 },
+    { label: 'ID_CONTA',          key: 'id_conta',          from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 44 },
+    { label: 'ID_CENTRO_COSTO',   key: 'id_centro_costo',   from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 16 },
+    { label: 'NOMBRE2',           key: 'nombre2',           from: [], necessity: NECESSITY.OBLIGATORIA, type: 'txt', width: 32 },
+    { label: 'Suma de DEBE',      key: 'debe',              from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+    { label: 'Suma de HABER',     key: 'haber',             from: [], necessity: NECESSITY.OBLIGATORIA, type: 'num', width: 18 },
+  ],
+};
+
 export const EXPORT_CONTRACTS = {
   brutos:           brutosControlar,
   brutos_reporte:   brutosReporte,
@@ -737,6 +756,8 @@ export const EXPORT_CONTRACTS = {
   // COTY · Contabilidad Desglosada + Asiento
   conta_desglosada:        contaDesglosada,
   conta_asiento:           contaAsiento,
+  // Marval · Neteo del asiento
+  neteo_asiento_marval:    neteoAsientoMarval,
   // GSMA · GTN desde el Tabulado de Axton (a mano, por diseño)
   gtn_gsma:                gtnGsma,
 };
@@ -770,6 +791,10 @@ export const CON_WRITER = [
   // Los 2 de la Contabilidad Desglosada: tablas planas con fila de TOTAL, todo
   // lo que el writer ya sabe hacer.
   'conta_desglosada', 'conta_asiento',
+  // El asiento neteado de Marval: una tabla plana con fila de "Total general".
+  // El formato contable de los importes se le pone después, sobre la hoja que
+  // devuelve el writer (ver `escribirAsientoNeteado`).
+  'neteo_asiento_marval',
 ];
 
 /**

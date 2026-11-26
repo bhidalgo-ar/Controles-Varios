@@ -65,6 +65,7 @@ import { parseNr, autoDetectNrMapping } from '../parsers/nrParser.js';
 import { parseRendimiento, autoDetectRendimientoMapping, detectHeadersRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal, autoDetectCostoTotalMapping, detectHeadersCostoTotal } from '../parsers/costoTotalParser.js';
 import { parseConta } from '../parsers/contaExcel.js';
+import { parseContaNeteo, detectHeaders as detectHeadersContaNeteo } from '../parsers/contaNeteoParser.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
 import {
@@ -160,6 +161,13 @@ const metaGtnGsmaPrev = (m) =>
   `GTN ${m?.periodo ? esc(m.periodo.split('-').reverse().join('/')) : '<span class="badge badge--warning">sin fecha</span>'}`
   + ` &nbsp;·&nbsp; ${m?.totalRows ?? 0} empleados &nbsp;·&nbsp; ${m?.origen === 'app' ? 'generado por la app' : 'de Meta4'}`
   + (m?.usdSinFormula ? ` &nbsp;·&nbsp; <span class="badge badge--warning">${m.usdSinFormula} sin la fórmula del sueldo USD</span>` : '');
+
+// La desglosada para netear el asiento informa filas, cuentas y de qué hoja las
+// leyó: el libro de Marval trae también la hoja del asiento armado, y ver cuál se
+// usó es lo que confirma que no se leyó la equivocada.
+const metaContaNeteo = (m) =>
+  `${m?.totalRows ?? 0} filas · ${m?.cuentas ?? 0} cuentas`
+  + (m?.sheetName ? ` &nbsp;·&nbsp; hoja «${esc(m.sheetName)}»` : '');
 
 // La escala informa cuántas categorías leyó y de qué pestaña — con un libro de
 // varias hojas, saber cuál se usó es lo que confirma que no se leyó la equivocada.
@@ -522,6 +530,27 @@ export const FILE_TYPES = {
     autoDetect: null,
     meta: metaLegajosConceptos,
     flow: 'multi',
+    fields: [],
+  },
+
+  // Contabilidad Desglosada para el Neteo del asiento (Marval). Es el MISMO
+  // Excel que `conta_file`, pero leído entero: `parseConta` descarta las filas
+  // sin nombre de centro de costo (en Marval son las de pasivo y provisiones,
+  // la mitad del asiento) y no lee el nombre del centro, que el asiento lleva
+  // como NOMBRE2. Tipo aparte y no una opción de `conta_file` porque un run
+  // guarda un archivo por tipo, y con el mismo tipo el lector de uno pisaría al
+  // del otro (Rendimiento vs Asiento también es de Marval).
+  //
+  // No hay columnas que mapear —el lector busca la hoja y las columnas por sus
+  // títulos— pero pasa por la vista previa: es lo que le muestra al analista que
+  // subió la desglosada del mes y no el asiento ya armado.
+  conta_neteo_file: {
+    label: 'Contabilidad Desglosada de Meta4',
+    siglas: ['CONTA', 'CONTABILIDAD'],
+    parse: parseContaNeteo,
+    detectHeaders: detectHeadersContaNeteo,
+    autoDetect: null,
+    meta: metaContaNeteo,
     fields: [],
   },
 

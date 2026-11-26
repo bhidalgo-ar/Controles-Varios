@@ -186,6 +186,13 @@ import {
 } from './rendVsAsiento.js';
 
 import { renderRendVsAsientoConfigEditor } from '../ui/rendVsAsientoConfigEditor.js';
+
+import {
+  runNeteoAsientoMarval,
+  summarizeNeteoAsientoMarval,
+  renderNeteoAsientoMarvalResults,
+} from './neteoAsientoMarval.js';
+import { renderNeteoAsientoMarvalConfigEditor } from '../ui/neteoAsientoMarvalConfigEditor.js';
 import { makeLegajoKey, DEFAULT_LEGAJO_KEY_MODE } from '../utils/legajo.js';
 
 import {
@@ -655,6 +662,54 @@ export const CONTROL_REGISTRY = {
     run:           runRendVsAsiento,
     summarize:     summarizeRendVsAsiento,
     renderResults: renderRendVsAsientoResults,
+  },
+
+  // Neteo del asiento (Marval): arma el asiento del mes desde la Contabilidad
+  // Desglosada y junta en una línea el Debe y el Haber de la misma cuenta,
+  // dimensión y centro de costo. Pedido de Marval, reglas de Guille del
+  // 26/11/2026 — ver specs/neteo-asiento-marval.md.
+  neteo_asiento_marval: {
+    id:          'neteo_asiento_marval',
+    // Netea al centavo y no compara importes contra un umbral: el monto de
+    // diferencia del cliente no le cambia nada (D-069).
+    ownTolerance: {
+      note: 'Netea al centavo y no compara contra un umbral: el monto de diferencia no lo toca.',
+    },
+    label:       'Neteo del asiento',
+    ...MARVAL_ONLY,
+    appliesWhen: () => true,
+    description: 'Arma el asiento contable del mes desde la Contabilidad Desglosada de Meta4 y junta en una '
+      + 'sola línea el Debe y el Haber de la misma cuenta, dimensión y centro de costo. Las cuentas de pasivo '
+      + 'y las líneas sin dimensión quedan abiertas.',
+    help: {
+      what: 'Reemplaza la tabla dinámica del asiento y el neteo a mano. Cuando una cuenta tiene importe al '
+        + 'Debe y al Haber con la misma dimensión y el mismo centro de costo, deja una sola línea con la '
+        + 'diferencia. Antes controla la regla de centros de costo: si no se cumple, no deja descargar.',
+      how: [
+        'Bajá de Meta4 la Contabilidad Desglosada del período.',
+        'Cargala en el Paso 2 y revisá en "Neteo del asiento" el dígito de las cuentas de pasivo y el centro compartido.',
+        'Ejecutá y mirá el Resumen: si frena, corregí lo que dice en Meta4 y volvé a bajar la desglosada.',
+        'Descargá el asiento neteado desde "⬇ Exportar" en la solapa Planilla.',
+      ],
+    },
+    group:       { id: 'neteo_asiento_marval', label: 'Neteo del asiento', mode: 'Generar Reporte', primary: true },
+    tabRequired: false,
+    additionalFiles: [
+      { key: 'conta_neteo', label: 'Contabilidad Desglosada de Meta4', fileType: 'conta_neteo_file' },
+    ],
+    config: [{ key: 'neteo_asiento_marval_config', stateKey: 'neteoAsientoConfig',
+               mappingKey: 'neteoAsientoConfig',
+               // `null` = nunca se configuró: el control cae a sus valores
+               // iniciales ("2" y "13"). No se manda la semilla para que "sin
+               // configurar" y "configurado igual a la semilla" no se vuelvan
+               // indistinguibles (D-035).
+               default: () => null,
+               mappingValue: (state) => state.neteoAsientoConfig || null,
+               editor: renderNeteoAsientoMarvalConfigEditor,
+               openByDefault: false }],
+    run:           runNeteoAsientoMarval,
+    summarize:     summarizeNeteoAsientoMarval,
+    renderResults: renderNeteoAsientoMarvalResults,
   },
 
   rend_x_ee: {

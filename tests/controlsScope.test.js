@@ -29,9 +29,11 @@ const nuevoAx = { code: 'NUEVOAX', sourceSystem: 'axton', ccts: [], attributes: 
 
 // ── Clasificación actual (decisión de Guillermo, 2026-07-31) ────────────────
 
-assert('Marval ve los 10 controles de Meta4 (no el de Axton, no agrupadores — está `hidden`)',
+// El 11º de Marval es el Neteo del asiento (specs/neteo-asiento-marval.md).
+assert('Marval ve los 10 controles de Meta4 más el Neteo del asiento (no el de Axton, no agrupadores — está `hidden`)',
   filterControlsForClient(allControls, marval).map(c => c.id).join(',').includes('acreditaciones_reporte') === false
-  && filterControlsForClient(allControls, marval).length === 10);
+  && filterControlsForClient(allControls, marval).map(c => c.id).includes('neteo_asiento_marval')
+  && filterControlsForClient(allControls, marval).length === 11);
 
 assert('un cliente Meta4 nuevo no ve ningún control ("agrupadores" es el único general y está `hidden`)',
   filterControlsForClient(allControls, nuevoM4).map(c => c.id).join(',') === '');

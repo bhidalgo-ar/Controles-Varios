@@ -43,8 +43,10 @@ assert(`hay controles con config declarada (${conConfig.length})`, conConfig.len
 // La 15ª y la 16ª son del GTN de GSMA: `gtn_gsma_config` (las asignaciones
 // código de Axton → columna del GTN) y `gtn_gsma_tipo_cambio`, que se declara
 // para tener editor y viajar a run() pero es `perRun`: no se guarda nunca.
-assert(`son 16 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
-  porClave.size === 16);
+// La 17ª es `neteo_asiento_marval_config`, del Neteo del asiento de Marval: el
+// dígito de las cuentas de pasivo y el centro de costo compartido.
+assert(`son 17 claves distintas de controlConfigs (hoy: ${[...porClave.keys()].sort().join(', ')})`,
+  porClave.size === 17);
 
 // ── Forma de cada declaración ───────────────────────────────────────────────
 

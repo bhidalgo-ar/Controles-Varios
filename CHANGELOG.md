@@ -7,6 +7,22 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(neteo-asiento-marval): Neteo del asiento de Marval desde la Contabilidad Desglosada — 2026-11-26
+
+- **Antes:** el asiento de Marval se armaba con una tabla dinámica sobre la Contabilidad Desglosada y el neteo
+  que pidió Marval (una sola línea cuando una cuenta tiene Debe y Haber con la misma dimensión) corría en un
+  script de Python fuera de la app.
+- **Ahora:** hay un control nuevo, **Neteo del asiento — Generar Reporte**, que sólo ve Marval. Se carga la
+  desglosada de Meta4 y sale el asiento neteado en las siete columnas de siempre con la fila "Total general".
+  Las cuentas de pasivo y las líneas sin dimensión quedan abiertas. El dígito de pasivo ("2") y el centro
+  compartido ("13") se editan en el Paso 2.
+- **Frena** si un Debe o Haber trae un texto que no es importe (o un número ambiguo como "1.234"), si una
+  dimensión con legajo usa dos centros o una sin legajo usa varios sin el compartido, y si netear cambiara la
+  diferencia Debe − Haber. El descuadre que ya trae el detalle y los importes con más de 2 decimales se
+  informan y no frenan.
+- Verificado contra los archivos reales de 11-2026: de 2.370 a 1.337 líneas, el mismo asiento que el script de
+  referencia (mismas líneas y mismo orden). Ver `specs/neteo-asiento-marval.md`.
+
 ### feat(gtn-gsma): GTN de GSMA armado desde el Tabulado de Axton — 2026-11-25
 
 - **Antes:** el Excel "Gross to Net" (GTN) que GSMA recibe todos los meses lo armaba Meta4. Con la liquidación en
