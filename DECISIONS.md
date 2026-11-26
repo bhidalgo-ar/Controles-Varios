@@ -4250,9 +4250,9 @@ pregunta abierta a Gaby (ver `ESTADO.md`).
 - **También frena una columna con forma de concepto sin `código - nombre`** (empieza con dígitos, o trae importes y no es
   una columna conocida del export): no se puede asignar, y generar igual dejaría su importe afuera con el semáforo en
   verde. Salario Familiar con importe no frena: avisa. (Regla agregada al corregir la auditoría del 2026-11-25;
-  **falta que Willy la confirme**.)
+  confirmada por Willy el 2026-11-26.)
 - **Una asignación guardada a una columna que el layout ya no tiene queda sin asignar**, también en un código sembrado:
-  volver a la semilla en silencio desharía una decisión del analista. (Misma corrección; falta que Willy la confirme.)
+  volver a la semilla en silencio desharía una decisión del analista. (Misma corrección; confirmada por Willy el 2026-11-26.)
 
 **Descartado:**
 - Aplicar los ASUMIDO como en el prototipo: un código mal asignado suma importe en la columna equivocada y el neto igual
@@ -4270,7 +4270,7 @@ Sin candidato → empleado nuevo / "no vino"; más de un candidato, homónimos o
 y se lista todo. Si el GTN trae una palabra de más, no cruza y se avisa; si ese parecido no es un par único (el GTN
 contiene a dos empleados de Axton, o dos filas del GTN se parecen al mismo), las filas del GTN salen "no cruzó (varios
 candidatos)" y el empleado de Axton como nuevo — nunca se resuelve por orden de aparición (este caso fino se
-agregó al corregir la auditoría; falta que Willy lo confirme). El cruce se muestra completo
+agregó al corregir la auditoría; confirmado por Willy el 2026-11-26). El cruce se muestra completo
 en resultados.
 
 **Descartado:** una tabla legajo de Axton ↔ Employee Number guardada como configuración. La config del cliente viaja en el seed,
