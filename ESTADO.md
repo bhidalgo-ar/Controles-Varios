@@ -10,7 +10,8 @@
 ## GTN GSMA (Axton) — construido y verificado contra archivos reales de 11/2026; falta que lo use una analista
 - Qué es: control `gtn_gsma` (sólo GSMA, Generar Reporte) que arma el Excel Gross to Net desde el Tabulado de Axton y el GTN del mes anterior, con la columna nueva Recognition Award, y controla Net Pay contra ER Net Paid.
 - Punto: verificado con el Tabulado de Axton 11/2026 y el GTN de Meta4 10/2026: 11 empleados, Gross 143.597.186,80, Net 96.479.096,94 = ER Net Paid. Celda por celda contra el GTN de Meta4 11/2026, las únicas diferencias son de Axton vs Meta4: Variable Pay +27,75, SS 20,4% +5,99, HI 6% +1,89, Accident +0,46.
-- Próximo paso: que una analista lo use con el mes real. Abierto: la detracción fija de −2.040, ¿sigue con Axton? (pregunta a Gaby); celdas que Meta4 escribe con un espacio y el generado deja vacías; las diferencias de contribuciones Axton vs Meta4 las confirma Gaby.
+- Gaby lo dio por OK el 2026-11-26. Respondió: la detracción queda fija en −2.040 por ahora; las diferencias de contribuciones son de centavos o pesos (de Axton, no del armado). El GTN del mes anterior queda obligatorio (Willy, 2026-11-26): de ahí salen Employee Number, Cost Centre, Location Code y el sueldo USD, que Axton no trae.
+- Próximo paso: que una analista lo use con el mes real. Abierto: que Gaby mire las celdas que Meta4 escribe con un espacio (Days not worked, Excedencia, Referral Fee) y el generado deja vacías; ella cree que da igual.
 - Detalle: `specs/gtn-gsma-axton.md`, D-104 a D-108, `docs/pruebas-pendientes.md` §2 ter.
 
 ## Vista estándar de resultados — las ocho tandas hechas e integradas; falta que Willy mire las 21 pantallas
