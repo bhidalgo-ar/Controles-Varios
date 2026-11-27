@@ -97,5 +97,14 @@ test('Rendimiento multi: un mapeo para todos y rechazo por columnas distintas', 
   await expect(page.locator('#host [data-multi-rejected]')).toContainText('rend_otro.xlsx');
   await expect(page.locator('#host [data-multi-rejected]')).toContainText('PRECIO');
   await expect(page.locator('#host .dropzone__count')).toHaveText('2 archivos');
+  await expect(page.locator('#host [data-multi-sinsigla]')).toHaveCount(0);
+
+  // Un archivo con las mismas columnas pero sin la sigla en el nombre entra,
+  // y la casilla avisa (y la corrida también, por `siglaMismatch`).
+  await page.evaluate(() => window.__drop('rend_file', [['planilla_c.xlsx', 'REND_B']]));
+  await expect(page.locator('#host .dropzone__count')).toHaveText('3 archivos');
+  await expect(page.locator('#host [data-multi-sinsigla]')).toHaveCount(1);
+  await expect(page.locator('#host [data-multi-sinsigla]')).toContainText('planilla_c.xlsx');
+  expect(await page.evaluate(() => window.__completes.at(-1).siglaMismatch)).toBe(true);
   expect(errores).toEqual([]);
 });

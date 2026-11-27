@@ -4352,3 +4352,7 @@ las mismas columnas en el mismo orden, y un mismo centro de costo puede aparecer
 **Alternativas descartadas:** declarar `flow: 'multi'` en la ficha de `rend_file` (le cambiaba la casilla a Rendimiento vs
 Tabulado, cuyo cálculo no suma por CC); pedir que el analista junte los archivos en uno antes de subirlos (el paso manual que
 la herramienta existe para evitar).
+
+**Sigla del nombre:** la carga de uno solo frena y pregunta cuando el nombre no trae la sigla (D-036); con varios eso sería un
+diálogo por archivo, así que la casilla multi los carga igual, los lista en un aviso y marca `siglaMismatch` para que la
+corrida lo informe. Aplica sólo a los tipos con mapeo de columnas: CONTA nunca tuvo ese aviso y sigue sin tenerlo.

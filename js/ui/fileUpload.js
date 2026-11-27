@@ -261,6 +261,12 @@ function initMultiUpload(container, { clientCode, fileType, existingData, onComp
       return;
     }
     const merged = merge(entries);
+    // El nombre sin la sigla del reporte no frena la carga de varios (sería un
+    // diálogo por archivo), pero se avisa en la casilla y en la corrida, como
+    // en la carga de uno solo (D-036). CONTA nunca lo tuvo y sigue sin tenerlo.
+    const sinSigla = needsMapping
+      ? entries.filter(e => !nameMatchesSiglas(e.fileName, siglasFor(fileType))).map(e => e.fileName)
+      : [];
     const data = {
       parsedRows:    merged.parsedRows,
       parseMetadata: merged.parseMetadata,
@@ -271,6 +277,8 @@ function initMultiUpload(container, { clientCode, fileType, existingData, onComp
         : `${entries.length} archivos · ${merged.parsedRows.length} filas`,
       entries,
       rejected,
+      siglaMismatch: sinSigla.length > 0,
+      sinSigla,
       ...(needsMapping ? { headers: refHeaders, preview: refPreview, clientCode } : {}),
     };
     render(data);
@@ -454,6 +462,12 @@ function initMultiUpload(container, { clientCode, fileType, existingData, onComp
         — ${escHtml(copy.dupHint)}</div>
       </div>
     `).join('');
+    const sinSiglaHtml = (data?.sinSigla || []).map(name => `
+      <div class="alert alert--warning" data-multi-sinsigla style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+        <div>⚠ El nombre de <strong>${escHtml(name)}</strong> no dice ${escHtml(siglasFor(fileType).join(' ni '))}
+        — revisá que sea el ${escHtml(dropLabelFor(fileType))} y no otro reporte.</div>
+      </div>
+    `).join('');
     const rejectedBlock = rejected.length
       ? `<div style="margin-top:var(--sp-2);">${rejectedHtml()}</div>` : '';
 
@@ -517,6 +531,7 @@ function initMultiUpload(container, { clientCode, fileType, existingData, onComp
           <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-multi-file-input">
         </div>
         ${rejectedBlock}
+        ${sinSiglaHtml}
         ${dupWarningsHtml}
       `;
     }
