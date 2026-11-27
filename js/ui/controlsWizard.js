@@ -1430,7 +1430,7 @@ function renderStepFiles(container, state, root) {
         const slot = document.createElement('div');
         // Los flujos multi-archivo traen su propia lista adentro: a media
         // grilla quedan ilegibles.
-        slot.className = flowFor(fileSpec.fileType) === 'single'
+        slot.className = flowFor(fileSpec.fileType, fileSpec.flow) === 'single'
           ? 'dz-grid__slot'
           : 'dz-grid__slot dz-grid__slot--wide';
         dropzonesEl.appendChild(slot);
@@ -1462,6 +1462,8 @@ function renderStepFiles(container, state, root) {
         // explica el checklist del panel): sin tag antes que con uno que miente.
         required:    fileSpec.optional ? undefined : true,
         autoDetect,
+        // El slot puede pedir otro flujo que el de la ficha (D-109).
+        flow:        fileSpec.flow,
         onComplete:  (data) => {
           const prev = state.controlFiles[controlId]?.[fileSpec.key];
           for (const destino of destinos) {

@@ -5,6 +5,7 @@
 <div id="host"></div><pre id="out">—</pre>
 <script type="module">
   const { initFileUploadStep } = await import('../../../js/ui/fileUpload.js');
+  const { autoDetectFor } = await import('../../../js/ui/fileTypes.js');
   const out = document.getElementById('out');
   window.__completes = [];
 
@@ -21,6 +22,23 @@
     ['2','Falcioni Julio','27222222223','5','Rem. Bruta','SUMA',2000,'ACME'],
   ];
 
+  // Reporte de Rendimiento: dos empresas del mismo mes con el mismo formato
+  // (un CC en las dos) y un tercero con otras columnas.
+  const REND_A = [
+    ['', 'CENTRO COSTO', 'PRECIO', 'CARGAS SOCIALES'],
+    ['10', 'Asesoramiento', 1000, 200],
+    ['20', 'Administracion', 500, 100],
+  ];
+  const REND_B = [
+    ['', 'CENTRO COSTO', 'PRECIO', 'CARGAS SOCIALES'],
+    ['10', 'Asesoramiento', 2500, 300],
+  ];
+  const REND_OTRO = [
+    ['', 'CENTRO COSTO', 'CARGAS SOCIALES', 'PRECIO'],
+    ['30', 'Sistemas', 50, 700],
+  ];
+  const AOAS = { CONTA, ACUM, REND_A, REND_B, REND_OTRO };
+
   const xlsxFile = (aoa, name) => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Hoja1');
@@ -28,20 +46,26 @@
     return new File([buf], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   };
 
-  window.__mount = (fileType) => new Promise(res => {
+  window.__mount = (fileType, flow = null) => new Promise(res => {
     window.__completes = [];
     document.getElementById('host').innerHTML = '';
     initFileUploadStep(document.getElementById('host'), {
-      clientCode: 'TEST', fileType, existingData: null,
+      clientCode: 'TEST', fileType, existingData: null, flow,
+      autoDetect: autoDetectFor(fileType),
       onComplete: d => { window.__completes.push(d); },
     });
     setTimeout(res, 150);
   });
 
+  // `names` es una lista de nombres, o de [nombre, clave de AOAS] para elegir
+  // el contenido de cada archivo.
   window.__drop = (fileType, names) => new Promise(res => {
-    const aoa = fileType === 'conta_file' ? CONTA : ACUM;
+    const porDefecto = fileType === 'conta_file' ? 'CONTA' : 'ACUM';
     const dt = new DataTransfer();
-    for (const n of names) dt.items.add(xlsxFile(aoa, n));
+    for (const n of names) {
+      const [nombre, clave] = Array.isArray(n) ? n : [n, porDefecto];
+      dt.items.add(xlsxFile(AOAS[clave], nombre));
+    }
     const input = document.querySelector('#host input[type=file]');
     input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));

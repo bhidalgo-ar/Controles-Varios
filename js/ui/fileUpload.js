@@ -2,7 +2,7 @@
 
 import { isValidExcelFile, readFileAsArrayBuffer } from '../utils/validators.js';
 import { showToast } from './toast.js';
-import { mergeContaFiles } from '../parsers/contaExcel.js';
+import { mergeParsedFiles, headersMismatch } from '../parsers/mergeFiles.js';
 import { getFileProfile, saveFileProfile } from '../db.js';
 import { blocksProgress, necessityOfKey, typeOfKey, NECESSITY, OMITIDO, esOmitido } from '../exports/contracts.js';
 import { columnValuesFromMatrix, columnHintHtml } from './columnHints.js';
@@ -19,19 +19,22 @@ import {
   dropHintFor,
   siglasFor,
   nameMatchesSiglas,
+  multiCopyFor,
+  mergeFor,
 } from './fileTypes.js';
 
-// Qué pantalla de carga le toca a cada `flow` declarado en la ficha. Las dos
-// siguen siendo funciones distintas porque hacen cosas distintas —CONTA mergea y
-// avisa filas duplicadas, Acumuladores pide un período por archivo— pero ya no
-// se eligen por nombre de archivo cableado. `'single'` no está acá: es el
+// Qué pantalla de carga le toca a cada `flow` declarado en la ficha (o en el
+// slot del registry, D-109). Las dos siguen siendo funciones distintas porque
+// hacen cosas distintas —la multi junta archivos y avisa filas duplicadas,
+// Acumuladores pide un período por archivo— pero ya no se eligen por nombre de
+// archivo cableado. `'single'` no está acá: es el
 // camino normal de `initFileUploadStep`, no una pantalla aparte.
 //
 // El mapa vive de este lado y no en la ficha a propósito: si `fileTypes.js`
 // importara estas funciones, cerraría el ciclo `fileUpload → fileTypes →
 // fileUpload`, que es la clase de cosa que sólo rompe en el navegador (D-045).
 const MULTI_UPLOADS = {
-  'multi':         initContaMultiUpload,
+  'multi':         initMultiUpload,
   'multi-periodo': initAcumuladoresMultiUpload,
 };
 
@@ -49,13 +52,13 @@ const MULTI_UPLOADS = {
  *                                   lo sigue decidiendo `canGoNext` del wizard).
  *                                   Sin declarar, no se pinta ningún tag
  */
-export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }) {
+export async function initFileUploadStep(container, { clientCode, fileType, existingData, onComplete, autoDetect, required, flow: slotFlow = null }) {
   // Cómo se sube este tipo lo declara su ficha, no un `if` por nombre de
   // archivo: un tipo multi-archivo nuevo declara su `flow` y funciona sin tocar
   // nada de acá. Un `flow` sin implementación corta con un error que lo nombra
   // en vez de caer al flujo de un archivo por slot, que es lo que un default
   // silencioso haría — y el analista subiría UN mes donde el control espera N.
-  const flow = flowFor(fileType);
+  const flow = flowFor(fileType, slotFlow);
   if (flow !== 'single') {
     const initMultiUpload = MULTI_UPLOADS[flow];
     if (!initMultiUpload) {
@@ -64,7 +67,7 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
         () => {});
       return;
     }
-    initMultiUpload(container, { fileType, existingData, onComplete, required });
+    initMultiUpload(container, { clientCode, fileType, existingData, onComplete, autoDetect, required });
     return;
   }
 
@@ -122,37 +125,8 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
       return;
     }
 
-    const savedProfile = await getFileProfile(clientCode, fileType);
-    let savedMapping  = savedProfile?.mapping || null;
-    let autoDetected  = false;
-
-    // Auto-detección: si no hay perfil guardado y se pasó una función de detección, intentar
-    if (!savedMapping && autoDetect) {
-      const detected = autoDetect(headers);
-      if (detected) {
-        savedMapping  = detected;
-        autoDetected  = true;
-      }
-    }
-
-    // La auto-detección nunca pisa un ⊘ del perfil guardado (misma regla que
-    // `shouldAutoFillTabValue` en el wizard: la omisión es una decisión del
-    // analista, no un artefacto de una carga anterior). Pero si ESTE archivo
-    // trae una columna que matchea una clave declarada ausente —el cliente
-    // pudo haber empezado a liquidar ese concepto—, se avisa junto al campo
-    // para que el analista destilde el ⊘ si corresponde. Decisión de Willy,
-    // 2026-08-13 (specs/obligatoria-gate-carga-archivo.md).
-    let omitCandidates = null;
-    if (savedMapping && autoDetect && Object.values(savedMapping).some(esOmitido)) {
-      const detected = autoDetect(headers);
-      if (detected) {
-        omitCandidates = Object.fromEntries(
-          Object.entries(savedMapping)
-            .filter(([k, v]) => esOmitido(v) && detected[k])
-            .map(([k]) => [k, detected[k]])
-        );
-      }
-    }
+    const { savedMapping, autoDetected, omitCandidates } =
+      await resolveInitialMapping(clientCode, fileType, headers, autoDetect);
 
     // El formulario se vuelve a mostrar a sí mismo cuando el parseo falla. Antes
     // la rama de error reimplementaba el handler un nivel más adentro, y la
@@ -197,38 +171,125 @@ export async function initFileUploadStep(container, { clientCode, fileType, exis
   }, { required });
 }
 
-// ── Carga múltiple de Contabilidad Desglosada (CONTA) ─────────────────────────
-//
-// A diferencia del resto de los archivos (un archivo por slot), CONTA admite
-// subir varios Excel del mismo formato en una sola corrida — típicamente porque
-// se juntan varios meses en el mismo control. Cada archivo se parsea por
-// separado y las filas se concatenan (mergeContaFiles); se avisa sin bloquear
-// si dos archivos distintos comparten filas idénticas, señal de una carga
-// duplicada por error.
+/**
+ * Con qué columnas arranca el formulario de mapeo: el perfil guardado del
+ * cliente para este tipo, o si no hay, lo que proponga la auto-detección. Lo
+ * comparten la carga de un archivo y la casilla multi-archivo (D-109).
+ */
+async function resolveInitialMapping(clientCode, fileType, headers, autoDetect) {
+  const savedProfile = await getFileProfile(clientCode, fileType);
+  let savedMapping  = savedProfile?.mapping || null;
+  let autoDetected  = false;
 
-function initContaMultiUpload(container, { fileType, existingData, onComplete, required }) {
-  let entries = existingData?.entries ? [...existingData.entries] : [];
+  // Auto-detección: si no hay perfil guardado y se pasó una función de detección, intentar
+  if (!savedMapping && autoDetect) {
+    const detected = autoDetect(headers);
+    if (detected) {
+      savedMapping  = detected;
+      autoDetected  = true;
+    }
+  }
+
+  // La auto-detección nunca pisa un ⊘ del perfil guardado (misma regla que
+  // `shouldAutoFillTabValue` en el wizard: la omisión es una decisión del
+  // analista, no un artefacto de una carga anterior). Pero si ESTE archivo
+  // trae una columna que matchea una clave declarada ausente —el cliente
+  // pudo haber empezado a liquidar ese concepto—, se avisa junto al campo
+  // para que el analista destilde el ⊘ si corresponde. Decisión de Willy,
+  // 2026-08-13 (specs/obligatoria-gate-carga-archivo.md).
+  let omitCandidates = null;
+  if (savedMapping && autoDetect && Object.values(savedMapping).some(esOmitido)) {
+    const detected = autoDetect(headers);
+    if (detected) {
+      omitCandidates = Object.fromEntries(
+        Object.entries(savedMapping)
+          .filter(([k, v]) => esOmitido(v) && detected[k])
+          .map(([k]) => [k, detected[k]])
+      );
+    }
+  }
+
+  return { savedMapping, autoDetected, omitCandidates };
+}
+
+// ── Casilla multi-archivo (`flow: 'multi'`) ──────────────────────────────────
+//
+// A diferencia del resto de los archivos (un archivo por slot), hay casillas que
+// admiten varios Excel del mismo formato en una sola corrida: la Contabilidad
+// Desglosada (varios meses juntos, D-018) y el Reporte de Rendimiento de
+// Rendimiento vs Asiento (el mismo mes partido por empresa o convenio, D-109).
+// Cada archivo se parsea por separado y las filas se juntan (`mergeFor` de la
+// ficha); se avisa sin bloquear si dos archivos distintos comparten filas
+// idénticas, señal de una carga duplicada por error.
+//
+// Si el tipo tiene columnas que mapear, el formulario del Paso 2 se muestra una
+// sola vez, con el primer archivo, y ese mapeo vale para todos. Por eso un
+// archivo con otras columnas no se suma: se rechaza con un aviso que dice cuál
+// y qué se esperaba. Con el mapeo de otro formato la columna elegida podría no
+// existir, o ser otra, y el importe saldría vacío o cambiado sin que nadie lo
+// note.
+//
+// Lo que recibe el wizard tiene la misma forma que un archivo único
+// (`parsedRows`, `parseMetadata`, `mapping`, `fileName`): el resto del pipeline
+// no sabe que hubo más de uno. Sumar lo que corresponda es trabajo del control.
+
+function initMultiUpload(container, { clientCode, fileType, existingData, onComplete, autoDetect, required }) {
+  const needsMapping = fieldsFor(fileType).length > 0 && !isFixedFormat(fileType);
+  const copy  = multiCopyFor(fileType);
+  const merge = mergeFor(fileType) || mergeParsedFiles;
+
+  let entries    = existingData?.entries ? [...existingData.entries] : [];
+  let mapping    = existingData?.mapping || null;
+  let refHeaders = existingData?.headers || null;
+  let refPreview = existingData?.preview || null;
+  // Archivos que no se sumaron por traer otras columnas. Se muestran hasta la
+  // próxima carga o quita: es la respuesta a lo que el analista acaba de hacer.
+  // Viajan en `data` porque el wizard vuelve a montar la casilla al recibir un
+  // archivo (`rerenderOnLoad`), y sin eso el aviso se borraría al instante.
+  let rejected   = existingData?.rejected ? [...existingData.rejected] : [];
+
+  const refFileName = () => entries[0]?.fileName || '';
 
   const commit = (newEntries) => {
     entries = newEntries;
     if (entries.length === 0) {
+      // Sin archivos, el próximo que entre vuelve a ser "el primero": define las
+      // columnas y pasa por el formulario de mapeo (con el perfil guardado).
+      mapping = null; refHeaders = null; refPreview = null;
       render(null);
       onComplete(null);
       return;
     }
-    const merged = mergeContaFiles(entries);
+    const merged = merge(entries);
+    // El nombre sin la sigla del reporte no frena la carga de varios (sería un
+    // diálogo por archivo), pero se avisa en la casilla y en la corrida, como
+    // en la carga de uno solo (D-036). CONTA nunca lo tuvo y sigue sin tenerlo.
+    const sinSigla = needsMapping
+      ? entries.filter(e => !nameMatchesSiglas(e.fileName, siglasFor(fileType))).map(e => e.fileName)
+      : [];
     const data = {
       parsedRows:    merged.parsedRows,
       parseMetadata: merged.parseMetadata,
-      mapping:       {},
+      mapping:       needsMapping ? mapping : {},
       fileType,
       fileName: entries.length === 1
         ? entries[0].fileName
         : `${entries.length} archivos · ${merged.parsedRows.length} filas`,
       entries,
+      rejected,
+      siglaMismatch: sinSigla.length > 0,
+      sinSigla,
+      ...(needsMapping ? { headers: refHeaders, preview: refPreview, clientCode } : {}),
     };
     render(data);
     onComplete(data);
+  };
+
+  const parseEntry = (file, arrayBuffer, map) => {
+    const { parsedRows, parseMetadata } = parseFor(fileType, arrayBuffer, map);
+    return needsMapping
+      ? { fileName: file.name, parsedRows, parseMetadata, arrayBuffer }
+      : { fileName: file.name, parsedRows, parseMetadata };
   };
 
   const addFiles = async (fileList) => {
@@ -240,51 +301,194 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
       return true;
     });
     if (files.length === 0) return;
+    rejected = [];
 
     renderLoadingProgress(container, 'parsing');
-    const newEntries = [];
-    for (const file of files) {
-      try {
-        const arrayBuffer = await readFileAsArrayBuffer(file);
-        const { parsedRows, parseMetadata } = parseFor(fileType, arrayBuffer);
-        newEntries.push({ fileName: file.name, parsedRows, parseMetadata });
-      } catch (err) {
-        showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
+
+    if (!needsMapping) {
+      const newEntries = [];
+      for (const file of files) {
+        try {
+          newEntries.push(parseEntry(file, await readFileAsArrayBuffer(file)));
+        } catch (err) {
+          showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
+        }
       }
+      commit([...entries, ...newEntries]);
+      return;
     }
-    commit([...entries, ...newEntries]);
+
+    // Con mapeo: se leen los encabezados de cada archivo y se comparan contra
+    // los del primero (el ya cargado, o el primero de esta tanda).
+    const accepted = [];
+    let pendingRefName = refFileName();
+    for (const file of files) {
+      let arrayBuffer, headers, preview;
+      try {
+        arrayBuffer = await readFileAsArrayBuffer(file);
+        ({ headers, preview } = detectHeadersFor(fileType, arrayBuffer));
+      } catch (err) {
+        showToast(`No se pudo leer "${file.name}": ${err.message}`, 'danger');
+        continue;
+      }
+      if (!refHeaders) {
+        refHeaders = headers; refPreview = preview; pendingRefName = file.name;
+      } else {
+        const diff = headersMismatch(refHeaders, headers);
+        if (diff) {
+          rejected.push({ fileName: file.name, refName: pendingRefName, ...diff });
+          continue;
+        }
+      }
+      accepted.push({ file, arrayBuffer });
+    }
+
+    const parseAll = (map) => {
+      const newEntries = [];
+      for (const { file, arrayBuffer } of accepted) {
+        try {
+          newEntries.push(parseEntry(file, arrayBuffer, map));
+        } catch (err) {
+          showToast(`Error al procesar "${file.name}": ${err.message}`, 'danger');
+        }
+      }
+      return newEntries;
+    };
+
+    if (mapping) {
+      const newEntries = parseAll(mapping);
+      // Si no entró ninguno, lo cargado no cambió: se vuelve a mostrar con el
+      // aviso, sin avisarle al wizard un cambio que no hubo.
+      if (newEntries.length === 0) { render(currentData); return; }
+      commit([...entries, ...newEntries]);
+      return;
+    }
+    if (accepted.length === 0) {
+      // Ninguno se pudo leer: la casilla vuelve a quedar vacía.
+      refHeaders = null; refPreview = null;
+      render(null);
+      return;
+    }
+
+    // Primera carga: el formulario de columnas, una vez, con el primer archivo.
+    const { savedMapping, autoDetected, omitCandidates } =
+      await resolveInitialMapping(clientCode, fileType, refHeaders, autoDetect);
+    showMultiMappingForm({
+      savedMapping, autoDetected, omitCandidates,
+      fileName: accepted.length === 1 ? accepted[0].file.name : `${accepted[0].file.name} (y ${accepted.length - 1} más)`,
+      onConfirm: async (map) => {
+        renderLoadingProgress(container, 'parsing');
+        const newEntries = parseAll(map);
+        if (newEntries.length === 0) {
+          refHeaders = null; refPreview = null;
+          render(null);
+          return;
+        }
+        mapping = map;
+        await saveFileProfile(clientCode, fileType, map).catch(() => {});
+        commit(newEntries);
+      },
+      onCancel: () => {
+        refHeaders = null; refPreview = null; rejected = [];
+        render(null);
+      },
+    });
   };
 
-  // El casillero de la Contabilidad es el mismo `.dropzone` que el resto de los
-  // archivos del Paso 2 (pantalla 9 del rediseño): vacío es una zona de drop
-  // igual a la de al lado, y cargado es la caja verde con el chip "N archivos",
-  // los nombres en mono y "+ Sumar" para agregarle otro mes. La lista por
-  // archivo no se fue: cada nombre lleva su ✕, porque sumar de más —el mismo
-  // mes dos veces— es el error que este flujo tiene que dejar deshacer.
-  function render(data) {
-    const dupWarningsHtml = (data?.parseMetadata?.duplicates || []).map(d => `
-      <div class="alert alert--warning" style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
-        ⚠ <strong>${escHtml(d.fileName)}</strong> tiene ${d.count} fila(s) idénticas a otro archivo ya cargado
-        — revisá que no sea el mismo período subido dos veces.
+  // El formulario de mapeo de siempre, con los rechazos arriba: si en la misma
+  // tanda vino un archivo de otro formato, el analista lo tiene que ver antes
+  // de confirmar las columnas.
+  function showMultiMappingForm({ savedMapping, autoDetected, omitCandidates, fileName, onConfirm, onCancel }) {
+    renderMappingForm(container, {
+      headers: refHeaders, preview: refPreview, fileType,
+      savedMapping, autoDetected, omitCandidates, fileName, onConfirm, onCancel,
+    });
+    if (rejected.length) container.insertAdjacentHTML('afterbegin', rejectedHtml());
+  }
+
+  // Cambiar las columnas con archivos ya cargados: se vuelven a leer todos con
+  // el mapeo nuevo (el mismo para todos, como al cargarlos).
+  const remap = () => {
+    rejected = [];
+    showMultiMappingForm({
+      savedMapping: mapping, autoDetected: false, omitCandidates: null,
+      fileName: entries.length === 1 ? entries[0].fileName : `${entries.length} archivos`,
+      onConfirm: async (map) => {
+        renderLoadingProgress(container, 'parsing');
+        try {
+          const reparsed = entries.map(e => {
+            const { parsedRows, parseMetadata } = parseFor(fileType, e.arrayBuffer, map);
+            return { ...e, parsedRows, parseMetadata };
+          });
+          mapping = map;
+          await saveFileProfile(clientCode, fileType, map).catch(() => {});
+          commit(reparsed);
+        } catch (err) {
+          renderError(container, `Error al procesar: ${err.message}`, remap);
+        }
+      },
+      onCancel: () => render(currentData),
+    });
+  };
+
+  // Una columna sin título se llama `__EMPTY` por dentro; al analista se le
+  // dice lo que ve en el Excel.
+  const colName = h => (!h ? '(no hay columna)' : /^__EMPTY(_\d+)?$/.test(h) ? '(sin título)' : h);
+
+  function rejectedHtml() {
+    return rejected.map(r => `
+      <div class="alert alert--danger" data-multi-rejected style="margin-bottom:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+        <div>✕ <strong>${escHtml(r.fileName)}</strong> no se sumó: sus columnas no son las mismas que las de
+        <strong>${escHtml(r.refName)}</strong>. En la columna ${r.position} se esperaba
+        «${escHtml(colName(r.expected))}» y vino «${escHtml(colName(r.found))}».
+        Todos los archivos de esta casilla tienen que traer las mismas columnas, en el mismo orden.</div>
       </div>
     `).join('');
+  }
+
+  let currentData = existingData;
+
+  // El casillero es el mismo `.dropzone` que el resto de los archivos del
+  // Paso 2 (pantalla 9 del rediseño): vacío es una zona de drop igual a la de al
+  // lado, y cargado es la caja verde con el chip "N archivos", los nombres en
+  // mono y "+ Sumar" para agregarle otro. Cada nombre lleva su ✕, porque sumar
+  // de más —el mismo archivo dos veces— es el error que este flujo tiene que
+  // dejar deshacer.
+  function render(data) {
+    currentData = data;
+    const dupWarningsHtml = (data?.parseMetadata?.duplicates || []).map(d => `
+      <div class="alert alert--warning" style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+        <div>⚠ <strong>${escHtml(d.fileName)}</strong> tiene ${d.count} fila(s) idénticas a otro archivo ya cargado
+        — ${escHtml(copy.dupHint)}</div>
+      </div>
+    `).join('');
+    const sinSiglaHtml = (data?.sinSigla || []).map(name => `
+      <div class="alert alert--warning" data-multi-sinsigla style="margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);font-size:var(--text-sm);">
+        <div>⚠ El nombre de <strong>${escHtml(name)}</strong> no dice ${escHtml(siglasFor(fileType).join(' ni '))}
+        — revisá que sea el ${escHtml(dropLabelFor(fileType))} y no otro reporte.</div>
+      </div>
+    `).join('');
+    const rejectedBlock = rejected.length
+      ? `<div style="margin-top:var(--sp-2);">${rejectedHtml()}</div>` : '';
 
     const label = dropLabelFor(fileType);
     const tag   = required === true ? 'OBLIGATORIO' : required === false ? 'OPCIONAL' : '';
     const tagCls = required === false ? ' dropzone__tag--optional' : '';
+    const buscar = copy.article === 'la' ? 'buscarla' : 'buscarlo';
 
     if (entries.length === 0) {
       container.innerHTML = `
-        <div class="dropzone dropzone--empty" id="js-conta-drop" role="button" tabindex="0"
+        <div class="dropzone dropzone--empty" id="js-multi-drop" role="button" tabindex="0"
              aria-label="Cargar ${escHtml(label)}">
           <span class="dropzone__icon" aria-hidden="true">⬆</span>
           <div class="dropzone__body">
-            <div class="dropzone__title">Arrastrá la ${escHtml(label)}${escHtml(dropHintFor(fileType))}</div>
-            <div class="dropzone__hint">o hacé clic para buscarla — .xlsx. Podés soltar varios meses juntos.</div>
+            <div class="dropzone__title">Arrastrá ${escHtml(copy.article)} ${escHtml(label)}${escHtml(dropHintFor(fileType))}</div>
+            <div class="dropzone__hint">o hacé clic para ${buscar} — .xlsx. ${escHtml(copy.hint)}</div>
           </div>
           <span class="dropzone__tag${tagCls}" ${tag ? '' : 'hidden'}>${escHtml(tag)}</span>
-          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-multi-file-input">
         </div>
+        ${rejectedBlock}
       `;
     } else {
       const descartadas = entries.reduce((n, e) => n + (e.parseMetadata?.descartadasSinCC ?? 0), 0);
@@ -292,7 +496,7 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
       const archivosHtml = entries.map((e, i) => `
         <span class="dropzone__fileitem">
           <span class="dropzone__file">${escHtml(e.fileName)}</span>
-          <button type="button" class="dropzone__fileitem-x" data-conta-remove="${i}"
+          <button type="button" class="dropzone__fileitem-x" data-multi-remove="${i}"
             title="Quitar ${escHtml(e.fileName)}" aria-label="Quitar ${escHtml(e.fileName)}">✕</button>
         </span>
       `).join('<span class="dropzone__sep" aria-hidden="true">·</span>');
@@ -309,30 +513,35 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
               ${archivosHtml}
             </div>
             <div class="dropzone__meta">
-              <span>${filas} fila${filas !== 1 ? 's' : ''} con CC</span>
+              <span>${escHtml(copy.rowsLabel(filas))}</span>
               ${descartadas > 0
                 ? `<span>·</span><span class="dropzone__warnchip">${descartadas} sin CC descartadas</span>`
                 : ''}
             </div>
             <div class="dropzone__note">
-              Podés soltar varios meses juntos — se avisa si dos comparten filas idénticas.
+              ${escHtml(copy.note)}
             </div>
           </div>
           <div class="dropzone__actions">
-            <button type="button" class="btn btn--secondary btn--sm" id="js-conta-drop">+ Sumar</button>
+            <button type="button" class="btn btn--secondary btn--sm" id="js-multi-drop">+ Sumar</button>
+            ${needsMapping && entries.every(e => e.arrayBuffer)
+              ? '<button type="button" class="btn btn--ghost btn--sm" id="js-multi-remap">Cambiar columnas</button>'
+              : ''}
           </div>
-          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-conta-file-input">
+          <input type="file" accept=".xlsx,.xls" multiple style="display:none" id="js-multi-file-input">
         </div>
+        ${rejectedBlock}
+        ${sinSiglaHtml}
         ${dupWarningsHtml}
       `;
     }
 
-    const dropZone  = container.querySelector('#js-conta-drop');
-    const fileInput = container.querySelector('#js-conta-file-input');
+    const dropZone  = container.querySelector('#js-multi-drop');
+    const fileInput = container.querySelector('#js-multi-file-input');
 
     dropZone.addEventListener('click', () => fileInput.click());
-    // Con la Contabilidad cargada el disparador es el botón "+ Sumar", que ya
-    // hace click con Enter y Espacio solo: agregarle el handler abriría el
+    // Con archivos cargados el disparador es el botón "+ Sumar", que ya hace
+    // click con Enter y Espacio solo: agregarle el handler abriría el
     // explorador dos veces.
     if (dropZone.tagName !== 'BUTTON') {
       dropZone.addEventListener('keydown', (e) => {
@@ -343,10 +552,11 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
       if (e.target.files.length) addFiles(e.target.files);
       fileInput.value = '';
     });
+    container.querySelector('#js-multi-remap')?.addEventListener('click', remap);
 
-    // Soltar archivos vale en todo el casillero, no sólo sobre el botón: con la
-    // Contabilidad ya cargada, "+ Sumar" es un botón chico y el gesto natural es
-    // arrastrar el mes nuevo encima de la caja verde.
+    // Soltar archivos vale en todo el casillero, no sólo sobre el botón: con
+    // archivos ya cargados, "+ Sumar" es un botón chico y el gesto natural es
+    // arrastrar el archivo nuevo encima de la caja verde.
     const zonaDrop = container.querySelector('.dropzone');
     zonaDrop.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -361,12 +571,13 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
       if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
     });
 
-    container.querySelectorAll('[data-conta-remove]').forEach(btn => {
+    container.querySelectorAll('[data-multi-remove]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         // El ✕ vive adentro del casillero, que abre el selector de archivos al
         // clickearse: sin esto, quitar un archivo abriría el explorador.
         e.stopPropagation();
-        const idx = Number(btn.dataset.contaRemove);
+        rejected = [];
+        const idx = Number(btn.dataset.multiRemove);
         commit(entries.filter((_, j) => j !== idx));
       });
     });
@@ -380,7 +591,7 @@ function initContaMultiUpload(container, { fileType, existingData, onComplete, r
 //
 // El control Acumuladores Ganancias necesita un crudo `repacumuladores` por
 // cada mes de la ventana del SAC teórico (RG 4030: 2 meses · RG 4003: hasta 8).
-// Mismo flujo que initContaMultiUpload (N archivos del mismo tipo, sin mapping),
+// Mismo flujo que initMultiUpload (N archivos del mismo tipo, sin mapping),
 // con una diferencia: cada archivo lleva un período propio ('YYYY-MM'), inferido
 // de la fecha de generación en el nombre del archivo y editable a mano (la fecha
 // de generación no siempre cae en el mes de los datos — ver
