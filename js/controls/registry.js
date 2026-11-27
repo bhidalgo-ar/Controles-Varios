@@ -600,7 +600,10 @@ export const CONTROL_REGISTRY = {
     additionalFiles: [
       // rerenderOnLoad: con el Rendimiento cargado, el editor ofrece sus áreas
       // como destino de los legajos que van a otra área (D-103).
-      { key: 'rend',  label: 'Reporte de Rendimiento',          fileType: 'rend_file', rerenderOnLoad: true },
+      // flow 'multi': el mes puede venir partido en varios reportes (uno por
+      // empresa o convenio); se suben juntos y `runRendVsAsiento` suma cada CC
+      // (D-109). Sólo en este control: Rend vs Tabulado lo sigue pidiendo de a uno.
+      { key: 'rend',  label: 'Reporte de Rendimiento',          fileType: 'rend_file', rerenderOnLoad: true, flow: 'multi' },
       // rerenderOnLoad: con CONTA cargada, el editor de config de abajo puede mostrar
       // el nombre de cada cuenta y concepto al lado de su código.
       { key: 'conta', label: 'Contabilidad Desglosada',         fileType: 'conta_file', rerenderOnLoad: true },

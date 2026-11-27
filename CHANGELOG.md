@@ -7,6 +7,17 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(rend-vs-asiento): el Reporte de Rendimiento acepta varios archivos del mismo mes — 2026-11-27
+
+- **Antes:** la casilla del Reporte de Rendimiento en **Rendimiento vs Asiento** aceptaba un solo archivo. Cuando el mes venía
+  partido (un reporte por empresa o convenio) había que juntarlos a mano en un Excel.
+- **Ahora:** se pueden soltar varios juntos, sumar otro con "+ Sumar" y quitar cada uno con ✕, igual que la Contabilidad
+  Desglosada. Las columnas se eligen una vez y valen para todos. Si un archivo trae otras columnas no se suma y la casilla
+  dice cuál, en qué columna y qué se esperaba. Si dos archivos traen filas idénticas, se avisa sin bloquear.
+- **El cruce suma cada centro de costo de todos los archivos** antes de compararlo contra la Contabilidad: un CC que está en
+  dos reportes sale en un solo renglón, con la suma. Una categoría que ningún archivo trae sigue saliendo vacía, no en 0.
+- Rendimiento vs Tabulado sigue pidiendo un solo archivo. Ver D-109.
+
 ### feat(neteo-asiento-marval): Neteo del asiento de Marval desde la Contabilidad Desglosada — 2026-11-26
 
 - **Antes:** el asiento de Marval se armaba con una tabla dinámica sobre la Contabilidad Desglosada y el neteo

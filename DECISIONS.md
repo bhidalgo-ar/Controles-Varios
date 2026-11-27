@@ -4316,3 +4316,39 @@ declara y no toca el wizard.
 - **`perRun: true`** en una config: es un dato de la corrida, **no se guarda ni se precarga**; arranca vacío cada vez (a
   diferencia de `readOnly`, tiene editor). Es el tipo de cambio de GSMA: precargado el mes siguiente sería un tipo de cambio
   viejo con cara de nuevo, coherente y equivocado. Hoy lo usa sólo `gtn_gsma`.
+
+---
+
+## D-109 — Rendimiento vs Asiento: el Reporte de Rendimiento admite varios archivos del mismo mes y se suma por CC
+
+**Fecha:** 2026-11-27. **Decidió:** Willy (criterio); extiende D-018, que dejó escrito que la casilla multi-archivo se
+generalizaba cuando apareciera un segundo caso. Este es ese caso.
+
+**Contexto:** el Reporte de Rendimiento de un mes puede venir partido en varios archivos (uno por empresa o convenio), con
+las mismas columnas en el mismo orden, y un mismo centro de costo puede aparecer en más de uno.
+
+**Decisión:**
+1. **La casilla multi es del slot, no sólo de la ficha.** `additionalFiles[].flow` en el registry pisa el `flow` de la ficha
+   del tipo (`flowFor(fileType, slotFlow)`). El slot `rend` de Rendimiento vs Asiento declara `flow: 'multi'`;
+   Rendimiento vs Tabulado sigue pidiendo **un** archivo, porque su cálculo arma un renglón por fila y no se tocó. El perfil
+   de columnas guardado sigue siendo uno por tipo (`rend_file`), así que los dos controles comparten el mapeo.
+2. **Una sola pantalla multi para todos los tipos** (`initMultiUpload`, reemplaza a `initContaMultiUpload`). Si el tipo tiene
+   columnas que mapear, el formulario del Paso 2 sale una vez, con el primer archivo, y ese mapeo vale para todos. Los textos
+   de la casilla salen de la ficha (`multiCopy`): la de Rendimiento no habla de meses ni de "filas con CC". Cómo se juntan los
+   archivos también (`merge`): CONTA sigue sumando sus filas sin CC descartadas sobre el genérico `mergeParsedFiles`
+   (`js/parsers/mergeFiles.js`), que concatena y avisa filas idénticas entre archivos distintos (aviso, no bloqueo).
+3. **Un archivo con otras columnas se rechaza, no se suma.** Se comparan los encabezados contra los del primer archivo
+   (`headersMismatch`: mismos títulos, mismo orden; no cuentan espacios de los costados ni columnas vacías al final). El
+   rechazo se muestra en la casilla: qué archivo, contra cuál, en qué columna y qué se esperaba. Con el mapeo del primero, un
+   archivo de otro formato leería otra columna o ninguna, y el importe saldría cambiado sin que nadie lo note. La
+   comparación aplica sólo a los tipos con mapeo: CONTA sigue igual que antes (su lector valida sus columnas por nombre).
+4. **`runRendVsAsiento` consolida el Rendimiento por CC antes de comparar** (`consolidateRendByCC`), con la misma clave con
+   la que busca el CC en CONTA (`normCCName` del nombre). Cada categoría se suma respetando que `null` no es `0`: es `null`
+   sólo si ninguna fila del CC trajo valor. Código y nombre: el primero no vacío. Las filas "total" se siguen salteando. Sin
+   esto, un CC en dos archivos daba dos renglones comparados cada uno contra el total de CONTA: diferencias falsas en los dos.
+   Con un archivo solo no cambia nada salvo el caso de dos filas con el mismo nombre de CC, que antes también se comparaban
+   cada una contra el mismo total y ahora salen sumadas.
+
+**Alternativas descartadas:** declarar `flow: 'multi'` en la ficha de `rend_file` (le cambiaba la casilla a Rendimiento vs
+Tabulado, cuyo cálculo no suma por CC); pedir que el analista junte los archivos en uno antes de subirlos (el paso manual que
+la herramienta existe para evitar).

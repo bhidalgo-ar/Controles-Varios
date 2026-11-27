@@ -603,6 +603,63 @@ export function renderRendVsAsientoMappingPanel(container, { accountNames = {}, 
 // es pantalla, no cálculo. Acá quedan la config por defecto y el panel de sólo
 // lectura que se muestra en resultados.
 
+// ── Consolidación del Rendimiento por CC ─────────────────────────────────────
+
+/** Suma respetando que `null` no es `0`: `null` sólo si los dos lados lo son. */
+function sumNullable(a, b) {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a + b;
+}
+
+const REND_CATS = [
+  ['precio',   'precioColumn'],
+  ['estimulo', 'estimuloColumn'],
+  ['cargas',   'cargasColumn'],
+  ['provMes',  'provMesColumn'],
+  ['provCcss', 'provCcssColumn'],
+];
+
+/**
+ * Un renglón por centro de costo del Rendimiento, sumando cada categoría de
+ * todas las filas del CC (D-109: el mes puede venir en varios archivos y un CC
+ * puede repetirse entre ellos). La clave es la misma con la que se busca el CC
+ * en CONTA (`normCCName` del nombre), así que dos filas que matchearían el
+ * mismo grupo de CONTA quedan en un solo renglón.
+ *
+ * - Una categoría es `null` sólo si ninguna fila del CC trajo valor; si alguna
+ *   trajo, es la suma de las que trajeron.
+ * - Código y nombre: los del primer archivo que los trae (el primero no vacío).
+ * - Las filas sin nombre ni código y las de "total" se saltean, como siempre.
+ * - Una fila con código pero sin nombre no matchea con CONTA (que se busca por
+ *   nombre): se agrupa por código, sin mezclarse con ningún CC con nombre.
+ *
+ * @returns {Array<{ ccCode: string, ccName: string, precio: number|null,
+ *   estimulo: number|null, cargas: number|null, provMes: number|null, provCcss: number|null }>}
+ */
+export function consolidateRendByCC(rendRows, rm) {
+  const byKey = new Map();
+  for (const rRow of rendRows || []) {
+    const ccCode = norm(rRow[rm.ccCodeColumn]);
+    const ccName = norm(rRow[rm.ccNameColumn]);
+    if (!ccName && !ccCode) continue;
+    if (ccName.toLowerCase().startsWith('total')) continue;
+
+    const key = normCCName(ccName) ?? `\u0000codigo:${normCCCode(ccCode)}`;
+    let g = byKey.get(key);
+    if (!g) {
+      g = { ccCode: '', ccName: '', precio: null, estimulo: null, cargas: null, provMes: null, provCcss: null };
+      byKey.set(key, g);
+    }
+    if (!g.ccCode && ccCode) g.ccCode = ccCode;
+    if (!g.ccName && ccName) g.ccName = ccName;
+    for (const [cat, col] of REND_CATS) {
+      g[cat] = sumNullable(g[cat], toNum(rRow[rm[col]]));
+    }
+  }
+  return [...byKey.values()];
+}
+
 // ── runRendVsAsiento ──────────────────────────────────────────────────────────
 
 export function runRendVsAsiento(rendRows, _tabRows, mapping) {
@@ -835,17 +892,17 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
   const rows      = [];
   const matchedCCs = new Set();
 
-  for (const rRow of rendRows) {
-    const ccCode = norm(rRow[rm.ccCodeColumn]);
-    const ccName = norm(rRow[rm.ccNameColumn]);
-    if (!ccName && !ccCode) continue;
-    if (ccName.toLowerCase().startsWith('total')) continue;
-
-    const rPrecio   = toNum(rRow[rm.precioColumn]);
-    const rEstimulo = toNum(rRow[rm.estimuloColumn]);
-    const rCargas   = toNum(rRow[rm.cargasColumn]);
-    const rProvMes  = toNum(rRow[rm.provMesColumn]);
-    const rProvCcss = toNum(rRow[rm.provCcssColumn]);
+  // El Rendimiento puede venir en varios archivos del mismo mes (D-109), y un
+  // mismo CC puede estar en más de uno: se consolida por CC ANTES de comparar,
+  // con la misma clave con la que se busca en CONTA. Sin esto, cada renglón se
+  // compararía contra el total del CC en CONTA y saldrían diferencias falsas.
+  for (const r of consolidateRendByCC(rendRows, rm)) {
+    const { ccCode, ccName } = r;
+    const rPrecio   = r.precio;
+    const rEstimulo = r.estimulo;
+    const rCargas   = r.cargas;
+    const rProvMes  = r.provMes;
+    const rProvCcss = r.provCcss;
     const rTotal    = (rPrecio ?? 0) + (rEstimulo ?? 0) + (rCargas ?? 0) + (rProvMes ?? 0) + (rProvCcss ?? 0);
 
     const nameKey = normCCName(ccName);

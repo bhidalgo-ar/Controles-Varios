@@ -32,7 +32,7 @@ test('CONTA: la pantalla multi-archivo sale de la ficha y concatena', async ({ p
   expect(await page.locator('#host').textContent()).toContain('sin CC descartadas');
   // El casillero cargado dice cuántos archivos se sumaron y deja quitar cada uno.
   await expect(page.locator('#host .dropzone__count')).toHaveText('2 archivos');
-  await expect(page.locator('#host [data-conta-remove]')).toHaveCount(2);
+  await expect(page.locator('#host [data-multi-remove]')).toHaveCount(2);
   expect(errores).toEqual([]);
 });
 
@@ -42,13 +42,13 @@ test('CONTA: quitar un archivo del casillero deja el otro cargado', async ({ pag
   await page.evaluate(() => window.__mount('conta_file'));
   await page.evaluate(() => window.__drop('conta_file', ['abril.xlsx', 'mayo.xlsx']));
 
-  await page.locator('#host [data-conta-remove]').first().click();
+  await page.locator('#host [data-multi-remove]').first().click();
 
   const d = await page.evaluate(() => window.__completes.at(-1));
   expect(d.parsedRows.length).toBe(2);
   expect(d.fileName).toBe('mayo.xlsx');
   // El ✕ no abre el selector de archivos: el casillero sigue mostrando el que quedó.
-  await expect(page.locator('#host [data-conta-remove]')).toHaveCount(1);
+  await expect(page.locator('#host [data-multi-remove]')).toHaveCount(1);
   expect(errores).toEqual([]);
 });
 
@@ -66,5 +66,36 @@ test('Acumuladores: pantalla propia, con período por archivo', async ({ page })
   expect(d.parsedRows.length).toBe(2);
   expect(d.parsedRows[0]._period).toBe('2026-04');  // inferido del nombre
   await expect(page.locator('#host input[type=month]')).toHaveCount(1);
+  expect(errores).toEqual([]);
+});
+
+// D-109: el Reporte de Rendimiento en la casilla multi de Rendimiento vs Asiento.
+// Tiene columnas que mapear: el formulario sale una vez, con el primer archivo,
+// y un archivo con otras columnas no se suma.
+test('Rendimiento multi: un mapeo para todos y rechazo por columnas distintas', async ({ page }) => {
+  await page.goto('/tests/e2e/fixtures/multiUpload.html');
+  await expect(page.locator('#out')).toHaveText('listo', { timeout: 15000 });
+  await page.evaluate(() => window.__mount('rend_file', 'multi'));
+
+  const texto = await page.evaluate(() => window.__dropText());
+  expect(texto).toContain('Arrastrá el Reporte de Rendimiento');
+  expect(texto).not.toContain('meses');
+
+  await page.evaluate(() => window.__drop('rend_file', [['rend_a.xlsx', 'REND_A'], ['rend_b.xlsx', 'REND_B']]));
+  await expect(page.locator('#host #js-mapping-form')).toBeVisible();
+  await page.locator('#host #js-mapping-form button[type=submit]').click();
+
+  await expect(page.locator('#host .dropzone__count')).toHaveText('2 archivos');
+  const d = await page.evaluate(() => window.__completes.at(-1));
+  expect(d.parsedRows.length).toBe(3);                 // se concatenan; la suma por CC la hace el control
+  expect(d.mapping.ccNameColumn).toBe('CENTRO COSTO');  // un solo mapeo para los dos
+  expect(await page.locator('#host').textContent()).not.toContain('con CC');
+
+  // "+ Sumar" con un archivo de otras columnas: no entra y se dice por qué.
+  await page.evaluate(() => window.__drop('rend_file', [['rend_otro.xlsx', 'REND_OTRO']]));
+  await expect(page.locator('#host [data-multi-rejected]')).toHaveCount(1);
+  await expect(page.locator('#host [data-multi-rejected]')).toContainText('rend_otro.xlsx');
+  await expect(page.locator('#host [data-multi-rejected]')).toContainText('PRECIO');
+  await expect(page.locator('#host .dropzone__count')).toHaveText('2 archivos');
   expect(errores).toEqual([]);
 });

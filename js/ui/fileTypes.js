@@ -29,7 +29,15 @@
 //   fixedFormat    {boolean}   se parsea derecho, sin formulario de mapeo
 //   flow           {string}    cómo se sube: 'single' (default, un archivo por
 //                              slot), 'multi' (N archivos que se concatenan) o
-//                              'multi-periodo' (N archivos, cada uno con su mes)
+//                              'multi-periodo' (N archivos, cada uno con su mes).
+//                              Un slot del registry puede pedir otro flujo para
+//                              ese control solo (`additionalFiles[].flow`, D-109)
+//   multiCopy      {object}    textos de la casilla cuando se sube con
+//                              `flow: 'multi'` (ver `multiCopyFor`)
+//   merge          {function}  (entries) → { parsedRows, parseMetadata }: cómo
+//                              se juntan los archivos de una casilla multi.
+//                              Sin declarar, `mergeParsedFiles` (concatena y
+//                              avisa filas idénticas entre archivos)
 //   dropLabel      {string}    override del texto de la zona de drop cuando
 //                              tiene que divergir de `label` — hoy ninguna
 //                              ficha lo usa (D-050 unificó la de Acumuladores)
@@ -64,7 +72,7 @@ import { parseGsPers, autoDetectGsPersMapping } from '../parsers/gsPersParser.js
 import { parseNr, autoDetectNrMapping } from '../parsers/nrParser.js';
 import { parseRendimiento, autoDetectRendimientoMapping, detectHeadersRendimiento } from '../parsers/rendimientoParser.js';
 import { parseCostoTotal, autoDetectCostoTotalMapping, detectHeadersCostoTotal } from '../parsers/costoTotalParser.js';
-import { parseConta } from '../parsers/contaExcel.js';
+import { parseConta, mergeContaFiles } from '../parsers/contaExcel.js';
 import { parseContaNeteo, detectHeaders as detectHeadersContaNeteo } from '../parsers/contaNeteoParser.js';
 import { parseAcreditaciones } from '../parsers/acreditacionesParser.js';
 import { parseAcumuladores } from '../parsers/acumuladoresParser.js';
@@ -475,6 +483,16 @@ export const FILE_TYPES = {
     detectHeaders: detectHeadersRendimiento,
     autoDetect: autoDetectRendimientoMapping,
     meta: metaRegistros,
+    // Rendimiento vs Asiento lo pide en una casilla multi-archivo (D-109): el
+    // mes puede venir partido en varios reportes, uno por empresa o convenio.
+    // Rendimiento vs Tabulado lo sigue pidiendo de a uno.
+    multiCopy: {
+      article:   'el',
+      hint:      'Podés soltar juntos los reportes del mismo mes (uno por empresa o convenio).',
+      note:      'Todos tienen que traer las mismas columnas. Un centro de costo que aparece en más de un archivo se suma.',
+      rowsLabel: n => `${n} fila${n !== 1 ? 's' : ''} de centro de costo`,
+      dupHint:   'revisá que no sea el mismo reporte subido dos veces.',
+    },
     fields: [
       { key: 'ccCodeColumn',     label: 'Columna de código CC (1ª col., sin encabezado)', required: false },
       { key: 'ccNameColumn',     label: 'Columna de Centro de Costo',                     required: true  },
@@ -530,6 +548,15 @@ export const FILE_TYPES = {
     autoDetect: null,
     meta: metaLegajosConceptos,
     flow: 'multi',
+    // Además de juntar las filas, suma las "sin CC descartadas" de cada archivo.
+    merge: mergeContaFiles,
+    multiCopy: {
+      article:   'la',
+      hint:      'Podés soltar varios meses juntos.',
+      note:      'Podés soltar varios meses juntos — se avisa si dos comparten filas idénticas.',
+      rowsLabel: n => `${n} fila${n !== 1 ? 's' : ''} con CC`,
+      dupHint:   'revisá que no sea el mismo período subido dos veces.',
+    },
     fields: [],
   },
 
@@ -958,8 +985,34 @@ export function isFixedFormat(fileType) {
  * uno con su mes). Un tipo sin `flow` declarado es 'single' — el default es el
  * caso de 15 de los 17 tipos, y declararlo en cada ficha sería ruido.
  */
-export function flowFor(fileType) {
-  return FILE_TYPES[fileType]?.flow || 'single';
+export function flowFor(fileType, slotFlow = null) {
+  // El slot del registry gana sobre la ficha (D-109): el mismo tipo de archivo
+  // puede subirse de a varios en un control y de a uno en otro.
+  return slotFlow || FILE_TYPES[fileType]?.flow || 'single';
+}
+
+/** Cómo se juntan los archivos de una casilla multi, o `null` (= el genérico). */
+export function mergeFor(fileType) {
+  return FILE_TYPES[fileType]?.merge || null;
+}
+
+const MULTI_COPY_DEFAULT = {
+  article:   'el',
+  hint:      'Podés soltar varios archivos juntos.',
+  note:      'Podés soltar varios archivos juntos — se avisa si dos comparten filas idénticas.',
+  rowsLabel: n => `${n} fila${n !== 1 ? 's' : ''}`,
+  dupHint:   'revisá que no sea el mismo archivo subido dos veces.',
+};
+
+/**
+ * Textos de la casilla multi-archivo de este tipo: el artículo del título
+ * ("Arrastrá la Contabilidad…" / "Arrastrá el Reporte…"), la aclaración de la
+ * zona vacía, la nota de la caja cargada, cómo se cuentan las filas y qué decir
+ * cuando dos archivos traen filas idénticas. Lo que la ficha no declara cae a
+ * un texto genérico, nunca a uno de otro tipo.
+ */
+export function multiCopyFor(fileType) {
+  return { ...MULTI_COPY_DEFAULT, ...(FILE_TYPES[fileType]?.multiCopy || {}) };
 }
 
 /**
