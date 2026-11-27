@@ -7,6 +7,13 @@
 
 ## [Unreleased] — MVP en desarrollo
 
+### feat(rend-vs-asiento): aviso de dimensión financiera con legajo que no tiene 3 dígitos — 2026-11-27
+
+- **Ahora:** el Resumen de **Rendimiento vs Asiento** avisa cada dimensión (`ID_CONTA` de la Contabilidad Desglosada)
+  cuyo legajo —el 7mo tramo— no tiene exactamente 3 dígitos, con los legajos y las filas que la usan. Pedido de Willy:
+  avisa, no frena. Las dimensiones vacías, "Null" o con `SIN_ASIGNAR` no tienen legajo y no se miran. No cambia la
+  comparación de importes ni el semáforo. Test: `tests/rendVsAsientoDimension.test.js` (en la cadena).
+
 ### feat(rend-vs-asiento): el Reporte de Rendimiento acepta varios archivos del mismo mes — 2026-11-27
 
 - **Antes:** la casilla del Reporte de Rendimiento en **Rendimiento vs Asiento** aceptaba un solo archivo. Cuando el mes venía

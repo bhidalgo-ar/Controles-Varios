@@ -104,6 +104,13 @@ CONTA / ya viene en el área destino / sólo tiene filas de un centro por person
 etiqueta "+ N legajo(s) de otra área" / "− N legajo(s) movido(s)" y el detalle en el `title`. Excel: columna
 "Movido por regla de legajo" en "Detalle por empleado". Test: `tests/rendVsAsientoLegajoArea.test.js`.
 
+## Cambio 5 — Legajo de la dimensión financiera con 3 dígitos (2026-11-27)
+Pedido de Willy: todo `ID_CONTA` de la CONTA que traiga legajo (7mo tramo, el mismo `legajoDeDimension` del Neteo
+del asiento) lo tiene que traer con exactamente 3 dígitos. Si no, **aviso** en el Resumen (una línea por dimensión,
+con legajos y filas) y badge; no frena, no es diferencia, no toca el semáforo. Vacía, "Null" o `SIN_ASIGNAR` no se
+miran. Resultado: `results.dimensionesLegajoMal`, `summary.dimensionesLegajoMal`. Test:
+`tests/rendVsAsientoDimension.test.js`.
+
 ## Números de aceptación (archivos reales de 10-2026, verificados con el código actual + config manual)
 Con la config por defecto nueva, mapeo AUTO-detectado del Rendimiento, CONTA completa y el listado de Marval
 como CC x Empleado, el control tiene que dar exactamente:

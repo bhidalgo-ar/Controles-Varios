@@ -13,6 +13,7 @@ import {
 } from '../ui/resultBlocks.js';
 import { estadoDeFila } from '../ui/tableTools.js';
 import { renderPlanillaPanel } from '../ui/planillaPanel.js';
+import { legajoDeDimension } from './neteoAsientoMarval.js';
 //
 // Compara el Reporte de Rendimiento de M4 (por CC) contra la Contabilidad
 // Desglosada (CONTA). Para cada CC, agrupa las filas de CONTA clasificando
@@ -963,6 +964,25 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     };
   });
 
+  // Dimensiones financieras (ID_CONTA) cuyo legajo no tiene 3 dígitos. Marval
+  // arma la dimensión con el legajo en el 7mo tramo y ahí tiene que ir con 3
+  // dígitos (pedido de Willy, 2026-11-27). Es un aviso: no frena, no es
+  // diferencia y no toca el semáforo. Una dimensión vacía o con SIN_ASIGNAR no
+  // tiene legajo y no se mira.
+  const dimsMal = new Map();
+  for (const row of contaRows) {
+    const dimension = norm(row.id_conta);
+    const tramo = legajoDeDimension(dimension);
+    if (!tramo || /^\d{3}$/.test(tramo)) continue;
+    const d = dimsMal.get(dimension) || { dimension, tramo, legajos: new Set(), filas: 0 };
+    if (norm(row.id_empleado)) d.legajos.add(norm(row.id_empleado));
+    d.filas++;
+    dimsMal.set(dimension, d);
+  }
+  const dimensionesLegajoMal = [...dimsMal.values()].map(d => ({
+    dimension: d.dimension, tramo: d.tramo, legajos: [...d.legajos], filas: d.filas,
+  }));
+
   // Lo que movió la regla por legajo, listo para el Resumen (D-103). Es
   // informativo: no cuenta como diferencia ni toca el semáforo.
   const movidosPorLegajo = [...movidos.values()].map(m => ({
@@ -1021,11 +1041,13 @@ export function runRendVsAsiento(rendRows, _tabRows, mapping) {
     legajosSinRepartir: avisosReparto.reduce((acc, a) => acc + a.legajos, 0),
     legajosMovidos: movidosPorLegajo.length,
     legajosSinUso:  legajosSinUso.length,
+    dimensionesLegajoMal: dimensionesLegajoMal.length,
   };
 
   return {
     summary, rows, ccsSoloEnConta,
     avisosReparto,
+    dimensionesLegajoMal,
     movidosPorLegajo,
     legajosSinUso,
     period: mapping.period || '',
@@ -1188,6 +1210,22 @@ export function renderRendVsAsientoResults(results, container) {
             sub: 'se reparte persona por persona',
             what: a.texto,
             why: a.queHacer,
+          })),
+        });
+      }
+
+      // Dimensiones con un legajo que no tiene 3 dígitos: aviso, no diferencia.
+      if (results.dimensionesLegajoMal?.length) {
+        const n = results.dimensionesLegajoMal.length;
+        renderIssues(panel, {
+          heading: `Dimensión financiera · ${n} con el legajo mal armado`,
+          items: results.dimensionesLegajoMal.map(d => ({
+            sev: 'lo',
+            who: d.dimension,
+            sub: d.legajos.length ? `legajo ${d.legajos.join(', ')}` : null,
+            what: `El legajo de la dimensión dice «${d.tramo}» y tiene que tener 3 dígitos.`,
+            why: `${d.filas} fila${d.filas === 1 ? '' : 's'} de la Contabilidad con esta dimensión.`
+              + ' Pedí que la corrijan en Meta4; no cambia la comparación de importes.',
           })),
         });
       }
@@ -1429,6 +1467,10 @@ function renderBadges(host, summary) {
   if (summary?.legajosSinRepartir > 0) {
     const n = summary.legajosSinRepartir;
     badges.push(`<span class="badge badge--warning">${n} legajo${n === 1 ? '' : 's'} sin repartir por persona</span>`);
+  }
+  if (summary?.dimensionesLegajoMal > 0) {
+    const n = summary.dimensionesLegajoMal;
+    badges.push(`<span class="badge badge--warning">${n} dimensi${n === 1 ? 'ón' : 'ones'} con legajo que no tiene 3 dígitos</span>`);
   }
   if (summary?.noCategorizadas > 0) badges.push(`<span class="badge badge--warning">${summary.noCategorizadas} filas CONTA no categorizadas</span>`);
   if (!badges.length) return;
